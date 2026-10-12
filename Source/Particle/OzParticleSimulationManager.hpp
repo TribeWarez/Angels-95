@@ -32,6 +32,12 @@ public:
     // Drop every live particle (emitter nodes are cleared separately).
     void Clear();
 
+    // Release the instanced shader/VAO/VBOs. Called once at client shutdown,
+    // BEFORE CloseWindow(), while the GL context is still alive - the manager is
+    // an intentionally-leaked singleton, so without this its GL objects would
+    // outlive the context. Safe to call more than once.
+    void Shutdown();
+
     // One-shot burst, independent of any OZONE emitter. There was no way to
     // spawn a particle from gameplay code before - Update() only reads emitter
     // defs - so muzzle smoke and impact sparks had to be drawn as separate
@@ -67,6 +73,44 @@ private:
 
     static constexpr int MAX_PARTICLES = 4096;
 
+    // Per-particle render state: the size/colour interpolation over the
+    // particle's age, plus the CPU light modulation. size <= 0 means "skip".
+    //
+    // ONE function, shared by the instanced and immediate draw paths. Written as
+    // two copies of the same lerp it is exactly the shape of bug where the fast
+    // path quietly renders a different colour or size from the fallback - the
+    // fallback only runs when the shader failed to load, so the drift would be
+    // invisible until then. tests/Surface.test.cpp pins that both paths call this
+    // and neither re-derives the lerp inline.
+    struct RenderState {
+        float size = 0.0f;
+        Color color{255, 255, 255, 0};
+    };
+    static RenderState ComputeRenderState(const Particle& p,
+                                          const std::vector<const LightNode*>& lights);
+
+    // --- Instanced GPU path (Particles.vs / Particles.fs) ---
+    //
+    // The immediate-mode path issued one DrawBillboard per particle - a texture
+    // bind plus a quad per particle - which does not scale past a few hundred.
+    // The instanced path expands one 6-vertex quad into N camera-facing quads in
+    // a single draw, one draw per distinct source texture (the atlas is a
+    // sampler, not a vertex attribute).
+    //
+    // Colour is still lit on the CPU (ApplyLighting) and uploaded per instance,
+    // so this needs no light uniforms and cannot drift from the immediate path.
+    //
+    // ALL GL goes through rlgl's public API: rlLoadVertexBuffer allocates the
+    // VBOs (it calls glGenBuffers/glBufferData internally), rlUpdateVertexBuffer
+    // streams the per-frame instances, rlDrawVertexArrayInstanced issues the
+    // draw, rlUnloadVertexBuffer frees them.
+    //
+    // Falls back to the immediate path if the shader or the GL objects fail to
+    // initialise, so a missing shader - or a headless test target with no GL
+    // context - never takes particles off screen.
+    bool EnsureInstancedResources();
+    void DrawInstanced(Camera3D& camera, const std::vector<const LightNode*>& lights);
+
     // Modulate a particle colour by the light reaching it. Immediate-mode
     // DrawBillboard cannot carry a custom shader, so lighting is sampled on the
     // CPU from the same LightNode data the lit mesh shader uses.
@@ -83,4 +127,15 @@ private:
     Texture2D m_defaultTex{0};
     std::unordered_map<std::string, Texture2D> m_texCache;
     std::unordered_map<uint32_t, float> m_spawnAccum;
+
+    // Instanced renderer state. Zero ids mean "not initialised".
+    unsigned int m_quadVao = 0;      // VAO combining the quad + instance attributes
+    unsigned int m_quadVbo = 0;      // static 6-vertex unit quad
+    unsigned int m_instVbo = 0;      // dynamic per-instance stream
+    Shader m_instShader{0};
+    int m_locMVP = -1, m_locCamRight = -1, m_locCamUp = -1;
+    bool m_instTried = false;        // one attempt, so a missing shader does not re-log per frame
+
+    // Per-frame instance scratch, reused to avoid allocating in the draw path.
+    std::vector<float> m_instData;   // centre(3) + size(1) + colour(4) = 8 floats
 };

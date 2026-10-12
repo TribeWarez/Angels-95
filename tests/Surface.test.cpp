@@ -1206,6 +1206,49 @@ static void test_restore_ambient_matches_startup() {
           "restore_ambient uses FillDefaultAmbient, matching the startup default");
 }
 
+// The particle renderer has two paths: an instanced GPU pass and the
+// immediate-mode fallback. They were written as two copies of the same
+// size/colour lerp, which is the classic way a fast path ends up rendering
+// something different from its own fallback - and the fallback only runs when
+// the shader failed to load, so the drift would be invisible until then.
+// ComputeRenderState is the single definition; this pins that both paths call
+// it and that neither re-derives the lerp inline.
+static void test_particle_paths_share_one_lerp() {
+    const std::string src =
+        ReadFile("Source/Particle/OzParticleSimulationManager.cpp");
+    if (src.empty()) { printf("  SKIP  particle lerp parity (source not found)\n"); return; }
+
+    check(src.find("OzParticleSimulationManager::ComputeRenderState") != std::string::npos,
+          "ComputeRenderState is defined (single source of truth for size+colour)");
+
+    const size_t drawInst = src.find("void OzParticleSimulationManager::DrawInstanced");
+    const size_t draw     = src.find("void OzParticleSimulationManager::Draw(");
+    check(drawInst != std::string::npos, "DrawInstanced is present");
+    check(draw != std::string::npos, "Draw (immediate fallback) is present");
+    if (drawInst == std::string::npos || draw == std::string::npos) return;
+
+    const std::string instBody = src.substr(drawInst, draw - drawInst);
+    const std::string immBody  = src.substr(draw);
+
+    check(instBody.find("ComputeRenderState") != std::string::npos,
+          "the instanced path renders through ComputeRenderState");
+    check(immBody.find("ComputeRenderState") != std::string::npos,
+          "the immediate path renders through ComputeRenderState");
+
+    // The lerp itself must appear exactly once in the file - inside
+    // ComputeRenderState. Two copies of "colorEnd.r - " is the drift.
+    size_t n = 0, p = 0;
+    while ((p = src.find("colorEnd.r -", p)) != std::string::npos) { n++; p++; }
+    check(n == 1, "the size/colour lerp is written once, not once per draw path");
+
+    // And the instanced path must not quietly become a second renderer: it has
+    // to actually reach the instanced draw.
+    check(instBody.find("rlDrawVertexArrayInstanced") != std::string::npos,
+          "DrawInstanced issues an instanced draw");
+    check(instBody.find("rlSetVertexAttributeDivisor") == std::string::npos,
+          "DrawInstanced does not re-declare the VAO (that is EnsureInstancedResources)");
+}
+
 int main() {
     printf("Surface tests:\n");
     test_legacy_bits_stable();
@@ -1234,6 +1277,7 @@ int main() {
     test_backdrop_fallback_uses_resolved_faces();
     test_props_panel_has_no_cross_space_index();
     test_restore_ambient_matches_startup();
+    test_particle_paths_share_one_lerp();
     printf("\nResults: %d/%d passed\n", pass_count, test_count);
     return (pass_count == test_count) ? 0 : 1;
 }

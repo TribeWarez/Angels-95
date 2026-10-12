@@ -1319,6 +1319,11 @@ int main(int argc, char** argv){
         oz::SurfaceMaterial::Instance().Shutdown();
         oz::Skybox::Instance().Shutdown();
         oz::SkyMaterial::Instance().Shutdown();
+        // Instanced particle VAO/VBOs + shader. Released with the other GPU
+        // resources and BEFORE CloseWindow(), while the GL context is still
+        // alive - the manager is an intentionally-leaked singleton, so without
+        // this its GL objects would outlive the context.
+        OzParticleSimulationManager::Instance().Shutdown();
     }
     CloseWindow();
 }

@@ -1,8 +1,11 @@
 #include "OzParticleSimulationManager.hpp"
 #include "../Pawn/OzPawnSystem.hpp"
 #include "../Package/PackageAssetLoader.hpp"
+#include "../Renderer/CullState.hpp"
 #include "raymath.h"
+#include <rlgl.h>
 #include <cmath>
+#include <algorithm>
 
 namespace {
 
@@ -142,6 +145,213 @@ void OzParticleSimulationManager::Update(float dt) {
     if (m_live < 0) m_live = 0;
 }
 
+// The single source of truth for how a particle looks this frame. Both the
+// instanced path and the immediate-mode fallback call this, so they cannot
+// disagree about a particle's size or lit colour - a fast path that renders
+// differently from its own fallback is invisible until the fallback triggers.
+OzParticleSimulationManager::RenderState
+OzParticleSimulationManager::ComputeRenderState(const Particle& p,
+                                               const std::vector<const LightNode*>& lights) {
+    RenderState r;
+    float t = (p.lifetime > 0.0f) ? (p.age / p.lifetime) : 1.0f;
+    if (t > 1.0f) t = 1.0f;
+    if (t < 0.0f) t = 0.0f;
+    r.size = p.sizeStart + (p.sizeEnd - p.sizeStart) * t;
+    if (r.size <= 0.001f) return r;
+    Color c = {
+        (unsigned char)(p.colorStart.r + (p.colorEnd.r - (int)p.colorStart.r) * t),
+        (unsigned char)(p.colorStart.g + (p.colorEnd.g - (int)p.colorStart.g) * t),
+        (unsigned char)(p.colorStart.b + (p.colorEnd.b - (int)p.colorStart.b) * t),
+        (unsigned char)(p.colorStart.a + (p.colorEnd.a - (int)p.colorStart.a) * t)
+    };
+    r.color = ApplyLighting(c, p.position, lights);
+    return r;
+}
+
+// ---------------------------------------------------------------------------
+// Instanced GPU path (Particles.vs / Particles.fs)
+// ---------------------------------------------------------------------------
+bool OzParticleSimulationManager::EnsureInstancedResources() {
+    if (m_quadVao != 0) return true;
+    if (m_instTried) return false;   // already failed once; do not retry per frame
+    m_instTried = true;
+
+    // Instancing is CORE from OpenGL 3.0, so a 3.3/4.3/ES3 build always has
+    // glDrawArraysInstanced bound by GLAD.
+    //
+    // This gate is not paranoia. rlDrawVertexArrayInstanced() does NOT check
+    // RLGL.ExtSupported.instancing before calling through the function pointer
+    // (rlgl.h:4095), so on a legacy GL2.1/ES2 build the pointer is NULL and the
+    // call is a crash, not a no-op. rlgl only fills those pointers from the
+    // extension list in rlLoadExtensions(), which is the GL 2.1 path.
+    //
+    // We deliberately do NOT consult RLGL.ExtSupported.instancing to decide this:
+    // rlgl.h:1147 declares `static rlglData RLGL`, so every translation unit
+    // that includes rlgl.h without RLGL_IMPLEMENTATION gets its OWN zeroed copy.
+    // Reading it from here would always report "unsupported" and silently
+    // disable instancing forever. rlGetVersion() is a real exported function
+    // that returns a build-time constant, which is exactly the decision we want.
+    if (rlGetVersion() < RL_OPENGL_33) {
+        OZ_WARN("Particles: instancing needs OpenGL 3.3+ - using immediate-mode path");
+        return false;
+    }
+
+    m_instShader = LoadShaderWithFallback("GameData/Shaders/Particles.vs",
+                                          "GameData/Shaders/Particles.fs");
+    if (m_instShader.id == 0) {
+        OZ_WARN("Particles: instanced shader failed to load - using immediate-mode path");
+        return false;
+    }
+
+    m_locMVP      = GetShaderLocation(m_instShader, "mvp");   // raylib's default MVP name
+    m_locCamRight = GetShaderLocation(m_instShader, "camRight");
+    m_locCamUp    = GetShaderLocation(m_instShader, "camUp");
+
+    // Static unit quad: two triangles, positions only (the UV is derived in the
+    // vertex shader from the corner offset). Six vertices, so no index buffer.
+    const float quad[] = {
+        -0.5f, -0.5f, 0.0f,   0.5f, -0.5f, 0.0f,   0.5f, 0.5f, 0.0f,
+        -0.5f, -0.5f, 0.0f,   0.5f,  0.5f, 0.0f,  -0.5f, 0.5f, 0.0f,
+    };
+    // Per-instance layout: centre (3) + size (1) + colour (4) = 8 floats.
+    const int kInstStride = 8 * (int)sizeof(float);
+
+    m_quadVbo = rlLoadVertexBuffer(quad, (int)sizeof(quad), false);
+    // Sized for a full pool so the draw path never reallocates mid-frame.
+    m_instVbo = rlLoadVertexBuffer(nullptr, kInstStride * MAX_PARTICLES, true);
+    if (m_quadVbo == 0 || m_instVbo == 0) {
+        OZ_WARN("Particles: instanced VBO alloc failed - using immediate-mode path");
+        return false;
+    }
+
+    m_quadVao = rlLoadVertexArray();
+    if (m_quadVao == 0 || !rlEnableVertexArray(m_quadVao)) {
+        OZ_WARN("Particles: VAO alloc failed - using immediate-mode path");
+        return false;
+    }
+
+    // Per-vertex corner, divisor 0.
+    rlEnableVertexBuffer(m_quadVbo);
+    rlEnableVertexAttribute(0);
+    rlSetVertexAttribute(0, 3, RL_FLOAT, false, 3 * sizeof(float), 0);
+    rlSetVertexAttributeDivisor(0, 0);
+
+    // Per-instance: centre (3), size (1), colour (4) - divisor 1 on each.
+    rlEnableVertexBuffer(m_instVbo);
+    rlEnableVertexAttribute(11);
+    rlSetVertexAttribute(11, 3, RL_FLOAT, false, kInstStride, 0);
+    rlSetVertexAttributeDivisor(11, 1);
+    rlEnableVertexAttribute(12);
+    rlSetVertexAttribute(12, 1, RL_FLOAT, false, kInstStride, 3 * (int)sizeof(float));
+    rlSetVertexAttributeDivisor(12, 1);
+    rlEnableVertexAttribute(13);
+    rlSetVertexAttribute(13, 4, RL_FLOAT, false, kInstStride, 4 * (int)sizeof(float));
+    rlSetVertexAttributeDivisor(13, 1);
+
+    rlDisableVertexArray();
+    m_instData.reserve((size_t)kInstStride * MAX_PARTICLES / sizeof(float));
+    return true;
+}
+
+void OzParticleSimulationManager::DrawInstanced(Camera3D& camera,
+                                                const std::vector<const LightNode*>& lights) {
+    if (!EnsureInstancedResources()) return;
+
+    // Camera basis for billboarding. Camera3D carries position/target/up but no
+    // right vector, so derive it: right = normalize(cross(up, forward)).
+    const Vector3 fwd = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
+    Vector3 right = Vector3CrossProduct(camera.up, fwd);
+    if (Vector3Length(right) < 1e-4f) right = Vector3CrossProduct({0, 1, 0}, fwd);
+    right = Vector3Normalize(right);
+    const Vector3 up = Vector3Normalize(Vector3CrossProduct(fwd, right));
+
+    // Visible textured billboards, sorted far-to-near so ALPHA blending
+    // composites correctly. The immediate-mode path drew in pool order, which is
+    // arbitrary, so ordering them is a straight correctness improvement too.
+    std::vector<const Particle*> visible;
+    visible.reserve((size_t)m_live);
+    for (const auto& p : m_pool)
+        if (p.active && p.billboard && p.texture.id > 0) visible.push_back(&p);
+    if (visible.empty()) return;
+    std::sort(visible.begin(), visible.end(),
+              [&](const Particle* a, const Particle* b) {
+                  return Vector3DistanceSqr(a->position, camera.position) >
+                         Vector3DistanceSqr(b->position, camera.position);
+              });
+
+    // Walk the sorted list in per-texture runs. Each run is uploaded and drawn as
+    // its OWN instanced draw starting at instance 0: rlDrawVertexArrayInstanced
+    // has no instance-offset parameter (its first argument is a VERTEX offset),
+    // so one concatenated buffer could not express "start this group at instance
+    // N" without drawing the wrong particles. One upload per distinct texture,
+    // and a scene normally has exactly one (the generated default sprite).
+    BeginShaderMode(m_instShader);
+    // raylib 5.5 has no GetModelViewProjectionMatrix(); GetCameraMatrix (raymath)
+    // is the same view-projection the immediate path used, so both paths project
+    // identically.
+    SetShaderValueMatrix(m_instShader, m_locMVP, GetCameraMatrix(camera));
+    if (m_locCamRight >= 0) SetShaderValue(m_instShader, m_locCamRight, &right, SHADER_UNIFORM_VEC3);
+    if (m_locCamUp >= 0)    SetShaderValue(m_instShader, m_locCamUp, &up, SHADER_UNIFORM_VEC3);
+
+    BeginBlendMode(BLEND_ALPHA);
+    {
+        // Camera-facing quads: backface culling is meaningless here and would drop
+        // half of them on winding. Routed through the tracked setter so the
+        // caller's state is restored (see Renderer/CullState.hpp).
+        oz::ScopedCullOff cullOff;
+
+        if (rlEnableVertexArray(m_quadVao)) {
+            size_t i = 0;
+            while (i < visible.size()) {
+                const int texId = visible[i]->texture.id;
+                m_instData.clear();
+                size_t j = i;
+                while (j < visible.size() && visible[j]->texture.id == texId) {
+                    const RenderState rs = ComputeRenderState(*visible[j], lights);
+                    if (rs.size > 0.001f) {
+                        m_instData.push_back(visible[j]->position.x);
+                        m_instData.push_back(visible[j]->position.y);
+                        m_instData.push_back(visible[j]->position.z);
+                        m_instData.push_back(rs.size);
+                        m_instData.push_back(rs.color.r / 255.0f);
+                        m_instData.push_back(rs.color.g / 255.0f);
+                        m_instData.push_back(rs.color.b / 255.0f);
+                        m_instData.push_back(rs.color.a / 255.0f);
+                    }
+                    j++;
+                }
+                const int count = (int)(m_instData.size() / 8);
+                if (count > 0) {
+                    rlSetTexture(texId);
+                    rlUpdateVertexBuffer(m_instVbo, m_instData.data(),
+                                         (int)(m_instData.size() * sizeof(float)), 0);
+                    rlDrawVertexArrayInstanced(0, 6, count);
+                }
+                i = j;
+            }
+            // Unbind, restoring VAO 0. This is safe for every subsequent raylib
+            // draw because each raylib path re-binds its own VAO before drawing
+            // rather than relying on whatever was last bound: the 2D batch binds
+            // batch->vertexBuffer[].vaoId in rlDrawRenderBatch (rlgl.h:2992),
+            // and 3D meshes bind their own mesh.vaoId. rlgl itself unbinds to 0
+            // the same way wherever it hands back to the driver.
+            rlDisableVertexArray();
+        }
+    }
+    EndBlendMode();
+    EndShaderMode();
+}
+
+void OzParticleSimulationManager::Shutdown() {
+    if (m_quadVao) { rlUnloadVertexArray(m_quadVao); m_quadVao = 0; }
+    if (m_quadVbo) { rlUnloadVertexBuffer(m_quadVbo); m_quadVbo = 0; }
+    if (m_instVbo) { rlUnloadVertexBuffer(m_instVbo); m_instVbo = 0; }
+    if (m_instShader.id != 0) { UnloadShader(m_instShader); m_instShader = {0}; }
+    m_instTried = false;
+    m_instData.clear();
+    m_instData.shrink_to_fit();
+}
+
 void OzParticleSimulationManager::Draw(Camera3D& camera,
                                        const std::vector<LightNode>* transientLights) {
     if (m_live <= 0) return;
@@ -158,31 +368,43 @@ void OzParticleSimulationManager::Draw(Camera3D& camera,
     for (const auto& n : PawnSystem::Instance().GetLights())
         if (n.active) lit.push_back(&n);
 
+    // Instanced GPU path first: one draw call per texture instead of one quad per
+    // particle. The immediate-mode loop below is the fallback, kept because
+    // EnsureInstancedResources() can legitimately fail (a headless test target
+    // has no GL context, and a missing shader must not take particles off
+    // screen).
+    //
+    // Only textured billboards go through the instanced shader. Sphere particles
+    // (billboard == false, or no texture) always take the immediate path, and
+    // `instancedDrew` makes that loop skip the billboards the shader already
+    // covered so nothing is drawn twice.
+    bool instancedDrew = false;
+    if (EnsureInstancedResources()) {
+        bool anyBillboard = false;
+        for (const auto& p : m_pool)
+            if (p.active && p.billboard && p.texture.id > 0) { anyBillboard = true; break; }
+        if (anyBillboard) {
+            DrawInstanced(camera, lit);
+            instancedDrew = true;
+        }
+    }
+
     BeginBlendMode(BLEND_ALPHA);
     for (auto& p : m_pool) {
         if (!p.active) continue;
-        float t = (p.lifetime > 0.0f) ? (p.age / p.lifetime) : 1.0f;
-        if (t > 1.0f) t = 1.0f;
-        float size = p.sizeStart + (p.sizeEnd - p.sizeStart) * t;
-        if (size <= 0.001f) continue;
-
-        Color c = {
-            (unsigned char)(p.colorStart.r + (p.colorEnd.r - (int)p.colorStart.r) * t),
-            (unsigned char)(p.colorStart.g + (p.colorEnd.g - (int)p.colorStart.g) * t),
-            (unsigned char)(p.colorStart.b + (p.colorEnd.b - (int)p.colorStart.b) * t),
-            (unsigned char)(p.colorStart.a + (p.colorEnd.a - (int)p.colorStart.a) * t)
-        };
-
-        c = ApplyLighting(c, p.position, lit);
+        // Skip textured billboards when the instanced shader already drew them.
+        if (instancedDrew && p.billboard && p.texture.id > 0) continue;
+        const RenderState rs = ComputeRenderState(p, lit);
+        if (rs.size <= 0.001f) continue;
 
         // billboard is now meaningful: a sphere regardless of texture. The
         // texture==0 fallback below is unchanged (that is how a Burst without a
         // texture renders), so this only adds a way to author solid particles
         // from an OZONE emitter.
         if (p.billboard && p.texture.id > 0)
-            DrawBillboard(camera, p.texture, p.position, size, c);
+            DrawBillboard(camera, p.texture, p.position, rs.size, rs.color);
         else
-            DrawSphere(p.position, size * 0.5f, c);
+            DrawSphere(p.position, rs.size * 0.5f, rs.color);
     }
     EndBlendMode();
 }
