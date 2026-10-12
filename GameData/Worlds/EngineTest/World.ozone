@@ -281,4 +281,4 @@ zone sound 12.5 2.5 0 27.5 17.5 4 name=engine_sound
 
 # gameType is numeric; the old SINGLEPLAYER token only parsed because std::stof
 # threw and the parser substituted 0.
-levelinfo 0 8 5 0 10 50 0 GameData/Global/sky/sky_day.dds GameData/Global/sky/sky_noon.dds
+levelinfo 0 8 5 0 10 50 0 GameData/Global/sky/sky_day.png GameData/Global/sky/sky_noon.png

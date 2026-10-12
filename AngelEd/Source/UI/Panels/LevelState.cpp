@@ -69,7 +69,7 @@ static bool ChooseImageFile(std::string& outPath) {
     dialog.hwndOwner = g_hRaylibWnd;
     dialog.lpstrFile = path;
     dialog.nMaxFile = MAX_PATH;
-    dialog.lpstrFilter = L"Images (*.png;*.jpg;*.jpeg;*.bmp;*.tga;*.dds)\0*.png;*.jpg;*.jpeg;*.bmp;*.tga;*.dds\0All Files (*.*)\0*.*\0\0";
+    dialog.lpstrFilter = L"Images (*.png;*.jpg;*.jpeg;*.bmp;*.tga)\0*.png;*.jpg;*.jpeg;*.bmp;*.tga\0All Files (*.*)\0*.*\0\0";
     dialog.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_FILEMUSTEXIST;
     if (!GetOpenFileNameW(&dialog)) return false;
 

@@ -84,30 +84,7 @@ void ShowTextureManager(bool show) {
 // that is thousands of GDI bitmaps and a visible memory spike at panel-open time. Now
 // only the cells that actually paint pay for one.
 static HBITMAP BuildTextureThumbnail(HWND hwnd, const ResourceEntry& tex) {
-    // Guarded: substr(npos) throws std::out_of_range when the path has no extension at
-    // all, which is reachable for a hand-built package key.
-    const size_t dot = tex.path.rfind('.');
-    if (dot == std::string::npos) return nullptr;
-    std::string ext = tex.path.substr(dot);
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
-    Image img = {0};
-    if (ext == ".dds") {
-        // raylib loads DDS via LoadTexture; resolve package entries by caching the bytes
-        // to a real file first.
-        std::string filePath = tex.fromPackage
-            ? PackageAssetLoader::Instance().CacheModelFile(tex.path.c_str())
-            : tex.path;
-        if (!filePath.empty() && IsPathFile(filePath.c_str())) {
-            Texture2D t = LoadTexture(filePath.c_str());
-            if (t.id > 0) {
-                img = LoadImageFromTexture(t);
-                UnloadTexture(t);
-            }
-        }
-    } else {
-        img = LoadImageWithFallback(tex.path.c_str());
-    }
+    Image img = LoadImageWithFallback(tex.path.c_str());
     if (!img.data) return nullptr;
 
     ImageResize(&img, TEX_THUMB_SIZE, TEX_THUMB_SIZE);
@@ -142,8 +119,10 @@ void ScanTextureBrowserFiles() {
         if (tex.thumbnail) { DeleteObject(tex.thumbnail); tex.thumbnail = nullptr; }
     }
     g_textureFiles.clear();
-    // .dds included so the Global/sky skybox library is selectable
-    const std::vector<std::string> exts = { ".png", ".tga", ".bmp", ".jpg", ".jpeg", ".dds" };
+    // Every shipped texture is now PNG (tools/convert_dds.py converted the .dds
+    // library), so the sky panoramas in Global/sky are selectable from the same
+    // list as everything else.
+    const std::vector<std::string> exts = { ".png", ".tga", ".bmp", ".jpg", ".jpeg" };
 
     // Enumeration belongs to Resources/AssetScan - it is the same walk the sound browser
     // and the Model Browser use, and this file was carrying a third copy of it.
@@ -235,7 +214,7 @@ static void ImportTexturesIntoWorld(HWND hwnd) {
     ofn.hwndOwner = hwnd;
     ofn.lpstrFile = buf.data();
     ofn.nMaxFile = (DWORD)buf.size();
-    ofn.lpstrFilter = L"Images (*.png;*.jpg;*.jpeg;*.bmp;*.tga;*.dds)\0*.png;*.jpg;*.jpeg;*.bmp;*.tga;*.dds\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFilter = L"Images (*.png;*.jpg;*.jpeg;*.bmp;*.tga)\0*.png;*.jpg;*.jpeg;*.bmp;*.tga\0All Files (*.*)\0*.*\0";
     ofn.lpstrTitle = L"Import Textures";
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR |
                 OFN_ALLOWMULTISELECT | OFN_EXPLORER;

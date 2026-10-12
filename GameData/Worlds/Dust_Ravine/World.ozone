@@ -1,22 +1,22 @@
 # OZONE world exported from AngelEd
 # Format: ozone v1.0
 
-add box -67.5 89.5 7 45 14 1 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.dds texScaleU=10 texScaleV=4 flags=8
-add box -22.5 89.5 7 45 14 1 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.dds texScaleU=10 texScaleV=4 flags=8
-add box 22.5 89.5 7 45 14 1 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.dds texScaleU=10 texScaleV=4 flags=8
-add box 67.5 89.5 7 45 14 1 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.dds texScaleU=10 texScaleV=4 flags=8
-add box -67.5 -89.5 7 45 14 1 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.dds texScaleU=10 texScaleV=4 flags=8
-add box -22.5 -89.5 7 45 14 1 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.dds texScaleU=10 texScaleV=4 flags=8
-add box 22.5 -89.5 7 45 14 1 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.dds texScaleU=10 texScaleV=4 flags=8
-add box 67.5 -89.5 7 45 14 1 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.dds texScaleU=10 texScaleV=4 flags=8
-add box 89.5 -67.5 7 1 14 45 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.dds texScaleU=10 texScaleV=4 flags=8
-add box 89.5 -22.5 7 1 14 45 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.dds texScaleU=10 texScaleV=4 flags=8
-add box 89.5 22.5 7 1 14 45 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.dds texScaleU=10 texScaleV=4 flags=8
-add box 89.5 67.5 7 1 14 45 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.dds texScaleU=10 texScaleV=4 flags=8
-add box -89.5 -67.5 7 1 14 45 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.dds texScaleU=10 texScaleV=4 flags=8
-add box -89.5 -22.5 7 1 14 45 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.dds texScaleU=10 texScaleV=4 flags=8
-add box -89.5 22.5 7 1 14 45 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.dds texScaleU=10 texScaleV=4 flags=8
-add box -89.5 67.5 7 1 14 45 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.dds texScaleU=10 texScaleV=4 flags=8
+add box -67.5 89.5 7 45 14 1 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.png texScaleU=10 texScaleV=4 flags=8
+add box -22.5 89.5 7 45 14 1 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.png texScaleU=10 texScaleV=4 flags=8
+add box 22.5 89.5 7 45 14 1 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.png texScaleU=10 texScaleV=4 flags=8
+add box 67.5 89.5 7 45 14 1 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.png texScaleU=10 texScaleV=4 flags=8
+add box -67.5 -89.5 7 45 14 1 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.png texScaleU=10 texScaleV=4 flags=8
+add box -22.5 -89.5 7 45 14 1 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.png texScaleU=10 texScaleV=4 flags=8
+add box 22.5 -89.5 7 45 14 1 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.png texScaleU=10 texScaleV=4 flags=8
+add box 67.5 -89.5 7 45 14 1 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.png texScaleU=10 texScaleV=4 flags=8
+add box 89.5 -67.5 7 1 14 45 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.png texScaleU=10 texScaleV=4 flags=8
+add box 89.5 -22.5 7 1 14 45 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.png texScaleU=10 texScaleV=4 flags=8
+add box 89.5 22.5 7 1 14 45 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.png texScaleU=10 texScaleV=4 flags=8
+add box 89.5 67.5 7 1 14 45 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.png texScaleU=10 texScaleV=4 flags=8
+add box -89.5 -67.5 7 1 14 45 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.png texScaleU=10 texScaleV=4 flags=8
+add box -89.5 -22.5 7 1 14 45 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.png texScaleU=10 texScaleV=4 flags=8
+add box -89.5 22.5 7 1 14 45 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.png texScaleU=10 texScaleV=4 flags=8
+add box -89.5 67.5 7 1 14 45 0 texPath=GameData/Worlds/Dust_Ravine/oztex/dp_fortress_04_3.png texScaleU=10 texScaleV=4 flags=8
 add cyl -60 10 3 2 2 6 16 0
 add cyl -50 -5 3 1.5 1.5 5 16 0
 add cyl -70 -10 3 1.8 1.8 6 16 0
@@ -265,7 +265,7 @@ PathNode canyon_c 12 -58 1 radius=4 next=canyon_a,canyon_b
 PathNode ruins_a 50 25 1 radius=4 next=ruins_b
 PathNode ruins_b 62 38 1 radius=4 next=ruins_c
 PathNode ruins_c 48 45 1 radius=4 next=ruins_a
-levelinfo 0 8 5 0 10 50 0 GameData/Global/sky/skydome_daylight.dds
+levelinfo 0 8 5 0 10 50 0 GameData/Global/sky/skydome_daylight.png
 particles 1 120 2 220 230 235 0.3 0.2
 
 # End of OZONE export

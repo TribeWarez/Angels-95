@@ -137,7 +137,7 @@ if (Test-Path $engineDir) {
     Run-OzPack "OZTX" $engineDir "$OUT_TEX\engine_icons.oztex"
 }
 
-# --- Skybox library (Global/sky: *.dds used by levelinfo skybox paths) ---
+# --- Skybox library (Global/sky: *.png panoramas used by levelinfo skybox paths) ---
 $skyDir = "$GAMEDATA\Global\sky"
 if (Test-Path $skyDir) {
     Run-OzPack "OZTX" $skyDir "$OUT_TEX\sky.oztex"

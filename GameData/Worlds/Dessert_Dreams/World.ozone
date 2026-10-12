@@ -145,7 +145,7 @@ PathNode mesa_foot -20 58 1 radius=5 next=mesa_top
 PathNode mesa_top -20 66 1 radius=5 next=mesa_foot
 PathNode outpost_a 46 -40 1 radius=3 next=outpost_b
 PathNode outpost_b 58 -50 1 radius=3 next=outpost_a
-levelinfo 0 8 5 0 10 50 0 GameData/Global/sky/sky_noon.dds GameData/Global/sky/sky_day.dds
+levelinfo 0 8 5 0 10 50 0 GameData/Global/sky/sky_noon.png GameData/Global/sky/sky_day.png
 particles 1 120 2 220 230 235 0.3 0.2
 
 # End of OZONE export

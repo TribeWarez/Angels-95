@@ -211,13 +211,14 @@ inline Texture2D LoadTextureWithFallback(const char* path) {
         std::string ext = normalized.substr(normalized.rfind('.'));
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
         // Raylib's LoadImageFromMemory (which LoadTextureFromImage uses) needs
-        // the extension *with* its leading dot, e.g. ".dds"/".png". Passing
-        // "dds"/"png" without the dot tripped "IMAGE: Data format not supported"
-        // and broke packaged DDS textures (the old workaround wrote them to
-        // System/Cache just to use the file-based loader).
+        // the extension *with* its leading dot, e.g. ".png". Passing "png"
+        // without the dot tripped "IMAGE: Data format not supported" (the old
+        // workaround wrote them to System/Cache just to use the file-based
+        // loader). Every shipped texture is now PNG/GIF - the .dds library was
+        // converted by tools/convert_dds.py - so ".dds" is no longer listed.
         const char* fmt = nullptr;
         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
-            ext == ".bmp" || ext == ".tga" || ext == ".gif" || ext == ".dds")
+            ext == ".bmp" || ext == ".tga" || ext == ".gif")
             fmt = ext.c_str();
         if (fmt) {
             Image img = LoadImageFromMemory(fmt, data, (int)sz);
@@ -336,10 +337,10 @@ inline Image LoadImageWithFallback(const char* path) {
         std::string ext = normalized.substr(normalized.rfind('.'));
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
         // Extension (including the leading dot) is required by raylib's
-        // LoadImageFromMemory; ".dds" decodes from memory too.
+        // LoadImageFromMemory.
         const char* fmt = nullptr;
         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
-            ext == ".bmp" || ext == ".tga" || ext == ".gif" || ext == ".dds")
+            ext == ".bmp" || ext == ".tga" || ext == ".gif")
             fmt = ext.c_str();
         if (fmt)
             return LoadImageFromMemory(fmt, data, (int)sz);

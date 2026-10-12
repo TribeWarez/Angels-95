@@ -659,9 +659,9 @@ void PawnSystem::EnsurePortalVisual() {
 
     UploadMesh(&mesh, false);
     m_portalQuadModel = LoadModelFromMesh(mesh);
-    m_portalTexture = LoadTextureWithFallback("GameData/Global/EFX/cas_win_black#.dds");
+    m_portalTexture = LoadTextureWithFallback("GameData/Global/EFX/cas_win_black#.png");
     if (m_portalTexture.id == 0)
-        OZ_WARN("Portal shimmer texture not found: GameData/Global/EFX/cas_win_black#.dds");
+        OZ_WARN("Portal shimmer texture not found: GameData/Global/EFX/cas_win_black#.png");
 }
 
 void PawnSystem::UnloadPortalVisual() {

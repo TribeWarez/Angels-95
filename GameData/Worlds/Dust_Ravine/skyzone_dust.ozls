@@ -2,12 +2,12 @@ entity "dust_sky" : skyzone {
     fog_color = (0.82, 0.68, 0.52)
     fog_density = 0.006
     ambient_light = (0.55, 0.50, 0.45)
-    skybox = "GameData/Global/sky/skydome_daylight.dds"
+    skybox = "GameData/Global/sky/skydome_daylight.png"
     actions {
         on_enter {
             set_fog 0.82 0.68 0.52 0.006
             set_ambient 0.55 0.50 0.45
-            set_skybox "GameData/Global/sky/skydome_daylight.dds"
+            set_skybox "GameData/Global/sky/skydome_daylight.png"
             say "Dust Ravine - fortress ahead, enemies in every hall"
         }
         on_exit {

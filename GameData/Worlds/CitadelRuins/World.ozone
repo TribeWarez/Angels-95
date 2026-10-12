@@ -187,18 +187,18 @@ add box 0 -43.5 -1.25 4.5 0.5 1 0 1
 # leave a larger-than-necessary diff - the render is identical either way, because
 # uvScaleU/uvScaleV default to 1.0 (SurfaceFlags.hpp).
 # ==============================================================================
-add box -30 42 11 30 22 1 0 flags=8 texPath=oztex/tileset/bb_wall_13.dds texScaleU=1 texScaleV=1
-add box 0 42 13 30 26 1 0 flags=8 texPath=oztex/tileset/bb_wall_13.dds texScaleU=1 texScaleV=1
-add box 30 42 9 30 18 1 0 flags=8 texPath=oztex/tileset/bb_wall_13.dds texScaleU=1 texScaleV=1
-add box -30 -42 9 30 18 1 0 flags=8 texPath=oztex/tileset/bb_wall_13.dds texScaleU=1 texScaleV=1
-add box 0 -42 12 30 24 1 0 flags=8 texPath=oztex/tileset/bb_wall_13.dds texScaleU=1 texScaleV=1
-add box 30 -42 13 30 26 1 0 flags=8 texPath=oztex/tileset/bb_wall_13.dds texScaleU=1 texScaleV=1
-add box 42 -30 11 1 22 30 0 flags=8 texPath=oztex/tileset/bb_wall_13.dds texScaleU=1 texScaleV=1
-add box 42 0 12 1 24 30 0 flags=8 texPath=oztex/tileset/bb_wall_13.dds texScaleU=1 texScaleV=1
-add box 42 30 10 1 20 30 0 flags=8 texPath=oztex/tileset/bb_wall_13.dds texScaleU=1 texScaleV=1
-add box -42 -30 12 1 24 30 0 flags=8 texPath=oztex/tileset/bb_wall_13.dds texScaleU=1 texScaleV=1
-add box -42 0 10 1 20 30 0 flags=8 texPath=oztex/tileset/bb_wall_13.dds texScaleU=1 texScaleV=1
-add box -42 30 11 1 22 30 0 flags=8 texPath=oztex/tileset/bb_wall_13.dds texScaleU=1 texScaleV=1
+add box -30 42 11 30 22 1 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 0 42 13 30 26 1 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 30 42 9 30 18 1 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box -30 -42 9 30 18 1 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 0 -42 12 30 24 1 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 30 -42 13 30 26 1 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 42 -30 11 1 22 30 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 42 0 12 1 24 30 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 42 30 10 1 20 30 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box -42 -30 12 1 24 30 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box -42 0 10 1 20 30 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box -42 30 11 1 22 30 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
 
 # ==============================================================================
 # Entities
@@ -288,4 +288,4 @@ zone sound -20 -40 -1 20 -16 1 name=citadel_approach
 
 # Evening sky, matching skyzone_citadel.ozls (which previously disagreed with
 # levelinfo, so the authored dusk sky was overridden by a night one).
-levelinfo 0 8 5 0 10 50 0 GameData/Global/sky/sky_evening.dds GameData/Global/sky/sky_death_land.dds
+levelinfo 0 8 5 0 10 50 0 GameData/Global/sky/sky_evening.png GameData/Global/sky/sky_death_land.png

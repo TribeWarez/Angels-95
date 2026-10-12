@@ -239,6 +239,6 @@ npc Floater 13.0442 28.0775 19.6112
 light point 28.7 27.4795 51.163 255 255 255 1 20 name=Light.Point
 light directional -1.26918 15.9852 37.9803 255 255 255 0.865773 effect=1 flare=1 name=Light.Point
 zone sky -1020.21 -1042.22 -1007.18 1027.79 1005.78 1040.82 1 name=zone_sky_0 gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
-levelinfo 0 8 5 0 10 50 0 GameData/Global/sky/cloud01.dds
+levelinfo 0 8 5 0 10 50 0 GameData/Global/sky/cloud01.png
 
 # End of OZONE export
