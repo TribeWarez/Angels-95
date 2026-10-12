@@ -191,6 +191,16 @@ static const int ID_PP_ZENV_AMB_B       = 743;
 static const int ID_PP_ZENV_AMB_INT     = 744;
 static const int ID_PP_ZENV_REVERB_MIX  = 750;
 static const int ID_PP_ZENV_REVERB_DEC  = 751;
+// Particle emitter authoring continued (760+). The original block (435-443)
+// stopped at the START values; sizeEnd/colorEnd/gravity/radius/billboard were
+// loader-only, so a hand-authored fade-out was lost on the first Apply.
+static const int ID_PP_EMITTER_SIZEEND  = 760;
+static const int ID_PP_EMITTER_REND     = 761;
+static const int ID_PP_EMITTER_GEND     = 762;
+static const int ID_PP_EMITTER_BEND     = 763;
+static const int ID_PP_EMITTER_GRAVITY  = 764;
+static const int ID_PP_EMITTER_RADIUS   = 765;
+static const int ID_PP_EMITTER_BILLBOARD = 766;
 
 // Read one editable stat row's field as text. Returns "" when the control is
 // absent, which the callers treat as "no edit".
@@ -1018,9 +1028,23 @@ static void PopulatePropertiesPanel(HWND hwnd) {
         addField(L"Speed:", ID_PP_EMITTER_SPEED, g_editorPanels.propEmitterSpeed);
         addField(L"Size:", ID_PP_EMITTER_SIZE, g_editorPanels.propEmitterSize);
         addField(L"Spread:", ID_PP_EMITTER_SPREAD, g_editorPanels.propEmitterSpread);
+        addField(L"Gravity:", ID_PP_EMITTER_GRAVITY, g_editorPanels.propEmitterGravity);
+        addField(L"Radius:", ID_PP_EMITTER_RADIUS, g_editorPanels.propEmitterRadius);
         addField(L"Color R:", ID_PP_EMITTER_R, (float)g_editorPanels.propEmitterR);
         addField(L"Color G:", ID_PP_EMITTER_G, (float)g_editorPanels.propEmitterG);
         addField(L"Color B:", ID_PP_EMITTER_B, (float)g_editorPanels.propEmitterB);
+        addField(L"Size End:", ID_PP_EMITTER_SIZEEND, g_editorPanels.propEmitterSizeEnd);
+        addField(L"End R:", ID_PP_EMITTER_REND, (float)g_editorPanels.propEmitterREnd);
+        addField(L"End G:", ID_PP_EMITTER_GEND, (float)g_editorPanels.propEmitterGEnd);
+        addField(L"End B:", ID_PP_EMITTER_BEND, (float)g_editorPanels.propEmitterBEnd);
+        {
+            // Unchecked draws the particle as a lit sphere; checked billboards it.
+            HWND hChk = CreateWindowEx(0, L"BUTTON", L"Billboard",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+                x, y, 200, 22, hwnd, (HMENU)(INT_PTR)ID_PP_EMITTER_BILLBOARD, g_hInst, nullptr);
+            SendMessage(hChk, BM_SETCHECK,
+                        g_editorPanels.propEmitterBillboard ? BST_CHECKED : BST_UNCHECKED, 0);
+        }
     } else if (selType == sel::PATHNODE) {
         addSection("Path Node");
         addTextField(L"Name:", ID_PP_PATHNAME, g_editorPanels.propPathName);
@@ -1499,6 +1523,18 @@ case WM_USER + 50: {
             g_editorPanels.propEmitterR = (int)readFloat(ID_PP_EMITTER_R, (float)g_editorPanels.propEmitterR);
             g_editorPanels.propEmitterG = (int)readFloat(ID_PP_EMITTER_G, (float)g_editorPanels.propEmitterG);
             g_editorPanels.propEmitterB = (int)readFloat(ID_PP_EMITTER_B, (float)g_editorPanels.propEmitterB);
+            g_editorPanels.propEmitterSizeEnd = readFloat(ID_PP_EMITTER_SIZEEND, g_editorPanels.propEmitterSizeEnd);
+            g_editorPanels.propEmitterGravity = readFloat(ID_PP_EMITTER_GRAVITY, g_editorPanels.propEmitterGravity);
+            g_editorPanels.propEmitterRadius = readFloat(ID_PP_EMITTER_RADIUS, g_editorPanels.propEmitterRadius);
+            g_editorPanels.propEmitterREnd = (int)readFloat(ID_PP_EMITTER_REND, (float)g_editorPanels.propEmitterREnd);
+            g_editorPanels.propEmitterGEnd = (int)readFloat(ID_PP_EMITTER_GEND, (float)g_editorPanels.propEmitterGEnd);
+            g_editorPanels.propEmitterBEnd = (int)readFloat(ID_PP_EMITTER_BEND, (float)g_editorPanels.propEmitterBEnd);
+            {
+                HWND hChk = GetDlgItem(hwnd, ID_PP_EMITTER_BILLBOARD);
+                if (hChk)
+                    g_editorPanels.propEmitterBillboard =
+                        (SendMessage(hChk, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            }
             // GameEngine.PathNode edits
             g_editorPanels.propPathName = readString(ID_PP_PATHNAME, g_editorPanels.propPathName);
             g_editorPanels.propPathRadius = readFloat(ID_PP_PATHRADIUS, g_editorPanels.propPathRadius);
@@ -1841,6 +1877,13 @@ if (!z.name.empty()) FillDefBlock(z.name, "");
                 g_editorPanels.propEmitterR = e->colorStart.r;
                 g_editorPanels.propEmitterG = e->colorStart.g;
                 g_editorPanels.propEmitterB = e->colorStart.b;
+                g_editorPanels.propEmitterSizeEnd = e->sizeEnd;
+                g_editorPanels.propEmitterREnd = e->colorEnd.r;
+                g_editorPanels.propEmitterGEnd = e->colorEnd.g;
+                g_editorPanels.propEmitterBEnd = e->colorEnd.b;
+                g_editorPanels.propEmitterGravity = e->gravity;
+                g_editorPanels.propEmitterRadius = e->radius;
+                g_editorPanels.propEmitterBillboard = e->billboard;
             }
         } else if (g_editorPanels.propsTargetType == sel::PATHNODE) {
             if (PathNode* pn = PawnSystem::Instance().GetPathNode(g_editorPanels.propsTargetIndex)) {

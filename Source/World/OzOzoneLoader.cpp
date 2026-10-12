@@ -360,7 +360,14 @@ static bool ParseOzoneEntity(const OzonePrimitive& prim,
             // ParticleEmitter <type> x y z [rate life speed spread sizeStart sizeEnd
             //   r g b rEnd gEnd bEnd gravity radius dirX dirY dirZ yaw] [tex=path]
             if (prim.args.size() >= 3) {
+                // A named kwarg (particleOverrides) wins over the positional
+                // slot it names, so `gravity=-0.8` retunes one value without
+                // restating the twenty-two around it. Overrides are applied
+                // LAST, after every positional default is resolved, so a
+                // kwarg never loses to a positional value.
                 auto arg = [&](int i, float def) -> float {
+                    for (const auto& ov : prim.particleOverrides)
+                        if (ov.first == i) return ov.second;
                     return (i >= 0 && i < (int)prim.args.size()) ? prim.args[i] : def;
                 };
                 ParticleEmitterNode node;

@@ -103,6 +103,7 @@ void OzParticleSimulationManager::SpawnFromEmitter(const ParticleEmitterNode& e,
         p->colorStart = e.colorStart;
         p->colorEnd = e.colorEnd;
         p->gravity = e.gravity;
+        p->billboard = e.billboard;
         p->texture = tex;
         p->active = true;
         m_live++;
@@ -174,7 +175,11 @@ void OzParticleSimulationManager::Draw(Camera3D& camera,
 
         c = ApplyLighting(c, p.position, lit);
 
-        if (p.texture.id > 0)
+        // billboard is now meaningful: a sphere regardless of texture. The
+        // texture==0 fallback below is unchanged (that is how a Burst without a
+        // texture renders), so this only adds a way to author solid particles
+        // from an OZONE emitter.
+        if (p.billboard && p.texture.id > 0)
             DrawBillboard(camera, p.texture, p.position, size, c);
         else
             DrawSphere(p.position, size * 0.5f, c);
@@ -252,28 +257,32 @@ void OzParticleSimulationManager::Burst(Vector3 pos, Vector3 dir, int count,
         if (!p) break;   // pool exhausted
 
         // Random point in the cone: random angle, random radial falloff
-        // (sqrt keeps the distribution uniform over the disc).
-        const float ang = (float)rand() / (float)RAND_MAX * 2.0f * PI;
-        const float rad = spreadRad > 0.0f
-            ? sqrtf((float)rand() / (float)RAND_MAX) * spreadRad
-            : 0.0f;
+        // (sqrt keeps the distribution uniform over the disc). FRand (the
+        // file-local PRNG) rather than rand(): Burst used to call rand(), so a
+        // gameplay srand() reshuffled every muzzle flash and the two emitters
+        // shared the global sequence with the rest of the process.
+        const float ang = FRand() * 2.0f * PI;
+        const float rad = spreadRad > 0.0f ? sqrtf(FRand()) * spreadRad : 0.0f;
         Vector3 v = base * cosf(rad)
                   + (right * cosf(ang) + realUp * sinf(ang)) * sinf(rad);
         v = Vector3Normalize(v);
 
         // Per-particle speed jitter so a burst does not read as one rigid cone.
-        const float s = speed * (0.7f + 0.6f * ((float)rand() / (float)RAND_MAX));
+        const float s = speed * (0.7f + 0.6f * FRand());
 
         p->active = true;
         p->position = pos;
         p->velocity = Vector3Scale(v, s);
         p->age = 0.0f;
-        p->lifetime = lifetime * (0.7f + 0.6f * ((float)rand() / (float)RAND_MAX));
+        p->lifetime = lifetime * (0.7f + 0.6f * FRand());
         p->sizeStart = sizeStart;
         p->sizeEnd = sizeEnd;
         p->colorStart = color;
         p->colorEnd = colorEnd;
         p->gravity = gravity;
+        // One-shot bursts are billboarded by default; a caller wanting solid
+        // spheres passes tex == 0 and Draw already falls back to a sphere.
+        p->billboard = true;
         // Left as 0 when no texture is given: Draw falls back to a sphere, so a
         // one-shot burst does not need a GL upload. Resolving the soft sprite
         // here would touch the GPU even on paths that never draw (tests).

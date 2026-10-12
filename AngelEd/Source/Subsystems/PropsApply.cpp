@@ -274,6 +274,18 @@ void ApplyPanelProperties(const std::vector<ed::Event>& events) {
                 e->colorStart.r = (unsigned char)g_editorPanels.propEmitterR;
                 e->colorStart.g = (unsigned char)g_editorPanels.propEmitterG;
                 e->colorStart.b = (unsigned char)g_editorPanels.propEmitterB;
+                // End-of-life size/colour, gravity, spawn radius and the
+                // billboard flag. These had no editor row before, so an Apply
+                // silently reset them to the struct defaults - which is how a
+                // hand-authored smoke fade turned into a uniform grey puff the
+                // first time anybody nudged its rate in the editor.
+                e->sizeEnd = g_editorPanels.propEmitterSizeEnd;
+                e->colorEnd.r = (unsigned char)g_editorPanels.propEmitterREnd;
+                e->colorEnd.g = (unsigned char)g_editorPanels.propEmitterGEnd;
+                e->colorEnd.b = (unsigned char)g_editorPanels.propEmitterBEnd;
+                e->gravity = g_editorPanels.propEmitterGravity;
+                e->radius = g_editorPanels.propEmitterRadius;
+                e->billboard = g_editorPanels.propEmitterBillboard;
             }
         } else if (tgtType == SelType::PATHNODE) {
             PathNode* pn = PawnSystem::Instance().GetPathNode(tgtIdx);

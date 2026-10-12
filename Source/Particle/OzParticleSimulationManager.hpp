@@ -58,6 +58,10 @@ private:
         Color colorEnd{255, 255, 255, 0};
         float gravity = 0.0f;
         Texture2D texture{0};
+        // Copied from the emitter (and true for one-shot bursts). false draws
+        // the particle as a lit sphere instead of a camera-facing quad; the
+        // emitter field was previously written by the loader and never read.
+        bool billboard = true;
         bool active = false;
     };
 

@@ -2,6 +2,9 @@
 #include "../Package/OzPackage.hpp"
 #include <cstdio>
 #include <cstring>
+#include <algorithm>
+#include <cctype>
+#include <unordered_map>
 
 std::string StripQuotes(std::string s) {
     if (s.size() >= 2 && s.front() == '\"' && s.back() == '\"')
@@ -423,10 +426,38 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
             prim.type = OzonePrimitiveType::ENTITY_PARTICLE_EMITTER;
             // ParticleEmitter <type> x y z [rate life speed spread sizeStart sizeEnd
             //   r g b rEnd gEnd bEnd gravity radius dirX dirY dirZ yaw] [tex=path]
+            // Plus optional `key=value` overrides of that tail (see
+            // OzonePrimitive::particleOverrides). The indices below are the
+            // positional slots the loader reads, so a kwarg and its slot name
+            // the same thing.
             if (ls >> prim.entityType) {
+                // name -> positional slot. Keep in step with the loader's
+                // ENTITY_PARTICLE_EMITTER arg() indices.
+                static const std::unordered_map<std::string, int> kSlots = {
+                    {"rate", 3},   {"life", 4},   {"speed", 5},   {"spread", 6},
+                    {"sizestart", 7}, {"sizeend", 8},
+                    {"r", 9},      {"g", 10},     {"b", 11},
+                    {"rend", 12},  {"gend", 13},  {"bend", 14},
+                    {"gravity", 15}, {"radius", 16},
+                    {"dirx", 17},  {"diry", 18},  {"dirz", 19},  {"yaw", 20},
+                };
                 std::string s;
                 while (ls >> s) {
                     if (s.rfind("tex=", 0) == 0) { prim.texPath = s.substr(4); continue; }
+                    const size_t eq = s.find('=');
+                    if (eq != std::string::npos && eq > 0) {
+                        std::string key = s.substr(0, eq);
+                        std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+                        auto it = kSlots.find(key);
+                        if (it != kSlots.end()) {
+                            try {
+                                prim.particleOverrides.emplace_back(
+                                    it->second, std::stof(s.substr(eq + 1)));
+                                continue;
+                            } catch (...) { /* fall through: a non-numeric value is not an arg */ }
+                        }
+                        continue;  // unknown key: ignore the token, keep the rest parseable
+                    }
                     try { prim.args.push_back(std::stof(s)); }
                     catch (...) { break; }
                 }

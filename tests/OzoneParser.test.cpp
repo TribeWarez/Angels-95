@@ -2,6 +2,7 @@
 #include "../Source/World/OzoneParser.hpp"
 #include "../Source/Physics/PhysicsInfo.hpp"
 #include <cstdio>
+#include <cmath>
 #include <string>
 
 int test_count = 0, pass_count = 0;
@@ -159,6 +160,42 @@ static void test_particle_emitter() {
     else printf("FAIL: size=%zu args=%zu type=%s\n",
                 e.size(), e.size() ? e[0].args.size() : 0,
                 e.size() ? e[0].entityType.c_str() : "");
+}
+
+// Named `key=value` overrides on ParticleEmitter. The point is retuning ONE
+// value (gravity, say) without restating twenty-two positional floats and
+// risking a transposed pair. The override is recorded against the positional
+// slot it names; the loader applies it last so it always wins.
+static void test_particle_emitter_kwargs() {
+    test_count++;
+    printf("  TEST ParticleEmitter named kwargs... ");
+    auto e = OzoneParser::parse_string(
+        "ParticleEmitter smoke 1 2 3 20 1 2 0.4 0.4 0.0 "
+        "255 180 80 60 20 10 0 0 0 1 0 0 gravity=-0.8 radius=2.5 rate=45 tex=x.png\n");
+    bool ok = e.size() == 1 && e[0].type == OzonePrimitiveType::ENTITY_PARTICLE_EMITTER;
+    // Two overrides recorded: gravity (slot 15) and radius (slot 16); rate
+    // (slot 3) is a third.
+    // Exact-ish comparison via a helper rather than int casts: (int)(-0.8f) is
+    // 0, so any integer truncation here would silently pass for the wrong
+    // value. 1e-3 tolerance on floats the parser produced from text.
+    auto near = [](float got, float want) { return fabsf(got - want) < 1e-3f; };
+    float ovGravity = 999, ovRadius = 999, ovRate = 999;
+    for (const auto& ov : e[0].particleOverrides) {
+        if (ov.first == 15) ovGravity = ov.second;
+        if (ov.first == 16) ovRadius = ov.second;
+        if (ov.first == 3)  ovRate   = ov.second;
+    }
+    ok = ok && e[0].texPath == "x.png"
+        && e[0].particleOverrides.size() == 3
+        && near(ovGravity, -0.8f) && near(ovRadius, 2.5f) && near(ovRate, 45.0f)
+        // The kwargs did NOT get pushed into args: args still holds exactly the
+        // 21 positionals, so the loader's index math is untouched.
+        && e[0].args.size() == 21
+        && e[0].args[3] == 20.0f;   // positional rate unchanged; kwarg overrides it
+    if (ok) { pass_count++; printf("PASS\n"); }
+    else printf("FAIL: size=%zu args=%zu overrides=%zu\n",
+                e.size(), e.size() ? e[0].args.size() : 0,
+                e.size() ? e[0].particleOverrides.size() : 0);
 }
 
 static void test_mesh_animfile() {
@@ -487,6 +524,7 @@ int main() {
     test_mesh_static();
     test_mesh_skeletal();
     test_particle_emitter();
+    test_particle_emitter_kwargs();
     test_path_node();
     test_wind_zone();
     test_mesh_wind_flag();

@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <utility>
 #include <sstream>
 #include <fstream>
 #include <cstdint>
@@ -70,6 +71,13 @@ struct OzonePrimitive {
     // positional arg(0) when it resolves to a known mode; unknown names warn
     // and fall back to arg(0) rather than silently becoming 0.
     std::string gametypeKey;
+    // GameEngine.ParticleEmitter: `key=value` overrides of the positional tail,
+    // stored as {positional index, value}. Twenty-three bare positional floats
+    // with no way to retune one of them means an author who wants different
+    // gravity rewrites the whole line and silently transposes two colours; a
+    // named kwarg wins over the slot it names. Positional args stay fully
+    // supported and the shipped emitters use it unchanged.
+    std::vector<std::pair<int, float>> particleOverrides;
     // Brush surface state: a brush-wide default plus up to six per-face
     // overrides, parsed from the `face<name>_<field>=` kwargs. See
     // World/SurfaceFlags.hpp for the bit allocation and the face/axis mapping.

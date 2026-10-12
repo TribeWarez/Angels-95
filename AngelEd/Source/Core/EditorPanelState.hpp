@@ -322,6 +322,15 @@ struct DefStatRow {
     float propEmitterSize = 0.4f;
     float propEmitterSpread = 0.4f;
     int propEmitterR = 255, propEmitterG = 180, propEmitterB = 80;
+    // End-of-life size and colour, plus gravity and spawn radius. The panel used
+    // to expose only the start values, so an emitter's fade-out was authored by
+    // hand in the .ozone and any Apply silently reset it to the defaults - the
+    // four fields below were written by the loader and had no editor row.
+    float propEmitterSizeEnd = 0.0f;
+    int propEmitterREnd = 60, propEmitterGEnd = 20, propEmitterBEnd = 10;
+    float propEmitterGravity = 0.0f;
+    float propEmitterRadius = 0.0f;
+    bool propEmitterBillboard = true;
 
     // GameEngine.PathNode editing
     std::string propPathName;
