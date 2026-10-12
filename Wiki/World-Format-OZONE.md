@@ -13,6 +13,21 @@ OZONE is a line-oriented text format supporting CSG brush primitives and
 entity metadata (player starts, pickups, NPCs, zones, lights, meshes, particle
 emitters, path nodes, wind zones).
 
+### Diagnostics
+
+The parser reports what it cannot use, with a line number, rather than dropping
+it silently:
+
+- an unrecognised **first token** name the line and the token;
+- a malformed **value** (`gravity=abc`, a bare `effect=`, `surfAlpha=opaque`)
+  keeps that field's default and reports — it used to throw
+  `std::invalid_argument` out of the parser and kill the process with no message;
+- a trailing token on an **entity** line reports and stops that line.
+
+Unknown tokens on a **brush** line are still ignored by design (that is what
+makes the surface kwargs extensible): `add box ... someFlag=1` is accepted and
+`someFlag` dropped without complaint.
+
 ### Primitives
 
 ```
@@ -54,6 +69,13 @@ normal, so they are the same six buckets the renderer draws.
 Faces are named in **engine Y-up** (`px nx py ny pz nz`) and are **not** swapped
 for OZONE's Z-up: they are a renderer concept, not world coordinates.
 
+**Every field below is genuinely per face**, including the texture and the UV
+transform. Each face is drawn with its own resolved properties and its own
+texture binding, so a face's `tex`/`texSlot` and its `uvScale*`/`uvOffset*` apply
+to that face alone. Precedence for the texture is: face `tex` (path) > face
+`texSlot` > brush-wide equivalents > the brush mesh's own (auto-selected or
+positional) texture.
+
 **Brush-wide kwargs** (on any brush line):
 
 | Kwarg | Meaning |
@@ -94,6 +116,13 @@ token:
 add box 0 0 0 8 3 8 0 flags=2048 facepy_flags=12 facepz_texSlot=3
 ```
 
+> Historical: `texSlot` / `tex` / `uvScale*` / `uvOffset*` were stored, exported
+> and round-tripped for as long as they existed and **nothing ever bound them** —
+> the Surface Properties dialog's texture and alignment fields only took effect
+> after a save and reload, and per-face values never did. Flags, alpha, pan and
+> glow were already applied per face (they travel as uniforms); texture and UV
+> were the two that were not.
+
 Precedence on load and on export: **face override → brush default → engine
 default.**
 
@@ -110,7 +139,7 @@ default.**
 | `1<<9` (512) | `SURF_MODULATED` | multiply blend |
 | `1<<10` (1024) | `SURF_TWO_SIDED` | back faces drawn too |
 | `1<<11` (2048) | `SURF_UNLIT` | full bright, lighting bypassed |
-| `1<<12` (4096) | `SURF_FAKE_LIT` | full bright, lighting bypassed (shares `UNLIT`'s branch) |
+| `1<<12` (4096) | `SURF_FAKE_LIT` | ambient-only lit surface: `baseColor * (amb/10)`, no light contribution. NOT the same as `UNLIT` |
 | `1<<13` (8192) | `SURF_SPECIAL_LIT` | reserved |
 | `1<<14` (16384) | `SURF_GLOW` | self-illumination + additive halo pass; **inert unless the colour is non-zero** |
 | `1<<15` (32768) | `SURF_PORTAL` | reserved |
@@ -126,7 +155,7 @@ default.**
 | `1<<25` (33554432) | `SURF_NO_SMOOTH` | flat shading hook |
 | `1<<26` (67108864) | `SURF_NO_FOG` | skip the fog term |
 | `1<<27` (134217728) | `SURF_NO_BOUNDS_REJECT` | reserved |
-| `1<<28` (268435456) | `SURF_NO_BSP_CUTS` | reserved |
+| `1<<28` (268435456) | `SURF_NO_BSP_CUTS` | skip this brush in the collision pass (cosmetic geometry opts out) |
 | `1<<29` (536870912) | `SURF_ZONE_HACK` | reserved |
 | `1<<30` (1073741824) | `SURF_INVISIBLE_OCCLUDER` | reserved |
 | `1<<31` (2147483648) | `SURF_FORCE_VIEW_ZONE` | reserved |
@@ -176,16 +205,37 @@ shell, a `sub box` for the interior, and the `skybox` primitive inside it.
 ### Collision is AABB-only
 
 The collision world is built by `CsgProcessor` (`Source/Physics/OzBsp.hpp`), which
-consumes **axis-aligned boxes only**. Two consequences:
+consumes **axis-aligned boxes only**. Three consequences:
 
 - `sub` / `intersect` are **modifiers**, not shapes. They subtract from, or
   intersect with, solids that already exist. A world whose only brush is
   `sub box ...` has **zero** collision volumes — the brush still renders, so it
   looks like a floor while the player falls straight through it. Author floors
   as `add`, and carve openings with `sub`.
+- **A rotated brush collides as a conservative AABB**, not as its rotated shape.
+  The box is the tightest axis-aligned box that CONTAINS the rotated geometry
+  (`RotatedAabbY`), so it over-covers the corners but never under-covers — a long
+  beam rotated 90° still blocks along its whole length.
 - A placed `Mesh.Static` / `Mesh.Skeletal` entity has **no collision at all**;
   the mesh entities are client-cosmetic. Use AngelEd's
   **Append AutoConvex Collision** to generate boxes for it.
+
+#### The per-brush carve budget
+
+`sub`/`intersect` have a budget (`MAX_SPLITS`, 4096 volumes) on how much ONE
+brush may grow the solid list before the rest of its carving is abandoned, with
+the untouched solids left **whole**. It is per BRUSH, so a level may hold as many
+storage solids as it likes and each `sub` still carves.
+
+Exceeding it means a cut the author drew is **missing** — the render mesh shows
+the opening and the collision does not. The client logs an `OZ_WARN`, the editor
+logs every occurrence and, since world-open now checks
+`OzoneLoader::LastCsgOverflowCount()`, opens with a dialog rather than quietly.
+
+Note: this budget used to be compared against the **total** solid count, so any
+world with more than ~58 solids silently stopped carving altogether. If you are
+reading an older revision of a level and a doorway does not work, that is why.
+
 
 ### Entities
 
@@ -266,21 +316,24 @@ Each of these fails **silently** - the line parses, the value is just ignored,
 or the wrong thing happens. All four shipped worlds hit at least one of them
 before being fixed.
 
-### `texSlot` is a bare positional, not `key=value`
+### `texSlot` — positional or keyword
 
-`texSlot` used to be positional-only, so writing it as a keyword was silently
-dropped. **It is now a real keyword and takes precedence**, but the positional
-form still works, so old worlds are unaffected:
+Both spellings work and mean the same thing:
 
 ```
-add box 0 0 0.75 4 1.5 4 0 3                # positional (legacy, still valid)
-add box 0 0 0.75 4 1.5 4 0 texSlot=3       # keyword - preferred
+add box 0 0 0.75 4 1.5 4 0 3                # positional
+add box 0 0 0.75 4 1.5 4 0 texSlot=3       # keyword
 add box 0 0 0.75 4 1.5 4 0 surfTexSlot=3   # explicit surface-slot form
 ```
 
 The positional slot is argument 8 for `box` (and 9 for `cyl`, 7 for `pyr`),
 i.e. immediately after `<rot>`. A bare number in a trailing `#` comment can
 still land in that slot - see *Trailing comments eat bare numbers*.
+
+The keyword forms land in the brush's surface block instead, which is what the
+**Surface Properties** dialog edits, and they work **per face**: a face's own
+`texSlot`/`tex` overrides the brush-wide one, which overrides the auto-selection.
+`tex=`/`surfTex=` (an explicit path) always wins over a slot number.
 
 When no slot is given the loader auto-selects: `h < 1` -> slot 1 (floor
 texture), otherwise slot 2 (wall texture). The brush still looks *plausible*,
@@ -290,6 +343,11 @@ Tile slot order is the tileset filenames **sorted ascending**
 (`oztex/tileset/*.png`), so `01_..`, `02_..`, `03_..` map to slots 1, 2, 3.
 The loader sorts explicitly, so slots are stable across machines.
 
+> Historical: the keyword form used to be parsed and then ignored — it neither
+> set the texture nor round-tripped, and because it made the brush "non-default"
+> it silently switched it to the per-face shader with the *auto-selected*
+> texture. If a level's textures look wrong after a reload, that is why.
+
 ### `light directional <x> <y> <z>` is the light SOURCE
 
 The authored point is where the sun/moon **is**; the light is aimed at the world
@@ -298,14 +356,39 @@ ground. Writing it the other way round (target above the map) makes `lightDir`
 point downward, every up-facing surface gets `NdotL = 0`, and the level renders
 almost black regardless of how high you crank the intensity.
 
-### `cyl` spans `z = [cz-h, cz]`
+### `cyl` spans `z = [cz-h, cz]`, and `pyr` likewise
 
-The authored `cz` is the **top** of the cylinder, not its centre - the loader
-shifts the generated mesh down by `h/2`. `box` is centre-based. Mixing these up
-is why props and columns in old revisions sat half-buried in the floor.
+The authored `cz` is the **top** of the cylinder (or pyramid), not its centre and
+not its base. A `cyl` with `cz=4 h=4` occupies `z` 0..4; `cz=3.5 h=2` occupies
+1.5..3.5. `box` is **centre-based**, so the two primitives differ — this is the
+one place that trips people up.
 
-`rTop`/`rBot` are also collapsed to `max(rTop, rBot)`: cones are not cones, at
-load time or on editor round-trip.
+You can see this in the level files themselves: a "support column" with `cz=4
+h=4` is commented *"spans z 0..4"*, a finial with `cz=3.5 h=2` *"spans z
+1.5..3.5"*, and `World_endless_snow`'s cylindrical building (`cz=12 h=12`) is
+capped by a roof slab at `cz=12.2 h=0.4` — which only lines up if the building
+occupies `[0, 12]`.
+
+**Known exception:** Dessert_Dreams's cacti and Dust_Ravine's rock pillars author
+`cz == h`, which puts their *bases* on the ground under this convention. They are
+correct as authored.
+
+> Historical: the mesh used to be built base-at-zero while the collision AABB
+> was centre-based and the exporter added a `+h/2` "compensation" for a
+> re-centring the loader never did. All three disagreed, and the exporter's
+> offset moved every cylinder half a height upward on **every** save/open cycle.
+
+`cyl` supports **true taper**: `rTop` and `rBot` are independent, so cones and
+frustums are real shapes. Side normals follow the frustum slope, so a cone shades
+as a cone rather than as a tube. In AngelEd these are the Properties panel's
+**Radius Top** / **Radius Bottom** / **Height** fields, and they round-trip.
+
+### `pln` is an oriented quad
+
+`pln <x> <y> <z> <nx> <ny> <nz> <dist>` builds a 10x10 quad whose normal is
+`(nx, ny, nz)` (authored in OZONE's Z-up space) and which lies in the plane
+`n . p = dist`, centred on the authored position. Vertical and sloped planes are
+supported. Collision is the quad's conservative AABB.
 
 ### Always name your zones, and expect `zone sound` to be script-inert
 

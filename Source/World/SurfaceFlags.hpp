@@ -186,6 +186,45 @@ struct SurfaceProps {
 };
 
 // ---------------------------------------------------------------------------
+// Which texture a face binds, and how its UVs are transformed.
+//
+// These live here, raylib-free, because they are the ONE definition used by the
+// renderer (BuildFaceMeshes / DrawSurface) and by the tests. Written separately
+// in each place they would drift, and a face that sampled a different texture
+// from the one the dialog named is exactly the bug this replaces: texSlot and
+// texPath were stored, exported and round-tripped for as long as they have
+// existed, and no code ever bound them.
+// ---------------------------------------------------------------------------
+struct FaceTextureRef {
+    std::string path;   // non-empty: load this asset (wins over slot)
+    int slot = 0;       // >0: 1-based index into the world's oztex/tileset list
+
+    // Nothing authored: keep whatever the brush's material already carries (the
+    // auto-selected or positional texSlot texture).
+    bool Keep() const { return path.empty() && slot <= 0; }
+};
+
+// `p` is a face's RESOLVED props (face override or brush default - the caller
+// uses BrushSurface::Resolve). Precedence: path beats slot, and neither beats
+// the brush material.
+inline FaceTextureRef ResolveFaceTexture(const SurfaceProps& p) {
+    FaceTextureRef r;
+    if (!p.texPath.empty())  r.path = p.texPath;
+    else if (p.texSlot > 0)  r.slot = p.texSlot;
+    return r;
+}
+
+// Write `base` (pristine generated UVs, 2 floats per vertex) transformed by a
+// face's scale/offset into `out`. `out` must hold vertexCount*2 floats.
+inline void ApplyUVTransform(const float* base, int vertexCount,
+                             float su, float sv, float ou, float ov, float* out) {
+    for (int i = 0; i < vertexCount; i++) {
+        out[i * 2 + 0] = base[i * 2 + 0] * su + ou;
+        out[i * 2 + 1] = base[i * 2 + 1] * sv + ov;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // BrushSurface — a brush's six faces plus the brush-wide default they inherit.
 //
 // Precedence when resolving face f:

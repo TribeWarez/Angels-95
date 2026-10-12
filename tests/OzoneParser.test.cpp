@@ -513,6 +513,66 @@ static void test_skybox_primitive() {
                 e.size() ? e[0].surface.def.flags : 0);
 }
 
+// Malformed input must not kill the process.
+//
+// The parser called std::stof / std::stoi directly on kwarg VALUES, so a typo
+// like `gravity=abc` or `surfAlpha=abc` threw std::invalid_argument straight out
+// of parse_string with no handler anywhere. Everything below threw before this
+// was fixed - and because the failure was an uncaught exception, not a parse
+// error, the process died with no diagnostic at all.
+//
+// The rule the fix implements: a malformed value keeps the field's default,
+// reports, and the REST of the document still parses.
+static void test_malformed_values_do_not_throw() {
+    test_count++;
+    printf("  TEST malformed values are reported, not fatal... ");
+
+    auto e = OzoneParser::parse_string(
+        // zone physics value is not a number
+        "zone water 0 0 0 10 10 10 1 gravity=abc\n"
+        // a bare effect= (empty value)
+        "light point 0 5 0 1 1 1 1 10 effect=\n"
+        // mesh scale / speed typos
+        "Mesh.Static droid.glb 0 0 0 0 scale=wide speed=fast\n"
+        // a surface kwarg that is not a number, on a real brush
+        "add box 0 0 0 4 1 4 0 surfAlpha=opaque\n"
+        // a skybox pan typo
+        "skybox sky.png 0 0 0 100 panU=left\n"
+        // a completely unknown primitive
+        "wat 1 2 3\n"
+        // a known line AFTER all of the above: it must still be parsed
+        "add box 0 0 1 2 2 2 0\n");
+
+    bool ok = true;
+    // The trailing box is the last primitive and must have survived.
+    if (e.empty()) { ok = false; printf("FAIL: nothing parsed\n"); }
+    else {
+        const OzonePrimitive& last = e.back();
+        if (!(last.type == OzonePrimitiveType::BOX && last.args.size() >= 6)) {
+            ok = false;
+            printf("FAIL: last prim type=%d args=%zu\n", (int)last.type, last.args.size());
+        }
+        // ...and the malformed brush must still be a box, with its default alpha
+        // (not a wiped line).
+        bool foundBox = false;
+        for (const auto& p : e) {
+            if (p.type == OzonePrimitiveType::BOX && p.surface.def.alpha == 1.0f &&
+                p.surface.def.uvScaleU == 1.0f)
+                foundBox = true;
+        }
+        if (!foundBox) { ok = false; printf("FAIL: malformed brush line lost or corrupted\n"); }
+    }
+
+    // Line numbers are carried for diagnostics.
+    for (const auto& p : e) {
+        if (p.type == OzonePrimitiveType::BOX && p.line == 0) {
+            ok = false; printf("FAIL: primitive has no source line\n");
+        }
+    }
+
+    if (ok) { pass_count++; printf("PASS\n"); }
+}
+
 int main() {
     printf("OzoneParser tests:\n");
     test_portal();
@@ -528,6 +588,7 @@ int main() {
     test_path_node();
     test_wind_zone();
     test_mesh_wind_flag();
+    test_malformed_values_do_not_throw();
     test_mesh_animfile();
     test_mixed_document();
     test_zone_physics_kwargs();

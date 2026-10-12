@@ -98,8 +98,9 @@ static void AppendAutoConvexForSelection() {
     if (extent > 0.0f) cell = fmaxf(0.25f, extent / 16.0f);
 
     HistoryPush();
+    AutoConvexFail fail = AutoConvexFail::NONE;
     int added = OzoneLoader::Instance().AppendAutoConvexCollision(
-        soup.data(), (int)soup.size(), cell, kAutoConvexMaxBoxes);
+        soup.data(), (int)soup.size(), cell, kAutoConvexMaxBoxes, &fail);
 
     if (added > 0) {
         // Turn the collision view on so the author sees the proxies land
@@ -108,8 +109,20 @@ static void AppendAutoConvexForSelection() {
         OzoneLoader::Instance().SetDrawCollisionProxies(true);
         EditorLog("AutoConvex: %d proxies appended to '%s' (cell %.2f)", added, what, cell);
     } else {
-        EditorLog("AutoConvex: refused for '%s' - over the %d box budget at cell %.2f. "
-                  "Use a coarser cell size.", what, kAutoConvexMaxBoxes, cell);
+        // Report the ACTUAL cause. Every failure used to be logged as "over the
+        // box budget", so a mesh with no usable geometry sent the author to
+        // raise a budget they were nowhere near.
+        EditorLog("AutoConvex: refused for '%s' (cell %.2f) - %s", what, cell,
+                  AutoConvexFailName(fail));
+        if (fail == AutoConvexFail::OVER_BUDGET) {
+            // Tell the author what it WOULD cost, so the fix is obvious.
+            AutoConvexParams probe;
+            probe.cellSize = cell;
+            probe.maxBoxes = kAutoConvexMaxBoxes;
+            const int needed = AutoConvex_CountCells(soup.data(), (int)soup.size(), probe);
+            EditorLog("AutoConvex: this mesh needs about %d proxies at cell %.2f "
+                      "(budget %d) - use a coarser cell size", needed, cell, kAutoConvexMaxBoxes);
+        }
     }
 }
 

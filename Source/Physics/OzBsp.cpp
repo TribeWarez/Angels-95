@@ -58,7 +58,10 @@ void CsgProcessor::Push(const AABB& aabb) {
 
 // Subtract sub-volume from solid at idx, replacing it with up to 6 sub-AABBs.
 // The sub-AABBs are the portions of the original solid that lie outside 'sub'.
-void CsgProcessor::Subtract(int idx, const AABB& sub) {
+//
+// Returns false when this brush has already grown the solid list by as much as
+// its budget allows, leaving the solid WHOLE. See the note on MAX_SPLITS.
+bool CsgProcessor::Subtract(int idx, const AABB& sub, int brushGrowth) {
     float sx = m_solidMinX[idx], sy = m_solidMinY[idx], sz = m_solidMinZ[idx];
     float ex = m_solidMaxX[idx], ey = m_solidMaxY[idx], ez = m_solidMaxZ[idx];
 
@@ -66,33 +69,18 @@ void CsgProcessor::Subtract(int idx, const AABB& sub) {
     if (AABB_Contains(sub.minX, sub.minY, sub.minZ, sub.maxX, sub.maxY, sub.maxZ,
                       sx, sy, sz, ex, ey, ez)) {
         RemoveAt(idx);
-        return;
+        return true;
     }
 
-    // Overflow protection: if this split would push the total over MAX_SPLITS,
-    // skip the split and keep the original solid intact.
+    // Per-brush budget. A split adds at most 5 net volumes (6 parts replace 1),
+    // so refuse when that would exceed what THIS brush may add.
     //
-    // This is a SILENT failure and has to stay visible. The split not happening means
-    // the `sub` carved NOTHING, so a wall the author intended to cut a doorway through
-    // stays solid and the player is blocked by geometry that looks open. Previously it
-    // logged to stderr behind a `static bool warned` that fires ONCE PER PROCESS, so
-    // every subsequent overflowing brush was invisible — a level with 200 of them
-    // produced exactly one line, naming no brush and no position.
-    //
-    // MAX_SPLITS is 64 and one split can add up to 6 volumes, so any world with more
-    // than ~60 CSG brushes starts hitting this. TestMap ships 230 collision proxies.
-    // Log every occurrence: the count is the diagnostic (how many brushes stopped
-    // carving), and the index is the locator.
-    int currentCount = (int)m_solidMinX.size();
-    if (currentCount + 6 > MAX_SPLITS) {
-        fprintf(stderr,
-                "[CSG] Overflow: split of solid #%d at (%.1f %.1f %.1f)-(%.1f %.1f %.1f) "
-                "would exceed %d volumes (%d present) — SUBTRACTION SKIPPED, this "
-                "solid stays whole. Raise MAX_SPLITS or reduce brush count.\n",
-                idx, sx, sy, sz, ex, ey, ez, MAX_SPLITS, currentCount);
-        m_overflowCount++;
-        return;
-    }
+    // This failure has to stay visible: the split not happening means the `sub`
+    // carved less than the author intended, so a wall meant to have a doorway
+    // stays solid and the player is blocked by geometry that looks open. The
+    // caller logs each occurrence with the brush's bounds and how many
+    // overlapping solids were left uncut.
+    if (brushGrowth + 6 > m_maxSplits) return false;
 
     // Clip along each axis where the subtractor partially overlaps
     // We build up to 6 sub-AABBs (left/right on X, bottom/top on Y, back/front on Z)
@@ -132,6 +120,16 @@ void CsgProcessor::Subtract(int idx, const AABB& sub) {
             Push({parts[i].minX, parts[i].minY, parts[i].minZ,
                   parts[i].maxX, parts[i].maxY, parts[i].maxZ});
     }
+    return true;
+}
+
+int CsgProcessor::CountOverlaps(int uptoInclusive, const AABB& brush) const {
+    if (uptoInclusive >= (int)m_solidMinX.size())
+        uptoInclusive = (int)m_solidMinX.size() - 1;
+    int n = 0;
+    for (int i = 0; i <= uptoInclusive; i++)
+        if (Overlaps(i, brush)) n++;
+    return n;
 }
 
 // Intersect solid at idx with isect — keep only the overlapping portion
@@ -164,13 +162,34 @@ void CsgProcessor::Apply(const CsgBrush& brush) {
             break;
 
         case CsgOp::SUB:
-        case CsgOp::DE_RESC:
+        case CsgOp::DE_RESC: {
+            // The budget is per BRUSH, not per world: it is measured against how
+            // much THIS brush has grown the solid list, so a level with hundreds
+            // of solids still carves. See the note on MAX_SPLITS.
+            const int brushStart = Count();
+            bool exhausted = false;
+            int leftUncut = 0;
             // Iterate in reverse so removal doesn't affect indices
             for (int i = (int)m_solidMinX.size() - 1; i >= 0; i--) {
-                if (Overlaps(i, b))
-                    Subtract(i, b);
+                if (!Overlaps(i, b)) continue;
+                if (!Subtract(i, b, Count() - brushStart)) {
+                    exhausted = true;
+                    leftUncut = CountOverlaps(i, b);
+                    break;
+                }
+            }
+            if (exhausted) {
+                fprintf(stderr,
+                        "[CSG] Per-brush budget reached (%d volumes): the sub/intersect at "
+                        "(%.1f %.1f %.1f)-(%.1f %.1f %.1f) stopped carving with %d "
+                        "overlapping solid(s) left UNCUT — those stay whole, so a cut the "
+                        "author drew may still block the player.\n",
+                        m_maxSplits, b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ,
+                        leftUncut);
+                m_overflowCount++;
             }
             break;
+        }
 
         case CsgOp::INTERSECT:
             for (int i = (int)m_solidMinX.size() - 1; i >= 0; i--) {

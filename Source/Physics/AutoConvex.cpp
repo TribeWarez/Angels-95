@@ -96,8 +96,13 @@ bool TriangleOverlapsBox(const float* v, const Box& b) {
 }
 
 bool BuildFromCells(const float* verts, int vertFloatCount, const AutoConvexParams& params,
-                    std::vector<ConvexBox>& out, bool countOnly) {
-    if (!verts || vertFloatCount < 9 || params.cellSize <= 0.0f) return false;
+                    std::vector<ConvexBox>& out, bool countOnly,
+                    AutoConvexFail* failOut) {
+    if (failOut) *failOut = AutoConvexFail::NONE;
+    if (!verts || vertFloatCount < 9 || params.cellSize <= 0.0f) {
+        if (failOut) *failOut = AutoConvexFail::BAD_INPUT;
+        return false;
+    }
 
     const float s = params.cellSize;
 
@@ -142,8 +147,14 @@ bool BuildFromCells(const float* verts, int vertFloatCount, const AutoConvexPara
     const long long nx = (long long)std::llround((bounds.maxX - bounds.minX) / s);
     const long long ny = (long long)std::llround((bounds.maxY - bounds.minY) / s);
     const long long nz = (long long)std::llround((bounds.maxZ - bounds.minZ) / s);
-    if (nx <= 0 || ny <= 0 || nz <= 0) return false;
-    if (nx > 4096 || ny > 4096 || nz > 4096) return false;
+    if (nx <= 0 || ny <= 0 || nz <= 0) {
+        if (failOut) *failOut = AutoConvexFail::DEGENERATE_GRID;
+        return false;
+    }
+    if (nx > 4096 || ny > 4096 || nz > 4096) {
+        if (failOut) *failOut = AutoConvexFail::GRID_TOO_BIG;
+        return false;
+    }
 
     // 9 floats per triangle (3 vertices x 3 components).
     const int triCount = vertFloatCount / 9;
@@ -166,7 +177,10 @@ bool BuildFromCells(const float* verts, int vertFloatCount, const AutoConvexPara
                 if (!hit) continue;
 
                 if (countOnly) { out.push_back(ConvexBox{}); continue; }
-                if ((int)out.size() >= params.maxBoxes) return false;
+                if ((int)out.size() >= params.maxBoxes) {
+                    if (failOut) *failOut = AutoConvexFail::OVER_BUDGET;
+                    return false;
+                }
                 ConvexBox cb;
                 cb.minX = cell.minX - grow; cb.minY = cell.minY - grow; cb.minZ = cell.minZ - grow;
                 cb.maxX = cell.maxX + grow; cb.maxY = cell.maxY + grow; cb.maxZ = cell.maxZ + grow;
@@ -179,10 +193,23 @@ bool BuildFromCells(const float* verts, int vertFloatCount, const AutoConvexPara
 
 }  // namespace
 
+const char* AutoConvexFailName(AutoConvexFail f) {
+    switch (f) {
+        case AutoConvexFail::NONE:           return "no failure";
+        case AutoConvexFail::BAD_INPUT:      return "no usable geometry (or a non-positive cell size)";
+        case AutoConvexFail::DEGENERATE_GRID:return "the geometry has no extent";
+        case AutoConvexFail::GRID_TOO_BIG:   return "the voxel grid exceeds 4096 cells on an axis";
+        case AutoConvexFail::OVER_BUDGET:    return "the mesh needs more proxies than the box budget";
+    }
+    return "unknown";
+}
+
 int AutoConvex_Build(const float* verts, int vertFloatCount,
-                     const AutoConvexParams& params, std::vector<ConvexBox>& out) {
+                     const AutoConvexParams& params, std::vector<ConvexBox>& out,
+                     AutoConvexFail* failOut) {
     std::vector<ConvexBox> built;
-    if (!BuildFromCells(verts, vertFloatCount, params, built, /*countOnly=*/false)) return 0;
+    if (!BuildFromCells(verts, vertFloatCount, params, built, /*countOnly=*/false, failOut))
+        return 0;
     out.insert(out.end(), built.begin(), built.end());
     return (int)built.size();
 }
@@ -192,6 +219,6 @@ int AutoConvex_CountCells(const float* verts, int vertFloatCount,
     // Same traversal, results discarded: the count is what the editor shows
     // before committing, so it must agree with what Build would emit.
     std::vector<ConvexBox> counted;
-    if (!BuildFromCells(verts, vertFloatCount, params, counted, /*countOnly=*/true)) return 0;
+    if (!BuildFromCells(verts, vertFloatCount, params, counted, /*countOnly=*/true, nullptr)) return 0;
     return (int)counted.size();
 }

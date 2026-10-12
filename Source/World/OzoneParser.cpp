@@ -1,5 +1,6 @@
 #include "OzoneParser.hpp"
 #include "../Package/OzPackage.hpp"
+#include "../Log.hpp"
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
@@ -96,36 +97,92 @@ static std::string ReadQuotedValue(std::istringstream& ls, const std::string& fi
 //
 // e.g.  facepy_flags=1024 facepy_tex=3 facepz_pan=0.05,-0.05
 // ---------------------------------------------------------------------------
+// Non-throwing numeric readers for kwarg VALUES.
+//
+// The parser called std::stof / std::stoi directly on these, so a typo like
+// `gravity=abc` or a bare `effect=` threw std::invalid_argument straight out of
+// parse_file with no handler anywhere - the process died with no diagnostic.
+// That is the same class as the malformed-vec3 crash; the vec3 path was fixed
+// with ReadVec3 and these scalars were left behind.
+static bool TryFloat(const std::string& s, float& out) {
+    try { out = std::stof(s); return true; } catch (...) { return false; }
+}
+static bool TryInt(const std::string& s, int& out) {
+    try { out = std::stoi(s); return true; } catch (...) { return false; }
+}
+
+// Report a malformed surface kwarg value. `line` is 0 when the caller cannot
+// supply one. These calls used to throw std::invalid_argument straight out of
+// the parser, so `surfAlpha=abc` on any brush line killed the process.
+static void WarnBadSurfaceValue(const char* key, const std::string& val, int line) {
+    if (line > 0)
+        OZ_WARN("OZONE line %d: surface %s='%s' is not a number", line, key, val.c_str());
+    else
+        OZ_WARN("OZONE: surface %s='%s' is not a number", key, val.c_str());
+}
+
 static bool ParseSurfaceField(const std::string& key, const std::string& val,
-                              oz::surface::SurfaceProps& p) {
+                              oz::surface::SurfaceProps& p, int line = 0) {
     using namespace oz::surface;
     auto f = [&](const char* k) { return key == k; };
 
-    if (f("flags"))            { p.flags = (uint32_t)std::stoul(val); return true; }
-    if (f("alpha"))            { p.alpha = std::stof(val); return true; }
-    if (f("cutoff"))           { p.alphaCutoff = std::stof(val); return true; }
-    if (f("glowScale"))        { p.glowScale = std::stof(val); return true; }
-    if (f("texSlot") || f("surfTexSlot")) { p.texSlot = std::stoi(val); return true; }
+    // A malformed value keeps the field's default and reports, rather than
+    // throwing: one bad token must not cost the whole world.
+    auto numF = [&](const char* k, float& dst) -> bool {
+        if (!f(k)) return false;
+        float v;
+        if (TryFloat(val, v)) dst = v;
+        else WarnBadSurfaceValue(k, val, line);
+        return true;
+    };
+    auto numI = [&](const char* k, int& dst) -> bool {
+        if (!f(k)) return false;
+        int v;
+        if (TryInt(val, v)) dst = v;
+        else WarnBadSurfaceValue(k, val, line);
+        return true;
+    };
+
+    if (f("flags")) {
+        int v = 0;
+        if (TryInt(val, v)) p.flags = (uint32_t)v;
+        else WarnBadSurfaceValue("flags", val, line);
+        return true;
+    }
+    if (numF("alpha", p.alpha))       return true;
+    if (numF("cutoff", p.alphaCutoff)) return true;
+    if (numF("glowScale", p.glowScale)) return true;
+    if (numI("texSlot", p.texSlot))   return true;
+    if (numI("surfTexSlot", p.texSlot)) return true;
     if (f("tex") || f("surfTex"))         { p.texPath = val; return true; }
-    if (f("panU"))         { p.panU = std::stof(val); return true; }
-    if (f("panV"))         { p.panV = std::stof(val); return true; }
+    if (numF("panU", p.panU))         return true;
+    if (numF("panV", p.panV))         return true;
     if (f("pan")) {
         // "u,v" form. Needed because the file is tokenised on whitespace, so a
         // `panU=` + `panV=` pair would have to be two tokens and cannot be
         // interleaved with other kwargs without ordering constraints.
         const size_t comma = val.find(',');
         if (comma != std::string::npos) {
-            try { p.panU = std::stof(val.substr(0, comma)); } catch (...) {}
-            try { p.panV = std::stof(val.substr(comma + 1)); } catch (...) {}
+            float a, b;
+            if (TryFloat(val.substr(0, comma), a)) p.panU = a;
+            else WarnBadSurfaceValue("pan", val, line);
+            if (TryFloat(val.substr(comma + 1), b)) p.panV = b;
+            else WarnBadSurfaceValue("pan", val, line);
+        } else if (TryFloat(val, p.panU)) {
+            // only U authored
         } else {
-            p.panU = std::stof(val);
+            WarnBadSurfaceValue("pan", val, line);
         }
         return true;
     }
-    if (f("uvScaleU") || f("texScaleU"))  { p.uvScaleU = std::stof(val); return true; }
-    if (f("uvScaleV") || f("texScaleV"))  { p.uvScaleV = std::stof(val); return true; }
-    if (f("uvOffsetU") || f("texOffsetU")) { p.uvOffsetU = std::stof(val); return true; }
-    if (f("uvOffsetV") || f("texOffsetV")) { p.uvOffsetV = std::stof(val); return true; }
+    if (numF("uvScaleU", p.uvScaleU))   return true;
+    if (numF("texScaleU", p.uvScaleU))  return true;
+    if (numF("uvScaleV", p.uvScaleV))   return true;
+    if (numF("texScaleV", p.uvScaleV))  return true;
+    if (numF("uvOffsetU", p.uvOffsetU)) return true;
+    if (numF("texOffsetU", p.uvOffsetU)) return true;
+    if (numF("uvOffsetV", p.uvOffsetV)) return true;
+    if (numF("texOffsetV", p.uvOffsetV)) return true;
     if (f("glow") || f("surfGlow")) {
         // "(r,g,b)" or "r,g,b". Parsed by stripping the parentheses and then
         // splitting on commas: the previous version looked for the NEXT comma to
@@ -160,7 +217,7 @@ static bool ParseSurfaceField(const std::string& key, const std::string& val,
 
 // Returns true when `key` was consumed as a surface kwarg.
 static bool ParseSurfaceKwarg(const std::string& key, const std::string& val,
-                              oz::surface::BrushSurface& bs) {
+                              oz::surface::BrushSurface& bs, int line = 0) {
     using namespace oz::surface;
     // Per-face? key must look like face<name>_<field>.
     if (key.rfind("face", 0) == 0) {
@@ -172,12 +229,12 @@ static bool ParseSurfaceKwarg(const std::string& key, const std::string& val,
         if (f == FACE_NONE) return false;   // unknown face name: not ours
         // Start from the brush default so a face only has to state what differs.
         SurfaceProps p = bs.Resolve(f);
-        if (!ParseSurfaceField(field, val, p)) return false;
+        if (!ParseSurfaceField(field, val, p, line)) return false;
         bs.SetFace(f, p);
         return true;
     }
     // Brush-wide, including the legacy texScale*/texOffset* names.
-    return ParseSurfaceField(key, val, bs.def);
+    return ParseSurfaceField(key, val, bs.def, line);
 }
 
 static void ParseFloatsAndFlags(std::istringstream& ls, OzonePrimitive& prim) {
@@ -195,7 +252,7 @@ static void ParseFloatsAndFlags(std::istringstream& ls, OzonePrimitive& prim) {
                 const std::string raw = s.substr(eq + 1);
                 std::string val = (raw.size() >= 1 && raw.front() == '"')
                                 ? ReadQuotedValue(ls, raw) : raw;
-                if (ParseSurfaceKwarg(key, val, prim.surface)) continue;
+                if (ParseSurfaceKwarg(key, val, prim.surface, prim.line)) continue;
                 // texPath is a quoted-or-bare path and is also the face/brush
                 // texture; keep the dedicated field for the existing loaders.
                 if (key == "texPath") { prim.texPath = val; continue; }
@@ -226,12 +283,15 @@ static void DeriveLegacySurfaceFields(OzonePrimitive& prim) {
         prim.texPath = prim.surface.def.texPath;
 }
 
+
 std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content) {
     std::vector<OzonePrimitive> prims;
     std::istringstream stream(content);
     std::string line;
+    int lineNo = 0;
 
     while (std::getline(stream, line)) {
+        lineNo++;
         if (line.empty() || line[0] == '#' || line.rfind("OZONE", 0) == 0 ||
             line.rfind("brushes", 0) == 0)
             continue;
@@ -243,6 +303,8 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
         OzonePrimitive prim;
         prim.type = OzonePrimitiveType::UNKNOWN;
         prim.csgOp = 0;
+        // Carried so any diagnostic can name the line the author must fix.
+        prim.line = lineNo;
 
         // Check for CSG operation prefix: add/sub/intersect/deresc
         if (type_name == "add" || type_name == "sub" ||
@@ -319,7 +381,13 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
                         s.rfind("ladder_speed=", 0) == 0 ||
                         s.rfind("fly_mult=", 0) == 0) {
                         size_t eq = s.find('=');
-                        float v = std::stof(s.substr(eq + 1));
+                        float v;
+                        if (!TryFloat(s.substr(eq + 1), v)) {
+                            // Used to throw straight out of the parser.
+                            OZ_WARN("OZONE line %d: zone physics '%s' is not a number",
+                                    lineNo, s.c_str());
+                            continue;
+                        }
                         std::string key = s.substr(0, eq + 1);
                         prim.hasPhysics = true;
                         if (key == "gravity=")          prim.physics.gravity = v;
@@ -333,7 +401,10 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
                         continue;
                     }
                     // Unknown token: stop parsing the rest of the line (parity
-                    // with the old behaviour for non-numeric tokens).
+                    // with the old behaviour for non-numeric tokens) - but say so,
+                    // because on an entity line this is almost always a typo.
+                    OZ_WARN("OZONE line %d: zone: trailing token '%s' ignored",
+                            lineNo, s.c_str());
                     break;
                 }
             }
@@ -358,9 +429,24 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
             if (ls >> prim.entityType) {
                 std::string s;
                 while (ls >> s) {
-                    if (s.rfind("effect=", 0) == 0) { prim.lightEffect = std::stoi(s.substr(7)); continue; }
-                    if (s.rfind("flare=", 0)  == 0) { prim.lightFlare  = std::stoi(s.substr(6)); continue; }
-                    if (s.rfind("corona=", 0) == 0) { prim.lightCorona = std::stoi(s.substr(7)); continue; }
+                    if (s.rfind("effect=", 0) == 0) {
+                        if (!TryInt(s.substr(7), prim.lightEffect))
+                            OZ_WARN("OZONE line %d: light effect '%s' is not a number",
+                                    lineNo, s.c_str());
+                        continue;
+                    }
+                    if (s.rfind("flare=", 0)  == 0) {
+                        if (!TryInt(s.substr(6), prim.lightFlare))
+                            OZ_WARN("OZONE line %d: light flare '%s' is not a number",
+                                    lineNo, s.c_str());
+                        continue;
+                    }
+                    if (s.rfind("corona=", 0) == 0) {
+                        if (!TryInt(s.substr(7), prim.lightCorona))
+                            OZ_WARN("OZONE line %d: light corona '%s' is not a number",
+                                    lineNo, s.c_str());
+                        continue;
+                    }
                     if (s.rfind("name=", 0) == 0) {
                         prim.name = s.substr(5);
                         if (prim.name.size() >= 2 && prim.name.front() == '\"' &&
@@ -404,11 +490,20 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
             if (ls >> prim.meshPath) {
                 std::string s;
                 while (ls >> s) {
-                    if (s.rfind("scale=", 0) == 0) { prim.args.push_back(std::stof(s.substr(6))); continue; }
+                    float mv;
+                    if (s.rfind("scale=", 0) == 0) {
+                        if (TryFloat(s.substr(6), mv)) prim.args.push_back(mv);
+                        else OZ_WARN("OZONE line %d: mesh scale '%s' is not a number", lineNo, s.c_str());
+                        continue;
+                    }
                     if (s.rfind("tex=", 0) == 0) { prim.texPath = s.substr(4); continue; }
                     if (s.rfind("animfile=", 0) == 0) { prim.animFile = s.substr(9); continue; }
                     if (s.rfind("anim=", 0) == 0) { prim.animClip = s.substr(5); continue; }
-                    if (s.rfind("speed=", 0) == 0) { prim.animSpeed = std::stof(s.substr(6)); continue; }
+                    if (s.rfind("speed=", 0) == 0) {
+                        if (!TryFloat(s.substr(6), prim.animSpeed))
+                            OZ_WARN("OZONE line %d: mesh speed '%s' is not a number", lineNo, s.c_str());
+                        continue;
+                    }
                     if (s == "wind" || s.rfind("wind=", 0) == 0) { prim.meshWind = true; continue; }
                     try { prim.args.push_back(std::stof(s)); }
                     catch (...) { break; }
@@ -468,7 +563,13 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
             if (ls >> prim.entityType) {
                 std::string s;
                 while (ls >> s) {
-                    if (s.rfind("radius=", 0) == 0) { prim.args.push_back(std::stof(s.substr(7))); continue; }
+                    float pv;
+                    if (s.rfind("radius=", 0) == 0) {
+                        if (TryFloat(s.substr(7), pv)) prim.args.push_back(pv);
+                        else OZ_WARN("OZONE line %d: pathnode radius '%s' is not a number",
+                                     lineNo, s.c_str());
+                        continue;
+                    }
                     if (s.rfind("next=", 0) == 0) { prim.entitySubType = s.substr(5); continue; }
                     if (s == "loop") { prim.pathLoop = true; continue; }
                     try { prim.args.push_back(std::stof(s)); }
@@ -526,9 +627,22 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
             if (ls >> prim.entityType) {
                 std::string s;
                 while (ls >> s) {
-                    if (s.rfind("panU=", 0) == 0) { prim.surface.def.panU = std::stof(s.substr(5)); continue; }
-                    if (s.rfind("panV=", 0) == 0) { prim.surface.def.panV = std::stof(s.substr(5)); continue; }
-                    if (s.rfind("scale=", 0) == 0) { prim.args.push_back(std::stof(s.substr(6))); continue; }
+                    float sv;
+                    if (s.rfind("panU=", 0) == 0) {
+                        if (TryFloat(s.substr(5), sv)) prim.surface.def.panU = sv;
+                        else OZ_WARN("OZONE line %d: skybox panU '%s' is not a number", lineNo, s.c_str());
+                        continue;
+                    }
+                    if (s.rfind("panV=", 0) == 0) {
+                        if (TryFloat(s.substr(5), sv)) prim.surface.def.panV = sv;
+                        else OZ_WARN("OZONE line %d: skybox panV '%s' is not a number", lineNo, s.c_str());
+                        continue;
+                    }
+                    if (s.rfind("scale=", 0) == 0) {
+                        if (TryFloat(s.substr(6), sv)) prim.args.push_back(sv);
+                        else OZ_WARN("OZONE line %d: skybox scale '%s' is not a number", lineNo, s.c_str());
+                        continue;
+                    }
                     if (s.rfind("topTex=", 0) == 0) { prim.surface.def.texPath = s.substr(7); continue; }
                     try { prim.args.push_back(std::stof(s)); }
                     catch (...) { break; }
@@ -560,6 +674,12 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
         if (prim.type != OzonePrimitiveType::UNKNOWN) {
             DeriveLegacySurfaceFields(prim);
             prims.push_back(std::move(prim));
+        } else {
+            // A line whose FIRST token is unrecognised used to vanish with no
+            // message at all, so a typo'd primitive was indistinguishable from a
+            // blank line. Name the line and the token.
+            OZ_WARN("OZONE line %d: unknown primitive '%s' skipped",
+                    lineNo, type_name.c_str());
         }
     }
 

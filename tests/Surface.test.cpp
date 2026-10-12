@@ -1249,6 +1249,121 @@ static void test_particle_paths_share_one_lerp() {
           "DrawInstanced does not re-declare the VAO (that is EnsureInstancedResources)");
 }
 
+// Per-face texture resolution. texSlot / texPath were stored, exported and
+// round-tripped for as long as they existed and NO renderer ever bound them, so
+// the Surface Properties dialog's texture fields did nothing until a reload.
+// The precedence now lives in one function the renderer and these tests share.
+static void test_face_texture_resolution() {
+    using namespace oz::surface;
+
+    // Nothing authored: keep the brush material's own texture (the auto-selected
+    // or positional texSlot one).
+    SurfaceProps none;
+    check(ResolveFaceTexture(none).Keep(),
+          "a face with no texPath/texSlot keeps the brush material's texture");
+
+    // A tileset slot with no path.
+    SurfaceProps slot;
+    slot.texSlot = 3;
+    FaceTextureRef r = ResolveFaceTexture(slot);
+    check(!r.Keep() && r.slot == 3 && r.path.empty(),
+          "texSlot resolves to a tileset slot when no path is authored");
+
+    // An explicit path WINS over a slot, matching the documented precedence.
+    SurfaceProps both;
+    both.texSlot = 3;
+    both.texPath = "GameData/Worlds/X/oztex/wood.png";
+    FaceTextureRef b = ResolveFaceTexture(both);
+    check(!b.Keep() && b.slot == 0 && b.path == "GameData/Worlds/X/oztex/wood.png",
+          "an explicit texPath wins over texSlot");
+
+    // A face override resolves through BrushSurface::Resolve, so the override's
+    // texture is what that face binds while its neighbours keep the default.
+    BrushSurface bs;
+    bs.def.texSlot = 1;
+    SurfaceProps ov;
+    ov.texPath = "GameData/Worlds/X/oztex/brick.png";
+    bs.SetFace(FACE_PX, ov);
+    check(ResolveFaceTexture(bs.Resolve(FACE_PX)).path == "GameData/Worlds/X/oztex/brick.png",
+          "an overridden face binds its own texture");
+    check(ResolveFaceTexture(bs.Resolve(FACE_NX)).slot == 1,
+          "a non-overridden face keeps the brush-wide texture");
+}
+
+// The UV transform is one function now: the mesh builder and ApplyRenderableUV
+// used to each carry their own copy of the same lerp.
+static void test_uv_transform() {
+    using namespace oz::surface;
+    auto near = [](float a, float b) { return (a > b ? a - b : b - a) < 0.0001f; };
+
+    const float base[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+    float out[4] = {0, 0, 0, 0};
+    ApplyUVTransform(base, 2, 2.0f, 1.0f, 0.5f, 0.0f, out);
+    check(near(out[0], 0.5f) && near(out[1], 0.0f) &&
+          near(out[2], 2.5f) && near(out[3], 1.0f),
+          "ApplyUVTransform applies scale then offset per component");
+
+    // Identity leaves the base untouched - the property that lets a face with no
+    // override share the brush-wide UVs.
+    float ident[4] = {0, 0, 0, 0};
+    ApplyUVTransform(base, 2, 1.0f, 1.0f, 0.0f, 0.0f, ident);
+    bool same = true;
+    for (int i = 0; i < 4; i++) if (!near(ident[i], base[i])) same = false;
+    check(same, "identity UV transform is a no-op");
+
+    // The base is never mutated, which is what stops an edit compounding.
+    check(near(base[2], 1.0f), "ApplyUVTransform leaves the pristine base unchanged");
+}
+
+// The cylinder/pyramid AXIS CONVENTION, pinned where it can be tested.
+//
+// OzoneLoader needs a GL context, so its mesh builders cannot run here. What can
+// be asserted is that the three places which must agree still do, because they
+// disagreed in three different ways: the mesh was built base-at-zero, the
+// collision AABB was centre-based, and the exporter added a +h/2 that existed
+// only to undo a "the loader re-centers them" behaviour that was never written.
+//
+// The authored `cz` is the TOP (the level comments say so: "support column,
+// spans z 0..4" for cz=4 h=4; "finial, spans z 1.5..3.5" for cz=3.5 h=2, and
+// endless_snow's building cz=12 h=12 with its roof slab at cz=12.2 h=0.4 only
+// lines up if the building occupies [0,12]).
+static void test_cylinder_top_convention() {
+    const std::string loader = ReadFile("Source/World/OzOzoneLoader.cpp");
+    const std::string exporter = ReadFile("AngelEd/Source/Subsystems/OzoneExport.cpp");
+    if (loader.empty() || exporter.empty()) {
+        printf("  SKIP  cylinder convention (sources not found)\n");
+        return;
+    }
+
+    // The exporter must NOT compensate by half a height any more: that offset
+    // moved every cyl/pyr half a height upward on EVERY save/open cycle.
+    check(exporter.find("center.y += h * 0.5f") == std::string::npos,
+          "exporter no longer adds the bogus +h/2 to cylinder/pyramid positions");
+
+    // ...and it must write the AUTHORED taper and slice count, not the mesh
+    // bbox's single radius (which flattened every cone on save).
+    check(exporter.find("r->cylRTop") != std::string::npos &&
+          exporter.find("r->cylRBot") != std::string::npos,
+          "exporter writes the stored taper radii");
+    check(exporter.find("r->cylSlices") != std::string::npos,
+          "exporter writes the stored slice count");
+
+    // The collision AABB must use the same top convention as the mesh.
+    check(loader.find("position.y - h, position.z - maxR") != std::string::npos,
+          "cylinder collision AABB spans [cz - h, cz]");
+
+    // The frustum normal must be slope-aware, or a cone shades as a straight tube.
+    check(loader.find("(rBot - rTop) * slopeScale") != std::string::npos,
+          "tapered cylinder side normals follow the frustum slope");
+
+    // The plane must rotate the authored normal into engine space rather than
+    // dropping it (which made every `pln` a horizontal patch).
+    check(loader.find("return BuildPlane(nx, nz, ny, dist);") != std::string::npos,
+          "pln normal is converted ozone Z-up -> engine Y-up");
+    check(exporter.find("r->planeNX") != std::string::npos,
+          "exporter writes the stored plane normal");
+}
+
 int main() {
     printf("Surface tests:\n");
     test_legacy_bits_stable();
@@ -1278,6 +1393,9 @@ int main() {
     test_props_panel_has_no_cross_space_index();
     test_restore_ambient_matches_startup();
     test_particle_paths_share_one_lerp();
+    test_face_texture_resolution();
+    test_uv_transform();
+    test_cylinder_top_convention();
     printf("\nResults: %d/%d passed\n", pass_count, test_count);
     return (pass_count == test_count) ? 0 : 1;
 }

@@ -678,9 +678,27 @@ static void PopulatePropertiesPanel(HWND hwnd) {
 
     // Type-specific fields
     if (selType == sel::BRUSH || selType == sel::ZONE || selType == sel::PORTAL) {  // add size fields
-        addField(L"Size X:", ID_PP_SX, g_editorPanels.propSizeX);
-        addField(L"Size Y:", ID_PP_SY, g_editorPanels.propSizeY);
-        addField(L"Size Z:", ID_PP_SZ, g_editorPanels.propSizeZ);
+        // For a cylinder these three fields ARE rTop / rBot / height (see
+        // OzoneLoader::UpdateBrushRenderable, which passes them as
+        // BuildCylinder(size.x, size.y, size.z, ...)), so the generic
+        // "Size X/Y/Z" labels hid the fact that a taper is authorable here. Name
+        // them what they are.
+        const wchar_t* sxLabel = L"Size X:";
+        const wchar_t* syLabel = L"Size Y:";
+        const wchar_t* szLabel = L"Size Z:";
+        bool isCyl = false;
+        if (selType == sel::BRUSH) {
+            OzoneRenderable* br = OzoneLoader::Instance().Get(selIdx);
+            isCyl = br && br->typeId == (int)OzonePrimitiveType::CYLINDER;
+        }
+        if (isCyl) {
+            sxLabel = L"Radius Top:";
+            syLabel = L"Radius Bot:";
+            szLabel = L"Height:";
+        }
+        addField(sxLabel, ID_PP_SX, g_editorPanels.propSizeX);
+        addField(syLabel, ID_PP_SY, g_editorPanels.propSizeY);
+        addField(szLabel, ID_PP_SZ, g_editorPanels.propSizeZ);
     }
 
     // Texture scale/offset for brushes

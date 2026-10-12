@@ -41,6 +41,19 @@ struct AutoConvexParams {
     float grow = 0.02f;
 };
 
+// Why a build produced nothing. The editor used to attribute EVERY failure to
+// the box budget, so a >4096-cell grid or empty geometry sent the author
+// hunting for a budget they were nowhere near.
+enum class AutoConvexFail {
+    NONE = 0,
+    BAD_INPUT,        // null / too few vertices, or a non-positive cell size
+    DEGENERATE_GRID,  // the source has no extent, so no cell can be generated
+    GRID_TOO_BIG,     // more than 4096 cells along an axis
+    OVER_BUDGET,      // would emit more than params.maxBoxes
+};
+
+const char* AutoConvexFailName(AutoConvexFail f);
+
 // Build convex proxies for the triangle soup in `verts`.
 //
 // `vertFloatCount` is a count of FLOATS (3 per vertex), not of vertices, and
@@ -51,11 +64,13 @@ struct AutoConvexParams {
 // geometry and as counts that changed between runs.
 //
 // Returns the number of boxes appended to `out`. Returns 0 and leaves `out`
-// untouched when the inputs are unusable (no vertices, non-positive cellSize)
-// or when the grid would exceed `params.maxBoxes` before any box is emitted -
-// refusing outright is safer than half a collision hull.
+// untouched when the inputs are unusable or when the grid would exceed
+// `params.maxBoxes` - refusing outright is safer than half a collision hull.
+// `failOut`, when given, receives the reason, so the caller can say WHICH of
+// those it was instead of guessing.
 int AutoConvex_Build(const float* verts, int vertFloatCount,
-                     const AutoConvexParams& params, std::vector<ConvexBox>& out);
+                     const AutoConvexParams& params, std::vector<ConvexBox>& out,
+                     AutoConvexFail* failOut = nullptr);
 
 // Count how many boxes the current parameters would emit, without building them.
 // Lets the editor tell the author "this mesh needs 4000 proxies" before

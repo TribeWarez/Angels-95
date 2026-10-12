@@ -145,7 +145,14 @@ public:
         auto& ozLoader = OzoneLoader::Instance();
         auto& chunkMgr = ozLoader.GetChunkManager();
         std::vector<int> nearIndices;
-        chunkMgr.GetVolumesNear(player.min.x, player.max.x, nearIndices);
+        // Brush obstacle test. Uses the box query, not the point query: the
+        // point form takes (worldX, worldZ) and this call used to pass the
+        // player's X max to the worldZ parameter, so obstacles were only found
+        // when |x - z| happened to fall inside the 3x3 cell window. Worlds whose
+        // spawn sits off that diagonal (World_endless_snow at z=-410,
+        // Dust_Ravine, Dessert_Dreams) had no wall collision at all.
+        chunkMgr.GetVolumesNearBox(player.min.x, player.min.z,
+                                   player.max.x, player.max.z, nearIndices);
         auto& vols = ozLoader.GetCollisionVolumes();
         for (int idx : nearIndices) {
             if (idx >= 0 && idx < (int)vols.size() &&

@@ -60,15 +60,12 @@ void ExportToOzone(std::ostream& output) {
         if (h < 0.01f) h = 1.0f;
         if (d < 0.01f) d = 1.0f;
 
-        // Cylinder/pyramid meshes sit with their bottom at Y=0 (the loader
-        // re-centers them on import) â€” undo the offset so position round-trips.
-        Vector3 center = r->position;
-        if (r->typeId == (int)OzonePrimitiveType::CYLINDER ||
-            r->typeId == (int)OzonePrimitiveType::PYRAMID)
-            center.y += h * 0.5f;
-
-        // Engine Y-up â†’ OZONE Z-up
-        Vector3 c = {center.x, center.z, center.y};
+        // Engine Y-up -> OZONE Z-up. Cylinder/pyramid meshes span [-h, 0] so the
+        // authored `cz` IS the top and needs no compensation. There used to be a
+        // `center.y += h * 0.5` here justified by "the loader re-centers them on
+        // import" - it does not, so every save/open moved those brushes half a
+        // height upward and the offset compounded on each cycle.
+        Vector3 c = {r->position.x, r->position.z, r->position.y};
         float rotDeg = r->rotation * RAD2DEG;
 
         output << CsgPrefixName(r->csgOp) << " " << prim
@@ -80,8 +77,15 @@ void ExportToOzone(std::ostream& output) {
             if (r->texSlot > 0) output << " " << r->texSlot;
         } else if (r->typeId == (int)OzonePrimitiveType::CYLINDER) {
             // cyl x y z rTop rBot h slices rot [texSlot]
-            float rad = ((w > d) ? w : d) * 0.5f;
-            output << " " << rad << " " << rad << " " << h << " 16 " << rotDeg;
+            //
+            // The radii and slice count come from the renderable, not from the
+            // mesh bounding box: the bbox only knows max(rTop, rBot), so writing
+            // it back as "rad rad" silently flattened every taper the author made.
+            const float rTop = (r->cylRTop > 0.0f) ? r->cylRTop : ((w > d) ? w : d) * 0.5f;
+            const float rBot = (r->cylRBot > 0.0f) ? r->cylRBot : rTop;
+            const int slices = (r->cylSlices > 0) ? r->cylSlices : 16;
+            output << " " << rTop << " " << rBot << " " << h << " " << slices
+                   << " " << rotDeg;
             if (r->texSlot > 0) output << " " << r->texSlot;
         } else if (r->typeId == (int)OzonePrimitiveType::SPHERE) {
             // sph x y z r segments
@@ -91,8 +95,15 @@ void ExportToOzone(std::ostream& output) {
             // pyr x y z w d h [texSlot]
             output << " " << w << " " << d << " " << h;
             if (r->texSlot > 0) output << " " << r->texSlot;
-        } else { // PLANE â€” orientation is not stored by the loader yet
-            output << " 0 1 0 0";
+        } else { // PLANE - normal + distance (see below)
+            // normal + distance, converted back to OZONE's Z-up. The loader
+            // swaps the authored normal into engine Y-up, and it cannot be
+            // re-derived from the mesh bounding box, so OzoneRenderable carries it.
+            float pnx = r->planeNX, pny = r->planeNZ, pnz = r->planeNY;
+            float plen = sqrtf(pnx*pnx + pny*pny + pnz*pnz);
+            if (plen < 1e-6f) { pnx = 0.0f; pny = 0.0f; pnz = 1.0f; plen = 1.0f; }
+            output << " " << (pnx/plen) << " " << (pny/plen) << " " << (pnz/plen)
+                   << " " << r->planeDist;
         }
 
         // Material kwargs (consumed by the OZONE brush parser).

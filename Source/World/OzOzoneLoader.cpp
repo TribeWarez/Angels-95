@@ -738,9 +738,124 @@ Model OzoneLoader::BuildBox(float w, float h, float d) {
     return model;
 }
 
+// Tapered cylinder (a cone frustum). GenMeshCylinder is uniform, so the taper
+// was collapsed to max(rTop, rBot) and every `cyl` was a straight tube.
+//
+// AXIS CONVENTION: the mesh spans y in [-h, 0], so the authored `cz` is the TOP
+// of the cylinder, not its centre or its base. That is the convention the level
+// comments were written against ("support column, spans z 0..4" for cz=4,h=4;
+// "finial, spans z 1.5..3.5" for cz=3.5,h=2) and the one the endless_snow
+// building+roof-slab pair requires (building cz=12 h=12 with its roof at
+// cz=12.2 h=0.4 only lines up if the building occupies [0,12]). `box` is
+// centre-based, so the two primitives differ - see the Wiki.
+//
+// Sides get normals from the frustum slope: the surface tangent in the
+// (radial, y) plane is (1, dr/dy) with dr/dy = (rTop - rBot)/h, so the outward
+// normal is normalize(radial * h, rBot - rTop). A straight cylinder reduces to
+// the radial direction, which is what GenMeshCylinder used to give.
 Model OzoneLoader::BuildCylinder(float rTop, float rBot, float h, int slices) {
-    float r = (rTop > rBot) ? rTop : rBot;
-    Mesh mesh = GenMeshCylinder(r, h, slices);
+    if (slices < 3) slices = 16;
+    if (h <= 0.0f) h = 0.001f;
+    if (rTop < 0.0f) rTop = 0.0f;
+    if (rBot < 0.0f) rBot = 0.0f;
+
+    const float yTop = 0.0f;      // local origin = authored cz
+    const float yBot = -h;
+
+    // Per side quad: 2 triangles. Plus a cap fan per end (r > 0).
+    const int sideVerts = slices * 6;
+    const int capVerts  = (rTop > 0.0f ? slices * 3 : 0) + (rBot > 0.0f ? slices * 3 : 0);
+    const int vertCount = sideVerts + capVerts;
+
+    Mesh mesh = {0};
+    mesh.vertexCount = vertCount;
+    mesh.triangleCount = vertCount / 3;
+    mesh.vertices  = (float*)RL_MALLOC((size_t)vertCount * 3 * sizeof(float));
+    mesh.normals   = (float*)RL_MALLOC((size_t)vertCount * 3 * sizeof(float));
+    mesh.texcoords = (float*)RL_MALLOC((size_t)vertCount * 2 * sizeof(float));
+
+    int vi = 0;
+    auto emit = [&](float px, float py, float pz, float nx, float ny, float nz,
+                    float u, float v) {
+        mesh.vertices[vi * 3 + 0] = px;
+        mesh.vertices[vi * 3 + 1] = py;
+        mesh.vertices[vi * 3 + 2] = pz;
+        mesh.normals[vi * 3 + 0] = nx;
+        mesh.normals[vi * 3 + 1] = ny;
+        mesh.normals[vi * 3 + 2] = nz;
+        mesh.texcoords[vi * 2 + 0] = u;
+        mesh.texcoords[vi * 2 + 1] = v;
+        vi++;
+    };
+
+    // --- Sides ---
+    // Circumference-proportional U so the tiling matches around the tube; V runs
+    // 0..1 over the height, matching the old mesh's behaviour closely enough that
+    // shipped texScaleU/V values still read the same.
+    const float slopeScale = 1.0f / sqrtf(h * h + (rTop - rBot) * (rTop - rBot));
+    for (int i = 0; i < slices; i++) {
+        const float a0 = (float)i / (float)slices * 2.0f * PI;
+        const float a1 = (float)(i + 1) / (float)slices * 2.0f * PI;
+        const float c0 = cosf(a0), s0 = sinf(a0);
+        const float c1 = cosf(a1), s1 = sinf(a1);
+
+        // Normal follows the frustum surface, not the radial direction alone.
+        auto sideNormal = [&](float c, float s, float& nx, float& ny, float& nz) {
+            nx = c * h * slopeScale;
+            ny = (rBot - rTop) * slopeScale;
+            nz = s * h * slopeScale;
+        };
+        float n0x, n0y, n0z, n1x, n1y, n1z;
+        sideNormal(c0, s0, n0x, n0y, n0z);
+        sideNormal(c1, s1, n1x, n1y, n1z);
+
+        const float u0 = (float)i / (float)slices;
+        const float u1 = (float)(i + 1) / (float)slices;
+
+        // Wound so the outward face is front-facing for a +Y-up camera.
+        emit(c1 * rBot, yBot, s1 * rBot, n1x, n1y, n1z, u1, 1.0f);
+        emit(c0 * rBot, yBot, s0 * rBot, n0x, n0y, n0z, u0, 1.0f);
+        emit(c0 * rTop, yTop, s0 * rTop, n0x, n0y, n0z, u0, 0.0f);
+
+        emit(c1 * rBot, yBot, s1 * rBot, n1x, n1y, n1z, u1, 1.0f);
+        emit(c0 * rTop, yTop, s0 * rTop, n0x, n0y, n0z, u0, 0.0f);
+        emit(c1 * rTop, yTop, s1 * rTop, n1x, n1y, n1z, u1, 0.0f);
+    }
+
+    // --- Caps ---
+    auto emitCap = [&](float r, float y, float ny) {
+        if (r <= 0.0f) return;
+        for (int i = 0; i < slices; i++) {
+            const float a0 = (float)i / (float)slices * 2.0f * PI;
+            const float a1 = (float)(i + 1) / (float)slices * 2.0f * PI;
+            // UVs are the disc projected into 0..1 so a cap samples the texture
+            // rather than collapsing to one texel.
+            auto uv = [&](float c, float s, float& u, float& v) {
+                u = c * 0.5f + 0.5f;
+                v = s * 0.5f + 0.5f;
+            };
+            float u0, v0, u1, v1;
+            uv(cosf(a0), sinf(a0), u0, v0);
+            uv(cosf(a1), sinf(a1), u1, v1);
+            const float cx0 = cosf(a0) * r, sz0 = sinf(a0) * r;
+            const float cx1 = cosf(a1) * r, sz1 = sinf(a1) * r;
+            if (ny > 0.0f) {
+                emit(0, y, 0, 0, 1, 0, 0.5f, 0.5f);
+                emit(cx0, y, sz0, 0, 1, 0, u0, v0);
+                emit(cx1, y, sz1, 0, 1, 0, u1, v1);
+            } else {
+                emit(0, y, 0, 0, -1, 0, 0.5f, 0.5f);
+                emit(cx1, y, sz1, 0, -1, 0, u1, v1);
+                emit(cx0, y, sz0, 0, -1, 0, u0, v0);
+            }
+        }
+    };
+    emitCap(rTop, yTop, +1.0f);
+    emitCap(rBot, yBot, -1.0f);
+
+    mesh.vertexCount = vi;
+    mesh.triangleCount = vi / 3;
+    UploadMesh(&mesh, false);
     Model model = LoadModelFromMesh(mesh);
     Texture2D tex = (m_tilesetTex.size() >= 3) ? m_tilesetTex[2] : Texture2D{0};
     ApplyTex(model, tex, SKYBLUE);
@@ -768,12 +883,15 @@ Model OzoneLoader::BuildPyramid(float w, float d, float h) {
     mesh.texcoords = (float*)RL_MALLOC(vertCount * 2 * sizeof(float));
 
     float hw = w / 2.0f, hd = d / 2.0f;
-    float ax = 0, ay = h, az = 0;
+    // Same convention as BuildCylinder: the mesh spans y in [-h, 0] so the
+    // authored `cz` is the TOP. The exporter used to compensate with a bogus
+    // +h/2 for both cyl and pyr, which drifted every save by half a height.
+    float ax = 0, ay = 0, az = 0;          // apex
     float b[4][3] = {
-        {-hw, 0, -hd},
-        { hw, 0, -hd},
-        { hw, 0,  hd},
-        {-hw, 0,  hd}
+        {-hw, -h, -hd},
+        { hw, -h, -hd},
+        { hw, -h,  hd},
+        {-hw, -h,  hd}
     };
     int faces[6][3] = {
         {0,1,4}, {1,2,4}, {2,3,4}, {3,0,4},
@@ -811,11 +929,97 @@ Model OzoneLoader::BuildPyramid(float w, float d, float h) {
 }
 
 Model OzoneLoader::BuildPlane(float nx, float ny, float nz, float dist) {
-    Mesh mesh = GenMeshPlane(10.0f, 10.0f, 1, 1);
+    // Oriented 10x10 quad. `nx/ny/nz` is an ENGINE-space normal (the caller
+    // converts from OZONE's Z-up), and `dist` offsets the quad along that normal
+    // so `n . x = dist` holds for the plane it lies in. Written as a fixed
+    // horizontal GenMeshPlane before, which ignored all four arguments: a
+    // vertical or sloped `pln` was impossible and its normal was inert.
+    float len = sqrtf(nx * nx + ny * ny + nz * nz);
+    if (len < 1e-6f) { nx = 0.0f; ny = 1.0f; nz = 0.0f; len = 1.0f; }
+    nx /= len; ny /= len; nz /= len;
+
+    // Tangent basis: pick a helper axis that is not parallel to the normal.
+    float ux, uy, uz;
+    if (fabsf(ny) > 0.99f) {   // normal is vertical
+        ux = 1.0f; uy = 0.0f; uz = 0.0f;
+    } else {
+        ux = 0.0f; uy = 1.0f; uz = 0.0f;
+    }
+    // u = normalize(cross(helper, n))
+    float ax = uy * nz - uz * ny;
+    float ay = uz * nx - ux * nz;
+    float az = ux * ny - uy * nx;
+    float al = sqrtf(ax * ax + ay * ay + az * az);
+    if (al < 1e-6f) { ax = 1.0f; ay = 0.0f; az = 0.0f; al = 1.0f; }
+    ax /= al; ay /= al; az /= al;
+    // v = cross(n, u)
+    const float vx = ny * az - nz * ay;
+    const float vy = nz * ax - nx * az;
+    const float vz = nx * ay - ny * ax;
+
+    const float h = 5.0f;                       // half of the 10x10 patch
+    const float cx = nx * dist, cy = ny * dist, cz = nz * dist;
+
+    // Corners ordered a, b, c, d so (b-a) x (c-a) points along +n.
+    const float corners[4][3] = {
+        {cx - ax * h - vx * h, cy - ay * h - vy * h, cz - az * h - vz * h},
+        {cx + ax * h - vx * h, cy + ay * h - vy * h, cz + az * h - vz * h},
+        {cx + ax * h + vx * h, cy + ay * h + vy * h, cz + az * h + vz * h},
+        {cx - ax * h + vx * h, cy - ay * h + vy * h, cz - az * h + vz * h},
+    };
+    const float uvs[4][2] = {{0, 1}, {1, 1}, {1, 0}, {0, 0}};
+    const int idx[6] = {0, 1, 2, 0, 2, 3};
+
+    Mesh mesh = {0};
+    mesh.vertexCount = 4;
+    mesh.triangleCount = 2;
+    mesh.vertices  = (float*)RL_MALLOC(4 * 3 * sizeof(float));
+    mesh.normals   = (float*)RL_MALLOC(4 * 3 * sizeof(float));
+    mesh.texcoords = (float*)RL_MALLOC(4 * 2 * sizeof(float));
+    mesh.indices   = (unsigned short*)RL_MALLOC(6 * sizeof(unsigned short));
+    for (int i = 0; i < 4; i++) {
+        mesh.vertices[i * 3 + 0] = corners[i][0];
+        mesh.vertices[i * 3 + 1] = corners[i][1];
+        mesh.vertices[i * 3 + 2] = corners[i][2];
+        mesh.normals[i * 3 + 0] = nx;
+        mesh.normals[i * 3 + 1] = ny;
+        mesh.normals[i * 3 + 2] = nz;
+        mesh.texcoords[i * 2 + 0] = uvs[i][0];
+        mesh.texcoords[i * 2 + 1] = uvs[i][1];
+    }
+    for (int i = 0; i < 6; i++) mesh.indices[i] = (unsigned short)idx[i];
+
+    UploadMesh(&mesh, false);
     Model model = LoadModelFromMesh(mesh);
     Texture2D tex = (m_tilesetTex.size() >= 1) ? m_tilesetTex[0] : Texture2D{0};
     ApplyTex(model, tex, DARKGRAY);
     return model;
+}
+
+// Carry a PLANE's normal and distance onto the renderable, in ENGINE space.
+// Both load paths call this so the two cannot disagree about the conversion, and
+// so the editor can re-emit them (a plane's orientation is not recoverable from
+// its mesh bounding box).
+static void StorePlaneOrientation(OzoneRenderable& r, const OzonePrimitive& prim) {
+    if (prim.type != OzonePrimitiveType::PLANE) return;
+    if (prim.args.size() > 5) {
+        // OZONE is Z-up -> engine Y-up, the same swap the position gets.
+        r.planeNX = prim.args[3];
+        r.planeNY = prim.args[5];
+        r.planeNZ = prim.args[4];
+    }
+    if (prim.args.size() > 6) r.planeDist = prim.args[6];
+}
+
+// Carry a CYLINDER's authored taper and slice count. The mesh bbox knows only
+// max(rTop, rBot), so without these a cone would save back as a straight tube.
+static void StoreCylinderShape(OzoneRenderable& r, const OzonePrimitive& prim) {
+    if (prim.type != OzonePrimitiveType::CYLINDER) return;
+    if (prim.args.size() > 4) {
+        r.cylRTop = prim.args[3];
+        r.cylRBot = prim.args[4];
+    }
+    if (prim.args.size() > 6) r.cylSlices = (int)prim.args[6];
 }
 
 // ---------------------------------------------------------------------------
@@ -962,11 +1166,14 @@ Model OzoneLoader::BuildFromPrimitive(int type, const std::vector<float>& args) 
             return BuildPyramid(w, d, h);
         }
         case OzonePrimitiveType::PLANE: {
+            // Author a normal in OZONE's Z-up space; build in ENGINE Y-up, the
+            // same swap the position gets (ozone x,y,z -> engine x,z,y). Without
+            // it a `pln 0 0 1` (up in the file) would build a wall.
             float nx   = (args.size() > 3) ? args[3] : 0.0f;
             float ny   = (args.size() > 4) ? args[4] : 1.0f;
             float nz   = (args.size() > 5) ? args[5] : 0.0f;
             float dist = (args.size() > 6) ? args[6] : 0.0f;
-            return BuildPlane(nx, ny, nz, dist);
+            return BuildPlane(nx, nz, ny, dist);
         }
         default:
             return BuildBox(1, 1, 1);
@@ -1116,6 +1323,8 @@ r.csgOp = prim.csgOp;
         r.texSlot = (int)prim.args[8];
     else if (prim.type == OzonePrimitiveType::PYRAMID && prim.args.size() >= 7)
         r.texSlot = (int)prim.args[6];
+    StorePlaneOrientation(r, prim);
+    StoreCylinderShape(r, prim);
     // Apply texture override if set
     if (r.texSlot > 0) ApplyTexSlotToModel(r.model, r.texSlot);
     m_renderables.push_back(r);
@@ -1212,6 +1421,8 @@ bool OzoneLoader::LoadString(const char* data, const char* worldDir) {
         r.texSlot = (int)prim.args[8];
     else if (prim.type == OzonePrimitiveType::PYRAMID && prim.args.size() >= 7)
         r.texSlot = (int)prim.args[6];
+    StorePlaneOrientation(r, prim);
+    StoreCylinderShape(r, prim);
     if (r.texSlot > 0) ApplyTexSlotToModel(r.model, r.texSlot);
     m_renderables.push_back(r);
     if (prim.texScaleU != 1.0f || prim.texScaleV != 1.0f ||
@@ -1325,6 +1536,20 @@ static bool FaceBelongsToPass(oz::surface::SurfaceFace f,
     return false;
 }
 
+// The ONE model matrix for a brush. Scale, then rotate about the brush's own
+// origin, then translate - raylib's row-vector order, and exactly what
+// DrawModelEx builds, so the fast path and the per-face path place a brush
+// identically. RebuildCollisionVolumes' RotatedAabbY mirrors this composition;
+// if this changes, that must too.
+static inline Matrix RenderableModelMatrix(const OzoneRenderable& r) {
+    Matrix mdl = MatrixTranslate(r.position.x, r.position.y, r.position.z);
+    if (r.rotation != 0.0f)
+        mdl = MatrixMultiply(MatrixRotateY(r.rotation), mdl);
+    if (r.scale != 1.0f)
+        mdl = MatrixMultiply(MatrixScale(r.scale, r.scale, r.scale), mdl);
+    return mdl;
+}
+
 void OzoneLoader::DrawSurface(OzoneRenderable& r, SurfacePass pass) {
     using namespace oz::surface;
     auto& sm = oz::SurfaceMaterial::Instance();
@@ -1337,11 +1562,7 @@ void OzoneLoader::DrawSurface(OzoneRenderable& r, SurfacePass pass) {
 
     // pos/rot/scale mirrors what DrawModel would have applied, so the geometry
     // lands in exactly the same place as the non-surface path.
-    Matrix mdl = MatrixTranslate(r.position.x, r.position.y, r.position.z);
-    if (r.rotation != 0.0f)
-        mdl = MatrixMultiply(MatrixRotateY(r.rotation), mdl);
-    if (r.scale != 1.0f)
-        mdl = MatrixMultiply(MatrixScale(r.scale, r.scale, r.scale), mdl);
+    const Matrix mdl = RenderableModelMatrix(r);
 
     Material mat = r.model.materials[0];
 
@@ -1350,11 +1571,26 @@ void OzoneLoader::DrawSurface(OzoneRenderable& r, SurfacePass pass) {
         if (!FaceBelongsToPass((SurfaceFace)f, p, pass)) continue;
         if (r.faceMesh[f].vaoId == 0) continue;   // no geometry on this axis
 
+        // Per-face texture. A face's texSlot/texPath were stored, exported and
+        // round-tripped for as long as they existed and NEVER bound, so the
+        // Surface Properties dialog's texture fields did nothing until a reload.
+        //
+        // `mat` copies the model's Material, but raylib's Material holds a
+        // POINTER to its maps array, so writing maps[DIFFUSE] reaches the model's
+        // own material. Save and restore around the draw: without the restore the
+        // last face's texture would become the next frame's baseline.
+        const Texture2D faceTex = ResolveFaceTextureHandle(p);
+        MaterialMap* diff = &mat.maps[MATERIAL_MAP_DIFFUSE];
+        const MaterialMap saved = *diff;
+        if (faceTex.id > 0) diff->texture = faceTex;
+
         mat.shader = sm.Get();
         sm.ApplyUniforms(p);
         sm.BeginSurfaceState(p);
         DrawMesh(r.faceMesh[f], mat, mdl);
         sm.EndSurfaceState();
+
+        *diff = saved;
     }
 }
 
@@ -1366,7 +1602,13 @@ static inline void DrawRenderable(OzoneRenderable& r) {
         OzoneLoader::Instance().DrawSurface(r);
         return;
     }
-    DrawModel(r.model, r.position, r.scale, WHITE);
+    // DrawModelEx composes scale * rotate * translate, the same matrix
+    // RenderableModelMatrix builds for the surface path. This used to be
+    // DrawModel(model, position, scale, WHITE), which has NO rotation term, so a
+    // rotated brush with no surface decoration rendered axis-aligned while the
+    // editor picked and drew its faces rotated.
+    DrawModelEx(r.model, r.position, {0.0f, 1.0f, 0.0f}, r.rotation * RAD2DEG,
+                {r.scale, r.scale, r.scale}, WHITE);
 }
 
 // ---------------------------------------------------------------------------
@@ -1445,8 +1687,11 @@ void OzoneLoader::ComputeCollisionAABB(int type, const std::vector<float>& args,
             float rBot = (args.size() > 4) ? args[4] : 1.0f;
             float h    = (args.size() > 5) ? args[5] : 2.0f;
             float maxR = (rTop > rBot) ? rTop : rBot;
-            out.min = {position.x - maxR, position.y - h/2, position.z - maxR};
-            out.max = {position.x + maxR, position.y + h/2, position.z + maxR};
+            // `cz` is the TOP: the mesh spans [cz - h, cz]. This used to be
+            // centre-based (position.y +/- h/2), which disagreed with the mesh
+            // and with collision - three different stories for one brush.
+            out.min = {position.x - maxR, position.y - h, position.z - maxR};
+            out.max = {position.x + maxR, position.y,     position.z + maxR};
             break;
         }
         case OzonePrimitiveType::SPHERE: {
@@ -1459,17 +1704,45 @@ void OzoneLoader::ComputeCollisionAABB(int type, const std::vector<float>& args,
             float w = (args.size() > 3) ? args[3] : 2.0f;
             float d = (args.size() > 4) ? args[4] : 2.0f;
             float h = (args.size() > 5) ? args[5] : 2.0f;
-            out.min = {position.x - w/2, position.y - h/2, position.z - d/2};
-            out.max = {position.x + w/2, position.y + h/2, position.z + d/2};
+            // Same top convention as the cylinder.
+            out.min = {position.x - w/2, position.y - h, position.z - d/2};
+            out.max = {position.x + w/2, position.y,     position.z + d/2};
             break;
         }
         case OzonePrimitiveType::PLANE: {
-            // BuildPlane renders a fixed 10x10 horizontal patch (normal args are
-            // not applied yet), so the AABB is a thin slab to match.
-            constexpr float kPlaneExtent = 5.0f;   // half of GenMeshPlane(10,10)
-            constexpr float kPlaneThickness = 0.05f;
-            out.min = {position.x - kPlaneExtent, position.y - kPlaneThickness, position.z - kPlaneExtent};
-            out.max = {position.x + kPlaneExtent, position.y + kPlaneThickness, position.z + kPlaneExtent};
+            // Oriented 10x10 quad: `n . x = dist`, so the AABB is the corner
+            // spread of the rotated quad rather than a fixed horizontal slab.
+            float nx   = (args.size() > 3) ? args[3] : 0.0f;
+            float ny   = (args.size() > 4) ? args[4] : 1.0f;
+            float nz   = (args.size() > 5) ? args[5] : 0.0f;
+            float dist = (args.size() > 6) ? args[6] : 0.0f;
+            // Same ozone -> engine swap BuildFromPrimitive applies.
+            float enx = nx, eny = nz, enz = ny;
+            float len = sqrtf(enx*enx + eny*eny + enz*enz);
+            if (len < 1e-6f) { enx = 0.0f; eny = 1.0f; enz = 0.0f; len = 1.0f; }
+            enx /= len; eny /= len; enz /= len;
+
+            constexpr float kHalf = 5.0f;          // half of the 10x10 patch
+            // Two tangents spanning the quad, then the four corners.
+            float ux, uy, uz;
+            if (fabsf(eny) > 0.99f) { ux = 1; uy = 0; uz = 0; } else { ux = 0; uy = 1; uz = 0; }
+            float ax = uy*enz - uz*eny, ay = uz*enx - ux*enz, az = ux*eny - uy*enx;
+            float al = sqrtf(ax*ax + ay*ay + az*az);
+            if (al < 1e-6f) { ax = 1; ay = 0; az = 0; al = 1; }
+            ax /= al; ay /= al; az /= al;
+            const float vx = eny*az - enz*ay, vy = enz*ax - enx*az, vz = enx*ay - eny*ax;
+
+            const float cx = position.x + enx * dist;
+            const float cy = position.y + eny * dist;
+            const float cz = position.z + enz * dist;
+            float extX = kHalf * (fabsf(ax) + fabsf(vx));
+            float extY = kHalf * (fabsf(ay) + fabsf(vy));
+            float extZ = kHalf * (fabsf(az) + fabsf(vz));
+            // A flat quad has no volume on one axis, which CSG cannot overlap;
+            // the collision pass inflates that axis, and bounds only needs to
+            // describe it.
+            out.min = {cx - extX, cy - extY, cz - extZ};
+            out.max = {cx + extX, cy + extY, cz + extZ};
             break;
         }
         default:
@@ -1527,20 +1800,30 @@ void OzoneLoader::RebuildCollisionVolumes() {
             continue;
         }
 
-        BoundingBox mb = GetMeshBoundingBox(r.model.meshes[0]);
+        // Conservative rotation-aware AABB. Collision is AABB-only, so a rotated
+        // brush cannot be exact; using the UNROTATED mesh box let the ends of a
+        // rotated beam stick out of their own collision. RotatedAabbY is the
+        // tightest box containing the rotated shape, and mirrors the composition
+        // RenderableModelMatrix applies at draw time.
+        const BoundingBox mb = GetMeshBoundingBox(r.model.meshes[0]);
+        const AabbBox local{mb.min.x, mb.min.y, mb.min.z, mb.max.x, mb.max.y, mb.max.z};
+        const AabbBox world = RotatedAabbY(local, r.rotation,
+                                           r.position.x, r.position.y, r.position.z,
+                                           r.scale);
         CsgBrush brush;
-        brush.minX = r.position.x + mb.min.x * r.scale;
-        brush.minY = r.position.y + mb.min.y * r.scale;
-        brush.minZ = r.position.z + mb.min.z * r.scale;
-        brush.maxX = r.position.x + mb.max.x * r.scale;
-        brush.maxY = r.position.y + mb.max.y * r.scale;
-        brush.maxZ = r.position.z + mb.max.z * r.scale;
-        // Zero-thickness geometry (plane slabs) can't overlap in CSG â€” inflate
-        // slightly so SUB/INTERSECT against them still produces a volume.
-        if (brush.maxY - brush.minY < 0.02f) {
-            brush.minY -= 0.05f;
-            brush.maxY += 0.05f;
-        }
+        brush.minX = world.minX;
+        brush.minY = world.minY;
+        brush.minZ = world.minZ;
+        brush.maxX = world.maxX;
+        brush.maxY = world.maxY;
+        brush.maxZ = world.maxZ;
+        // Zero-thickness geometry cannot overlap in CSG — inflate slightly so
+        // SUB/INTERSECT against it still produces a volume. Applied to EVERY
+        // axis, not just Y: a horizontal plane slab needed the Y inflation, and
+        // an oriented `pln` (which can be vertical) needs X or Z.
+        if (brush.maxX - brush.minX < 0.02f) { brush.minX -= 0.05f; brush.maxX += 0.05f; }
+        if (brush.maxY - brush.minY < 0.02f) { brush.minY -= 0.05f; brush.maxY += 0.05f; }
+        if (brush.maxZ - brush.minZ < 0.02f) { brush.minZ -= 0.05f; brush.maxZ += 0.05f; }
         brush.op   = (CsgOp)r.csgOp;
         csg.Apply(brush);
     }
@@ -1604,14 +1887,16 @@ void OzoneLoader::RebuildCollisionVolumes() {
     // editor's props-panel size/UV fallback, which is itself keyed on a selection
     // index rather than a volume index.
     //
-    // Also surface the CSG overflow count here: a non-zero value means some `sub`
-    // brush carved NOTHING, which is invisible from the render mesh alone.
+    // Also surface the CSG overflow count here: a non-zero value means a `sub`
+    // brush stopped carving part-way, which is invisible from the render mesh
+    // alone. The budget is per BRUSH, so this is not "the world has too many
+    // solids" - it is one brush whose carve was abandoned.
     if (csg.overflow_count() > 0) {
-        OZ_WARN("CSG: %d subtraction(s) were skipped after hitting the %d-volume "
-                "cap — those brushes did NOT carve, so geometry you intended to cut "
-                "is still solid",
+        OZ_WARN("CSG: %d brush(es) hit the %d-volume per-brush carve budget and "
+                "stopped early — geometry you intended to cut is still solid",
                 csg.overflow_count(), CsgProcessor::MAX_SPLITS);
     }
+    m_lastCsgOverflow = csg.overflow_count();
 
     {
         int renderableBrushCount = 0;
@@ -1729,15 +2014,26 @@ int OzoneLoader::AddBrushRenderable(int primType, const Vector3& pos,
 // can fall through, which is exactly the bug this feature exists to fix.
 // ---------------------------------------------------------------------------
 int OzoneLoader::AppendAutoConvexCollision(const float* verts, int vertFloatCount,
-                                           float cellSize, int maxBoxes) {
+                                           float cellSize, int maxBoxes,
+                                           AutoConvexFail* failOut) {
     AutoConvexParams params;
     params.cellSize = cellSize;
     params.maxBoxes = maxBoxes;
 
     std::vector<ConvexBox> boxes;
-    int n = AutoConvex_Build(verts, vertFloatCount, params, boxes);
-    if (n <= 0) return 0;
+    AutoConvexFail fail = AutoConvexFail::NONE;
+    int n = AutoConvex_Build(verts, vertFloatCount, params, boxes, &fail);
+    if (failOut) *failOut = fail;
+    if (n <= 0) {
+        // Say WHICH failure it was. The editor used to attribute every one of
+        // these to the box budget, so a grid/geometry problem sent the author
+        // hunting for a budget they were nowhere near.
+        OZ_WARN("AutoConvex: refused (cell %.2f, budget %d): %s",
+                cellSize, maxBoxes, AutoConvexFailName(fail));
+        return 0;
+    }
 
+    int appended = 0;
     for (int i = 0; i < n; i++) {
         const ConvexBox& b = boxes[i];
         Vector3 size = {b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ};
@@ -1746,14 +2042,23 @@ int OzoneLoader::AppendAutoConvexCollision(const float* verts, int vertFloatCoun
                           (b.minZ + b.maxZ) * 0.5f};
         // SOLID (not ADD): a proxy is a plain solid volume, and SOLID is what
         // CsgProcessor treats as additive - see CsgOp in OzBsp.hpp.
-        AddBrushRenderable((int)OzonePrimitiveType::BOX, center, size,
-                           0.0f, 1.0f, (int)CsgOp::SOLID, SURF_COLLISION_PROXY);
+        const int idx = AddBrushRenderable((int)OzonePrimitiveType::BOX, center, size,
+                                           0.0f, 1.0f, (int)CsgOp::SOLID, SURF_COLLISION_PROXY);
+        if (idx >= 0) appended++;
     }
 
     RebuildCollisionVolumes();
+
+    // A rejected append leaves a HOLE in the hull. Reporting "n proxies" while
+    // some were dropped contradicts the "never a partial hull" contract, so say
+    // so and report the number actually added.
+    if (appended != n) {
+        OZ_WARN("AutoConvex: only %d of %d proxies were added - the hull has HOLES "
+                "and the player can fall through them", appended, n);
+    }
     OZ_INFO("AutoConvex: appended %d collision proxies (%zu total renderables)",
-            n, m_renderables.size());
-    return n;
+            appended, m_renderables.size());
+    return appended;
 }
 
 // ---------------------------------------------------------------------------
@@ -1774,10 +2079,8 @@ void OzoneLoader::ApplyRenderableUV(int idx, float su, float sv, float ou, float
         r->uvBase.assign(mesh.texcoords, mesh.texcoords + need);
     }
 
-    for (int i = 0; i < mesh.vertexCount; i++) {
-        mesh.texcoords[i*2 + 0] = r->uvBase[i*2 + 0] * su + ou;
-        mesh.texcoords[i*2 + 1] = r->uvBase[i*2 + 1] * sv + ov;
-    }
+    oz::surface::ApplyUVTransform(r->uvBase.data(), mesh.vertexCount,
+                                  su, sv, ou, ov, mesh.texcoords);
 
     // Store new params
     r->texScaleU = su;
@@ -1788,6 +2091,12 @@ void OzoneLoader::ApplyRenderableUV(int idx, float su, float sv, float ou, float
     // Upload updated UVs to GPU (attribute index 1 = texcoords)
     UpdateMeshBuffer(mesh, 1, mesh.texcoords,
                      mesh.vertexCount * 2 * (int)sizeof(float), 0);
+
+    // A per-face brush is drawn from its face sub-meshes, which carry their OWN
+    // texcoord arrays. Without this the model's UVs below would be updated and
+    // the geometry actually on screen would not - a brush-wide UV edit from the
+    // Properties panel would look like it did nothing.
+    if (r->surface.NeedsPerFaceDraw()) RebuildSurfaceMeshes(idx);
 }
 
 // ---------------------------------------------------------------------------
@@ -1796,8 +2105,33 @@ void OzoneLoader::ApplyRenderableUV(int idx, float su, float sv, float ou, float
 // custom texture. Stores the path on the renderable for persistence.
 // Returns true if the texture was loaded and applied successfully.
 // ---------------------------------------------------------------------------
-bool OzoneLoader::ApplyRenderableTexture(int idx, const char* path) {
-    OzoneRenderable* r = Get(idx);
+Texture2D OzoneLoader::ResolveFaceTextureHandle(const oz::surface::SurfaceProps& p) {
+    const oz::surface::FaceTextureRef ref = oz::surface::ResolveFaceTexture(p);
+
+    if (!ref.path.empty()) {
+        // The SAME resolver brush `texPath=` uses (repo-relative, world-relative
+        // and absolute all handled), so a face texture behaves identically
+        // wherever it was authored. A second copy of this rule would drift.
+        const std::string tp = ResolveWorldAssetPath(ref.path, m_worldDir, m_worldDir);
+
+        auto it = m_faceTexCache.find(tp);
+        if (it != m_faceTexCache.end()) return it->second;
+
+        Texture2D tex = LoadTextureWithFallback(tp.c_str());
+        if (tex.id == 0) {
+            OZ_WARN("Surface: face texture '%s' failed to load", tp.c_str());
+            m_faceTexCache[tp] = Texture2D{0};   // cache the miss: one warning, not one per frame
+            return Texture2D{0};
+        }
+        m_faceTexCache[tp] = tex;
+        return tex;
+    }
+
+    if (ref.slot > 0) return GetTilesetTex(ref.slot);
+    return Texture2D{0};
+}
+
+bool OzoneLoader::ApplyRenderableTexture(int idx, const char* path) {    OzoneRenderable* r = Get(idx);
     if (!r || !r->loaded || r->model.meshCount == 0) return false;
 
     Texture2D tex = LoadTextureWithFallback(path);
@@ -1807,8 +2141,19 @@ bool OzoneLoader::ApplyRenderableTexture(int idx, const char* path) {
     if (r->customTex.id > 0) UnloadTexture(r->customTex);
 
     r->customTex = tex;
-    r->texPath = path ? path : "";
     r->texSlot = 0; // custom texture overrides tileset
+
+    // surface.def is the OWNER of a brush's texture path; r->texPath is a derived
+    // view of it (DeriveLegacySurfaceMirror). Writing only the mirror left the
+    // owner empty, so the next DeriveLegacyRenderable - which runs on ANY surface
+    // edit - overwrote the mirror back to "" and the next export lost `texPath=`.
+    // Write the owner and re-derive, exactly like every other writer.
+    //
+    // No mesh rebuild here on purpose: a texture is bound per draw, not baked into
+    // the mesh, and setting a non-default path makes NeedsPerFaceDraw() true so
+    // the lazy draw path builds the sub-meshes if they do not exist yet.
+    r->surface.def.texPath = path ? path : "";
+    DeriveLegacyRenderable(*r);
 
     r->model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = tex;
     if (GetLitFogShader().id > 0)
@@ -1868,25 +2213,35 @@ static void BuildFaceMeshes(OzoneRenderable& r) {
         tris[face].push_back(i2);
     }
 
-    // Second pass: one Mesh per face, sharing the source's vertex arrays.
+    // Second pass: one Mesh per face.
     //
-    // The sub-meshes ALIAS src.vertices/texcoords/normals/colors while
-    // UploadMesh reads them and uploads its own VBO copies. Only the index
-    // buffer is fresh, because it is the one array that must differ per face.
+    // Each sub-mesh ALIASES the source's vertices/normals/colors while UploadMesh
+    // reads them and uploads its own VBO copies, but it OWNS its index buffer and
+    // its texcoords: a face's UV scale/offset is its own, so the six faces cannot
+    // share one texcoord array the way they used to.
     //
-    // The aliases are then DROPPED before the Mesh is stored. That is the whole
-    // point: UnloadMesh frees EVERY CPU array a Mesh points at, not just
-    // `indices`, so a stored alias makes the four teardown paths
-    // (RebuildSurfaceMeshes, RemoveRenderable, UpdateBrushRenderable, Unload)
-    // free arrays that UnloadModel is about to free again. That double free
-    // silently corrupted the heap, and it did not surface until the next world
-    // load - OzoneLoader::Unload() is where the damage was detected, inside
-    // ClearScene(), BEFORE the new world's "OZONE format:" log line. So the
-    // level you opened was never the level at fault: any world with a
-    // surface-flagged brush (SURF_FAKEBACKDROP backdrops in particular) poisons
-    // the heap, and the NEXT world you open dies in ClearScene. Nulling the
-    // pointers is safe because nothing reads a face sub-mesh's CPU arrays: the
-    // only consumer is DrawMesh, which draws from the VBO ids UploadMesh set.
+    // The borrowed aliases are DROPPED before the Mesh is stored. That is the
+    // whole point: UnloadMesh frees EVERY CPU array a Mesh points at, so a stored
+    // alias makes the four teardown paths (RebuildSurfaceMeshes,
+    // RemoveRenderable, UpdateBrushRenderable, Unload) free arrays that
+    // UnloadModel is about to free again. That double free silently corrupted the
+    // heap, and it did not surface until the next world load - OzoneLoader::Unload()
+    // is where the damage was detected, inside ClearScene(), BEFORE the new
+    // world's "OZONE format:" log line. So the level you opened was never the
+    // level at fault: any world with a surface-flagged brush (SURF_FAKEBACKDROP
+    // backdrops in particular) poisons the heap, and the NEXT world you open dies
+    // in ClearScene.
+    //
+    // The same rule is why the fresh texcoords are RL_MALLOC'd rather than
+    // pointed at r.uvBase: a borrowed base would be freed by UnloadMesh and then
+    // freed again when the vector dies. Nulling the remaining pointers is safe
+    // because nothing reads a face sub-mesh's CPU arrays: the only consumer is
+    // DrawMesh, which draws from the VBO ids UploadMesh set.
+    const size_t uvCount = (size_t)src.vertexCount * 2;
+    if (r.uvBase.size() != uvCount && src.texcoords)
+        r.uvBase.assign(src.texcoords, src.texcoords + uvCount);
+    const float* uvBase = (r.uvBase.size() == uvCount) ? r.uvBase.data() : nullptr;
+
     for (int f = 0; f < oz::surface::FACE_COUNT; f++) {
         const size_t n = tris[f].size();
         if (n < 3) continue;   // primitive has no geometry on this axis
@@ -1894,16 +2249,27 @@ static void BuildFaceMeshes(OzoneRenderable& r) {
         m.vertexCount = src.vertexCount;
         m.triangleCount = (int)(n / 3);
         m.vertices = src.vertices;
-        m.texcoords = src.texcoords;
         m.normals = src.normals;
         m.colors = src.colors;
         m.indices = (unsigned short*)RL_MALLOC(n * sizeof(unsigned short));
         if (!m.indices) continue;
         memcpy(m.indices, tris[f].data(), n * sizeof(unsigned short));
+
+        m.texcoords = (float*)RL_MALLOC(uvCount * sizeof(float));
+        if (!m.texcoords) { RL_FREE(m.indices); m.indices = nullptr; continue; }
+        const oz::surface::SurfaceProps& fp =
+            r.surface.Resolve((oz::surface::SurfaceFace)f);
+        if (uvBase) {
+            oz::surface::ApplyUVTransform(uvBase, src.vertexCount,
+                                          fp.uvScaleU, fp.uvScaleV,
+                                          fp.uvOffsetU, fp.uvOffsetV, m.texcoords);
+        } else {
+            memset(m.texcoords, 0, uvCount * sizeof(float));
+        }
+
         UploadMesh(&m, false);
-        // Keep the index buffer (owned here), drop the four borrowed arrays.
+        // Keep indices + texcoords (both owned here); drop the three borrowed.
         m.vertices = nullptr;
-        m.texcoords = nullptr;
         m.normals = nullptr;
         m.colors = nullptr;
         r.faceMesh[f] = m;
@@ -2000,7 +2366,6 @@ void OzoneLoader::UpdateBrushRenderable(int idx, const Vector3& pos, const Vecto
 
     // Save texture state to re-apply on the new mesh
     int oldTexSlot = r->texSlot;
-    std::string oldTexPath = r->texPath;
     Texture2D oldCustomTex = r->customTex;
     float oldSu = r->texScaleU;
     float oldSv = r->texScaleV;
@@ -2014,7 +2379,7 @@ void OzoneLoader::UpdateBrushRenderable(int idx, const Vector3& pos, const Vecto
         case 1: newModel = BuildCylinder(size.x, size.y, size.z, 16); break;
         case 2: newModel = BuildSphere(size.x, 16); break;
         case 3: newModel = BuildPyramid(size.x, size.z, size.y); break;
-        case 4: newModel = BuildPlane(0, 1, 0, 0); break;
+        case 4: newModel = BuildPlane(r->planeNX, r->planeNY, r->planeNZ, r->planeDist); break;
     }
     if (newModel.meshCount == 0) return;
 
@@ -2027,35 +2392,31 @@ void OzoneLoader::UpdateBrushRenderable(int idx, const Vector3& pos, const Vecto
         ApplyTexSlotToModel(newModel, oldTexSlot);
     }
 
-    // Re-apply UV transform on the fresh mesh
-    if (newModel.meshes[0].texcoords) {
-        Mesh& m = newModel.meshes[0];
-        for (int i = 0; i < m.vertexCount; i++) {
-            m.texcoords[i*2 + 0] = m.texcoords[i*2 + 0] * oldSu + oldOu;
-            m.texcoords[i*2 + 1] = m.texcoords[i*2 + 1] * oldSv + oldOv;
-        }
-        UpdateMeshBuffer(m, 1, m.texcoords, m.vertexCount * 2 * (int)sizeof(float), 0);
-    }
-
-    // Replace old model
+    // Replace old model. The fresh mesh's texcoords are PRISTINE (they carry
+    // only the generator's baked tiling), so drop the stale snapshot and let
+    // ApplyRenderableUV - the single owner of uvBase - re-take it and re-apply
+    // the brush-wide transform. Applying the old transform inline here and then
+    // snapshotting would make the snapshot capture ALREADY-transformed UVs and
+    // every later edit would compound on top of it.
     UnloadModel(r->model);
     r->model = newModel;
-    // The mesh is brand new, so its pristine UVs are different (a bigger box
-    // tiles differently). Drop the stale snapshot or the next ApplyRenderableUV
-    // would scale the OLD base.
     r->uvBase.clear();
-    // Face sub-meshes reference the old vertex streams; they must be rebuilt.
+    // Face sub-meshes were built from the previous vertex streams and must go.
     for (int f = 0; f < oz::surface::FACE_COUNT; f++) {
         if (r->faceMesh[f].vaoId > 0) UnloadMesh(r->faceMesh[f]);
         r->faceMesh[f] = Mesh{0};
     }
     r->faceMeshesBuilt = false;
-    if (r->surface.NeedsPerFaceDraw()) BuildFaceMeshes(*r);
+
+    if (r->model.meshCount > 0 && r->model.meshes[0].texcoords) {
+        ApplyRenderableUV(idx, oldSu, oldSv, oldOu, oldOv);
+    } else if (r->surface.NeedsPerFaceDraw()) {
+        BuildFaceMeshes(*r);
+    }
 
     // Update transform
     r->position = pos;
     r->rotation = rot * DEG2RAD; // caller passes degrees; store radians
-
 }
 
 void OzoneLoader::SetWorldAmbient(float r, float g, float b, float a) {
@@ -2246,6 +2607,12 @@ void OzoneLoader::Unload() {
     m_entities.Clear();
     m_zoneCounters.clear();
     m_worldDir.clear();
+    m_lastCsgOverflow = 0;
+    // Face textures are referenced by path from surface.def, which the
+    // renderables just dropped, so nothing can still be using them.
+    for (auto& kv : m_faceTexCache)
+        if (kv.second.id > 0) UnloadTexture(kv.second);
+    m_faceTexCache.clear();
     UnloadHeightmap();
     UnloadTextures();
 }

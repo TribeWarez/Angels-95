@@ -1464,9 +1464,24 @@ OmegaTechEditor.DrawModel = false;
                                 {pk.position.x+0.6f,pk.position.y+1.2f,pk.position.z+0.6f}};
                 }
             } else if (sel.type == SelType::BRUSH) {
-                auto& vols = OzoneLoader::Instance().GetCollisionVolumes();
-                if (sel.index >= 0 && sel.index < (int)vols.size())
-                    return vols[sel.index].aabb;
+                // `sel.index` is a RENDERABLE index, so it must be read against
+                // the renderable. This used to index GetCollisionVolumes(), which
+                // is a different index space (the CSG OUTPUT, regenerated on every
+                // rebuild), so the hover/selection box belonged to an unrelated
+                // volume or to nothing. SnapGizmoToSelection documents the same
+                // trap and was fixed; this consumer was missed.
+                OzoneRenderable* r = OzoneLoader::Instance().Get(sel.index);
+                if (r && r->loaded && r->model.meshCount > 0) {
+                    BoundingBox mb = GetMeshBoundingBox(r->model.meshes[0]);
+                    const AabbBox local{mb.min.x, mb.min.y, mb.min.z,
+                                        mb.max.x, mb.max.y, mb.max.z};
+                    // Rotation-aware, matching what collision now uses, so the box
+                    // always contains the drawn (possibly rotated) brush.
+                    const AabbBox w = RotatedAabbY(local, r->rotation,
+                                                   r->position.x, r->position.y,
+                                                   r->position.z, r->scale);
+                    return {{w.minX, w.minY, w.minZ}, {w.maxX, w.maxY, w.maxZ}};
+                }
             } else if (sel.type == SelType::ZONE) {
                 auto& zones = ZoneManager::Instance().GetZones();
                 for (auto& z : zones) {

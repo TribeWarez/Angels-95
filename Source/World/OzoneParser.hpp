@@ -40,6 +40,9 @@ enum class OzonePrimitiveType : uint8_t {
 
 struct OzonePrimitive {
     OzonePrimitiveType type;
+    // 1-based source line. Carried so diagnostics can name the line an author has
+    // to fix; the parser used to drop bad lines and tokens with no locator at all.
+    int line = 0;
     std::vector<float> args;        // position, dimensions, etc.
     std::string entityType;         // for entity types: "Walker", "HealthVial", etc.
     std::string entitySubType;      // for zones: "Water", "Ladder", "Sky", "Reverb"

@@ -65,26 +65,44 @@ void WorldChunkManager::GetVolumesInCell(float worldX, float worldZ,
         outIndices = it->second;
 }
 
+void WorldChunkManager::CollectCells(int ix0, int iz0, int ix1, int iz1,
+                                      std::vector<int>& outIndices) const {
+    for (int iz = iz0; iz <= iz1; iz++) {
+        if (iz < 0 || iz >= m_cellsZ) continue;
+        for (int ix = ix0; ix <= ix1; ix++) {
+            if (ix < 0 || ix >= m_cellsX) continue;
+            int idx = iz * m_cellsX + ix;
+            auto it = m_cells.find(idx);
+            if (it == m_cells.end()) continue;
+            for (int vi : it->second) {
+                // Avoid duplicates if a volume spans multiple cells
+                if (std::find(outIndices.begin(), outIndices.end(), vi) == outIndices.end())
+                    outIndices.push_back(vi);
+            }
+        }
+    }
+}
+
 void WorldChunkManager::GetVolumesNear(float worldX, float worldZ,
                                         std::vector<int>& outIndices, int range) const {
     outIndices.clear();
     int cx = (int)std::floor((worldX - m_worldMinX) / m_chunkSize);
     int cz = (int)std::floor((worldZ - m_worldMinZ) / m_chunkSize);
+    CollectCells(cx - range, cz - range, cx + range, cz + range, outIndices);
+}
 
-    for (int dz = -range; dz <= range; dz++) {
-        for (int dx = -range; dx <= range; dx++) {
-            int ix = cx + dx;
-            int iz = cz + dz;
-            if (ix < 0 || ix >= m_cellsX || iz < 0 || iz >= m_cellsZ) continue;
-            int idx = iz * m_cellsX + ix;
-            auto it = m_cells.find(idx);
-            if (it != m_cells.end()) {
-                for (int vi : it->second) {
-                    // Avoid duplicates if a volume spans multiple cells
-                    if (std::find(outIndices.begin(), outIndices.end(), vi) == outIndices.end())
-                        outIndices.push_back(vi);
-                }
-            }
-        }
-    }
+void WorldChunkManager::GetVolumesNearBox(float minX, float minZ, float maxX, float maxZ,
+                                           std::vector<int>& outIndices, int range) const {
+    outIndices.clear();
+    // Normalise: a caller may hand us the corners in either order.
+    if (minX > maxX) { float t = minX; minX = maxX; maxX = t; }
+    if (minZ > maxZ) { float t = minZ; minZ = maxZ; maxZ = t; }
+
+    // Every cell the box overlaps, plus `range` cells of slack.
+    int ix0 = (int)std::floor((minX - m_worldMinX) / m_chunkSize) - range;
+    int ix1 = (int)std::floor((maxX - m_worldMinX) / m_chunkSize) + range;
+    int iz0 = (int)std::floor((minZ - m_worldMinZ) / m_chunkSize) - range;
+    int iz1 = (int)std::floor((maxZ - m_worldMinZ) / m_chunkSize) + range;
+
+    CollectCells(ix0, iz0, ix1, iz1, outIndices);
 }

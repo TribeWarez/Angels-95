@@ -5,6 +5,7 @@
 #include "ZoneTypes.hpp"
 #include "../Pawn/OzPawnSystem.hpp"
 #include "../Physics/WorldChunk.hpp"
+#include "../Physics/AutoConvex.hpp"   // AutoConvexFail, for AppendAutoConvexCollision
 #include "OzoneParser.hpp"
 #include "SurfaceFlags.hpp"
 #include <cstdint>
@@ -79,6 +80,16 @@ struct OzoneRenderable {
     std::vector<float> uvBase;
     std::string texPath;         // filesystem/package path to custom texture (empty = use tileset)
     Texture2D customTex = {0};   // loaded custom texture (id=0 if using tileset)
+    // PLANE orientation, in ENGINE space (the file is Z-up; the loader converts).
+    // A plane's normal and distance cannot be recovered from its mesh bounding
+    // box, so they are carried explicitly for the editor to round-trip.
+    float planeNX = 0.0f, planeNY = 1.0f, planeNZ = 0.0f;
+    float planeDist = 0.0f;
+    // CYLINDER taper. The mesh bounding box only knows max(rTop, rBot), so a
+    // cone could not survive an editor round-trip without these. They are also
+    // what the Properties panel's Size X / Size Y mean for a cylinder.
+    float cylRTop = 0.0f, cylRBot = 0.0f;
+    int   cylSlices = 0;         // 0 = derive from the loaded mesh
     BoundingBox bounds{{0,0,0},{0,0,0}}; // world-space AABB for frustum culling
     bool hasBounds = false;      // true once bounds is meaningful
 };
@@ -229,6 +240,13 @@ public:
     const std::vector<OzoneCollisionVolume>& GetCollisionVolumes() const { return m_collisionVolumes; }
     void RebuildCollisionVolumes();
 
+    // CSG overflow count from the most recent RebuildCollisionVolumes(). Non-zero
+    // means at least one sub/intersect brush hit the per-brush carve budget and
+    // stopped early, leaving geometry the author meant to cut still solid.
+    // Read by the editor on world open so a pre-existing broken level is loud
+    // immediately, not only on the next brush commit.
+    int LastCsgOverflowCount() const { return m_lastCsgOverflow; }
+
     // Editor: add a brush renderable so it becomes visible in the viewport
     int AddBrushRenderable(int primType, const Vector3& pos, const Vector3& size,
                            float rot, float scale, int csgOp,
@@ -240,8 +258,11 @@ public:
     // `vertFloatCount` counts FLOATS. Returns the number of boxes appended, or
     // 0 when the source is unusable or the box budget was exceeded - it never
     // appends a partial hull, because half a collision wall is worse than none.
+    // `failOut`, when given, receives WHY it refused so the editor can say so
+    // instead of blaming the budget for every cause.
     int AppendAutoConvexCollision(const float* verts, int vertFloatCount,
-                                  float cellSize, int maxBoxes);
+                                  float cellSize, int maxBoxes,
+                                  AutoConvexFail* failOut = nullptr);
 
     // Editor: show/hide SURF_COLLISION_PROXY brushes in Draw() (the editor's
     // "all renderables" path). DrawWorldGeometry always hides them, so the
@@ -347,6 +368,13 @@ void ResetRenderableSurfaceDefault(int idx);
     void SetLitFogShaderEnabled(bool enabled);
     void ApplyTexSlotToModel(Model& model, int slot);
 
+    // The texture a face should bind, or a zero Texture2D meaning "keep whatever
+    // the brush's material already carries". Resolves surface.def's texPath /
+    // texSlot into a handle, loading and caching an explicit path on first use.
+    // The precedence itself lives in oz::surface::ResolveFaceTexture so the
+    // renderer and the tests share one definition.
+    Texture2D ResolveFaceTextureHandle(const oz::surface::SurfaceProps& p);
+
     // Publish the world's current `ambient` uniform so DrawZoneGeometry can put
     // it back. raylib has no GetShaderValue (and adding one would not help: the
     // value lives on the GL program, not in our code), so the owner of the
@@ -427,8 +455,14 @@ private:
     std::string m_hmTexRel;      // relative texture path as authored (for export)
 
     std::vector<Texture2D> m_tilesetTex;
+    // Per-face texture assets, keyed by the RESOLVED path. Loaded once per
+    // distinct path and freed in Unload(). Separate from a renderable's
+    // `customTex` (which the renderable owns and frees) so the two lifetimes
+    // cannot be confused - sharing them would double-free on unload.
+    std::unordered_map<std::string, Texture2D> m_faceTexCache;
 
     std::string m_worldDir;        // current world directory (for .ozls def matching)
+    int m_lastCsgOverflow = 0;     // overflow_count() from the last collision rebuild
     OzoneZoneCounters m_zoneCounters; // per-load zone name counters
     OzoneEntitySet m_entities;     // parsed, not-yet-injected entity nodes
 

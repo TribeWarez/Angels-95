@@ -18,6 +18,10 @@ static bool LoadWorldDocument(const fs::path& path) {
     HistoryClear();
     SetWorldDirectory(path.parent_path());
     g_documentPath = path;
+    // The warning is a property of the world just CLOSED, not this one. It was
+    // only ever cleared by the next successful brush commit, so a red
+    // "NO SOLID" collision count could persist into an unrelated level.
+    g_editorPanels.collisionOpWarning = false;
 
     // Auto-load .oztex packages from the world directory (for textures used by this level)
     {
@@ -49,6 +53,29 @@ static bool LoadWorldDocument(const fs::path& path) {
     if (extension == ".ozone") {
         EditorLog("OZONE format: %s", path.string().c_str());
         bool ok = OzoneLoader::Instance().LoadFile(path.string().c_str());
+
+        // A world whose file ALREADY overflows the CSG per-brush carve budget
+        // used to open quietly: the only signal was an OZ_WARN in the log, and
+        // the loud "this carved nothing" dialog fired only on a FRESH brush
+        // commit. So a level with broken geometry looked fine until the author
+        // happened to touch a brush. Report it on open, where the author is.
+        {
+            const int overflow = OzoneLoader::Instance().LastCsgOverflowCount();
+            if (overflow > 0) {
+                g_editorPanels.collisionOpWarning = true;
+                EditorLog("*** CSG: %d brush(es) hit the per-brush carve budget on load — "
+                          "those cuts are MISSING, so geometry the author intended to "
+                          "remove is still solid ***", overflow);
+                MessageBoxA(nullptr,
+                    "This world has CSG sub/intersect brushes that hit the per-brush "
+                    "carve budget and stopped early.\n\n"
+                    "Geometry those brushes were meant to cut away is STILL SOLID, so "
+                    "the player will be blocked by walls that look open.\n\n"
+                    "Split the offending brushes into smaller operations.",
+                    "CSG carve budget exceeded", MB_OK | MB_ICONWARNING);
+            }
+        }
+
         // The loader only parses; applying the parsed entities to the editor's
         // scene is an explicit step.
         InjectOzoneEntities(OzoneLoader::Instance().GetEntities(),
