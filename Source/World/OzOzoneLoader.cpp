@@ -1089,12 +1089,6 @@ r.csgOp = prim.csgOp;
     if (prim.args.size() >= 3)
         r.position = {prim.args[0], prim.args[2], prim.args[1]};
 
-    // Center cylinder and pyramid at position (mesh sits with bottom at Y=0, but
-    // box/sphere/plane are centered; adjust to match the center convention)
-    if ((prim.type == OzonePrimitiveType::CYLINDER ||
-         prim.type == OzonePrimitiveType::PYRAMID) && prim.args.size() >= 6)
-        r.position.y -= prim.args[5] / 2.0f;
-
     r.scale = 1.0f;
     if (prim.type == OzonePrimitiveType::BOX && prim.args.size() >= 7)
         r.rotation = prim.args[6] * DEG2RAD;
@@ -1194,11 +1188,6 @@ bool OzoneLoader::LoadString(const char* data, const char* worldDir) {
     DeriveLegacyRenderable(r);
     if (prim.args.size() >= 3)
         r.position = {prim.args[0], prim.args[2], prim.args[1]};
-
-    // Center cylinder and pyramid at position (mesh sits with bottom at Y=0)
-    if ((prim.type == OzonePrimitiveType::CYLINDER ||
-         prim.type == OzonePrimitiveType::PYRAMID) && prim.args.size() >= 6)
-        r.position.y -= prim.args[5] / 2.0f;
 
     r.scale = 1.0f;
     r.model = BuildFromPrimitive((int)prim.type, prim.args);
@@ -1699,9 +1688,6 @@ int OzoneLoader::AddBrushRenderable(int primType, const Vector3& pos,
     OzoneRenderable r;
     r.typeId = primType;
     r.position = pos;
-    // Center cylinder/pyramid at position (mesh sits with bottom at Y=0)
-    if (primType == 1) r.position.y -= size.z / 2.0f;  // cylinder: h = size.z
-    if (primType == 3) r.position.y -= size.y / 2.0f;  // pyramid: h = size.y
     r.scale = scale;
     // Store rotation in radians (matches file-loaded renderables); the editor
     // passes degrees from its UI fields.
@@ -2063,9 +2049,6 @@ void OzoneLoader::UpdateBrushRenderable(int idx, const Vector3& pos, const Vecto
     r->position = pos;
     r->rotation = rot * DEG2RAD; // caller passes degrees; store radians
 
-    // Re-apply the Y-center adjustment for cylinder/pyramid
-    if (r->typeId == 1) r->position.y -= size.z / 2.0f;  // cylinder: h = size.z
-    if (r->typeId == 3) r->position.y -= size.y / 2.0f;  // pyramid: h = size.y
 }
 
 void OzoneLoader::SetWorldAmbient(float r, float g, float b, float a) {

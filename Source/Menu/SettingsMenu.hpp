@@ -5,6 +5,7 @@
 
 #include "../Settings.hpp"
 #include "../Renderer/raygui/raygui.h"
+#include "MenuStyle.hpp"
 
 void ToggleSettings() {
     if (ShowSettings) {
@@ -19,99 +20,103 @@ void ToggleSettings() {
 }
 
 void UpdateSettings() {
-    if (ShowSettings) {
-        static int s_filterDropdown = -1;
-        if (GuiWindowBox((Rectangle){ 20, 20, 360, 520 }, "Angels95 Developer Settings")) {
-            ShowSettings = false;
-            HideCursor();
-            DisableCursor();
-            return;
+    if (!ShowSettings) return;
+
+    // Sized to fit the content; the old 360x520 clipped the window-size row.
+    const float W = 380.0f, H = 584.0f;
+    Rectangle win = { 20, 20, W, H };
+    if (angelsui::Panel(win, "Angels95 Settings")) {
+        ShowSettings = false;
+        HideCursor();
+        DisableCursor();
+        return;
+    }
+
+    const float x0 = win.x + 14, x1 = win.x + W - 14;
+    const float gap = 8, w3 = (x1 - x0 - gap * 2) / 3;
+    float y = win.y + 42;
+
+    // Latched toggles: the button shows ON/OFF and lights up when set.
+    auto tgl = [&](int col, const char* label, bool on) {
+        return angelsui::Button({ x0 + col * (w3 + gap), y, w3, 26 },
+                                TextFormat("%s %s", label, on ? "ON" : "OFF"), on);
+    };
+    if (tgl(0, "Debug",   Debug))       Debug = !Debug;
+    if (tgl(1, "H.Bob",   HeadBob))     HeadBob = !HeadBob;
+    if (tgl(2, "P.Shad",  PixelShader)) PixelShader = !PixelShader;
+    y += 34;
+    if (tgl(0, "Particles", ParticlesEnabled)) ParticlesEnabled = !ParticlesEnabled;
+    if (tgl(1, "FPS",       FPSEnabled))       FPSEnabled = !FPSEnabled;
+    if (tgl(2, "Log",       ShowLogWindow))    ShowLogWindow = !ShowLogWindow;
+    y += 34;
+    if (tgl(0, "VSync",  VSYNCToggle)) {
+        VSYNCToggle = !VSYNCToggle;
+        // SetWindowState/ClearWindowState. SetConfigFlags after InitWindow does not
+        // touch the live window, so the old toggle silently did nothing.
+        if (VSYNCToggle) SetWindowState(FLAG_VSYNC_HINT);
+        else             ClearWindowState(FLAG_VSYNC_HINT);
+    }
+    if (tgl(1, "Jitter", JitterEnabled)) JitterEnabled = !JitterEnabled;
+    if (tgl(2, "Fog",    FogEnabled))    FogEnabled = !FogEnabled;
+    y += 42;
+
+    // Texture filter (click-to-cycle, so no raygui dropdown).
+    angelsui::Group({ x0, y, x1 - x0, 60 }, "Texture Filter");
+    angelsui::Label({ x0 + 8, y + 23, 46, 20 }, "Mode");
+    TextureFilterMode = angelsui::Cycle({ x0 + 56, y + 22, x1 - x0 - 64, 24 },
+                                        FilterNames, 6, TextureFilterMode);
+    y += 74;
+
+    // Pixelation.
+    angelsui::Group({ x0, y, x1 - x0, 56 }, "Pixelation");
+    PixelSize = angelsui::Slider({ x0 + 8, y + 22, x1 - x0 - 16, 22 },
+                                 TextFormat("Size  %.0f", PixelSize), PixelSize, 1.0f, 32.0f);
+    y += 70;
+
+    // Vertex jitter.
+    angelsui::Group({ x0, y, x1 - x0, 56 }, "Vertex Jitter");
+    JitterIntensity = angelsui::Slider({ x0 + 8, y + 22, x1 - x0 - 16, 22 },
+                                       TextFormat("Intensity  %.1f", JitterIntensity),
+                                       JitterIntensity, 0.0f, 10.0f);
+    y += 70;
+
+    // Resolution scale.
+    angelsui::Group({ x0, y, x1 - x0, 84 }, "Resolution Scale");
+    ResolutionScale = angelsui::Slider({ x0 + 8, y + 22, x1 - x0 - 16, 22 },
+                                       TextFormat("Scale  %.2f", ResolutionScale),
+                                       ResolutionScale, 0.0f, 3.0f);
+    if (angelsui::Button({ x0 + 8, y + 50, 140, 24 }, "Set Resolution")) {
+        UnloadRenderTexture(Target);
+        Target = LoadRenderTexture(int(1280 * ResolutionScale), int(720 * ResolutionScale));
+    }
+    y += 98;
+
+    // Window size.
+    angelsui::Group({ x0, y, x1 - x0, 60 }, "Window Size");
+    static const char* resNames[5] = { "480p", "720p", "1080p", "1440p", "4K" };
+    static const int   resW[5] = { 640, 1280, 1920, 2560, 3840 };
+    static const int   resH[5] = { 480, 720, 1080, 1440, 2160 };
+    const float bw = (x1 - x0 - 16 - 4 * 6) / 5;
+    for (int i = 0; i < 5; i++) {
+        if (angelsui::Button({ x0 + 8 + i * (bw + 6), y + 24, bw, 24 }, resNames[i],
+                             false, 11)) {
+            ConfigWindowWidth = resW[i];
+            ConfigWindowHeight = resH[i];
+            SetWindowSize(ConfigWindowWidth, ConfigWindowHeight);
         }
-        int x = 40, y = 50, w = 100, h = 30, gap = 5;
+    }
 
-        // Row 1 - Debug / HeadBob / PixelShader toggle
-        if (GuiButton((Rectangle){ x, y, w, h }, "Toggle Debug")) Debug = !Debug;
-        if (GuiButton((Rectangle){ x + w + gap, y, w, h }, "Toggle H.B.")) HeadBob = !HeadBob;
-        if (GuiButton((Rectangle){ x + (w + gap) * 2, y, w, h }, "Toggle P.S.")) PixelShader = !PixelShader;
-
-        // Row 2 - Particles / FPS / Log
-        y += h + gap;
-        if (GuiButton((Rectangle){ x, y, w, h }, "Particles")) ParticlesEnabled = !ParticlesEnabled;
-        if (GuiButton((Rectangle){ x + w + gap, y, w, h }, "Show FPS")) FPSEnabled = !FPSEnabled;
-        if (GuiButton((Rectangle){ x + (w + gap) * 2, y, w, h }, "Log")) ShowLogWindow = !ShowLogWindow;
-
-        // Row 3 - VSync / Jitter toggle
-        y += h + gap;
-        if (GuiButton((Rectangle){ x, y, w, h }, "VSync .T")) {
-            if (IsWindowState(FLAG_VSYNC_HINT)) {
-                ClearWindowState(FLAG_VSYNC_HINT);
-            } else {
-                SetConfigFlags(FLAG_VSYNC_HINT);
-            }
+    // Log output, in the same framing.
+    if (ShowLogWindow) {
+        Rectangle log = { win.x + W + 10, win.y, 500, 500 };
+        if (angelsui::Panel(log, "Log Output")) ShowLogWindow = false;
+        angelsui::Group({ log.x + 8, log.y + 38, log.width - 16, log.height - 46 }, "Output");
+        int ly = (int)log.y + 60;
+        for (const auto& ll : Log::get_buffer()) {
+            if (ly > log.y + log.height - 16) break;
+            DrawText(ll.text, (int)log.x + 16, ly, 12, angelsui::kTextDim);
+            ly += 16;
         }
-        if (GuiButton((Rectangle){ x + w + gap, y, w, h }, "Jitter")) JitterEnabled = !JitterEnabled;
-        if (GuiButton((Rectangle){ x + (w + gap) * 2, y, w, h }, "Fog")) FogEnabled = !FogEnabled;
-
-        // Log window
-        if (ShowLogWindow) {
-            if (GuiWindowBox((Rectangle){ 380, 20, 500, 500 }, "Log Output")) {
-                ShowLogWindow = false;
-            }
-            int log_line_y = 50;
-            for (const auto& ll : Log::get_buffer()) {
-                if (log_line_y > 500) break;
-                Color c = RAYWHITE;
-                DrawText(ll.text, 390, log_line_y, 12, c);
-                log_line_y += 16;
-            }
-        }
-
-        // --- Texture filter group ---
-        y += h + gap + 5;
-        GuiGroupBox((Rectangle){ x, y, 320, 100 }, "Texture Filter");
-        y += 18;
-        GuiLabel((Rectangle){ x + 5, y, 100, 20 }, "Mode:");
-        Rectangle filterRect = { x + 60, y, 200, 22 };
-        if (GuiDropdownBox(filterRect, "Point (Nearest);Bilinear;Trilinear;Aniso x4;Aniso x8;Aniso x16", &TextureFilterMode, s_filterDropdown == 0)) {
-            s_filterDropdown = (s_filterDropdown == 0) ? -1 : 0;
-        }
-
-        // --- Pixelation group ---
-        y += 30;
-        GuiGroupBox((Rectangle){ x, y, 320, 70 }, "Pixelation");
-        y += 18;
-        GuiLabel((Rectangle){ x + 5, y, 50, 20 }, "Size:");
-        PixelSize = GuiSlider((Rectangle){ x + 55, y, 200, 20 }, "1", "32", PixelSize, 1.0f, 32.0f);
-
-        // --- Jitter group ---
-        y += 28;
-        GuiGroupBox((Rectangle){ x, y, 320, 70 }, "Vertex Jitter");
-        y += 18;
-        GuiLabel((Rectangle){ x + 5, y, 50, 20 }, "Intensity:");
-        JitterIntensity = GuiSlider((Rectangle){ x + 65, y, 195, 20 }, "0", "10", JitterIntensity, 0.0f, 10.0f);
-
-        // --- Resolution scale group ---
-        y += 30;
-        GuiGroupBox((Rectangle){ x, y, 320, 80 }, "Resolution Scale");
-        y += 18;
-        Rectangle sliderRect = { x + 5, y, 250, 20 };
-        ResolutionScale = GuiSlider(sliderRect, "Scale", TextFormat("%.2f", ResolutionScale), ResolutionScale, 0.0f, 3.0f);
-        y += 28;
-        if (GuiButton((Rectangle){ x + 5, y, 120, 22 }, "Set Resolution")) {
-            UnloadRenderTexture(Target);
-            Target = LoadRenderTexture(int(1280 * ResolutionScale), int(720 * ResolutionScale));
-        }
-
-        // --- Window size group ---
-        y += 30;
-        GuiGroupBox((Rectangle){ x, y, 320, 50 }, "Window Size");
-        y += 18;
-        int bw = 55, bgap = 5;
-        if (GuiButton((Rectangle){ x + 5, y, bw, 24 }, "480p")) { ConfigWindowWidth = 640;  ConfigWindowHeight = 480;  SetWindowSize(ConfigWindowWidth, ConfigWindowHeight); }
-        if (GuiButton((Rectangle){ x + 10 + bw, y, bw, 24 }, "720p")) { ConfigWindowWidth = 1280; ConfigWindowHeight = 720; SetWindowSize(ConfigWindowWidth, ConfigWindowHeight); }
-        if (GuiButton((Rectangle){ x + 15 + bw * 2, y, bw, 24 }, "1080p")) { ConfigWindowWidth = 1920; ConfigWindowHeight = 1080; SetWindowSize(ConfigWindowWidth, ConfigWindowHeight); }
-        if (GuiButton((Rectangle){ x + 20 + bw * 3, y, bw, 24 }, "1440p")) { ConfigWindowWidth = 2560; ConfigWindowHeight = 1440; SetWindowSize(ConfigWindowWidth, ConfigWindowHeight); }
-        if (GuiButton((Rectangle){ x + 25 + bw * 4, y, bw, 24 }, "4k")) { ConfigWindowWidth = 3840; ConfigWindowHeight = 2160; SetWindowSize(ConfigWindowWidth, ConfigWindowHeight); }
     }
 }
 

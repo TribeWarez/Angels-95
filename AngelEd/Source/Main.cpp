@@ -175,7 +175,10 @@ int main(int argc, char **argv){
                 std::ifstream f(entry.path());
                 if (!f.is_open()) continue;
                 std::string name, sp, sc;
+                std::string modelPath, modelTex, meshType;
+                std::string animIdle, animPatrol, animChase, animReturn, animDeath;
                 float speed = 1.5f, aggroRange = 6.0f, attackRange = 1.5f, damage = 10.0f;
+                float animSpeed = 1.0f, modelScale = 1.0f;
                 int maxHealth = 100;
                 std::string line;
                 while (std::getline(f, line)) {
@@ -197,6 +200,21 @@ int main(int argc, char **argv){
                     else if (key == "maxHealth") maxHealth = std::stoi(val);
                     else if (key == "sprite_path") sp = val;
                     else if (key == "scream_path") sc = val;
+                    // Model fields. The client's loader (Core.hpp) reads these, so
+                    // without them the editor fell back to the sprite_path - which
+                    // for most shipped defs is a 32x32 placeholder - and enemies
+                    // rendered as flat coloured squares while the game showed their
+                    // real GLBs. Keep this list in step with Core.hpp's parser.
+                    else if (key == "model_path") modelPath = val;
+                    else if (key == "model_texture") modelTex = val;
+                    else if (key == "mesh_type") meshType = val;
+                    else if (key == "model_scale") modelScale = std::stof(val);
+                    else if (key == "anim_idle") animIdle = val;
+                    else if (key == "anim_patrol") animPatrol = val;
+                    else if (key == "anim_chase") animChase = val;
+                    else if (key == "anim_return") animReturn = val;
+                    else if (key == "anim_death") animDeath = val;
+                    else if (key == "anim_speed") animSpeed = std::stof(val);
                 }
                 if (!name.empty()) {
                     PawnDef def;
@@ -208,6 +226,18 @@ int main(int argc, char **argv){
                     def.maxHealth = maxHealth;
                     def.sprite_path = sp;
                     def.scream_path = sc;
+                    def.model_path = modelPath;
+                    def.model_texture = modelTex;
+                    def.model_scale = modelScale;
+                    def.mesh_type = meshType;
+                    def.anim_idle = animIdle;
+                    def.anim_patrol = animPatrol;
+                    def.anim_chase = animChase;
+                    def.anim_return = animReturn;
+                    def.anim_death = animDeath;
+                    def.anim_speed = animSpeed;
+                    def.baseDir = entry.path().parent_path().string();
+                    if (!def.baseDir.empty()) def.baseDir += "/";
                     ps.RegisterDef(def);
                     if (!sp.empty())
                         PawnManagerAddPawn(name.c_str(), sp.c_str());
@@ -1718,7 +1748,7 @@ OmegaTechEditor.DrawModel = false;
         // Dispatch is deferred to one point per frame, after the Win32 message pump,
         // because a panel is mid-layout while it posts. What makes that safe is every
         // event carrying its own target captured at post time - not the timing.
-        ed::EventBus::instance().drain(g_editorFrameEvents);
+        ed::EventBus::instance().drain(g_editorFrameEvents, ed::IsFrameEvent);
         if (!g_editorFrameEvents.empty()) {
             DispatchFrameEvents(g_editorFrameEvents);
             // Placement, delete, duplicate, CSG commit and portal link/delete all
@@ -1732,7 +1762,7 @@ OmegaTechEditor.DrawModel = false;
         // Drained separately from the frame pass because these handlers always were
         // their own group, and that separation is what let Subsystems/SurfaceOps.cpp
         // happen without reordering the selection dispatch.
-        ed::EventBus::instance().drain(g_editorSurfaceEvents);
+        ed::EventBus::instance().drain(g_editorSurfaceEvents, ed::IsSurfaceEvent);
         if (!g_editorSurfaceEvents.empty()) {
             ApplySurfaceEdits(g_editorSurfaceEvents);
             // Core calling into the UI layer is the legal direction. It used to be
@@ -1751,7 +1781,7 @@ OmegaTechEditor.DrawModel = false;
         //
         // SelType::MAP is dispatched inside PropsApply rather than here, because it
         // writes level metadata and has its own undo policy.
-        ed::EventBus::instance().drain(g_editorPropsEvents);
+        ed::EventBus::instance().drain(g_editorPropsEvents, ed::IsPropsEvent);
         if (!g_editorPropsEvents.empty()) {
             ApplyPanelProperties(g_editorPropsEvents);
             MarkWorldGraphDirty();
@@ -1890,7 +1920,7 @@ OmegaTechEditor.DrawModel = false;
         // INTRA-FRAME chaining signals rather than user intents: the handlers
         // themselves set Save, and Refresh is a dirty flag. Queueing those would
         // push the file write a frame later for no benefit.
-        ed::EventBus::instance().drain(g_editorAnimEvents);
+        ed::EventBus::instance().drain(g_editorAnimEvents, ed::IsAnimEvent);
         ApplyAnimIntents(g_editorAnimEvents);
 
         // Placement arrives as ed::Ev::Spawn* carrying its own position, resolved
@@ -1908,7 +1938,7 @@ OmegaTechEditor.DrawModel = false;
         // condition observable at all - g_editorUnplacedEvents counts a Spawn* that
         // arrived without a usable payload, which is how the nine dead actionSpawn*
         // fields stayed invisible for so long.
-        ed::EventBus::instance().drain(g_editorPlacementEvents);
+        ed::EventBus::instance().drain(g_editorPlacementEvents, ed::IsPlacementEvent);
         if (!g_editorPlacementEvents.empty()) {
             ApplyPlacementSpawns(g_editorPlacementEvents);
             MarkWorldGraphDirty();

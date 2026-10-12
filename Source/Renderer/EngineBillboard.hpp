@@ -40,27 +40,43 @@ private:
     // effectively invisible on a dark viewport. Every quad normal is +Z, which
     // after the camera-facing yaw points at the viewer.
     static Mesh MakeBillboardQuad() {
-        static const float v[] = {
-            // x     y     z      u     v
-            -0.5f, -0.5f, 0.0f,  0.0f, 1.0f,
-             0.5f, -0.5f, 0.0f,  1.0f, 1.0f,
-             0.5f,  0.5f, 0.0f,  1.0f, 0.0f,
-            -0.5f,  0.5f, 0.0f,  0.0f, 0.0f,
+        // Separate arrays. The previous version packed position and UV into one
+        // interleaved array and then handed that array to mesh.vertices as if it
+        // were positions-only, with texcoords pointing at `v + 12`. Both reads
+        // were therefore garbage: the four "vertices" were not the quad corners
+        // at all, so every sprite/gizmo billboard drew as a thin degenerate
+        // sliver (or nothing). One array per attribute is the only correct form.
+        static float v[] = {
+            // x     y     z
+            -0.5f, -0.5f, 0.0f,
+             0.5f, -0.5f, 0.0f,
+             0.5f,  0.5f, 0.0f,
+            -0.5f,  0.5f, 0.0f,
         };
-        static const float n[] = {
+        static float uv[] = {
+            // u    v
+            0.0f, 1.0f,
+            1.0f, 1.0f,
+            1.0f, 0.0f,
+            0.0f, 0.0f,
+        };
+        static float n[] = {
              0.0f, 0.0f, 1.0f,
              0.0f, 0.0f, 1.0f,
              0.0f, 0.0f, 1.0f,
              0.0f, 0.0f, 1.0f,
         };
-        static const unsigned short idx[] = { 0, 1, 2, 0, 2, 3 };
+        static unsigned short idx[] = { 0, 1, 2, 0, 2, 3 };
         Mesh mesh = {0};
         mesh.vertexCount = 4;
-        mesh.triangleCount = 6;
-        mesh.vertices = (float*)v;
-        mesh.texcoords = (float*)(v + 12);
-        mesh.normals = (float*)n;
-        mesh.indices = (unsigned short*)idx;
+        // triangleCount is the number of TRIANGLES (2 here), not the index count
+        // (6). Raylib's DrawMesh draws `triangleCount * 3` indices, so the old
+        // value of 6 made it read 18 indices from this 6-element array.
+        mesh.triangleCount = 2;
+        mesh.vertices = v;
+        mesh.texcoords = uv;
+        mesh.normals = n;
+        mesh.indices = idx;
         return mesh;
     }
 
@@ -69,6 +85,13 @@ public:
         AssetMapper::Instance().PreloadCategory("engine");
         AssetMapper::Instance().PreloadCategory("items");
         s_BillboardModel = LoadModelFromMesh(MakeBillboardQuad());
+        // raylib 6.0's LoadModelFromMesh does NOT upload the mesh to the GPU
+        // (earlier versions did), so the model carried a CPU-side quad with
+        // vaoId == 0 and every DrawModelEx of it rendered nothing. Upload it
+        // explicitly; the false keeps the static vertex arrays alive, which is
+        // fine because MakeBillboardQuad's arrays are static storage.
+        if (s_BillboardModel.meshCount > 0 && s_BillboardModel.meshes[0].vaoId == 0)
+            UploadMesh(&s_BillboardModel.meshes[0], false);
     }
 
     static void Shutdown() {

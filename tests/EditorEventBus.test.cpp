@@ -214,6 +214,7 @@ static void test_event_coverage() {
         {Ev::DeleteEntity, "DeleteEntity"}, {Ev::DuplicateEntity, "DuplicateEntity"},
         {Ev::DeletePortal, "DeletePortal"},
         {Ev::SelectEntity, "SelectEntity"}, {Ev::ApplyProperties, "ApplyProperties"},
+        {Ev::OpenProperties, "OpenProperties"},
         {Ev::OpenWorld, "OpenWorld"}, {Ev::LinkWorld, "LinkWorld"},
         {Ev::ApplySurface, "ApplySurface"}, {Ev::ResetSurface, "ResetSurface"},
         {Ev::ApplyTextureToSelection, "ApplyTextureToSelection"},
@@ -449,6 +450,48 @@ static void test_heightmap_desc_is_one_payload() {
           "a default HeightmapDesc has no image, so the handler skips it");
 }
 
+// ---------------------------------------------------------------------------
+// The one-queue trap: filtered drains must partition the batch
+// ---------------------------------------------------------------------------
+// This is the bug the filtered drain exists for. main() drains the bus once per
+// subsystem (frame, surface, props, anim, placement), but the bus holds ONE queue.
+// An unfiltered drain in the FIRST pass moves the whole queue out, so every later
+// pass receives an empty vector - which is exactly how Surface Properties stopped
+// applying, and how placement/animation/props-apply went dead. The filters must
+// route each kind to exactly one pass, and the frame catch-all must never steal a
+// kind another pass owns.
+static void test_filtered_drain_partitions_by_kind() {
+    EventBus bus;
+    bus.post(Ev::ApplySurface,   SurfaceEdit{});
+    bus.post(Ev::SpawnPawn,      SpawnDesc{});
+    bus.post(Ev::ApplyProperties, SelRef{SelKind::Mesh, 3});
+    bus.post(Ev::AnimUndo,       AnimIntent{});
+    bus.post(Ev::SelectEntity,   SelRef{SelKind::Brush, 1});
+    bus.post(Ev::OpenProperties, SelRef{SelKind::Zone, 2});
+
+    std::vector<Event> frame, surface, props, anim, placement;
+    // Called in the SAME order as main(): frame first. The frame catch-all must not
+    // consume the kinds owned by the later passes, or this reproduces the bug.
+    bus.drain(frame,     IsFrameEvent);
+    bus.drain(surface,   IsSurfaceEvent);
+    bus.drain(props,     IsPropsEvent);
+    bus.drain(anim,      IsAnimEvent);
+    bus.drain(placement, IsPlacementEvent);
+
+    check(surface.size() == 1 && surface[0].kind == Ev::ApplySurface,
+          "the surface pass gets its ApplySurface");
+    check(props.size() == 1 && props[0].kind == Ev::ApplyProperties,
+          "the props pass gets its ApplyProperties");
+    check(anim.size() == 1 && anim[0].kind == Ev::AnimUndo,
+          "the anim pass gets its AnimUndo");
+    check(placement.size() == 1 && placement[0].kind == Ev::SpawnPawn,
+          "the placement pass gets its SpawnPawn");
+    // SelectEntity AND OpenProperties are frame-owned; OpenProperties must NOT be
+    // mistaken for ApplyProperties.
+    check(frame.size() == 2, "the frame catch-all gets SelectEntity + OpenProperties");
+    check(bus.pending() == 0, "every event was routed to exactly one pass");
+}
+
 int main() {
     printf("EditorEventBus tests:\n");
     test_typed_payloads();
@@ -464,6 +507,7 @@ int main() {
     test_target_is_captured_not_looked_up();
     test_fifo_drain();
     test_no_sticky_events();
+    test_filtered_drain_partitions_by_kind();
     test_overflow_is_bounded_and_counted();
     test_event_coverage();
     test_selkind_covers_seltype();

@@ -224,7 +224,15 @@ enum class Ev : uint8_t {
     CsgPlace, CsgCommit,
 
     // Selection. Payload: Selection (see below) or SelRef.
-    DeleteEntity, DuplicateEntity, SelectEntity, ApplyProperties,
+    DeleteEntity, DuplicateEntity, SelectEntity,
+    // ApplyProperties WRITES the Properties panel's edited values (payload: SelRef,
+    // consumed by ApplyPanelProperties). OpenProperties only OPENS that panel on a
+    // row (payload: Selection, from the WorldGraph's "Properties" menu item,
+    // consumed by DispatchFrameEvents). These used to be ONE kind, and because the
+    // bus is a single queue whose first drain takes everything, the open path
+    // swallowed every apply. Keeping them distinct is what lets each pass own
+    // exactly one meaning.
+    ApplyProperties, OpenProperties,
 
     // Portal deletion, deliberately NOT folded into DeleteEntity: it mutates
     // ZoneManager::GetPortals(), a different container from the entity lists
@@ -324,6 +332,58 @@ struct Event {
     SelRef target() const;
 };
 
+// ---------------------------------------------------------------------------
+// Per-pass kind filters
+// ---------------------------------------------------------------------------
+// main() drains the one bus queue once per subsystem, and each pass must see only
+// the kinds its handler understands. These predicates are the single definition of
+// "which kinds belong to which pass"; test_editorbus asserts they partition the
+// enum so a new Ev cannot be added without being classified.
+//
+// The frame pass is the catch-all (everything not claimed below), so an event with
+// no handler still reaches DispatchFrameEvents and is counted as unhandled rather
+// than left in the queue forever.
+inline bool IsSurfaceEvent(const Event& e) {
+    return e.kind == Ev::ApplySurface || e.kind == Ev::ResetSurface;
+}
+
+inline bool IsPlacementEvent(const Event& e) {
+    switch (e.kind) {
+        case Ev::SpawnPawn: case Ev::SpawnMesh: case Ev::SpawnPickup:
+        case Ev::SpawnEmitter: case Ev::SpawnZone: case Ev::SpawnParticleEmitter:
+        case Ev::SpawnPathNode: case Ev::SpawnWindZone: case Ev::SpawnPlayerStart:
+        case Ev::SpawnLight:
+            return true;
+        default:
+            return false;
+    }
+}
+
+inline bool IsAnimEvent(const Event& e) {
+    switch (e.kind) {
+        case Ev::AnimNewClip: case Ev::AnimDeleteClip: case Ev::AnimScrub:
+        case Ev::AnimAddKey: case Ev::AnimDeleteKey: case Ev::AnimApplyClipMeta:
+        case Ev::AnimToggleEdit: case Ev::AnimUndo: case Ev::AnimRedo:
+        case Ev::AnimSelectAll: case Ev::AnimClearSelection:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// The Properties pass writes edited values; it owns ApplyProperties/ApplyLevelState
+// only. OpenProperties stays with the frame pass (it opens the panel).
+inline bool IsPropsEvent(const Event& e) {
+    return e.kind == Ev::ApplyProperties || e.kind == Ev::ApplyLevelState;
+}
+
+// Catch-all: whatever no other pass claims. Deliberately defined in terms of the
+// others so adding a new owned kind cannot leave it in two passes at once.
+inline bool IsFrameEvent(const Event& e) {
+    return !IsSurfaceEvent(e) && !IsPlacementEvent(e) && !IsAnimEvent(e) &&
+           !IsPropsEvent(e);
+}
+
 class EventBus {
 public:
     // Public on purpose. A bus you cannot instantiate is a bus you cannot test,
@@ -353,9 +413,28 @@ public:
 
     // Move the queue out and empty it. Called once per frame, at the single point
     // where dispatching is safe — a panel is mid-layout while it is posting.
+    //
+    // This takes EVERYTHING. The per-subsystem passes in main() must therefore use
+    // the filtered overload below: with one shared queue, an unfiltered drain in the
+    // frame pass leaves nothing for surface/props/anim/placement, so those passes
+    // saw empty vectors and dropped every event (Surface Properties, the Properties
+    // panel's Apply, entity placement and animation commands). Kept unfiltered for
+    // the tests and for callers that genuinely want the whole batch.
     void drain(std::vector<Event>& out) {
         out.clear();
         out.swap(m_queue);
+    }
+
+    // Move only the events matching `keep` out of the queue, preserving FIFO order.
+    // Non-matching events stay queued for a later pass, so each pass gets exactly
+    // its own kinds regardless of the order the drains are called in.
+    template <class Keep>
+    void drain(std::vector<Event>& out, Keep keep) {
+        out.clear();
+        for (auto it = m_queue.begin(); it != m_queue.end();) {
+            if (keep(*it)) { out.push_back(std::move(*it)); it = m_queue.erase(it); }
+            else ++it;
+        }
     }
 
     size_t pending() const { return m_queue.size(); }

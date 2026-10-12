@@ -20,10 +20,10 @@ static void DispatchFrameEvents(const std::vector<ed::Event>& events) {
             case ed::Ev::SelectEntity:
                 AdoptSelection(ev.selection());
                 break;
-            case ed::Ev::ApplyProperties:
-                // Adopt the event's own target rather than trusting g_sel, so
-                // "Properties" always opens the row that was right-clicked even
-                // if something else changed the selection in between.
+            case ed::Ev::OpenProperties:
+                // Open the Properties panel on the row that was right-clicked.
+                // (ApplyProperties is a DIFFERENT kind - it writes the panel's
+                // edited values and is owned by the props pass, not this one.)
                 AdoptSelection(ev.selection());
                 OpenPropertiesForSelection();
                 break;

@@ -19,6 +19,14 @@
 #include <cstring>
 #include <unordered_map>
 
+// NPC locomotion constants. A pawn is an AABB that shares the player's collision
+// model (heightmap first, then brush tops); gravity matches the engine's default
+// PhysicsInfo gravity so a falling pawn reads like a falling player.
+static constexpr float kPawnGravity   = 18.0f;
+static constexpr float kPawnTerminal  = 40.0f;
+static constexpr float kPawnHalfWidth = 0.5f;
+static constexpr float kPawnHeight    = 1.8f;
+
 // ---------------------------------------------------------------------------
 // AssignLightZones — bind each light to the first zone volume that contains it.
 // zoneId -1 means "affects every zone" (the default). Called by the world
@@ -794,12 +802,19 @@ void PawnSystem::SyncSkyboxState() {
 // ---------------------------------------------------------------------------
 // Update - tick AI for all pawns
 // ---------------------------------------------------------------------------
-void PawnSystem::Update(Vector3 playerPos, float dt) {
+void PawnSystem::Update(Vector3 playerPos, float dt,
+                        oz::physics::PlayerPhysics::CollisionQuery* collision) {
     for (auto& p : m_pawns) {
         if (!p.active) continue;
         // Network-controlled pawns: the server owns AI/position � no local FSM
         // (prevents double simulation and fights over position).
         if (p.networkControlled) continue;
+
+        // Snapshot for the horizontal-collision rollback below: the FSM ticks
+        // move x/z directly, so the pre-tick position is what a wall test must
+        // fall back to.
+        const float oldX = p.position.x;
+        const float oldZ = p.position.z;
 
         float dx = playerPos.x - p.position.x;
         float dz = playerPos.z - p.position.z;
@@ -823,6 +838,46 @@ void PawnSystem::Update(Vector3 playerPos, float dt) {
                 break;
             case PawnState::DEAD:
                 break;
+        }
+
+        // Vertical + collision integration. The FSM above only ever moved x/z;
+        // without this the pawn kept its spawn Y forever (floating) and walked
+        // straight through walls and floors. Skipped when no world query was
+        // injected, so tests/editor keep the old behaviour.
+        if (collision) {
+            p.velocity.y -= kPawnGravity * dt;
+            if (p.velocity.y < -kPawnTerminal) p.velocity.y = -kPawnTerminal;
+            p.position.y += p.velocity.y * dt;
+
+            oz::physics::GroundSample ground =
+                collision->SampleGround(p.position.x, p.position.z, p.position.y);
+            if (ground.valid && p.position.y <= ground.y + oz::physics::kGroundEpsilon) {
+                p.position.y = ground.y;
+                p.velocity.y = 0.0f;
+                p.onGround = true;
+            } else {
+                p.onGround = false;
+            }
+
+            // Horizontal blocker test: a wall must not be walked through. Resolve
+            // axis-separated so a pawn scraping a wall can still slide along it.
+            auto pawnBox = [&]() {
+                return (BoundingBox){
+                    {p.position.x - kPawnHalfWidth, p.position.y, p.position.z - kPawnHalfWidth},
+                    {p.position.x + kPawnHalfWidth, p.position.y + kPawnHeight, p.position.z + kPawnHalfWidth}};
+            };
+            if (collision->OverlapsObstacle(pawnBox(), p.position.y)) {
+                const float nx = p.position.x, nz = p.position.z;
+                p.position.x = oldX;                        // try X rolled back
+                if (collision->OverlapsObstacle(pawnBox(), p.position.y)) {
+                    p.position.x = nx; p.position.z = oldZ; // try Z rolled back
+                    if (collision->OverlapsObstacle(pawnBox(), p.position.y)) {
+                        p.position.x = oldX; p.position.z = oldZ;
+                        p.velocity.x = 0.0f;
+                        p.velocity.z = 0.0f;
+                    }
+                }
+            }
         }
     }
 }

@@ -1022,7 +1022,7 @@ int main(int argc, char** argv){
                                                         savedCamY, verticalBlocked, zonePhysics);
         }
 
-        const bool uiBlocking = ShowInventory || ShowSkillTree || g_consoleOpen;
+        const bool uiBlocking = ShowSettings || ShowInventory || ShowSkillTree || g_consoleOpen;
 
         // Weapon fire AFTER camera so left-click does not disrupt movement
         WeaponBehaviour::Instance().HandleInput(uiBlocking, OmegaTechData.MainCamera);
@@ -1121,9 +1121,6 @@ int main(int argc, char** argv){
         if (FPSEnabled && !(g_shot.active && g_shot.hideHud)){
             DrawFPS(0,0);
         }
-
-        if (!(g_shot.active && g_shot.hideHud))
-            UpdateSettings();
 
         OmegaTechTextSystem.Update();
 
@@ -1268,11 +1265,17 @@ int main(int argc, char** argv){
             oz::skilltree::DrawOverlay(ShowSkillTree);
         }
 
+        // Developer settings overlay. Drawn with the other overlays, i.e. AFTER the
+        // HUD, so its window sits on top of the HP/MP columns (which open exactly
+        // under it) instead of the HUD painting over the panel.
+        if (!(g_shot.active && g_shot.hideHud))
+            UpdateSettings();
+
         // Console overlay (always on top)
         DrawConsole();
 
         // Crosshair
-        if (!ShowInventory && !ShowSkillTree && !g_consoleOpen &&
+        if (!ShowInventory && !ShowSkillTree && !ShowSettings && !g_consoleOpen &&
             !(g_shot.active && g_shot.hideHud)) {
             int cx = GetScreenWidth() / 2;
             int cy = GetScreenHeight() / 2;

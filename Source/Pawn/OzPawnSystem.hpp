@@ -3,6 +3,7 @@
 #include "../Renderer/LitLightning.hpp"
 #include "../Renderer/Mesh/MeshCache.hpp"
 #include "../Physics/PhysicsInfo.hpp"
+#include "../Physics/PlayerPhysics.hpp"
 #include "../World/LevelSettings.hpp"
 #include "../World/ZoneManager.hpp"
 #include "../World/ZoneTypes.hpp"
@@ -84,6 +85,10 @@ struct Pawn {
     Vector3 velocity{0, 0, 0};
     Vector3 spawnPosition{0, 0, 0};
     float yaw = 0.0f;
+    // Vertical physics state. Only driven when a world collision query is
+    // injected into Update() (the client single-player path); without one the
+    // pawn keeps the legacy flat movement (tests, editor, server-owned pawns).
+    bool onGround = false;
 
     float speed = 1.5f;
     float aggroRange = 6.0f;
@@ -300,8 +305,16 @@ public:
     // Remove all pawns
     void DespawnAll();
 
-    // Tick AI for every active pawn
-    void Update(Vector3 playerPos, float dt);
+    // Tick AI for every active pawn.
+    //
+    // `collision` supplies the world ground/obstacle queries so pawns fall under
+    // gravity and are blocked by geometry instead of floating and clipping
+    // through walls. It is optional: passing nullptr keeps the legacy flat
+    // horizontal movement, which is what the headless tests and the editor want
+    // (neither has a loaded collision world). The client passes an
+    // OzoneCollisionQuery from Core.hpp.
+    void Update(Vector3 playerPos, float dt,
+                oz::physics::PlayerPhysics::CollisionQuery* collision = nullptr);
 
     // Draw billboard sprites for every active pawn (optional lit shader for fog/lighting)
     void DrawAll(Camera3D& camera, Shader litShader = {0});

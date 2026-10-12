@@ -369,7 +369,11 @@ static LRESULT CALLBACK WorldGraphProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) 
                     // whatever g_sel happened to be — correct only because the
                     // select field was set in the same notification.
                     if (cmd == 1001) {
-                        ed::EventBus::instance().post(ed::Ev::ApplyProperties, pick);
+                        // OpenProperties, not ApplyProperties: this only OPENS the
+                        // panel. ApplyProperties writes the panel's edited values
+                        // (posted by the panel's own Apply button) and is a separate
+                        // kind for exactly that reason.
+                        ed::EventBus::instance().post(ed::Ev::OpenProperties, pick);
                     } else if (cmd == 1002) {
                         ed::EventBus::instance().post(ed::Ev::DeleteEntity, pick);
                     } else if (cmd == 1003) {

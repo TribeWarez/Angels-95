@@ -1009,8 +1009,13 @@ void UpdateEntitiesSim(float dt)
         else g_returnPortalId = -1;
     }
 
-    // Update all pawns via PawnSystem (FSM: IDLE/PATROL/CHASE/RETURN)
-    PawnSystem::Instance().Update(playerPos, dt);
+    // Update all pawns via PawnSystem (FSM: IDLE/PATROL/CHASE/RETURN). The
+    // collision query is what gives them gravity and solid walls; without it the
+    // local FSM never touched position.y and walked through geometry.
+    {
+        oz::physics::OzoneCollisionQuery pawnQuery;
+        PawnSystem::Instance().Update(playerPos, dt, &pawnQuery);
+    }
 
     // Update pickups (respawn timers, player collision).
     // Single-player only. In multiplayer the server owns pickup state and the

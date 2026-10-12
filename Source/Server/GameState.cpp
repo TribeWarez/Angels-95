@@ -722,12 +722,14 @@ void GameState::tick_npcs(WorldState& ws, float dt) {
                         break;
                     }
                 }
-                // Move toward player
+                // Move toward player. HORIZONTAL ONLY: the server has no collision
+                // world, so the old 3D approach made an NPC fly up/down to the
+                // player's eye height and hover there. Keeping y fixed leaves the
+                // NPC on the ground plane it was seeded at.
                 {
                     float dx = nearest_player->position.x - npc.position.x;
-                    float dy = nearest_player->position.y - npc.position.y;
                     float dz = nearest_player->position.z - npc.position.z;
-                    float dist_to_player = std::sqrt(dx * dx + dy * dy + dz * dz);
+                    float dist_to_player = std::sqrt(dx * dx + dz * dz);
                     if (dist_to_player <= npc.attack_range) {
                         // Attack the player
                         if (npc.attack_cooldown <= 0) {
@@ -737,10 +739,9 @@ void GameState::tick_npcs(WorldState& ws, float dt) {
                     } else {
                         float speed_factor = npc.speed * 1.5f * dt;
                         npc.position.x += (dx / dist_to_player) * speed_factor;
-                        npc.position.y += (dy / dist_to_player) * speed_factor;
                         npc.position.z += (dz / dist_to_player) * speed_factor;
-                    // Face player
-                    npc.yaw = std::atan2(dz, dx) * 180.0f / 3.14159265f;
+                        // Face player
+                        npc.yaw = std::atan2(dz, dx) * 180.0f / 3.14159265f;
                     }
                 }
                 break;
