@@ -84,6 +84,10 @@ static constexpr int HOTBAR_SIZE = 8;
     int  EquipmentAt(int slot) const;           // returns instance index or -1
     void EquipmentAssign(int slot, int instanceIndex);
     void EquipmentUnequip(int slot);            // despawns equipped instance
+    // Swap two equipment slots (drag-and-drop between rows). Fires
+    // on_unequip/on_equip once per affected instance and does NOT despawn the
+    // occupants, so neither piece is lost. Out-of-range or same-slot is a no-op.
+    void EquipmentSwap(int a, int b);
     void EquipmentClear();                      // despawns all equipped
     int  EquipmentFindFreeSlot() const;         // first empty slot, or -1
 

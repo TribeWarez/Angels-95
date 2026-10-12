@@ -155,6 +155,73 @@ static int test_equipment_clear() {
     PASS(); return 0; END_TEST();
 }
 
+// Drag-and-drop between equipment rows. EquipmentSwap reads both occupants out
+// before writing either, because EquipmentAssign despawns whatever it replaces:
+// two back-to-back Assign calls would have the second despawn the piece the
+// first had just moved in, so dragging a helmet onto a full ring lost one.
+static int test_equipment_swap() {
+    TEST("EquipmentSwap exchanges occupants and loses neither");
+    auto& reg = LightningEntityRegistry::Instance();
+    EntityDef helm, ring;
+    helm.name = "SwapHelm"; helm.type = EntityType::ARMOR;
+    helm.stats.strings["equip_slot"] = "helmet";
+    helm.stats.floats["defense"] = 3.0f;
+    ring.name = "SwapRing"; ring.type = EntityType::ARMOR;
+    ring.stats.strings["equip_slot"] = "jewelry1";
+    ring.stats.floats["defense"] = 1.0f;
+    reg.Register(helm);
+    reg.Register(ring);
+
+    auto& em = LightningEntityManager::Instance();
+    em.Init();
+    em.EquipmentClear();
+
+    // Real instances, so "neither was despawned" is a real assertion rather than
+    // a lookup of an index that never existed. Indices are re-read AFTER each
+    // assign: EquipmentAssign despawns the slot's previous occupant and Despawn
+    // shifts m_instances swap-with-last, so an index captured before an assign is
+    // not guaranteed to name the same instance after it.
+    const int idxHelm = em.Spawn("SwapHelm");
+    CHECK(idxHelm >= 0);
+    em.EquipmentAssign(static_cast<int>(EquipSlotType::HELMET), idxHelm);
+    const int helmAt = em.EquipmentAt(static_cast<int>(EquipSlotType::HELMET));
+
+    const int idxRing = em.Spawn("SwapRing");
+    CHECK(idxRing >= 0);
+    em.EquipmentAssign(static_cast<int>(EquipSlotType::JEWELRY1), idxRing);
+    const int ringAt = em.EquipmentAt(static_cast<int>(EquipSlotType::JEWELRY1));
+    const int slotHelm = static_cast<int>(EquipSlotType::HELMET);
+    const int slotRing = static_cast<int>(EquipSlotType::JEWELRY1);
+
+    em.EquipmentSwap(slotHelm, slotRing);
+    CHECK_EQ(em.EquipmentAt(slotHelm), ringAt);
+    CHECK_EQ(em.EquipmentAt(slotRing), helmAt);
+    // Both occupants still resolvable: neither was despawned by the other half.
+    CHECK(em.Get(ringAt) != nullptr);
+    CHECK(em.Get(helmAt) != nullptr);
+
+    // Same slot and out-of-range are no-ops (must not clear the slot). Checked
+    // HERE, while slotRing still holds ringAt from the swap above.
+    em.EquipmentSwap(slotRing, slotRing);
+    CHECK_EQ(em.EquipmentAt(slotRing), helmAt);
+    em.EquipmentSwap(-1, slotRing);
+    CHECK_EQ(em.EquipmentAt(slotRing), helmAt);
+    em.EquipmentSwap(slotRing, 999);
+    CHECK_EQ(em.EquipmentAt(slotRing), helmAt);
+
+    // Swapping onto an empty slot moves; the vacated slot reads empty.
+    em.EquipmentClear();
+    const int idxBoots = em.Spawn("SwapRing");
+    CHECK(idxBoots >= 0);
+    em.EquipmentAssign(5, idxBoots);
+    const int captured = em.EquipmentAt(5);
+    em.EquipmentSwap(5, 6);
+    CHECK_EQ(em.EquipmentAt(5), -1);
+    CHECK_EQ(em.EquipmentAt(6), captured);
+    em.EquipmentClear();
+    PASS(); return 0; END_TEST();
+}
+
 static int test_equipment_out_of_range() {
     TEST("Equipment access with invalid slot returns -1");
     auto& em = LightningEntityManager::Instance();
@@ -1031,6 +1098,7 @@ int main() {
     failures += test_equipment_assign();
     failures += test_equipment_find_free();
     failures += test_equipment_clear();
+    failures += test_equipment_swap();
     failures += test_equipment_out_of_range();
     failures += test_serialize_format();
     failures += test_deserialize_empty();

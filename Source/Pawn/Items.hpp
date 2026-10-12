@@ -173,6 +173,20 @@ struct InventorySystem {
         return true;
     }
 
+    // Swap two backpack slots wholesale (drag-and-drop reorder). Both indices
+    // are validated; a no-op swap (same slot, or either out of range) is
+    // rejected so a stray release cannot corrupt the array. Whole-slot swap
+    // (not stack-merge) so dragging never silently changes quantities.
+    bool SwapBackpackSlots(int a, int b) {
+        if (a < 0 || a >= BACKPACK_SLOTS) return false;
+        if (b < 0 || b >= BACKPACK_SLOTS) return false;
+        if (a == b) return false;
+        BackpackSlot tmp = backpack[a];
+        backpack[a] = backpack[b];
+        backpack[b] = tmp;
+        return true;
+    }
+
     // NOTE: equipment (armor/upgrade) is handled by the .ozls-driven
     // LightningEntityManager equipment slots (EquipmentAssign etc.), not here.
 

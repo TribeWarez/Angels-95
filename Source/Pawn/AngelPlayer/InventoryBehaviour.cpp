@@ -207,6 +207,70 @@ void InventoryBehaviour::DrawOverlay() {
     const int px = (sw - panel_w) / 2;
     const int py = (sh - panel_h) / 2;
 
+    // Layout constants shared by the draw pass and the drag hit-test below.
+    const int ex = px + 20;          // equipment column x
+    const int slotH = 38, slotW = 150;
+    const int bx = px + 190;         // backpack grid x
+    const int by = py + 50;
+    const int cellSize = 52, cellGap = 4;
+
+    auto& lem = LightningEntityManager::Instance();
+
+    // === Drag-and-drop: resolve an in-flight drag before drawing ===
+    //
+    // Click-to-pick used to live inside each cell's hover block, so a press
+    // both selected AND armed a use. A drag needs press / release on DIFFERENT
+    // cells, which cannot be decided in the per-cell block (the release cell is
+    // a different iteration). So: a press that lands on an occupied cell starts a
+    // drag; the drop is resolved here against the current cursor position, and
+    // the per-cell blocks below only start drags and render the drop highlight.
+    //
+    // Namespace rule: a drag only lands on the same kind it started from
+    // (backpack<->backpack, equipment<->equipment). Item ids and entity
+    // instances are not interchangeable and there is no bridge between them, so
+    // a cross-kind release is ignored rather than half-applying.
+    if (m_dragKind != DragKind::NONE) {
+        const Vector2 mp = GetMousePosition();
+        // Right-click cancels rather than dropping, so a mis-press is undoable
+        // without the pieces having moved.
+        if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+            m_dragKind = DragKind::NONE;
+            m_dragSlot = -1;
+        } else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+            if (m_dragKind == DragKind::BACKPACK) {
+                for (int i = 0; i < BACKPACK_SLOTS; i++) {
+                    const int r = i / BACKPACK_COLS, c = i % BACKPACK_COLS;
+                    Rectangle cell = {(float)(bx + c * (cellSize + cellGap)),
+                                      (float)(by + r * (cellSize + cellGap)),
+                                      (float)cellSize, (float)cellSize};
+                    if (CheckCollisionPointRec(mp, cell)) {
+                        if (i != m_dragSlot) gInventory.SwapBackpackSlots(m_dragSlot, i);
+                        break;
+                    }
+                }
+            } else { // EQUIPMENT
+                for (int s = 0; s < EQUIP_SLOT_COUNT; s++) {
+                    Rectangle r = {(float)ex, (float)(py + 50 + s * (slotH + 4)),
+                                   (float)slotW, (float)slotH};
+                    if (CheckCollisionPointRec(mp, r)) {
+                        if (s != m_dragSlot) lem.EquipmentSwap(m_dragSlot, s);
+                        break;
+                    }
+                }
+            }
+            m_dragKind = DragKind::NONE;
+            m_dragSlot = -1;
+        }
+        // If the release happened outside every drop target, clear the drag so a
+        // stale source can never apply to a freshly-opened panel.
+        if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
+            !IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+            !IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+            m_dragKind = DragKind::NONE;
+            m_dragSlot = -1;
+        }
+    }
+
     DrawRectangle(0, 0, sw, sh, (Color){0, 0, 0, 160});
     DrawRectangle(px, py, panel_w, panel_h, (Color){25, 25, 35, 245});
     DrawRectangleLines(px, py, panel_w, panel_h, (Color){180, 180, 200, 255});
@@ -214,18 +278,13 @@ void InventoryBehaviour::DrawOverlay() {
     DrawText("INVENTORY", px + 15, py + 10, 22, WHITE);
     DrawText(TextFormat("Coins: %d", gInventory.coins), px + panel_w - 150, py + 14, 16, GOLD);
 
-    int ex = px + 20;
     int ey = py + 50;
-    int slotH = 38;
-    int slotW = 150;
 
-    // === EQUIPMENT (left side) ===
     DrawText("EQUIPMENT", ex, ey - 18, 12, LIGHTGRAY);
 
     // Labels now live in Pawn/EquipSlots.hpp, sized by EQUIP_SLOT_COUNT, so a new
     // equipment slot without a label is a compile error instead of a blank row.
 
-    auto& lem = LightningEntityManager::Instance();
     for (int i = 0; i < EQUIP_SLOT_COUNT; i++) {
         int idx = lem.EquipmentAt(i);
         bool owned = (idx >= 0 && lem.Get(idx) && lem.Get(idx)->owned);
@@ -234,10 +293,24 @@ void InventoryBehaviour::DrawOverlay() {
 
         Rectangle eqRect = {(float)ex, (float)ey, (float)slotW, (float)slotH};
         bool eqHover = CheckCollisionPointRec(GetMousePosition(), eqRect);
-        if (eqHover && owned) {
-            c = (Color){120, 200, 255, 255};
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
-                lem.EquipmentUnequip(i);
+        // Drop target highlight while an equipment drag is in flight.
+        bool eqDropTarget = (m_dragKind == DragKind::EQUIPMENT && m_dragSlot >= 0 &&
+                             m_dragSlot != i && eqHover);
+        if (eqDropTarget) c = (Color){120, 200, 255, 255};
+
+        // Start a drag on press over an owned piece. The drop resolves in the
+        // pre-pass above (a release can land on a different row).
+        if (eqHover && owned && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+            m_dragKind == DragKind::NONE) {
+            m_dragKind = DragKind::EQUIPMENT;
+            m_dragSlot = i;
+        }
+        // Right-click / press-and-release-in-place unequips (kept from the old
+        // click-to-unequip; a same-slot release is a no-op swap).
+        if (eqHover && owned && IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+            lem.EquipmentUnequip(i);
+            m_dragKind = DragKind::NONE;
+            m_dragSlot = -1;
         }
 
         DrawRectangle(ex, ey, slotW, slotH, bg);
@@ -252,12 +325,10 @@ void InventoryBehaviour::DrawOverlay() {
         ey += slotH + 4;
     }
 
-    // === BACKPACK (right side) -> Legacy ===
-    int bx = px + 190;
-    int by = py + 50;
-    int cellSize = 52;
-    int cellGap = 4;
-
+    // === BACKPACK (right side) ===
+    // bx/by/cellSize/cellGap are declared once at the top of DrawOverlay so the
+    // drag hit-test and this draw pass agree; redeclaring them here used to be
+    // the pattern and is what made the two passes drift.
     DrawText("BACKPACK", bx, by - 18, 12, LIGHTGRAY);
 
     for (int row = 0; row < BACKPACK_ROWS; row++) {
@@ -272,8 +343,22 @@ void InventoryBehaviour::DrawOverlay() {
 
             Rectangle cellRect = {(float)cx, (float)cy, (float)cellSize, (float)cellSize};
             bool hover = CheckCollisionPointRec(GetMousePosition(), cellRect);
-            if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
-                m_selectedBpSlot = hasItem ? idx : -1;
+
+            // Press on an occupied cell starts a drag (and selects it). The drop
+            // resolves in the pre-pass; a press-and-release on the SAME cell is a
+            // no-op swap, so click-to-select still works. Right-click keeps the
+            // old use-an-item behaviour.
+            if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                if (hasItem && m_dragKind == DragKind::NONE) {
+                    m_dragKind = DragKind::BACKPACK;
+                    m_dragSlot = idx;
+                    m_selectedBpSlot = idx;
+                } else if (!hasItem && m_dragKind == DragKind::BACKPACK) {
+                    // Drop onto an empty cell: the pre-pass already moved the
+                    // source here, so just clear the selection highlight.
+                    m_selectedBpSlot = -1;
+                }
+            }
             if (hover && IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && hasItem) {
                 if (UseBackpackItem(idx)) { itemId = -1; qty = 0; hasItem = false; }
             }
@@ -282,9 +367,15 @@ void InventoryBehaviour::DrawOverlay() {
             Color borderC = hasItem ? WHITE : (Color){50, 50, 50, 255};
 
             if (hover) borderC = (Color){120, 200, 255, 255};
+            // Green outline = legal drop target for the drag in flight.
+            if (m_dragKind == DragKind::BACKPACK && hover && m_dragSlot != idx)
+                borderC = (Color){80, 255, 120, 255};
             if (m_selectedBpSlot == idx) {
                 borderC = (Color){255, 255, 0, 255};
             }
+            // Dim the source while it is being dragged.
+            if (m_dragKind == DragKind::BACKPACK && m_dragSlot == idx)
+                bgC = (Color){30, 30, 45, 255};
 
             DrawRectangle(cx, cy, cellSize, cellSize, bgC);
             DrawRectangleLines(cx, cy, cellSize, cellSize, borderC);
@@ -447,8 +538,53 @@ void InventoryBehaviour::DrawOverlay() {
         }
     }
 
+    // === Drag ghost ===
+    // The dragged piece follows the cursor, semi-transparent, so the player can
+    // see what they are carrying and where it will land.
+    if (m_dragKind != DragKind::NONE && m_dragSlot >= 0) {
+        Vector2 mp = GetMousePosition();
+        if (m_dragKind == DragKind::BACKPACK) {
+            const int itemId = gInventory.backpack[m_dragSlot].itemId;
+            const int qty = gInventory.backpack[m_dragSlot].quantity;
+            const ItemDBEntry* def = GetItemDef(itemId);
+            DrawRectangle(mp.x - 4, mp.y - 4, cellSize, cellSize, (Color){255, 255, 255, 60});
+            DrawRectangleLinesEx({mp.x - 4, mp.y - 4, (float)cellSize, (float)cellSize}, 1,
+                                 (Color){255, 255, 255, 200});
+            if (def) {
+                const char* iconAlias = nullptr;
+                switch (def->category) {
+                    case ItemCategory::HEALTH_VIAL:    iconAlias = "HealthVial"; break;
+                    case ItemCategory::MANA_VIAL:      iconAlias = "ManaVial"; break;
+                    case ItemCategory::ENERGY_CRYSTAL: iconAlias = "EnergyCrystal"; break;
+                    case ItemCategory::KEY:            iconAlias = "Key"; break;
+                    case ItemCategory::COIN:           iconAlias = "Coin"; break;
+                    case ItemCategory::POWERUP:        iconAlias = "Powerup"; break;
+                    default: break;
+                }
+                if (iconAlias) {
+                    Texture2D t = AssetMapper::Instance().GetTexture(iconAlias);
+                    if (t.id > 0) {
+                        float scale = (float)cellSize / (float)t.width * 0.7f;
+                        DrawTextureEx(t, {mp.x + 2, mp.y + 0}, 0, scale, (Color){255,255,255,200});
+                    }
+                }
+                DrawText(def->name, (int)mp.x + 6, (int)mp.y - 16, 12, WHITE);
+                if (qty > 1)
+                    DrawText(TextFormat("%d", qty), (int)mp.x + cellSize - 14,
+                             (int)mp.y + cellSize - 16, 12, WHITE);
+            }
+        } else {
+            const int inst = lem.EquipmentAt(m_dragSlot);
+            DrawRectangle(mp.x - 4, mp.y - 4, slotW / 2, slotH, (Color){255, 255, 255, 60});
+            DrawRectangleLinesEx({mp.x - 4, mp.y - 4, (float)slotW / 2, (float)slotH}, 1,
+                                 (Color){255, 255, 255, 200});
+            if (inst >= 0 && lem.Get(inst) && lem.Get(inst)->def)
+                DrawText(lem.Get(inst)->def->name.c_str(), (int)mp.x + 6, (int)mp.y, 12, WHITE);
+        }
+    }
+
     // Controls hint
-    DrawText("TAB: close  |  Left-click select  |  Right-click / ENTER use  |  E: pickup  |  K: skills  |  ^: console",
+    DrawText("TAB: close  |  Drag to reorder / move equipment  |  Right-click use / unequip  |  ENTER use  |  E: pickup  |  K: skills  |  ^: console",
              px + 20, py + panel_h - 22, 12, DARKGRAY);
 }
 

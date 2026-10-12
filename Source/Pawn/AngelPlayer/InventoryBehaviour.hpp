@@ -52,6 +52,14 @@ private:
     class OmegaClient* m_client = nullptr;  // scoreboard rendering; not owned
 
     int m_selectedBpSlot = -1;
+    // Drag-and-drop. Two sources share the drag: the backpack (item ids) and
+    // the equipment rows (entity instances). They are separate namespaces, so a
+    // drag may only be dropped on the SAME kind it started from - the drag kind
+    // is carried in m_dragKind and an incompatible drop is ignored rather than
+    // silently doing nothing.
+    enum class DragKind { NONE, BACKPACK, EQUIPMENT };
+    DragKind m_dragKind = DragKind::NONE;
+    int  m_dragSlot = -1;        // source backpack cell or equipment slot
     std::function<void(const std::string&)> m_messageSink;
     std::function<void()> m_feedbackSink;
 };

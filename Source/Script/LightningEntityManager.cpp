@@ -1283,6 +1283,38 @@ void LightningEntityManager::EquipmentUnequip(int slot) {
     }
 }
 
+// Swap the occupants of two equipment slots (drag-and-drop between rows).
+//
+// Both indices are read out and both slots CLEARED before either is re-filled,
+// because EquipmentAssign despawns whatever already occupies the slot it writes:
+// two back-to-back Assign calls would have the second one despawn the item the
+// first one had just moved in, so dragging a helmet onto a full ring deleted one
+// of the two pieces. on_unequip/on_equip still fire, once per affected instance.
+void LightningEntityManager::EquipmentSwap(int a, int b) {
+    if (a < 0 || a >= EQUIP_SLOT_COUNT) return;
+    if (b < 0 || b >= EQUIP_SLOT_COUNT) return;
+    if (a == b) return;
+
+    const int idxA = m_equipment[a];
+    const int idxB = m_equipment[b];
+    // Drop a piece that is being moved off its slot (on_unequip), but do NOT
+    // despawn - it is either going back into the other slot or being discarded.
+    if (idxA >= 0 && idxA < (int)m_instances.size())
+        RunAction(&m_instances[idxA], "on_unequip");
+    if (idxB >= 0 && idxB < (int)m_instances.size())
+        RunAction(&m_instances[idxB], "on_unequip");
+
+    m_equipment[a] = -1;
+    m_equipment[b] = -1;
+
+    m_equipment[a] = idxB;
+    if (idxB >= 0 && idxB < (int)m_instances.size())
+        RunAction(&m_instances[idxB], "on_equip");
+    m_equipment[b] = idxA;
+    if (idxA >= 0 && idxA < (int)m_instances.size())
+        RunAction(&m_instances[idxA], "on_equip");
+}
+
 void LightningEntityManager::EquipmentClear() {
     for (int s = 0; s < EQUIP_SLOT_COUNT; s++) {
         if (m_equipment[s] >= 0) {
