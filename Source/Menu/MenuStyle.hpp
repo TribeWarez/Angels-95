@@ -117,8 +117,10 @@ inline float Slider(Rectangle r, const char* label, float value, float lo, float
 }
 
 // Click-to-cycle chooser (a dropdown without the popup), so the settings stay
-// fully custom-drawn. Returns the (possibly advanced) index.
-inline int Cycle(Rectangle r, const char** opts, int count, int index) {
+// fully custom-drawn. Returns the (possibly advanced) index. The option table
+// is `const char* const*` so a `static const char* const names[]` table can be
+// passed directly without a cast.
+inline int Cycle(Rectangle r, const char* const* opts, int count, int index) {
     if (count <= 0) return index;
     if (index < 0 || index >= count) index = 0;
     bool hover = Hover(r);

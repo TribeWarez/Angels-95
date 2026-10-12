@@ -22,8 +22,12 @@ void ToggleSettings() {
 void UpdateSettings() {
     if (!ShowSettings) return;
 
-    // Sized to fit the content; the old 360x520 clipped the window-size row.
-    const float W = 380.0f, H = 584.0f;
+    // Tall enough for every group including the crosshair section, but clamped
+    // to the viewport so the last group never falls off a 720p screen. The
+    // content is laid out top-down from a fixed cursor, so on a short screen the
+    // bottom is simply not reached rather than overlapping the hotbar.
+    const float W = 380.0f;
+    const float H = fminf(700.0f, (float)GetScreenHeight() - 40.0f);
     Rectangle win = { 20, 20, W, H };
     if (angelsui::Panel(win, "Angels95 Settings")) {
         ShowSettings = false;
@@ -104,6 +108,63 @@ void UpdateSettings() {
             ConfigWindowHeight = resH[i];
             SetWindowSize(ConfigWindowWidth, ConfigWindowHeight);
         }
+    }
+    y += 68;
+
+    // Crosshair. Everything here is persisted to System/Angels95.ini by
+    // SaveClientSettings and read back by LoadClientSettings, so it survives a
+    // restart. Drawn by Renderer/Crosshair.hpp.
+    angelsui::Group({ x0, y, x1 - x0, 132 }, "Crosshair");
+    {
+        const float gx = x0 + 8, gw = x1 - x0 - 16, half = (gw - 8) / 2;
+
+        angelsui::Label({ gx, y + 22, 46, 20 }, "Style");
+        CrosshairStyleSel = angelsui::Cycle({ gx + 50, y + 22, gw - 50, 24 },
+                                             kCrosshairStyleNames,
+                                             CROSSHAIR_STYLE_COUNT, CrosshairStyleSel);
+
+        CrosshairSize = (int)(angelsui::Slider({ gx, y + 52, half, 22 },
+                                                TextFormat("Size  %.0f", CrosshairSize),
+                                                (float)CrosshairSize, 2.0f, 48.0f) + 0.5f);
+        CrosshairGap = (int)(angelsui::Slider({ gx + half + 8, y + 52, half, 22 },
+                                               TextFormat("Gap  %.0f", CrosshairGap),
+                                               (float)CrosshairGap, 0.0f, 48.0f) + 0.5f);
+
+        CrosshairThickness = angelsui::Slider({ gx, y + 82, half, 22 },
+                                              TextFormat("Width  %.1f", CrosshairThickness),
+                                              CrosshairThickness, 1.0f, 6.0f);
+        CrosshairA = (int)(angelsui::Slider({ gx + half + 8, y + 82, half, 22 },
+                                             TextFormat("Alpha  %.0f", CrosshairA),
+                                             (float)CrosshairA, 0.0f, 255.0f) + 0.5f);
+
+        // Colour presets rather than three more sliders: a crosshair is either
+        // one of a handful of colours, or the player is tuning it by hand.
+        struct Preset { const char* name; int r, g, b; };
+        static const Preset kPresets[] = {
+            { "White", 255, 255, 255 }, { "Green", 80, 255, 80 },
+            { "Red",   255, 80,  80 },   { "Amber", 255, 200, 60 },
+            { "Cyan",  80, 220, 255 },
+        };
+        const int nPresets = (int)(sizeof(kPresets) / sizeof(kPresets[0]));
+        const float pw = (gw - (nPresets - 1) * 6) / nPresets;
+        for (int i = 0; i < nPresets; i++) {
+            const bool sel = (CrosshairR == kPresets[i].r && CrosshairG == kPresets[i].g &&
+                              CrosshairB == kPresets[i].b);
+            if (angelsui::Button({ gx + i * (pw + 6), y + 108, pw, 20 }, kPresets[i].name, sel, 10)) {
+                CrosshairR = kPresets[i].r;
+                CrosshairG = kPresets[i].g;
+                CrosshairB = kPresets[i].b;
+            }
+        }
+    }
+    y += 140;
+
+    // Visibility toggle sits below the group so it stays reachable (and so a
+    // player who turned the crosshair off can find the switch again).
+    if (angelsui::Button({ x0, y, x1 - x0 - 8, 26 },
+                         CrosshairVisible ? "Crosshair: ON" : "Crosshair: OFF",
+                         CrosshairVisible)) {
+        CrosshairVisible = !CrosshairVisible;
     }
 
     // Log output, in the same framing.

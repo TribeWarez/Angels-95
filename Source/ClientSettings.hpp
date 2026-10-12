@@ -41,6 +41,17 @@ static inline void LoadClientSettings() {
     g_debugEnabled   = Debug;   // mirror into the cross-TU flag (see Settings.hpp)
     MuteToggle       = cfg.GetBool(S, "mute",         MuteToggle);
     AudioSlider      = CfgClampF(cfg.GetFloat(S, "audio_volume", AudioSlider), 0.0f, 100.0f);
+
+    CrosshairStyleSel = CfgClampI(cfg.GetInt(S, "crosshair_style", CrosshairStyleSel),
+                                  0, CROSSHAIR_STYLE_COUNT - 1);
+    CrosshairVisible  = cfg.GetBool(S, "crosshair_visible", CrosshairVisible);
+    CrosshairSize     = CfgClampI(cfg.GetInt(S, "crosshair_size", CrosshairSize), 2, 48);
+    CrosshairGap      = CfgClampI(cfg.GetInt(S, "crosshair_gap",  CrosshairGap),  0, 48);
+    CrosshairThickness = CfgClampF(cfg.GetFloat(S, "crosshair_thickness", CrosshairThickness), 1.0f, 6.0f);
+    CrosshairR = CfgClampI(cfg.GetInt(S, "crosshair_r", CrosshairR), 0, 255);
+    CrosshairG = CfgClampI(cfg.GetInt(S, "crosshair_g", CrosshairG), 0, 255);
+    CrosshairB = CfgClampI(cfg.GetInt(S, "crosshair_b", CrosshairB), 0, 255);
+    CrosshairA = CfgClampI(cfg.GetInt(S, "crosshair_a", CrosshairA), 0, 255);
 }
 
 // Write all settings back to System/Angels95.ini.
@@ -68,5 +79,14 @@ static inline void SaveClientSettings() {
     cfg.SetBool(S, "debug",         Debug);
     cfg.SetBool(S, "mute",          MuteToggle);
     cfg.SetFloat(S, "audio_volume", AudioSlider);
+    cfg.SetInt(S,   "crosshair_style",     CrosshairStyleSel);
+    cfg.SetBool(S,  "crosshair_visible",   CrosshairVisible);
+    cfg.SetInt(S,   "crosshair_size",      CrosshairSize);
+    cfg.SetInt(S,   "crosshair_gap",       CrosshairGap);
+    cfg.SetFloat(S, "crosshair_thickness", CrosshairThickness);
+    cfg.SetInt(S,   "crosshair_r", CrosshairR);
+    cfg.SetInt(S,   "crosshair_g", CrosshairG);
+    cfg.SetInt(S,   "crosshair_b", CrosshairB);
+    cfg.SetInt(S,   "crosshair_a", CrosshairA);
     cfg.Save(kClientIniPath);
 }

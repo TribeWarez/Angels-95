@@ -56,6 +56,34 @@ int Spinner004Value = 0;
 bool VSYNCToggle = false;
 bool MXAAToggle = false;
 
+// --- Crosshair ---
+// Global (not per-weapon). Persisted by ClientSettings.hpp, drawn by
+// Renderer/Crosshair.hpp. The style is an index into kCrosshairStyleNames so
+// the settings UI and the ini can never disagree about what "2" means.
+enum CrosshairStyle : int {
+    CROSSHAIR_CROSS = 0,   // four ticks around a gap
+    CROSSHAIR_DOT,         // single centre dot
+    CROSSHAIR_CIRCLE,      // ring
+    CROSSHAIR_CIRCLE_DOT,  // ring plus centre dot
+    CROSSHAIR_STYLE_COUNT
+};
+static const char* const kCrosshairStyleNames[CROSSHAIR_STYLE_COUNT] = {
+    "Cross", "Dot", "Circle", "Circle + Dot"
+};
+static int   CrosshairStyleSel = CROSSHAIR_CROSS;
+static bool  CrosshairVisible  = true;
+static int   CrosshairSize     = 12;  // tick length / circle radius, px
+static int   CrosshairGap      = 5;   // gap between centre and tick, px
+static float CrosshairThickness = 1.0f; // line width, px
+static int   CrosshairR = 255, CrosshairG = 255, CrosshairB = 255;
+static int   CrosshairA = 180;         // 0..255
+
+inline Color CrosshairColor() {
+    return (Color){ (unsigned char)CrosshairR, (unsigned char)CrosshairG,
+                    (unsigned char)CrosshairB, (unsigned char)CrosshairA };
+}
+
+
 bool MuteToggle = false;
 float AudioSlider = 100.0f; // persisted as 0..100 in [Settings] audio_volume
 

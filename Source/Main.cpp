@@ -15,6 +15,7 @@
 #include "Pawn/AngelPlayer/PlayerController.hpp"
 #include "Pawn/PickupPawns.hpp"
 #include "Renderer/CombatFX.hpp"
+#include "Renderer/Crosshair.hpp"
 #include "Renderer/Mesh/MeshCache.hpp"
 #include "Renderer/ViewModel.hpp"
 #include "Renderer/PlayerModel.hpp"
@@ -1274,19 +1275,16 @@ int main(int argc, char** argv){
         // Console overlay (always on top)
         DrawConsole();
 
-        // Crosshair
+        // Crosshair. Style/size/gap/colour are settings; ADS and the fire bloom
+        // come from WeaponBehaviour and are passed in, so the renderer stays
+        // decoupled from the weapon system. (The inline version this replaced
+        // also drew the DOWN tick at cx+gap instead of cx - an off-centre cross.)
         if (!ShowInventory && !ShowSkillTree && !ShowSettings && !g_consoleOpen &&
             !(g_shot.active && g_shot.hideHud)) {
-            int cx = GetScreenWidth() / 2;
-            int cy = GetScreenHeight() / 2;
-            const bool ads = WeaponBehaviour::Instance().AdsActive();
-            int gap = (ads ? 2 : 5) + (int)(WeaponBehaviour::Instance().CrosshairBloom() * (ads ? 0.3f : 1.0f));
-            int len = 12;
-            Color col = {255, 255, 255, 180};
-            DrawLine(cx - gap - len, cy, cx - gap, cy, col);
-            DrawLine(cx + gap, cy, cx + gap + len, cy, col);
-            DrawLine(cx, cy - gap - len, cx, cy - gap, col);
-            DrawLine(cx + gap, cy + gap, cx + gap + len, cy + gap, col);
+            oz::CrosshairFrame frame;
+            frame.ads   = WeaponBehaviour::Instance().AdsActive();
+            frame.bloom = WeaponBehaviour::Instance().CrosshairBloom();
+            oz::DrawCrosshair(frame);
         }
 
         EndDrawing();
