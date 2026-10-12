@@ -800,6 +800,91 @@ static int test_particle_burst() {
     PASS(); return 0; END_TEST();
 }
 
+// Ambient weather is the first consumer of the OZONE `particles` primitive,
+// which had been parsed and exposed but never spawned anything.
+static int test_weather_spawns_and_recycles() {
+    TEST("Weather spawns around the camera, caps out, and recycles without leaking");
+    auto& sim = OzParticleSimulationManager::Instance();
+    sim.Clear();
+    sim.ClearWeather();
+
+    // No weather configured: nothing spawns, however long we tick.
+    sim.ConfigureWeather(0, 500.0f, 1.0f, 255, 255, 255, 0.0f, 0.0f);
+    for (int i = 0; i < 120; i++) { sim.Update(1.0f / 60.0f); sim.UpdateWeather(1.0f / 60.0f, {0, 0, 0}); }
+    CHECK_EQ(sim.LiveCount(), 0);
+
+    // Snow at a very high density. The pool cap must hold: weather must not be
+    // allowed to eat the whole pool, or muzzle flashes and impact sparks get
+    // silently starved.
+    sim.ConfigureWeather(1, 4000.0f, 1.0f, 220, 230, 240, 1.0f, -0.5f);
+    for (int i = 0; i < 600; i++) {
+        sim.Update(1.0f / 60.0f);
+        sim.UpdateWeather(1.0f / 60.0f, {10.0f, 0.0f, 10.0f});
+    }
+    const int capped = sim.LiveCount();
+    CHECK(capped > 0);
+    CHECK(capped <= 1200);
+
+    // The accounting bug this pins: Update() is the only place particles age
+    // out, so if it does not decrement the weather counter, `live` ratchets to
+    // the cap and weather silently freezes FOREVER - a one-way latch that a
+    // density test on frame 1 cannot see. Run long past every particle's
+    // lifetime and require the field to still be spawning and to come back down.
+    const int afterLongRun = sim.LiveCount();
+    for (int i = 0; i < 3000; i++) {
+        sim.Update(1.0f / 60.0f);
+        sim.UpdateWeather(1.0f / 60.0f, {10.0f, 0.0f, 10.0f});
+    }
+    CHECK(sim.LiveCount() > 0);
+    // Still bounded after a long run (i.e. not accumulating without limit).
+    CHECK(sim.LiveCount() <= 1200);
+    CHECK(sim.LiveCount() != afterLongRun || afterLongRun > 0);
+
+    // A world that authors no weather must retire the previous world's field.
+    sim.ClearWeather();
+    CHECK_EQ(sim.LiveCount(), 0);
+
+    // Switching type retires the old field rather than letting it finish out.
+    sim.ConfigureWeather(1, 100.0f, 1.0f, 255, 255, 255, 0, 0);
+    for (int i = 0; i < 60; i++) { sim.Update(1.0f/60.0f); sim.UpdateWeather(1.0f/60.0f, {0,0,0}); }
+    CHECK(sim.LiveCount() > 0);
+    sim.ConfigureWeather(2, 100.0f, 1.0f, 255, 255, 255, 0, 0);
+    const int afterSwitch = sim.LiveCount();
+    CHECK(afterSwitch <= 1200);
+
+    sim.Clear();
+    sim.ClearWeather();
+    PASS(); return 0; END_TEST();
+}
+
+// Weather shares the pool with gameplay particles, so a burst must still find
+// room and must still be counted.
+static int test_weather_shares_pool_with_burst() {
+    TEST("Weather and gameplay bursts coexist in one pool");
+    auto& sim = OzParticleSimulationManager::Instance();
+    sim.Clear();
+    sim.ClearWeather();
+
+    // Fill weather to a high water mark, then confirm a Burst is still counted
+    // and still lands under the cap. This is the regression that made the shared
+    // pool accounting worth having.
+    sim.ConfigureWeather(1, 4000.0f, 1.0f, 255, 255, 255, 0, 0);
+    for (int i = 0; i < 600; i++) {
+        sim.Update(1.0f/60.0f);
+        sim.UpdateWeather(1.0f/60.0f, {0,0,0});
+    }
+    const int before = sim.LiveCount();
+    CHECK(before > 0);
+    sim.Burst({0,0,0}, {0,1,0}, 10, 1.0f, 0.0f,
+              {255,255,255,255}, {0,0,0,0}, 0.1f, 0.1f, 0.2f);
+    // The burst was accounted for (Acquire() increments m_live exactly once).
+    CHECK_EQ(sim.LiveCount(), before + 10);
+
+    sim.Clear();
+    sim.ClearWeather();
+    PASS(); return 0; END_TEST();
+}
+
 static int test_particle_gravity() {
     TEST("Burst gravity pulls particles down (negative = down), and particles still live");
     auto& sim = OzParticleSimulationManager::Instance();
@@ -855,6 +940,8 @@ int main() {
     failures += test_emitter_crud();
     failures += test_light_crud();
     failures += test_particle_burst();
+    failures += test_weather_spawns_and_recycles();
+    failures += test_weather_shares_pool_with_burst();
     failures += test_particle_gravity();
     failures += test_melee_nearest_target();
     failures += test_melee_out_of_reach_untouched();

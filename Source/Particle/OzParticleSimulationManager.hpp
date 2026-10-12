@@ -24,10 +24,39 @@ public:
     // Advance the simulation. Safely callable with dt <= 0 (no-op).
     void Update(float dt);
 
+    // --- Ambient weather (OZONE `particles` / LevelSettings) ---
+    //
+    // These fields were parsed, round-tripped, exposed over the server's HTTP
+    // map API and logged on world load, but NOTHING ever spawned from them: a
+    // world authored `particles SNOW 120 1.2 ...` rendered no weather at all.
+    // ConfigureWeather() is the first consumer.
+    //
+    // Weather shares the pool with gameplay particles, so it is hard-capped well
+    // below MAX_PARTICLES: a dense snow field that consumed the whole pool would
+    // silently eat muzzle flashes and impact sparks.
+    void ConfigureWeather(int type, float density, float speed,
+                          int r, int g, int b, float windX, float windZ);
+    void ClearWeather();
+
+    // Spawn weather around the camera for one frame. Separate from Update() on
+    // purpose: Update() is fed only emitter definitions and must stay free of any
+    // camera/gameplay input, so the weather spawn cannot be folded into it.
+    void UpdateWeather(float dt, Vector3 camPos);
+
     // Draw all live particles in the 3D pass. `transientLights` (optional) are
     // effect lights that should be sampled before world lights; pass
     // LitLightning_TransientLights().
     void Draw(Camera3D& camera, const std::vector<struct LightNode>* transientLights = nullptr);
+
+    // Master on/off, driven by the user's "Particles" setting.
+    //
+    // That setting is a header-static (Settings.hpp), so EVERY translation unit
+    // including it gets its own copy. Reading it from inside the manager or from
+    // OzPawnSystem would therefore consult a different variable from the one the
+    // settings menu just flipped - so the flag is pushed in from Core.hpp once a
+    // frame instead. Before this existed the toggle was wired to nothing at all:
+    // the menu flipped a bool, the config saved it, and particles drew anyway.
+    void SetEnabled(bool enabled) { m_enabled = enabled; }
 
     // Drop every live particle (emitter nodes are cleared separately).
     void Clear();
@@ -69,6 +98,11 @@ private:
         // emitter field was previously written by the loader and never read.
         bool billboard = true;
         bool active = false;
+        // Claimed by the ambient-weather spawner rather than an OZONE emitter or a
+        // Burst. Weather is retargeted (not merely stopped) when the world's
+        // weather changes, and it has its own share of the pool cap - so the two
+        // sources cannot be told apart after the fact without this.
+        bool weather = false;
     };
 
     static constexpr int MAX_PARTICLES = 4096;
@@ -121,12 +155,32 @@ private:
     Texture2D DefaultTexture();
     void SpawnFromEmitter(const struct ParticleEmitterNode& e, int count);
 
+    // Claim a free pool slot, or nullptr if the pool is full.
+    Particle* Acquire();
+
+    // Ambient weather state. `type` matches ParticleTypeNameToIndex()
+    // (OzoneParser.cpp): 0 none, 1 snow, 2 rain, 3 void, 4 psychic.
+    //
+    // The cap is a fraction of MAX_PARTICLES on purpose - see ConfigureWeather.
+    static constexpr int MAX_WEATHER_PARTICLES = 1200;
+    struct Weather {
+        int type = 0;
+        float density = 0.0f;      // spawns per second
+        float speed = 1.0f;
+        Color color{255, 255, 255, 255};
+        float windX = 0.0f, windZ = 0.0f;
+        float accum = 0.0f;
+        int live = 0;              // live particles attributed to weather
+    };
+    Weather m_weather;
+
     std::vector<Particle> m_pool;
     int m_next = 0;
     int m_live = 0;
     Texture2D m_defaultTex{0};
     std::unordered_map<std::string, Texture2D> m_texCache;
     std::unordered_map<uint32_t, float> m_spawnAccum;
+    bool m_enabled = true;
 
     // Instanced renderer state. Zero ids mean "not initialised".
     unsigned int m_quadVao = 0;      // VAO combining the quad + instance attributes

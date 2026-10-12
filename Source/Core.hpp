@@ -357,9 +357,25 @@ auto LoadWorld()
                     OZ_WARN("LevelInfo: skybox '%s' not found", s.skyboxPath.c_str());
                 }
             }
-            ParticlesEnabled = (s.particleType != 0);
-            if (ParticlesEnabled)
-                OZ_INFO("LevelInfo: particles type=%d density=%.0f", s.particleType, s.particleDensity);
+            // The user's global Particles toggle is a MASTER switch and must NOT
+            // be derived from the level. It used to be assigned here, so loading
+            // any weather level silently re-enabled particles for a user who had
+            // turned them off in the settings menu.
+            if (s.WeatherEnabled())
+            {
+                OzParticleSimulationManager::Instance().ConfigureWeather(
+                    s.particleType, s.particleDensity, s.particleSpeed,
+                    s.particleR, s.particleG, s.particleB,
+                    s.particleWindX, s.particleWindZ);
+                OZ_INFO("LevelInfo: weather type=%d density=%.0f speed=%.2f",
+                        s.particleType, s.particleDensity, s.particleSpeed);
+            }
+            else
+            {
+                // Retire the previous world's field: without this, snow kept
+                // falling in a level that authored no weather at all.
+                OzParticleSimulationManager::Instance().ClearWeather();
+            }
             if (!s.skyboxSidePath.empty())
             {
                 Texture2D sideSky = LoadTextureWithFallback(s.skyboxSidePath.c_str());
@@ -1506,7 +1522,20 @@ if (inSkyZone)
 
         // GameEngine.ParticleEmitter — simulated in isolation *after* the
         // weapon/NPC/projectile ticks so particles cannot re-enter gameplay.
+        // The user's Particles toggle is pushed in here, once a frame, because
+        // it is a header-static and every TU including Settings.hpp has its own
+        // copy of it.
+        OzParticleSimulationManager::Instance().SetEnabled(ParticlesEnabled);
         OzParticleSimulationManager::Instance().Update(GetFrameTime());
+
+        // Ambient weather spawns around the camera, so it needs the camera and
+        // is deliberately NOT part of the manager's Update(): that function is
+        // fed only emitter definitions and must stay free of camera/gameplay
+        // input. Gated on the user's global Particles toggle, which is a master
+        // switch and is not derived from the level.
+        if (ParticlesEnabled)
+            OzParticleSimulationManager::Instance().UpdateWeather(
+                GetFrameTime(), OmegaTechData.MainCamera.position);
 
         // Draw pawns / entity billboards exactly once per frame (kept out of
         // the sim steps so a catch-up frame doesn't re-draw the scene).

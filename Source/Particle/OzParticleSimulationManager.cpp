@@ -20,6 +20,11 @@ float FRand() {
 }
 float FRandSym() { return FRand() * 2.0f - 1.0f; }
 
+// Uniform in [lo, hi). Named helper rather than an inline "lo + FRand()*(hi-lo)"
+// at each site: the inline spelling is easy to get backwards, and a reversed
+// pair here silently produces an inverted weather size/variance.
+float FRandRange(float lo, float hi) { return lo + FRand() * (hi - lo); }
+
 } // namespace
 
 OzParticleSimulationManager& OzParticleSimulationManager::Instance() {
@@ -78,12 +83,7 @@ void OzParticleSimulationManager::SpawnFromEmitter(const ParticleEmitterNode& e,
     else base = {0.0f, 1.0f, 0.0f};
 
     for (int i = 0; i < count; i++) {
-        Particle* p = nullptr;
-        for (int tries = 0; tries < MAX_PARTICLES; tries++) {
-            Particle& cand = m_pool[m_next];
-            m_next = (m_next + 1) % MAX_PARTICLES;
-            if (!cand.active) { p = &cand; break; }
-        }
+        Particle* p = Acquire();
         if (!p) return; // pool exhausted
 
         Vector3 dir = {base.x + FRandSym() * e.spread,
@@ -109,7 +109,6 @@ void OzParticleSimulationManager::SpawnFromEmitter(const ParticleEmitterNode& e,
         p->billboard = e.billboard;
         p->texture = tex;
         p->active = true;
-        m_live++;
     }
 }
 
@@ -135,6 +134,15 @@ void OzParticleSimulationManager::Update(float dt) {
         if (p.age >= p.lifetime) {
             p.active = false;
             m_live--;
+            // Update() is the ONLY place particles age out (UpdateWeather runs
+            // after it and must not re-retire), so this is the only place the
+            // weather's own live count can be decremented. Missing it lets the
+            // count ratchet up to MAX_WEATHER_PARTICLES and silently freezes
+            // weather on for the rest of the session.
+            if (p.weather) {
+                p.weather = false;
+                if (m_weather.live > 0) m_weather.live--;
+            }
             continue;
         }
         p.velocity.y += p.gravity * dt;
@@ -342,6 +350,129 @@ void OzParticleSimulationManager::DrawInstanced(Camera3D& camera,
     EndShaderMode();
 }
 
+// ---------------------------------------------------------------------------
+// Ambient weather
+// ---------------------------------------------------------------------------
+void OzParticleSimulationManager::ConfigureWeather(int type, float density, float speed,
+                                                   int r, int g, int b,
+                                                   float windX, float windZ) {
+    // Changing weather retires the old field rather than letting it finish out:
+    // switching a snow level to rain would otherwise leave snow falling for the
+    // lifetime of the slowest flake.
+    if (m_weather.type != type) ClearWeather();
+
+    m_weather.type    = type;
+    m_weather.density = density;
+    m_weather.speed   = speed;
+    m_weather.color   = {(unsigned char)std::clamp(r, 0, 255),
+                         (unsigned char)std::clamp(g, 0, 255),
+                         (unsigned char)std::clamp(b, 0, 255), 255};
+    m_weather.windX   = windX;
+    m_weather.windZ   = windZ;
+    if (m_weather.density < 0.0f) m_weather.density = 0.0f;
+    if (m_weather.speed <= 0.0f) m_weather.speed = 1.0f;
+}
+
+void OzParticleSimulationManager::ClearWeather() {
+    for (auto& p : m_pool) {
+        if (p.active && p.weather) { p.active = false; p.weather = false; if (m_live > 0) m_live--; }
+    }
+    m_weather.live = 0;
+    m_weather.accum = 0.0f;
+}
+
+OzParticleSimulationManager::Particle* OzParticleSimulationManager::Acquire() {
+    for (int tries = 0; tries < MAX_PARTICLES; tries++) {
+        Particle& cand = m_pool[m_next];
+        m_next = (m_next + 1) % MAX_PARTICLES;
+        if (!cand.active) { m_live++; return &cand; }
+    }
+    return nullptr;   // pool exhausted
+}
+
+void OzParticleSimulationManager::UpdateWeather(float dt, Vector3 camPos) {
+    if (dt <= 0.0f || m_weather.type == 0 || m_weather.density <= 0.0f) return;
+    if ((int)m_pool.size() != MAX_PARTICLES) m_pool.resize(MAX_PARTICLES);
+
+    // Update() (called immediately before this) already retires anything past
+    // its lifetime, so there is nothing to age out here - see the note on the
+    // weather counter in Update().
+    if (m_weather.live >= MAX_WEATHER_PARTICLES) return;
+
+    m_weather.accum += m_weather.density * dt;
+    int count = (int)m_weather.accum;
+    if (count > 128) count = 128;
+    m_weather.accum -= (float)count;
+    if (count <= 0) return;
+
+    // A box that follows the camera, so the field always surrounds the player
+    // without being authored per-level.
+    const float half = 26.0f;
+    const float top = 20.0f, bottom = -14.0f;
+    const float spd = m_weather.speed;
+    Texture2D tex = DefaultTexture();
+    const Color base = m_weather.color;
+
+    for (int i = 0; i < count; i++) {
+        if (m_weather.live >= MAX_WEATHER_PARTICLES) break;
+        Particle* p = Acquire();
+        if (!p) break;
+
+        const float rx = (FRand() * 2.0f - 1.0f) * half;
+        const float rz = (FRand() * 2.0f - 1.0f) * half;
+        p->position = {camPos.x + rx, camPos.y + top, camPos.z + rz};
+
+        float life, grav, szStart, szEnd, vx, vy, vz;
+        switch (m_weather.type) {
+            case 2: {  // RAIN - fast, heavy, short-lived, drawn small and dense
+                vx = m_weather.windX * 0.5f + (FRand() - 0.5f) * 0.6f;
+                vz = m_weather.windZ * 0.5f + (FRand() - 0.5f) * 0.6f;
+                vy = -18.0f * spd;
+                grav = -9.0f;
+                life = 1.6f + FRand() * 0.6f;
+                szStart = 0.10f; szEnd = 0.05f;
+            } break;
+            case 3:    // VOID - drawn inward toward the viewer, i.e. rising
+            case 4: {  // PSYCHIC - drifting up, wider spread
+                vx = m_weather.windX + (FRand() - 0.5f) * 2.2f;
+                vz = m_weather.windZ + (FRand() - 0.5f) * 2.2f;
+                vy = (m_weather.type == 3 ? 1.2f : 2.4f) * spd;
+                grav = 0.0f;
+                life = 5.0f + FRand() * 2.0f;
+                szStart = 0.30f; szEnd = 0.10f;
+            } break;
+            case 1:
+            default: { // SNOW - slow fall, per-flake drift so it does not read as rain
+                vx = m_weather.windX + (FRand() - 0.5f) * 1.8f;
+                vz = m_weather.windZ + (FRand() - 0.5f) * 1.8f;
+                vy = -2.2f * spd;
+                grav = 0.0f;
+                life = 9.0f + FRand() * 3.0f;
+                szStart = 0.26f; szEnd = 0.18f;
+            } break;
+        }
+
+        p->active = true;
+        p->weather = true;
+        p->velocity = {vx, vy, vz};
+        p->age = 0.0f;
+        p->lifetime = life;
+        p->sizeStart = szStart;
+        p->sizeEnd = szEnd;
+        p->gravity = grav;
+        p->billboard = true;
+        p->texture = tex;
+        // Fade in and out so nothing pops at spawn or death. Colour variance
+        // keeps a large field from reading as one flat sheet of dots.
+        const unsigned char v = (unsigned char)FRandRange(0.78f, 1.0f);
+        const unsigned char alpha = (unsigned char)FRandRange(0.35f, 0.9f);
+        p->colorStart = {(unsigned char)(base.r * v), (unsigned char)(base.g * v),
+                         (unsigned char)(base.b * v), alpha};
+        p->colorEnd   = {p->colorStart.r, p->colorStart.g, p->colorStart.b, 0};
+        m_weather.live++;
+    }
+}
+
 void OzParticleSimulationManager::Shutdown() {
     if (m_quadVao) { rlUnloadVertexArray(m_quadVao); m_quadVao = 0; }
     if (m_quadVbo) { rlUnloadVertexBuffer(m_quadVbo); m_quadVbo = 0; }
@@ -354,6 +485,10 @@ void OzParticleSimulationManager::Shutdown() {
 
 void OzParticleSimulationManager::Draw(Camera3D& camera,
                                        const std::vector<LightNode>* transientLights) {
+    // Honour the user's master toggle (pushed in from Core.hpp; see SetEnabled).
+    // Weather particles are retired by ClearWeather, not here, so re-enabling
+    // resumes an authored field rather than restarting it.
+    if (!m_enabled) return;
     if (m_live <= 0) return;
 
     // Gather lights once per frame, transient first (matching the priority the
@@ -470,12 +605,10 @@ void OzParticleSimulationManager::Burst(Vector3 pos, Vector3 dir, int count,
 
     const float spreadRad = spread * DEG2RAD;
     for (int i = 0; i < count; i++) {
-        Particle* p = nullptr;
-        for (int tries = 0; tries < MAX_PARTICLES; tries++) {
-            Particle& cand = m_pool[m_next];
-            m_next = (m_next + 1) % MAX_PARTICLES;
-            if (!cand.active) { p = &cand; break; }
-        }
+        // Shared with the weather spawner so the m_live bookkeeping has exactly
+        // one definition; Burst used to do this inline and increment nothing,
+        // which is how its particles were invisible to the pool accounting.
+        Particle* p = Acquire();
         if (!p) break;   // pool exhausted
 
         // Random point in the cone: random angle, random radial falloff
@@ -509,7 +642,6 @@ void OzParticleSimulationManager::Burst(Vector3 pos, Vector3 dir, int count,
         // one-shot burst does not need a GL upload. Resolving the soft sprite
         // here would touch the GPU even on paths that never draw (tests).
         p->texture = tex;
-        m_live++;
     }
 }
 
@@ -518,4 +650,10 @@ void OzParticleSimulationManager::Clear() {
     m_live = 0;
     m_next = 0;
     m_spawnAccum.clear();
+    // Clear() runs on world load. The weather *configuration* is re-applied by
+    // the loader immediately afterwards, but the counters must not survive - a
+    // stale `live` would immediately trip MAX_WEATHER_PARTICLES and the new
+    // world's weather would never spawn.
+    m_weather.live = 0;
+    m_weather.accum = 0.0f;
 }
