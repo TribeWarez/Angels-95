@@ -173,6 +173,14 @@ if (Test-Path $skillsDir) {
     Run-OzPack "OZPK" $skillsDir "$OUT\skills.ozpak"
 }
 
+# --- Spells (Global/Spells: *.ozls). The registry also reads these loose from
+# GameData/, but the distributed System/ bundle carries only System\Data\*.oz*,
+# so without this block spell defs would be missing from a release build. ---
+$spellsDir = "$GAMEDATA\Global\Spells"
+if (Test-Path $spellsDir) {
+    Run-OzPack "OZPK" $spellsDir "$OUT\spells.ozpak"
+}
+
 Write-Step "=== Packaging Worlds ==="
 
 # --- Worlds (oztex and ozone) ---

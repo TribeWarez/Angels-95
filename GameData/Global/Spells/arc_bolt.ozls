@@ -1,0 +1,23 @@
+// Arc Bolt - the cheapest offensive spell. Single fast projectile on mana.
+// The tutorial spell: low cost, short cooldown, one bolt.
+entity "arc_bolt" : spell {
+    icon = "GameData/Global/Spells/arc_bolt.png"
+    stats {
+        // Cost comes from mana unless cost_type says psychic_energy.
+        mana_cost = 12
+        cooldown = 0.6
+
+        // No `radius`, so this resolves as a PROJECTILE cast.
+        damage = 26
+        projectile_speed = 48.0
+        projectile_lifetime = 2.0
+        projectile_count = 1
+        projectile_scale = 0.9
+        projectile_color = (0.45, 0.75, 1.0)
+        cast_sound = GameData/Global/Sounds/Magic/arc_bolt.wav
+        cast_volume = 0.8
+    }
+    actions {
+        on_cast { say "Arc Bolt!" }
+    }
+}

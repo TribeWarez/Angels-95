@@ -1,0 +1,22 @@
+// Frost Lance - a five-bolt fan. `projectile_count` > 1 makes CastSpell spread
+// the shots across the aim direction rather than jittering them, so it reads as
+// a deliberate volley instead of one shot with noise.
+entity "frost_lance" : spell {
+    icon = "GameData/Global/Spells/frost_lance.png"
+    stats {
+        mana_cost = 34
+        cooldown = 1.8
+        damage = 18
+        projectile_speed = 42.0
+        projectile_lifetime = 1.8
+        projectile_count = 5
+        spread = 14.0
+        projectile_scale = 1.1
+        projectile_color = (0.72, 0.92, 1.0)
+        cast_sound = GameData/Global/Sounds/Magic/frost_lance.wav
+        cast_volume = 0.9
+    }
+    actions {
+        on_cast { say "Frost Lance!" }
+    }
+}

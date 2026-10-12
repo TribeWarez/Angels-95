@@ -30,6 +30,11 @@ enum class EntityType : uint8_t {
     LIGHT,
     // Metadata-only ruleset def (GameTypeInfo override). Not placeable.
     GAMETYPE,
+    // An active cast: costs mana OR psychic energy (per-def), and resolves
+    // either to an instant effect at the target or to spawned projectiles.
+    // Distinct from SKILL (a passive stat node) and from WEAPON (which is
+    // gated on ammo/stamina and drives the view-model).
+    SPELL,
     UNKNOWN
 };
 
@@ -51,6 +56,7 @@ inline const char* EntityTypeName(EntityType t) {
         case EntityType::GAMEUI:          return "GameUI";
         case EntityType::LIGHT:          return "light";
         case EntityType::GAMETYPE:       return "gametype";
+        case EntityType::SPELL:          return "spell";
         default:                          return "unknown";
     }
 }
@@ -72,6 +78,7 @@ inline EntityType EntityTypeFromName(const std::string& n) {
     if (n == "GameUI")        return EntityType::GAMEUI;
     if (n == "light")          return EntityType::LIGHT;
     if (n == "gametype")       return EntityType::GAMETYPE;
+    if (n == "spell")          return EntityType::SPELL;
     return EntityType::UNKNOWN;
 }
 

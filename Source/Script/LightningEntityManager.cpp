@@ -369,6 +369,275 @@ else {
 }
 
 // ---------------------------------------------------------------------------
+// Spell bar + casting
+// ---------------------------------------------------------------------------
+void LightningEntityManager::UpdateSpellPools(float dt) {
+    if (dt <= 0.0f) return;
+
+    // Rates deliberately match the server's pools (Server/GameState.hpp ticks
+    // mana +1 per 8 sim ticks and PE +1 per 12) so a spell has the same budget
+    // single-player and multiplayer. They cannot be shared because the client
+    // does not link the server header.
+    const float maxMana = GetPlayerMaxMana();
+    if (maxMana > 0.0f) {
+        const float cur = GetPlayerMana();
+        if (cur < maxMana) SetPlayerMana(fminf(cur + 100.0f / 8.0f * dt, maxMana));
+    }
+    const float maxPe = GetPlayerMaxPsychicEnergy();
+    if (maxPe > 0.0f) {
+        const float cur = GetPlayerPsychicEnergy();
+        if (cur < maxPe) SetPlayerPsychicEnergy(fminf(cur + 100.0f / 12.0f * dt, maxPe));
+    }
+}
+
+bool LightningEntityManager::HasMana(float cost) const {
+    if (cost <= 0.0f) return true;
+    return GetPlayerMana() >= cost;
+}
+
+bool LightningEntityManager::SpendMana(float cost) {
+    if (cost <= 0.0f) return true;
+    const float have = GetPlayerMana();
+    // Refuse without spending: a partial spend would let the player chip a spell
+    // they cannot afford, and would then refuse the NEXT cast for free.
+    if (have < cost) return false;
+    SetPlayerMana(have - cost);
+    return true;
+}
+
+bool LightningEntityManager::HasPsychicEnergy(float cost) const {
+    if (cost <= 0.0f) return true;
+    return GetPlayerPsychicEnergy() >= cost;
+}
+
+bool LightningEntityManager::SpendPsychicEnergy(float cost) {
+    if (cost <= 0.0f) return true;
+    const float have = GetPlayerPsychicEnergy();
+    if (have < cost) return false;
+    SetPlayerPsychicEnergy(have - cost);
+    return true;
+}
+
+const std::string& LightningEntityManager::GetSpellInSlot(int slot) const {
+    static const std::string kEmpty;
+    if (slot < 0 || slot >= SPELL_BAR_SIZE) return kEmpty;
+    return m_spellBar[slot];
+}
+
+void LightningEntityManager::SetSpellInSlot(int slot, const std::string& defName) {
+    if (slot < 0 || slot >= SPELL_BAR_SIZE) return;
+    m_spellBar[slot] = defName;
+
+    // Despawn the instance the old def owned, so reassigning a slot cannot leave
+    // the previous spell's cooldown ticking against an unrelated def.
+    for (int i = 0; i < (int)m_instances.size(); i++) {
+        if (m_instances[i].def && m_instances[i].spellSlot == slot) { Despawn(i); break; }
+    }
+}
+
+EntityInstance* LightningEntityManager::GetSpellInstance(int slot) {
+    if (slot < 0 || slot >= SPELL_BAR_SIZE) return nullptr;
+    const std::string& name = m_spellBar[slot];
+    if (name.empty()) return nullptr;
+
+    // Reuse the live instance so a cast's cooldown and any runtime stat
+    // overrides persist across casts, exactly as they do for a hotbar weapon.
+    for (auto& in : m_instances) {
+        if (in.def && in.def->name == name && in.spellSlot == slot) return &in;
+    }
+
+    const EntityDef* def = LightningEntityRegistry::Instance().Find(name);
+    if (!def || def->type != EntityType::SPELL) return nullptr;
+    const int idx = Spawn(name);
+    if (idx < 0 || idx >= (int)m_instances.size()) return nullptr;
+    m_instances[idx].spellSlot = slot;
+    return &m_instances[idx];
+}
+
+float LightningEntityManager::GetSpellCooldown(int slot) const {
+    if (slot < 0 || slot >= SPELL_BAR_SIZE) return 0.0f;
+    const std::string& name = m_spellBar[slot];
+    if (name.empty()) return 0.0f;
+    for (const auto& in : m_instances)
+        if (in.def && in.def->name == name && in.spellSlot == slot)
+            return in.cooldownRemaining;
+    return 0.0f;
+}
+
+float LightningEntityManager::GetSpellCost(int slot) const {
+    if (slot < 0 || slot >= SPELL_BAR_SIZE) return 0.0f;
+    const std::string& name = m_spellBar[slot];
+    if (name.empty()) return 0.0f;
+    const EntityDef* def = LightningEntityRegistry::Instance().Find(name);
+    if (!def) return 0.0f;
+    // Default pool is mana; a def opts into PE with cost_type.
+    auto ct = def->stats.strings.find("cost_type");
+    const bool usesPe = (ct != def->stats.strings.end() &&
+                         (ct->second == "psychic_energy" || ct->second == "pe"));
+    auto c = def->stats.floats.find(usesPe ? "pe_cost" : "mana_cost");
+    return (c != def->stats.floats.end()) ? c->second : 0.0f;
+}
+
+int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vector3& direction) {
+    EntityInstance* ent = GetSpellInstance(slot);
+    if (!ent || !ent->def) return -1;
+    if (ent->def->type != EntityType::SPELL) return -1;
+    if (ent->cooldownRemaining > 0.0f) return -1;
+
+    auto readStat = [&](const std::string& key, float defVal) -> float {
+        auto rit = ent->runtimeStats.find(key);
+        if (rit != ent->runtimeStats.end()) return rit->second;
+        auto dit = ent->def->stats.floats.find(key);
+        return (dit != ent->def->stats.floats.end()) ? dit->second : defVal;
+    };
+
+    // Cost is resolved from the DEF, not from a runtime stat, so a script cannot
+    // `playerstat mana -= N` its way to a free cast: the deduction below is the
+    // only one that happens on this path.
+    const bool usesPe = [&]{
+        auto it = ent->def->stats.strings.find("cost_type");
+        return it != ent->def->stats.strings.end() &&
+               (it->second == "psychic_energy" || it->second == "pe");
+    }();
+    const float cost = readStat(usesPe ? "pe_cost" : "mana_cost", 0.0f);
+
+    // Affordability BEFORE any effect is committed. A refused cast spends
+    // nothing, sets no cooldown and runs no script - so mashing the key while
+    // empty cannot bank a free cast for when mana trickles back.
+    if (usesPe) { if (!HasPsychicEnergy(cost)) return -1; }
+    else        { if (!HasMana(cost)) return -1; }
+
+    const float cooldown = readStat("cooldown", readStat("fire_rate", 0.5f));
+    const float damage = readStat("damage", 10.0f);
+
+    // `radius` > 0 is an area effect resolved at a point `reach` units along the
+    // aim; `targets_self` is a spell that acts on the caster. Both are INSTANT
+    // (no projectile). Deliberately a different discriminator from
+    // FireSelectedWeapon's `reach`, because there reach alone picks the melee
+    // branch and a spell has no swing.
+    const float radius = readStat("radius", 0.0f);
+    const float reach = readStat("reach", 6.0f);
+    const bool targetsSelf = readStat("targets_self", 0.0f) > 0.0f;
+    const float heal = readStat("heal", 0.0f);
+
+    ent->cooldownRemaining = cooldown;
+    if (usesPe) SpendPsychicEnergy(cost); else SpendMana(cost);
+    RunAction(ent, "on_cast");
+
+    float scriptCd = ent->ctx.TakePendingFloat("__cooldown");
+    if (scriptCd > 0.0f) ent->cooldownRemaining = scriptCd;
+
+#ifdef OMEGA_HAVE_PAWNSYSTEM
+    if (radius > 0.0f || targetsSelf) {
+        // ---- INSTANT: resolves an effect now, spawns nothing ----
+        const Vector3 centre = Vector3Add(origin, Vector3Scale(direction, reach));
+        int hits = 0;
+
+        // Support spells (heal) and area attacks (damage) are separate effects,
+        // not one "apply area damage" with a negative number: a heal that
+        // scrolled through the damage path would clamp against max_health
+        // exactly once instead of healing toward it, and would report hits for
+        // pawns it never touched.
+        if (heal > 0.0f) {
+            const float cur = GetPlayerHealth();
+            const float maxHp = GetPlayerMaxHealth();
+            if (cur < maxHp) { SetPlayerHealth(fminf(cur + heal, maxHp)); hits = 1; }
+        }
+        if (radius > 0.0f)
+            hits += ApplyAreaDamage(centre, radius, (int)damage);
+
+        // on_hit only when something was actually affected, so a whiffed cast
+        // does not fire the connect sound. Mirrors the melee !blocked rule.
+        if (hits > 0) {
+            RunAction(ent, "on_hit");
+            PlayDefStatSound(ent, "hit_sound", "hit_volume", "hit_pitch");
+        }
+        PlayDefStatSound(ent, "cast_sound", "cast_volume", "cast_pitch");
+        if (radius > 0.0f)
+            CombatFX::Instance().SpawnImpact(centre, hitNormalOrAway(origin, direction),
+                                             Color{180, 150, 255, 255}, 14, 6.0f);
+        return 0;   // instant: no projectile
+    }
+
+    // ---- PROJECTILE ----
+    const float projSpeed = readStat("projectile_speed", 30.0f);
+    const float projLife = readStat("projectile_lifetime", readStat("lifetime", 2.0f));
+    const int projCount = (int)readStat("projectile_count", 1.0f);
+    const float spreadDeg = readStat("spread", 0.0f);
+
+    std::string projMesh, projTex;
+    const std::string defDir = DefSourceDir(ent->def->sourcePath);
+    auto mit = ent->def->stats.strings.find("projectile_mesh");
+    if (mit != ent->def->stats.strings.end()) projMesh = ResolveDefPath(defDir, mit->second);
+    auto tit = ent->def->stats.strings.find("projectile_texture");
+    if (tit != ent->def->stats.strings.end()) projTex = ResolveDefPath(defDir, tit->second);
+    const int projSub = (int)readStat("projectile_submesh", 0.0f);
+    const float projScale = readStat("projectile_scale", 0.15f);
+    float projCol[3] = {0.65f, 0.5f, 1.0f};
+    auto cit = ent->def->stats.vec3s.find("projectile_color");
+    if (cit != ent->def->stats.vec3s.end()) {
+        projCol[0] = cit->second[0]; projCol[1] = cit->second[1]; projCol[2] = cit->second[2];
+    }
+
+    for (int i = 0; i < projCount; i++) {
+        Vector3 dir = direction;
+        if (projCount > 1 && spreadDeg > 0.0f) {
+            // Fan across the aim direction rather than jittering around it, so a
+            // multi-projectile spell reads as a deliberate spread.
+            const float t = ((float)i / (float)(projCount - 1)) - 0.5f;
+            Vector3 right = Vector3Normalize(Vector3CrossProduct(dir, Vector3{0.0f, 1.0f, 0.0f}));
+            dir = Vector3Normalize(Vector3Add(dir, Vector3Scale(right, t * spreadDeg * DEG2RAD)));
+        }
+
+        ProjectileNode p;
+        p.position = origin;
+        p.velocity = Vector3Scale(dir, projSpeed);
+        p.damage = damage;
+        p.lifetime = projLife;
+        p.speed = projSpeed;
+        p.ownerId = -1;
+        p.meshPath = projMesh;
+        p.texturePath = projTex;
+        p.submesh = projSub;
+        p.scale = projScale;
+        p.tint = Color{(unsigned char)(projCol[0] * 255.0f),
+                       (unsigned char)(projCol[1] * 255.0f),
+                       (unsigned char)(projCol[2] * 255.0f), 255};
+        PawnSystem::Instance().SpawnProjectile(p);
+    }
+    return projCount;
+#else
+    (void)damage; (void)reach; (void)heal; (void)targetsSelf;
+    return 0;
+#endif  // OMEGA_HAVE_PAWNSYSTEM
+}
+
+#ifdef OMEGA_HAVE_PAWNSYSTEM
+// Damage every live pawn within `radius` of `centre`. Returns the hit count so
+// the caller can distinguish a connect from a whiff.
+//
+// Network-controlled pawns are skipped rather than damaged locally: the server
+// owns their health (see ApplyPawnDamage), so damaging them here would be a
+// second, client-authoritative source of truth - exactly the duplicate-damage
+// bug WeaponBehaviour used to have.
+int LightningEntityManager::ApplyAreaDamage(const Vector3& centre, float radius, int damage) {
+    if (radius <= 0.0f || damage <= 0.0f) return 0;
+    int hits = 0;
+    for (const Pawn& p : PawnSystem::Instance().GetPawns()) {
+        if (p.health <= 0.0f) continue;
+        if (p.networkControlled) continue;
+        // Pawn centre sits at the origin of its AABB but its model stands on the
+        // ground, so compare against a point lifted to body height.
+        const Vector3 body = Vector3Add(p.position, Vector3{0.0f, 1.0f, 0.0f});
+        if (Vector3Distance(body, centre) > radius) continue;
+        Pawn* target = PawnSystem::Instance().Get((int)p.id);
+        if (target) { PawnSystem::Instance().ApplyPawnDamage(*target, damage); hits++; }
+    }
+    return hits;
+}
+#endif
+
+// ---------------------------------------------------------------------------
 // ReloadSelectedWeapon — manually reload the selected weapon
 // Returns: true if reload was performed
 // ---------------------------------------------------------------------------
@@ -434,6 +703,11 @@ void LightningEntityManager::Init() {
     m_pendingAmbient = false;
     m_pendingMessage.clear();
     m_playerHurt = false;
+    // The spell bar holds def NAMES, not indices, so it is not touched by the
+    // index remapping elsewhere in this class - but it must still be reset here
+    // or a New Game in an existing process inherits the previous session's
+    // bindings (the same reason m_hotbar is cleared above).
+    m_spellBar.assign(SPELL_BAR_SIZE, std::string());
 
     // Auto-spawn player entity
     int playerIdx = Spawn("Player");
@@ -978,6 +1252,30 @@ void LightningEntityManager::UncacheResource(int idx) {
     m_resources[idx].type = 0; // Mark as unused instead of erasing (avoids index shift)
     m_resources[idx].model = Model{0};
     m_resources[idx].texture = Texture2D{0};
+}
+
+// ---------------------------------------------------------------------------
+// HandleSpellInput — Z X C V B cast spell-bar slots 0..4.
+// ---------------------------------------------------------------------------
+void LightningEntityManager::HandleSpellInput(bool uiBlocking, Camera3D& cam) {
+    // Same modal contract as HandleInput: the spellbook and inventory own the
+    // keyboard while they are up, or a cast would fire underneath the menu.
+    if (uiBlocking) return;
+
+    static const KeyboardKey kKeys[SPELL_BAR_SIZE] = {
+        KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B
+    };
+    for (int slot = 0; slot < SPELL_BAR_SIZE; slot++) {
+        if (!IsKeyPressed(kKeys[slot])) continue;
+        if (GetSpellInSlot(slot).empty()) continue;   // empty slot: silent, no FX
+
+        // Aim from the camera, matching how a shot is fired: forward from the
+        // camera position, not from the muzzle.
+        const Vector3 dir = Vector3Normalize(
+            Vector3Subtract(cam.target, cam.position));
+        CastSpell(slot, cam.position, dir);
+        break;   // one cast per keypress even if several keys changed
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1675,6 +1973,15 @@ std::string LightningEntityManager::SerializeState() const {
         result += m_unlockedSkills[i];
     }
     result += "|";
+    // Spell bar. Def NAMES, not indices: unlike the hotbar this survives a def
+    // that is merely unresolved at load time. Empty slots are empty strings, so
+    // the entry count is always SPELL_BAR_SIZE.
+    result += "spells=";
+    for (int s = 0; s < SPELL_BAR_SIZE; s++) {
+        if (s > 0) result += ",";
+        result += GetSpellInSlot(s);
+    }
+    result += "|";
     return result;
 }
 
@@ -1769,6 +2076,36 @@ bool LightningEntityManager::DeserializeState(const std::string& data) {
                 while (!name.empty() && (name[0] == ' ' || name[0] == '\t')) name.erase(0, 1);
                 while (!name.empty() && (name.back() == ' ' || name.back() == '\t')) name.pop_back();
                 if (!name.empty()) UnlockSkill(name);
+                if (comma == std::string::npos) break;
+                start = comma + 1;
+            }
+        }
+    }
+
+    // Restore the spell bar. Cleared unconditionally FIRST, so an old save with
+    // no `spells=` section does not inherit whatever the process had bound.
+    //
+    // Assigned directly rather than through SetSpellInSlot: the bar stores def
+    // names, and SetSpellInSlot would Spawn (and thus require) each def to be
+    // resolvable right now. A name whose def is missing stays bound so it comes
+    // back if the def is restored; GetSpellInstance resolves lazily on cast.
+    {
+        m_spellBar.assign(SPELL_BAR_SIZE, std::string());
+        size_t p = data.find("spells=");
+        if (p != std::string::npos) {
+            p += 7;
+            size_t end = data.find('|', p);
+            if (end == std::string::npos) end = data.size();
+            std::string section = data.substr(p, end - p);
+            size_t start = 0;
+            for (int s = 0; s < SPELL_BAR_SIZE; s++) {
+                size_t comma = section.find(',', start);
+                std::string name = (comma == std::string::npos)
+                    ? section.substr(start)
+                    : section.substr(start, comma - start);
+                while (!name.empty() && (name[0] == ' ' || name[0] == '\t')) name.erase(0, 1);
+                while (!name.empty() && (name.back() == ' ' || name.back() == '\t')) name.pop_back();
+                m_spellBar[s] = name;
                 if (comma == std::string::npos) break;
                 start = comma + 1;
             }

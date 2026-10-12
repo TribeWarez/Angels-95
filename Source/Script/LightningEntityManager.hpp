@@ -19,6 +19,11 @@ struct EntityInstance {
     int variantIndex = 0;
     std::unordered_map<std::string, float> runtimeStats;
     float cooldownRemaining = 0.0f;
+    // Which spell-bar slot owns this instance, or -1 for anything else.
+    // Ownership is tracked here rather than by matching def names so two slots
+    // bound to the same def keep INDEPENDENT cooldowns — a shared instance would
+    // let slot 0's cooldown block slot 1's cast.
+    int spellSlot = -1;
 };
 
 // LightningEntityManager — runtime entity instances + dynamic hotbar + equipment
@@ -115,6 +120,16 @@ static constexpr int HOTBAR_SIZE = 8;
     // console, screenshot mode). Without it these keys fired underneath menus.
     void HandleInput(bool uiBlocking = false);
     void DrawHotbar();
+
+    // Spell-bar keys. Split from HandleInput because casting needs the camera
+    // (origin + aim), which HandleInput has no access to - the same reason
+    // WeaponBehaviour::HandleInput takes a Camera3D&.
+    //
+    // Bound to Z X C V B. The 1-8 row belongs to the weapon hotbar and there is
+    // no rebinding layer (see Wiki/Engine-Roadmap.md), so the spell row had to be
+    // keys that are provably free; these sit naturally under the left hand and
+    // collide with nothing in the engine's key inventory.
+    void HandleSpellInput(bool uiBlocking, Camera3D& cam);
 
     // --- Projectile spawning (for weapon entities) ---
     int FireSelectedWeapon(const Vector3& origin, const Vector3& direction);
@@ -221,6 +236,54 @@ static constexpr int HOTBAR_SIZE = 8;
     float GetPlayerPsychicEnergy() const;
     float GetPlayerMaxPsychicEnergy() const;
     void  SetPlayerPsychicEnergy(float v);
+
+    // --- Spell casting (EntityType::SPELL) ---
+    //
+    // Cast cost is checked BEFORE it is deducted and refuses without spending,
+    // exactly like SpendStamina. The LightningScript opcode `playerstat mana -= N`
+    // is NOT a substitute: it is a deferred post-hoc write with no
+    // "can I afford this" precondition, so a spell gated on it would fire at any
+    // pool level and only then drive the value negative-clamped away.
+    //
+    // Which pool a spell draws on is the def's `cost_type`
+    // ("mana" / "psychic_energy"); these are the two pools it can draw from.
+    bool  HasMana(float cost) const;
+    bool  SpendMana(float cost);
+    bool  HasPsychicEnergy(float cost) const;
+    bool  SpendPsychicEnergy(float cost);
+    // Regenerate both pools toward their max. `dt` in seconds.
+    //
+    // There was NO client-side regeneration for either pool before this: only
+    // the server ticked them, and it never syncs them to the client (Client.cpp
+    // literally sends mana = 0). Without it a single cast was permanent, so the
+    // spell bar would be a one-shot button.
+    void  UpdateSpellPools(float dt);
+
+    // Cast the spell in `slot` (0..SPELL_BAR_SIZE-1) from `origin` along
+    // `direction`.
+    //
+    // Return convention matches FireSelectedWeapon so callers can treat a
+    // refused cast identically to a refused shot:
+    //   -1  refused (no spell in slot, on cooldown, or unaffordable) - nothing
+    //        was spent and no FX ran
+    //    0  instant cast resolved at the target (no projectile spawned)
+    //   >0  that many projectiles were spawned
+    int   CastSpell(int slot, const Vector3& origin, const Vector3& direction);
+
+    // The spell bar: def names, empty string = empty slot. Persisted in the save
+    // blob alongside unlocked skills.
+    static constexpr int SPELL_BAR_SIZE = 5;
+    const std::string& GetSpellInSlot(int slot) const;
+    void SetSpellInSlot(int slot, const std::string& defName);
+    // Cooldown remaining for a bar slot, in seconds. 0 = ready.
+    float GetSpellCooldown(int slot) const;
+    // Mana (or PE, per the def) a slot's spell would cost right now.
+    float GetSpellCost(int slot) const;
+    // Resolve a live EntityInstance for a bar slot, spawning the def on first
+    // use. Spells live in the same instance pool as everything else so they
+    // share cooldowns, runtime stats and script context; the bar only stores the
+    // def NAME and this is the one place that turns a name into an instance.
+    EntityInstance* GetSpellInstance(int slot);
     int   GetPlayerLevel() const;
     void  SetPlayerLevel(int v);
     int   GetPlayerXP() const;
@@ -287,6 +350,11 @@ static constexpr int HOTBAR_SIZE = 8;
 
 private:
     LightningEntityManager();
+    // Damage every non-network-controlled pawn within `radius` of `centre`;
+    // returns the hit count so a whiff is distinguishable from a connect.
+    // Declared here rather than inlined into CastSpell so the test build (which
+    // compiles without OMEGA_HAVE_PAWNSYSTEM) still sees one definition.
+    int  ApplyAreaDamage(const Vector3& centre, float radius, int damage);
     std::vector<EntityInstance> m_instances;
     int m_hotbar[HOTBAR_SIZE];
     int m_selectedSlot = 0;
@@ -305,6 +373,14 @@ private:
 
     // Unlocked ethereal skill node names (persisted in TF.sav).
     std::vector<std::string> m_unlockedSkills;
+
+    // Spell bar: EntityDef NAMES, empty string = empty slot (persisted in TF.sav).
+    // SPELL_BAR_SIZE is declared in the public section above, but a static
+    // constexpr member is NOT in scope inside another member's default
+    // initialiser (member initialisers are not complete-class contexts), so the
+    // size is written literally and tied back by the static_assert.
+    static_assert(SPELL_BAR_SIZE == 5, "m_spellBar size must track SPELL_BAR_SIZE");
+    std::vector<std::string> m_spellBar = std::vector<std::string>(5, std::string());
 
     // Cached model/texture/icon handles
     struct CachedResource {

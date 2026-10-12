@@ -20,6 +20,7 @@
 #include "Renderer/ViewModel.hpp"
 #include "Renderer/PlayerModel.hpp"
 #include "Menu/SkillTree.hpp"
+#include "Menu/SpellBook.hpp"
 #include "UI/UiHandler.hpp"
 #include <cmath>
 #include <memory>
@@ -118,6 +119,8 @@ int NetworkWorldIndexByName(const char* world_name) {
 
 static bool ShowInventory = false;
 static bool ShowSkillTree = false;
+// Spellbook modal: Q toggles it, Z/X/C/V/B cast the bar slots.
+static bool ShowSpellbook = false;
 
 // Deep-link / CLI join target. SetServerJoinIP is a raw pointer consumed long
 // after parsing, so the host string must live for the whole process.
@@ -568,7 +571,8 @@ int main(int argc, char** argv){
         FPSEnabled  = false;
         ShowSettings = false;
         ShowInventory = false;
-        ShowSkillTree = false;
+ShowSkillTree = false;
+ShowSpellbook = false;
     }
 
     // Browser deep links (angels95://join/...) need an OS protocol handler.
@@ -846,7 +850,8 @@ int main(int argc, char** argv){
                 DisableCursor();
             }
         }
-        PlayerController::Instance().HandleKeyToggles(ShowInventory, ShowSkillTree, g_consoleOpen);
+        PlayerController::Instance().HandleKeyToggles(ShowInventory, ShowSkillTree, g_consoleOpen,
+                                                  &ShowSpellbook);
 
         // Console input processing
         if (g_consoleOpen) {
@@ -861,7 +866,7 @@ int main(int argc, char** argv){
             if (pauseKeyNow && !pauseKeyWasDown) {
                 g_gamePaused = !g_gamePaused;
                 if (g_gamePaused) { ShowCursor(); EnableCursor(); }
-                else if (!ShowSettings && !ShowInventory && !ShowSkillTree && !g_consoleOpen) { HideCursor(); DisableCursor(); }
+                else if (!ShowSettings && !ShowInventory && !ShowSkillTree && !ShowSpellbook && !g_consoleOpen) { HideCursor(); DisableCursor(); }
             }
             pauseKeyWasDown = pauseKeyNow;
         }
@@ -942,7 +947,7 @@ int main(int argc, char** argv){
         // from the player entity's authored movement_speed, with hold-Shift
         // sprint and hold-Ctrl crouch.
         {
-            bool uiBlocked = ShowSettings || ShowInventory || ShowSkillTree || g_consoleOpen;
+            bool uiBlocked = ShowSettings || ShowInventory || ShowSkillTree || ShowSpellbook || g_consoleOpen;
             float moveSpeedScalar = LightningEntityManager::Instance().GetPlayerMovementSpeed();
             g_playerMovement.UpdateLookAndMove(
                 OmegaTechData.MainCamera, GetFrameTime(), moveSpeedScalar, uiBlocked);
@@ -1017,16 +1022,22 @@ int main(int argc, char** argv){
         }
         }
         // --- Jump / Fly / Noclip Y management ---
-        const bool verticalBlocked = g_consoleOpen || ShowInventory || ShowSkillTree;
+        const bool verticalBlocked = g_consoleOpen || ShowInventory || ShowSkillTree || ShowSpellbook;
         for (int s = 0; s < move_steps; ++s) {
             PlayerController::Instance().UpdateVertical(kMoveDt, OmegaTechData.MainCamera,
                                                         savedCamY, verticalBlocked, zonePhysics);
         }
 
-        const bool uiBlocking = ShowSettings || ShowInventory || ShowSkillTree || g_consoleOpen;
+        const bool uiBlocking = ShowSettings || ShowInventory || ShowSkillTree || ShowSpellbook || g_consoleOpen;
 
         // Weapon fire AFTER camera so left-click does not disrupt movement
         WeaponBehaviour::Instance().HandleInput(uiBlocking, OmegaTechData.MainCamera);
+
+        // Spell bar (Z/X/C/V/B). Also after the camera, because a cast aims
+        // along the view direction. uiBlocking is the same modal flag, so a cast
+        // cannot fire underneath the spellbook while it is open.
+        LightningEntityManager::Instance().HandleSpellInput(uiBlocking,
+                                                           OmegaTechData.MainCamera);
 
         // ADS / Zoom (right-click)
         WeaponBehaviour::Instance().SetAdsActive(!uiBlocking && IsMouseButtonDown(MOUSE_BUTTON_RIGHT));
@@ -1265,6 +1276,13 @@ int main(int argc, char** argv){
         if (ShowSkillTree) {
             oz::skilltree::DrawOverlay(ShowSkillTree);
         }
+
+        // Spellbook overlay + the persistent spell bar. The bar is suppressed in
+        // screenshot mode along with the rest of the HUD.
+        if (!(g_shot.active && g_shot.hideHud))
+            oz::spellbook::DrawSpellBar(GetScreenWidth(), GetScreenHeight());
+        if (ShowSpellbook)
+            oz::spellbook::DrawSpellbook(ShowSpellbook);
 
         // Developer settings overlay. Drawn with the other overlays, i.e. AFTER the
         // HUD, so its window sits on top of the HP/MP columns (which open exactly

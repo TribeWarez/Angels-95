@@ -17,9 +17,11 @@ public:
         return instance;
     }
 
-    // K toggles the skill tree, Tab toggles the inventory (mutually exclusive,
-    // both ignored while the console is open). Handles the cursor state.
-    void HandleKeyToggles(bool& showInventory, bool& showSkillTree, bool consoleOpen);
+    // K toggles the skill tree, Tab toggles the inventory, Q toggles the
+    // spellbook (mutually exclusive, all ignored while the console is open).
+    // Handles the cursor state.
+    void HandleKeyToggles(bool& showInventory, bool& showSkillTree, bool consoleOpen,
+                          bool* showSpellbook = nullptr);
 
     // Fixed 60 Hz timestep: advance the accumulator and return how many sim
     // steps to run this frame (at most `maxSteps`).

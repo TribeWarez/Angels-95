@@ -281,6 +281,40 @@ const StatSpec kWeaponStats[] = {
     {"equip_volume",           0, "Equip Volume", "Audio"},
 };
 
+// Spells. Kept separate from kWeaponStats rather than sharing it: a spell has no
+// magazine/reload/viewmodel/recoil, and a weapon has no cost/radius/heal. A
+// shared schema would show every weapon 8 rows it can never use (and vice
+// versa), which is exactly the "shows stats it has never set" problem the
+// schema-from-SCHEMA design already has to be careful about.
+//
+// `cost_type` is a STRING row: author it quote-free and space-free
+// (psychic_energy or pe for the PE pool, anything else means mana).
+const StatSpec kSpellStats[] = {
+    {"mana_cost",              0, "Mana Cost", "Cost"},
+    {"pe_cost",                0, "PE Cost", "Cost"},
+    {"cost_type",              1, "Cost Type", "Cost"},
+    {"cooldown",               0, "Cooldown", "Cost"},
+    // Effect. `radius` > 0 makes it an instant area cast; otherwise projectiles.
+    {"damage",                 0, "Damage", "Effect"},
+    {"reach",                  0, "Reach", "Effect"},
+    {"radius",                 0, "Radius (AoE)", "Effect"},
+    {"targets_self",           0, "Targets Self", "Effect"},
+    {"heal",                   0, "Heal", "Effect"},
+    {"projectile_speed",       0, "Proj Speed", "Projectile"},
+    {"projectile_lifetime",    0, "Proj Lifetime", "Projectile"},
+    {"projectile_count",       0, "Proj Count", "Projectile"},
+    {"projectile_submesh",     0, "Proj Submesh", "Projectile"},
+    {"projectile_scale",       0, "Proj Scale", "Projectile"},
+    {"spread",                 0, "Spread", "Projectile"},
+    {"projectile_mesh",        1, "Projectile Mesh", "Projectile"},
+    {"projectile_texture",     1, "Projectile Tex", "Projectile"},
+    {"projectile_color",       2, "Projectile RGB", "Projectile"},
+    {"cast_sound",             3, "Cast Sound", "Audio"},
+    {"cast_volume",            0, "Cast Volume", "Audio"},
+    {"hit_sound",              3, "Hit Sound", "Audio"},
+    {"hit_volume",             0, "Hit Volume", "Audio"},
+};
+
 const StatSpec kPlayerStats[] = {
     {"health",                 0, "Health", "Vitals"},
     {"max_health",             0, "Max Health", "Vitals"},
@@ -358,6 +392,7 @@ const StatSpec* StatSchemaFor(EntityType type, int* outCount) {
         // so match on the def NAME as well - there is no dedicated player type.
         case EntityType::UPGRADE: return set(kPlayerStats, (int)(sizeof(kPlayerStats)/sizeof(StatSpec)));
         case EntityType::LIGHT:   return set(kLightStats,  (int)(sizeof(kLightStats)/sizeof(StatSpec)));
+        case EntityType::SPELL:   return set(kSpellStats,  (int)(sizeof(kSpellStats)/sizeof(StatSpec)));
         default: *outCount = 0; return nullptr;
     }
 }

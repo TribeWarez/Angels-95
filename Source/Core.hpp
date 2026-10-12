@@ -1057,6 +1057,13 @@ void UpdateEntitiesSim(float dt)
     // check so the pool refills whether or not an NPC is in range.
     LightningEntityManager::Instance().UpdateStamina(dt);
 
+    // Mana / psychic-energy regen for spells. Same placement as stamina: every
+    // frame, independent of anything being in range. Neither pool regenerated
+    // on the client at all before spells existed, and the server's values never
+    // reach the client (Client.cpp sends mana = 0), so without this a cast was
+    // permanent.
+    LightningEntityManager::Instance().UpdateSpellPools(dt);
+
     // Check if any pawn is attacking the player (contact damage)
     {
         g_damageCooldown -= dt;

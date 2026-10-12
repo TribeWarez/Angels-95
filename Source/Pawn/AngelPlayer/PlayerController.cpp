@@ -11,15 +11,33 @@ extern PlayerMovement g_playerMovement;
 namespace pphys = oz::physics;
 
 // ---------------------------------------------------------------------------
-// Overlay key toggles (K = skill tree, Tab = inventory)
+// Overlay key toggles (K = skill tree, Tab = inventory, Q = spellbook)
 // ---------------------------------------------------------------------------
-void PlayerController::HandleKeyToggles(bool& showInventory, bool& showSkillTree, bool consoleOpen) {
+void PlayerController::HandleKeyToggles(bool& showInventory, bool& showSkillTree, bool consoleOpen,
+                                        bool* showSpellbook) {
     // K key toggles the ethereal (angelic) skill tree
     if (IsKeyPressed(KEY_K)) {
         if (!consoleOpen) {
             showSkillTree = !showSkillTree;
             if (showSkillTree) {
                 showInventory = false;
+                if (showSpellbook) *showSpellbook = false;
+                ShowCursor();
+                EnableCursor();
+            } else {
+                HideCursor();
+                DisableCursor();
+            }
+        }
+    }
+
+    // Q key toggles the spellbook (spell bar bindings)
+    if (showSpellbook && IsKeyPressed(KEY_Q)) {
+        if (!consoleOpen) {
+            *showSpellbook = !*showSpellbook;
+            if (*showSpellbook) {
+                showInventory = false;
+                showSkillTree = false;
                 ShowCursor();
                 EnableCursor();
             } else {
@@ -35,6 +53,7 @@ void PlayerController::HandleKeyToggles(bool& showInventory, bool& showSkillTree
             showInventory = !showInventory;
             if (showInventory) {
                 showSkillTree = false;
+                if (showSpellbook) *showSpellbook = false;
                 ShowCursor();
                 EnableCursor();
             } else {

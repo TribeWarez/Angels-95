@@ -31,6 +31,42 @@ void FitCentered(Texture2D icon, Rectangle box, Rectangle& src, Rectangle& dst) 
 
 }  // namespace
 
+// The ONE definition of the bar's screen rect. DrawSlotBar below positions from
+// this, and SlotBarScreenRect publishes it so stacked HUD elements (the spell
+// bar) do not re-derive it - see the note in SlotBar.hpp.
+bool SlotBarScreenRect(const SlotBarOptions& opt, Rectangle& out) {
+    GameUi& gui = GameUi::Instance();
+    if (!gui.HasBar()) return false;
+
+    Texture2D bar = gui.Texture();
+    if (bar.id == 0 || bar.width <= 0 || bar.height <= 0) return false;
+
+    const int sw = GetScreenWidth();
+    const int sh = GetScreenHeight();
+    if (sw <= 0 || sh <= 0) return false;
+
+    float barW;
+    if (opt.forcedWidth > 0.0f) {
+        barW = opt.forcedWidth;
+    } else {
+        float pct = (opt.widthPct > 0.0f) ? opt.widthPct : gui.WidthPct();
+        if (pct > 1.0f) pct = 1.0f;
+        barW = (float)sw * pct;
+    }
+    if (barW > (float)sw - 8.0f) barW = (float)sw - 8.0f;
+    if (barW < 1.0f) barW = 1.0f;
+
+    const float scale = barW / (float)bar.width;
+    const float barH  = (float)bar.height * scale;
+
+    const float cx = (opt.centerX >= 0.0f) ? opt.centerX : (float)sw * 0.5f;
+    const float by = (opt.bottomY >= 0.0f) ? opt.bottomY
+                                           : (float)sh - gui.BottomMargin();
+
+    out = {cx - barW * 0.5f, by - barH, barW, barH};
+    return true;
+}
+
 bool DrawSlotBar(const SlotBarOptions& opt, int& hoverSlot) {
     hoverSlot = -1;
 
@@ -75,25 +111,18 @@ bool DrawSlotBar(const SlotBarOptions& opt, int& hoverSlot) {
 #endif
 
     // --- Layout --------------------------------------------------------------
-    float barW;
-    if (opt.forcedWidth > 0.0f) {
-        barW = opt.forcedWidth;
-    } else {
-        float pct = (opt.widthPct > 0.0f) ? opt.widthPct : gui.WidthPct();
-        if (pct > 1.0f) pct = 1.0f;
-        barW = (float)sw * pct;
-    }
-    if (barW > (float)sw - 8.0f) barW = (float)sw - 8.0f;
-    if (barW < 1.0f) barW = 1.0f;
-
+    // Geometry comes from SlotBarScreenRect so there is exactly one copy of it.
+    const Rectangle barRect = [&] {
+        Rectangle r{};
+        SlotBarScreenRect(opt, r);
+        return r;
+    }();
+    const float barX = barRect.x;
+    const float barY = barRect.y;
+    const float barW = barRect.width;
+    const float barH = barRect.height;
+    const float cx   = barX + barW * 0.5f;
     const float scale = barW / (float)bar.width;
-    const float barH  = (float)bar.height * scale;
-
-    const float cx = (opt.centerX >= 0.0f) ? opt.centerX : (float)sw * 0.5f;
-    const float by = (opt.bottomY >= 0.0f) ? opt.bottomY
-                                           : (float)sh - gui.BottomMargin();
-    const float barX = cx - barW * 0.5f;
-    const float barY = by - barH;
 
     // --- Atlas ---------------------------------------------------------------
     DrawTexturePro(bar,

@@ -1,0 +1,22 @@
+// Mend - the only support spell: an INSTANT cast that heals the caster instead
+// of damaging anything.
+//
+// This is the case that forced `ApplyAreaDamage` to be split out rather than
+// folded into CastSpell's instant branch: the instant path is "resolve an effect
+// at the aimed point", and the effect is a spell-defined action, not always a
+// damage sweep. A self-cast is expressed as radius 0 + `targets_self`.
+entity "mend" : spell {
+    icon = "GameData/Global/Spells/mend.png"
+    stats {
+        mana_cost = 25
+        cooldown = 5.0
+        // No radius: this one is not an area sweep at all.
+        targets_self = 1
+        heal = 35
+        cast_sound = GameData/Global/Sounds/Magic/mend.wav
+        cast_volume = 0.8
+    }
+    actions {
+        on_cast { say "Mend" }
+    }
+}

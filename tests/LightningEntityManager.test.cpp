@@ -1080,10 +1080,164 @@ static int test_no_variants_leaves_index() {
     PASS(); return 0; END_TEST();
 }
 
+// ---------------------------------------------------------------------------
+// Spells. These run last for the same reason test_despawn_clears_player_index
+// does: casting spends a player pool, and GetPlayerStat/SetPlayerStat are no-ops
+// until a "Player" entity exists (they read 0 and write nowhere). Every test
+// above this point assumes Init() spawns nothing.
+// ---------------------------------------------------------------------------
+
+// Registers "Player" (idempotent - Register overwrites by name) and a spell def,
+// then re-inits so the player exists.
+static void SetupPlayerAndSpell(const char* spellName, EntityType type,
+                                float manaCost, float peCost, const char* costType,
+                                float cooldown) {
+    auto& reg = LightningEntityRegistry::Instance();
+    EntityDef pdef;
+    pdef.name = "Player";
+    pdef.type = EntityType::UPGRADE;
+    reg.Register(pdef);
+
+    EntityDef sd;
+    sd.name = spellName;
+    sd.type = type;
+    if (manaCost >= 0.0f) sd.stats.floats["mana_cost"] = manaCost;
+    if (peCost >= 0.0f)   sd.stats.floats["pe_cost"] = peCost;
+    if (costType)         sd.stats.strings["cost_type"] = costType;
+    sd.stats.floats["cooldown"] = cooldown;
+    sd.stats.floats["damage"] = 20.0f;
+    reg.Register(sd);
+
+    LightningEntityManager::Instance().Init();
+}
+
+static int test_spell_bar_bind_and_init_clear() {
+    TEST("Spell bar binds by name and Init() clears it");
+    SetupPlayerAndSpell("BindBolt", EntityType::SPELL, 10.0f, -1.0f, nullptr, 0.5f);
+    auto& em = LightningEntityManager::Instance();
+
+    CHECK(em.GetSpellInSlot(0).empty());
+    em.SetSpellInSlot(2, "BindBolt");
+    CHECK(em.GetSpellInSlot(2) == "BindBolt");
+
+    // Out-of-range slots are ignored, not clamped onto a real one.
+    em.SetSpellInSlot(-1, "BindBolt");
+    em.SetSpellInSlot(LightningEntityManager::SPELL_BAR_SIZE + 3, "BindBolt");
+    CHECK(em.GetSpellInSlot(0) == "");
+
+    // Init() (New Game) must drop the bindings - the bar is name-backed so it is
+    // invisible to the index remapping in Despawn, and would otherwise survive.
+    em.Init();
+    CHECK(em.GetSpellInSlot(2) == "");
+    PASS(); return 0; END_TEST();
+}
+
+static int test_cast_spell_spends_mana_and_sets_cooldown() {
+    TEST("CastSpell spends mana, sets cooldown, and refuses while empty/on CD");
+    SetupPlayerAndSpell("ManaBolt", EntityType::SPELL, 12.0f, -1.0f, nullptr, 0.5f);
+    auto& em = LightningEntityManager::Instance();
+
+    CHECK(em.HasPlayerEntity());      // the whole test depends on this
+    em.SetPlayerMana(100.0f);
+    em.SetSpellInSlot(0, "ManaBolt");
+
+    const Vector3 o = {0, 0, 0}, d = {0, 0, -1};
+    const int r = em.CastSpell(0, o, d);
+    CHECK(r != -1);                    // accepted (headless: no projectiles)
+    CHECK_APROX(em.GetPlayerMana(), 88.0f, 0.001f);
+    CHECK(em.GetSpellCooldown(0) > 0.0f);
+
+    // On cooldown: refused, and spending nothing further.
+    const float manaAfter = em.GetPlayerMana();
+    CHECK_EQ(em.CastSpell(0, o, d), -1);
+    CHECK_APROX(em.GetPlayerMana(), manaAfter, 0.001f);
+
+    // Clear the cooldown and drain the pool: an unaffordable cast is refused
+    // WITHOUT spending, so there is no partial spend and no banked cast.
+    em.SetSpellInSlot(0, "");          // clears + despawns the instance
+    em.SetSpellInSlot(0, "ManaBolt");  // fresh instance, cooldown reset
+    em.SetPlayerMana(5.0f);
+    CHECK_EQ(em.CastSpell(0, o, d), -1);
+    CHECK_APROX(em.GetPlayerMana(), 5.0f, 0.001f);
+    CHECK(em.GetSpellCooldown(0) <= 0.0f);   // refused cast set NO cooldown
+
+    // Empty slot: refused, silently.
+    em.SetSpellInSlot(0, "");
+    CHECK_EQ(em.CastSpell(0, o, d), -1);
+    PASS(); return 0; END_TEST();
+}
+
+static int test_cast_spell_uses_psychic_energy() {
+    TEST("A cost_type=psychic_energy spell draws on PE, not mana");
+    SetupPlayerAndSpell("PeBolt", EntityType::SPELL, -1.0f, 30.0f,
+                        "psychic_energy", 0.5f);
+    auto& em = LightningEntityManager::Instance();
+
+    em.SetPlayerMana(100.0f);
+    em.SetPlayerPsychicEnergy(100.0f);
+    em.SetSpellInSlot(1, "PeBolt");
+
+    const Vector3 o = {0, 0, 0}, d = {0, 0, -1};
+    CHECK(em.CastSpell(1, o, d) != -1);
+    CHECK_APROX(em.GetPlayerPsychicEnergy(), 70.0f, 0.001f);
+    CHECK_APROX(em.GetPlayerMana(), 100.0f, 0.001f);   // mana untouched
+
+    // The affordability gate is on the RIGHT pool: an empty PE pool must refuse
+    // even with full mana.
+    em.SetSpellInSlot(1, "");
+    em.SetSpellInSlot(1, "PeBolt");
+    em.SetPlayerMana(100.0f);
+    em.SetPlayerPsychicEnergy(0.0f);
+    CHECK_EQ(em.CastSpell(1, o, d), -1);
+    CHECK_APROX(em.GetPlayerMana(), 100.0f, 0.001f);
+    PASS(); return 0; END_TEST();
+}
+
+static int test_cast_spell_rejects_non_spell_def() {
+    TEST("CastSpell refuses a slot bound to a non-spell def");
+    SetupPlayerAndSpell("NotASpellWeapon", EntityType::WEAPON, -1.0f, -1.0f, nullptr, 0.1f);
+    auto& em = LightningEntityManager::Instance();
+    em.SetPlayerMana(100.0f);
+
+    // Bind a WEAPON def into a spell slot. Casting must refuse: the type gate is
+    // what stops a weapon's magazine/stamina semantics leaking into a cast.
+    em.SetSpellInSlot(3, "NotASpellWeapon");
+    const Vector3 o = {0, 0, 0}, d = {0, 0, -1};
+    CHECK_EQ(em.CastSpell(3, o, d), -1);
+    CHECK_APROX(em.GetPlayerMana(), 100.0f, 0.001f);
+    PASS(); return 0; END_TEST();
+}
+
+static int test_spell_bar_serialize_roundtrip() {
+    TEST("The spell bar round-trips through SerializeState/DeserializeState");
+    SetupPlayerAndSpell("RoundBolt", EntityType::SPELL, 10.0f, -1.0f, nullptr, 0.5f);
+    auto& em = LightningEntityManager::Instance();
+
+    em.SetSpellInSlot(0, "RoundBolt");
+    em.SetSpellInSlot(4, "");
+    const std::string blob = em.SerializeState();
+    CHECK(blob.find("spells=") != std::string::npos);
+
+    // Init() wipes the bar...
+    em.Init();
+    CHECK(em.GetSpellInSlot(0) == "");
+
+    // ...and restoring the blob brings it back.
+    em.DeserializeState(blob);
+    CHECK(em.GetSpellInSlot(0) == "RoundBolt");
+    CHECK(em.GetSpellInSlot(1).empty());
+
+    // A blob with no `spells=` section (an old save) must CLEAR the bar rather
+    // than leave whatever the process had bound.
+    em.SetSpellInSlot(0, "RoundBolt");
+    em.DeserializeState("hotbar:|equip:|skills=|");
+    CHECK(em.GetSpellInSlot(0) == "");
+    PASS(); return 0; END_TEST();
+}
+
 int main() {
     fprintf(stdout, "LightningEntityManager Tests\n");
     fprintf(stdout, "============================\n");
-
     int failures = 0;
     failures += test_init();
     failures += test_hotbar();
@@ -1131,6 +1285,13 @@ int main() {
     // Last of all: registers a "Player" def permanently (no Unregister exists), so
     // it must follow every other test that assumes Init() spawns nothing.
     failures += test_despawn_clears_player_index();
+    // Spell tests: need a live Player entity for pool spend/refusal, so they run
+    // after the test above has registered "Player".
+    failures += test_spell_bar_bind_and_init_clear();
+    failures += test_cast_spell_spends_mana_and_sets_cooldown();
+    failures += test_cast_spell_uses_psychic_energy();
+    failures += test_cast_spell_rejects_non_spell_def();
+    failures += test_spell_bar_serialize_roundtrip();
 
     fprintf(stdout, "============================\n");
     fprintf(stdout, "%d/%d passed, %d failed\n",

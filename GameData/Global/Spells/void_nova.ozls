@@ -1,0 +1,25 @@
+// Void Nova - an INSTANT area cast on psychic energy. No projectile: the
+// `radius` > 0 is what makes CastSpell resolve it at a point instead of
+// spawning bolts. Costs PE, not mana, so it competes with Arc Bolt for the same
+// budget rather than being free alongside it.
+entity "void_nova" : spell {
+    icon = "GameData/Global/Spells/void_nova.png"
+    stats {
+        cost_type = psychic_energy
+        pe_cost = 45
+        cooldown = 4.0
+
+        // Instant cast at `reach` units along the aim, hitting everything
+        // within `radius` of that point.
+        radius = 7.0
+        reach = 5.0
+        damage = 55
+        hit_sound = GameData/Global/Sounds/Magic/void_nova.wav
+        hit_volume = 0.9
+        cast_sound = GameData/Global/Sounds/Magic/void_bolt.wav
+        cast_volume = 0.9
+    }
+    actions {
+        on_cast { say "Void Nova!" }
+    }
+}

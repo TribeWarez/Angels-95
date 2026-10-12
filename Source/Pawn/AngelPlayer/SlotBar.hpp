@@ -38,3 +38,13 @@ struct SlotBarOptions {
 // texture or no slot_rects) so callers can fall back to their own chrome.
 // `hoverSlot` receives the hovered slot index, or -1.
 bool DrawSlotBar(const SlotBarOptions& opt, int& hoverSlot);
+
+// The screen-space rectangle the bar occupies for `opt`, using the SAME layout
+// DrawSlotBar uses. Returns false when there is no usable bar.
+//
+// Exposed so HUD elements that STACK above the bar (the spell bar) can position
+// themselves against it without re-deriving the layout. A second copy of the
+// formula would drift the moment hud_width_pct, hud_bottom_margin or the atlas
+// changes - and the drift is screen-size dependent, so it would not show up on
+// the developer's own resolution.
+bool SlotBarScreenRect(const SlotBarOptions& opt, Rectangle& out);
