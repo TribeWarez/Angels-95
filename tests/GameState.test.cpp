@@ -1158,6 +1158,10 @@ static int test_log_calls_have_no_duplicate_args() {
 }
 
 int main() {
+    // Unbuffered: when a suite dies without a summary line, a piped stdout keeps
+    // the last "TEST:" line in the log, which is what names the culprit (the
+    // MSYS2-only std::system_error this suite hit printed no test name at all).
+    setvbuf(stdout, nullptr, _IONBF, 0);
     fprintf(stdout, "GameState Tests\n");
     fprintf(stdout, "===============\n");
 

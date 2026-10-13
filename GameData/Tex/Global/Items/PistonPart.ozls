@@ -1,5 +1,5 @@
 entity "PistonPart" : pickup {
-    icon = "GameData/Tex/Global/Items/key.png"
+    icon = "GameData/Tex/Global/Items/Key.png"
     stats {
         value = 1
         respawn_time = 60.0

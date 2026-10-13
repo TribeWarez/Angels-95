@@ -37,6 +37,14 @@ OzParticleSimulationManager& OzParticleSimulationManager::Instance() {
 Texture2D OzParticleSimulationManager::DefaultTexture() {
     if (m_defaultTex.id != 0) return m_defaultTex;
 
+    // No GL context (a headless test target): return the empty texture and keep
+    // every CPU path working. LoadTextureFromImage() goes straight into rlgl,
+    // whose GL entry points are NULL until InitWindow() has run - on Linux that
+    // is a segfault the moment the weather field spawns, and Windows hid it
+    // because raylib there links opengl32's GL 1.1 imports, which merely no-op
+    // without a context.
+    if (!IsWindowReady()) return Texture2D{0};
+
     const int S = 32;
     Image img = GenImageColor(S, S, BLANK);
     for (int y = 0; y < S; y++) {
@@ -59,6 +67,7 @@ Texture2D OzParticleSimulationManager::DefaultTexture() {
 
 Texture2D OzParticleSimulationManager::TextureFor(const std::string& path) {
     if (path.empty()) return DefaultTexture();
+    if (!IsWindowReady()) return Texture2D{0};   // headless target: same reason as above
     auto it = m_texCache.find(path);
     if (it != m_texCache.end()) return it->second;
     Texture2D t = LoadTextureWithFallback(path.c_str());
