@@ -6,63 +6,9 @@
 # accept that this asset does not exist yet", and a path typo introduced while
 # moving files will NOT match an entry and will fail `make test`.
 #
-# Basenames are enough because the register is about missing CONTENT; if these
-# assets ever get authored, delete their line (the reference then resolves).
-
-Accessory1.obj
-Accessory1Icon.png
-Accessory1Texture.png
-Accessory2.obj
-Accessory2Icon.png
-Accessory2Texture.png
-arc_bolt.png
-arc_bolt.wav
-Armory1.obj
-Armory1Icon.png
-Armory1Texture.png
-Armory2.obj
-Armory2Icon.png
-Armory2Texture.png
-Boots.obj
-BootsIcon.png
-BootsTexture.png
-Brute.wav
-Floater.wav
-frost_lance.png
-frost_lance.wav
-Helmet.obj
-HelmetIcon.png
-HelmetTexture.png
-Jewelry1.obj
-Jewelry1Icon.png
-Jewelry1Texture.png
-Jewelry2.obj
-Jewelry2Icon.png
-Jewelry2Texture.png
-Legs.obj
-LegsIcon.png
-LegsTexture.png
-mend.png
-mend.wav
-Object1.obj
-Object1Texture.png
-Object2.obj
-Object2Icon.png
-Object2Texture.png
-Object3.obj
-Object3Icon.png
-Object3Texture.png
-Object4.obj
-Object4Icon.png
-Object4Texture.png
-Object5.obj
-Object5Icon.png
-Object5Texture.png
-psychic_surge.png
-psychic_surge.wav
-selenite_blade_icon.png
-Skaarj.wav
-void_bolt.wav
-void_nova.png
-void_nova.wav
-Walker.wav
+# EMPTY as of the placeholder pass (tools/gen_placeholders.ps1): all 57 entries
+# that used to live here (the gear objects, spell icons, spell cast sounds and
+# pawn screams) are now real files - obvious placeholders that resolve, so the
+# features they belong to are visible/audible. Replace a placeholder with real
+# art by overwriting the file; delete the line of any entry that becomes stale
+# rather than accepting breakage.
