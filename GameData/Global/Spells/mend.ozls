@@ -13,7 +13,7 @@ entity "mend" : spell {
         // No radius: this one is not an area sweep at all.
         targets_self = 1
         heal = 35
-        cast_sound = GameData/Global/Sounds/Magic/mend.wav
+        cast_sound = GameData/Audio/Sounds/Skills/mend.wav
         cast_volume = 0.8
     }
     actions {

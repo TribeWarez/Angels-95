@@ -17,7 +17,7 @@ entity "Medkit" : consumable {
         on_use {
             playerstat health += 50
             msg "You kneel and bind your wounds. +50 health."
-            play_sound "GameData/Global/Sounds/TalkingNoise.mp3"
+            play_sound "GameData/Audio/Sounds/UI/TalkingNoise.mp3"
             consume
         }
     }

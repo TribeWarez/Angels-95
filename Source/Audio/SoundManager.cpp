@@ -39,16 +39,16 @@ void SoundManager::LoadCoreSounds() {
     };
 
     GameSounds& s = m_sounds;
-    s.CollisionSound = loadCore("GameData/Global/Sounds/CollisionSound.mp3");
-    s.WalkingSound    = loadCore("GameData/Global/Sounds/WalkingSound.mp3");
-    s.ChasingSound    = loadCore("GameData/Global/Sounds/ChasingSound.mp3");
-    s.UIClick         = loadCore("GameData/Global/Sounds/UI/MenuSelect_Click.wav");
-    s.Death           = loadCore("GameData/Global/Sounds/Hurt.mp3");
-    s.JumpSound       = loadCore("GameData/Global/Sounds/Player/jump1.wav");
-    s.WeaponLoadSound = loadCore("GameData/Global/Sounds/Player/weapload.wav");
-    s.MenuSelectSound = loadCore("GameData/Global/Sounds/UI/MenuSelect_Click.wav");
-    s.MatchStartSound = loadCore("GameData/Global/Sounds/UI/MenuRoundBeginn.wav");
-    m_textNoise       = loadCore("GameData/Global/Sounds/TalkingNoise.mp3");
+    s.CollisionSound = loadCore("GameData/Audio/Sounds/Entities/CollisionSound.mp3");
+    s.WalkingSound    = loadCore("GameData/Audio/Sounds/Entities/WalkingSound.mp3");
+    s.ChasingSound    = loadCore("GameData/Audio/Sounds/Entities/ChasingSound.mp3");
+    s.UIClick         = loadCore("GameData/Audio/Sounds/UI/MenuSelect_Click.wav");
+    s.Death           = loadCore("GameData/Audio/Sounds/Entities/Hurt.mp3");
+    s.JumpSound       = loadCore("GameData/Audio/Sounds/Entities/jump1.wav");
+    s.WeaponLoadSound = loadCore("GameData/Audio/Sounds/Entities/weapload.wav");
+    s.MenuSelectSound = loadCore("GameData/Audio/Sounds/UI/MenuSelect_Click.wav");
+    s.MatchStartSound = loadCore("GameData/Audio/Sounds/UI/MenuRoundBeginn.wav");
+    m_textNoise       = loadCore("GameData/Audio/Sounds/UI/TalkingNoise.mp3");
 }
 
 void SoundManager::Shutdown() {
@@ -222,7 +222,7 @@ void SoundManager::PlayWorldMusic(const std::string& assetPrefix) {
 
     const std::string worldTrack = assetPrefix + "Music/Main.mp3";
     // Fallback so worlds without their own track still get atmosphere.
-    static const char* kGlobalAmbience = "GameData/Global/Sounds/Ambience/Music_Atmo_1.wav";
+    static const char* kGlobalAmbience = "GameData/Audio/Ambience/Music_Atmo_1.wav";
 
     Music m{0};
     std::string playingFrom;

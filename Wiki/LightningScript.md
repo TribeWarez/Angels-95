@@ -76,11 +76,11 @@ inside a `.ozsnd` works exactly like a loose file.
 
 | Stat | Type | Applies To | Default | Description |
 |---|---|---|---|---|
-| `fire_sound` | string | ranged weapon | `Sounds/Gun/machgf3b.wav` | One-shot per projectile fired |
+| `fire_sound` | string | ranged weapon | `Audio/Sounds/Guns/machgf3b.wav` | One-shot per projectile fired |
 | `swing_sound` | string | melee weapon | *(silent)* | One-shot per melee swing |
 | `hit_sound` | string | melee weapon | *(silent)* | Melee connect that is **not** blocked by geometry |
 | `reload_sound` | string | any weapon | *(silent)* | Once per reload (manual **and** auto) |
-| `equip_sound` | string | any weapon | `Player/weapload.wav` | Selecting the weapon in the hotbar |
+| `equip_sound` | string | any weapon | `Audio/Sounds/Entities/weapload.wav` | Selecting the weapon in the hotbar |
 | `fire_volume` / `swing_volume` / `hit_volume` / `reload_volume` / `equip_volume` | float | matching key | 1.0 | Linear gain |
 | `fire_pitch` / `swing_pitch` / `hit_pitch` | float | matching key | 1.0 | Playback rate (`0.85` = deeper) |
 
@@ -90,7 +90,7 @@ auto-spawned Player entity: `jump_sound`, `land_sound`, `walk_sound`,
 
 ```
 stats {
-    fire_sound = GameData/Global/Sounds/Gun/machgf3b.wav
+    fire_sound = GameData/Audio/Sounds/Guns/machgf3b.wav
     fire_volume = 0.9
     fire_pitch = 0.85
 }
@@ -281,7 +281,7 @@ entity "acidpool" : skyzone {
         on_enter {
             wtflag 0 1
             var timer = 60
-            play_sound "GameData/Global/Sounds/Hurt.mp3"
+            play_sound "GameData/Audio/Sounds/Entities/Hurt.mp3"
             msg "Acid! The pooled run-off burns your boots!"
         }
         on_tick {

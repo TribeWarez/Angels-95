@@ -21,10 +21,10 @@ entity "rifle_01" : weapon {
         viewmodel_scale = 1.3
         // Sound stats: quote-free, space-free asset paths. Heavier and lower
         // than the pistol via pitch, reusing the one shipped gunshot wav.
-        fire_sound = GameData/Global/Sounds/Gun/machgf3b.wav
+        fire_sound = GameData/Audio/Sounds/Guns/machgf3b.wav
         fire_volume = 1.0
         fire_pitch = 0.85
-        reload_sound = GameData/Global/Sounds/Player/weapload.wav
+        reload_sound = GameData/Audio/Sounds/Entities/weapload.wav
     }
     actions {
         on_fire {

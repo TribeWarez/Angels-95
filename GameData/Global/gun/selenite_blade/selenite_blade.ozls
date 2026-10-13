@@ -16,7 +16,7 @@ entity "selenite_blade" : weapon {
         viewmodel_rot = (90, 0, 0)
         viewmodel_scale = 1.0
         // Melee sound stats.
-        swing_sound = GameData/Global/Sounds/Player/boot2.wav
+        swing_sound = GameData/Audio/Sounds/Entities/boot2.wav
         swing_volume = 0.6
         swing_pitch = 1.2
     }

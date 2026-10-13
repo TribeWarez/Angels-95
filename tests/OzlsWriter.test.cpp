@@ -131,7 +131,7 @@ static int test_preserves_comments_and_order() {
 static int test_insert_new_key() {
     WriteFile(kBase);
     auto r = ozls::PatchOzlsStats(g_tmp, {
-        {"fire_sound", "GameData/Global/Sounds/Gun/gun.wav", ozls::StatKind::String},
+        {"fire_sound", "GameData/Audio/Sounds/Guns/gun.wav", ozls::StatKind::String},
         {"fire_volume", "0.9", ozls::StatKind::Float},
     });
     CHECK(r.ok);
@@ -141,7 +141,7 @@ static int test_insert_new_key() {
     const std::string after = ReadFile();
     // Appended INSIDE the stats block, i.e. before its closing brace and before
     // the actions block.
-    CHECK(HasLine(after, "        fire_sound = GameData/Global/Sounds/Gun/gun.wav\n"));
+    CHECK(HasLine(after, "        fire_sound = GameData/Audio/Sounds/Guns/gun.wav\n"));
     CHECK(HasLine(after, "        fire_volume = 0.9\n"));
     CHECK(after.find("fire_sound") < after.find("on_fire"));
 
@@ -150,7 +150,7 @@ static int test_insert_new_key() {
     auto s = def.stats.strings.find("fire_sound");
     CHECK(s != def.stats.strings.end());
     if (s != def.stats.strings.end())
-        CHECK_STR(s->second, "GameData/Global/Sounds/Gun/gun.wav");
+        CHECK_STR(s->second, "GameData/Audio/Sounds/Guns/gun.wav");
     auto v = def.stats.floats.find("fire_volume");
     CHECK(v != def.stats.floats.end());
     if (v != def.stats.floats.end())
@@ -333,7 +333,7 @@ static int test_serialize_roundtrip() {
     src.mesh = "Rifle_01.glb";
     src.stats.floats["damage"] = 20.0f;
     src.stats.floats["fire_rate"] = 0.125f;
-    src.stats.strings["fire_sound"] = "GameData/Global/Sounds/Gun/g.wav";
+    src.stats.strings["fire_sound"] = "GameData/Audio/Sounds/Guns/g.wav";
     // vec3s holds a raw float[3]; brace-init into it is not a valid assignment.
     src.stats.vec3s["viewmodel_offset"][0] = 0.3f;
     src.stats.vec3s["viewmodel_offset"][1] = -0.22f;
@@ -352,7 +352,7 @@ static int test_serialize_roundtrip() {
     CHECK(back.stats.floats.find("damage")->second == 20.0f);
     CHECK(back.stats.floats.find("fire_rate")->second > 0.124f);
     CHECK_STR(back.stats.strings.find("fire_sound")->second,
-              "GameData/Global/Sounds/Gun/g.wav");
+              "GameData/Audio/Sounds/Guns/g.wav");
     CHECK(back.stats.vec3s.find("viewmodel_offset") != back.stats.vec3s.end());
     CHECK(back.actions.size() == 1);
     CHECK_STR(back.actions[0].name, "on_fire");

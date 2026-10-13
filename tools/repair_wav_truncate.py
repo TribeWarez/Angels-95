@@ -1,5 +1,5 @@
 """
-Repair GameData/Global/Sounds/Gun/machgf3b.wav.
+Repair GameData/Audio/Sounds/Guns/machgf3b.wav.
 
 The shipped file has trailing junk bytes after the audio `data` chunk: the RIFF
 size header accounts for 65510 bytes but the `data` chunk only declares 65466.
@@ -10,7 +10,7 @@ container, and drops anything after the final chunk. The repaired file has a
 consistent RIFF size and decodes cleanly.
 
 Run from repo root:
-    py tools/repair_wav_truncate.py GameData/Global/Sounds/Gun/machgf3b.wav
+    py tools/repair_wav_truncate.py GameData/Audio/Sounds/Guns/machgf3b.wav
 """
 
 import struct

@@ -771,7 +771,7 @@ void OmegaTechInit()
     OmegaTechData.BtnClicked = LoadTexture("GameData/Global/Title/menu_button_clicked.png");
     if (IsPathFile("GameData/Global/Title/Title.mpg"))
         OmegaTechData.HomeScreenVideo = ray_video_open("GameData/Global/Title/Title.mpg");
-    OmegaTechData.HomeScreenMusic = LoadMusicWithFallback("GameData/Global/Title/Title.mp3");
+    OmegaTechData.HomeScreenMusic = LoadMusicWithFallback("GameData/Audio/Music/Title.mp3");
 
     OmegaTechTextSystem.Bar = LoadTextureWithFallback("GameData/Global/TextBar.png");
     OmegaTechTextSystem.BarFont = LoadFontWithFallback("GameData/Global/Font.ttf");

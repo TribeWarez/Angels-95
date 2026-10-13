@@ -12,7 +12,7 @@ entity "flux_carbine" : weapon {
         spread = 2.0
         // Sound stats: quote-free, space-free asset paths. The fastest-firing
         // weapon, so pitched up a little to separate it from the rifle.
-        fire_sound = GameData/Global/Sounds/Gun/machgf3b.wav
+        fire_sound = GameData/Audio/Sounds/Guns/machgf3b.wav
         fire_volume = 0.85
         fire_pitch = 1.15
     }

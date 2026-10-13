@@ -3,7 +3,7 @@ entity "acidpool" : skyzone {
         on_enter {
             wtflag 0 1
             var timer = 60
-            play_sound "GameData/Global/Sounds/Hurt.mp3"
+            play_sound "GameData/Audio/Sounds/Entities/Hurt.mp3"
             msg "Acid! The pooled run-off burns your boots!"
         }
         on_tick {

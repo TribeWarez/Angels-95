@@ -34,8 +34,8 @@ void ShowSoundManager(bool show) {
 }
 
 void ScanSoundBrowserFiles() {
-    ScanFilesAndPackages("Global/Sounds", { ".wav", ".ogg", ".mp3" }, g_sfxFiles);
-    ScanFilesAndPackages("Global/Sounds/Ambience", { ".wav", ".ogg", ".mp3" }, g_ambFiles);
+    ScanFilesAndPackages("Audio/Sounds", { ".wav", ".ogg", ".mp3" }, g_sfxFiles);
+    ScanFilesAndPackages("Audio/Ambience", { ".wav", ".ogg", ".mp3" }, g_ambFiles);
     ScanFilesAndPackages("", { ".wav", ".ogg", ".mp3" }, g_musicFiles);
     if (g_editorPanels.hSoundMgr)
         SendMessage((HWND)g_editorPanels.hSoundMgr, WM_USER + 50, 0, 0);

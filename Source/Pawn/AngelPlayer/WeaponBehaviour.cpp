@@ -82,7 +82,7 @@ void WeaponBehaviour::FireWeapon(Camera3D& cam) {
         PlayWeaponSound("swing_sound", "swing_volume", "swing_pitch", "");
     } else {
         PlayWeaponSound("fire_sound", "fire_volume", "fire_pitch",
-                        "GameData/Global/Sounds/Gun/machgf3b.wav");
+                        "GameData/Audio/Sounds/Guns/machgf3b.wav");
     }
 
     oz::ViewModel::Instance().TriggerFire();

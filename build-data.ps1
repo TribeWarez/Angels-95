@@ -114,13 +114,13 @@ if (Test-Path $itemsDir) {
 }
 
 # --- Sounds ---
-$sndDir = "$GAMEDATA\Global\Sounds"
+$sndDir = "$GAMEDATA\Audio\Sounds"
 if (Test-Path $sndDir) {
     Run-OzPack "OZSD" "$sndDir" "$OUT_SND\global.ozsnd"
 }
 
 # --- Music (ambience) ---
-$ambDir = "$GAMEDATA\Global\Sounds\Ambience"
+$ambDir = "$GAMEDATA\Audio\Ambience"
 if (Test-Path $ambDir) {
     Run-OzPack "OZMX" $ambDir "$OUT_MUS\ambience.ozmux"
 }

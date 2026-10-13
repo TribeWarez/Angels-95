@@ -14,7 +14,7 @@ entity "arc_bolt" : spell {
         projectile_count = 1
         projectile_scale = 0.9
         projectile_color = (0.45, 0.75, 1.0)
-        cast_sound = GameData/Global/Sounds/Magic/arc_bolt.wav
+        cast_sound = GameData/Audio/Sounds/Skills/arc_bolt.wav
         cast_volume = 0.8
     }
     actions {

@@ -13,7 +13,7 @@ entity "frost_lance" : spell {
         spread = 14.0
         projectile_scale = 1.1
         projectile_color = (0.72, 0.92, 1.0)
-        cast_sound = GameData/Global/Sounds/Magic/frost_lance.wav
+        cast_sound = GameData/Audio/Sounds/Skills/frost_lance.wav
         cast_volume = 0.9
     }
     actions {

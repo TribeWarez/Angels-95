@@ -20,7 +20,7 @@ entity "pistol_01" : weapon {
         viewmodel_rot = (0, 90, 0)
         viewmodel_scale = 1.0
         // Sound stats: quote-free, space-free asset paths.
-        fire_sound = GameData/Global/Sounds/Gun/machgf3b.wav
+        fire_sound = GameData/Audio/Sounds/Guns/machgf3b.wav
         fire_volume = 0.9
     }
     actions {
