@@ -58,7 +58,7 @@ add box -15 2 5 10 10 0.5 0 texScaleU=16 texScaleV=16
 add box 15 2 5 10 10 0.5 0 texScaleU=16 texScaleV=16
 add cyl -5 10 5 0.4 0.4 10 16 0
 add cyl 5 10 5 0.4 0.4 10 16 0
-add box -5 10 4.75 20 0.5 17 0 texScaleU=8 texScaleV=8
+add box -5 10 5.75 20 0.5 17 0 texScaleU=8 texScaleV=8
 add box -7 22 5 6 10 0.5 0 texScaleU=16 texScaleV=16
 add box 7 22 5 6 10 0.5 0 texScaleU=16 texScaleV=16
 add box 0 50 5 20 10 0.5 0 texScaleU=16 texScaleV=16
@@ -73,7 +73,7 @@ add box 7 36 10 6 0.5 28 0 texScaleU=8 texScaleV=8
 add box 0 48 2 8 4 4 0 texScaleU=16 texScaleV=16
 add box -4 20 5 0.5 10 4 0 texScaleU=16 texScaleV=16
 add box 4 20 5 0.5 10 4 0 texScaleU=16 texScaleV=16
-add box 0 20 4.75 8 0.5 4 0 texScaleU=8 texScaleV=8
+add box 0 20 5.75 8 0.5 4 0 texScaleU=8 texScaleV=8
 add box 25 38 5 22 10 0.5 0 texScaleU=16 texScaleV=16
 add box 36 30 5 0.5 10 16 0 texScaleU=16 texScaleV=16
 add box 25 22 5 22 10 0.5 0 texScaleU=16 texScaleV=16
@@ -136,9 +136,9 @@ add box 42 26 5 12 10 0.5 0 texScaleU=16 texScaleV=16
 add box 42 22 5 12 10 0.5 0 texScaleU=16 texScaleV=16
 add box 42 24 10 12 0.5 4 0 texScaleU=8 texScaleV=8
 add box -24 36 -6 32 0.5 6 0 texScaleU=8 texScaleV=8
-add box -24 39 -6 32 5 0.5 0 texScaleU=16 texScaleV=16
-add box -24 33 -6 32 5 0.5 0 texScaleU=16 texScaleV=16
-add box -24 36 -1.5 32 0.5 6 0 texScaleU=8 texScaleV=8
+add box -24 39 -4.5 32 8 0.5 0 texScaleU=16 texScaleV=16
+add box -24 33 -4.5 32 8 0.5 0 texScaleU=16 texScaleV=16
+add box -24 36 -0.25 32 0.5 6 0 texScaleU=8 texScaleV=8
 add box -40 36 -3 4 6 6 0 texScaleU=16 texScaleV=16
 add box 0 36 -6 16 0.5 24 0 texScaleU=8 texScaleV=8
 add box 8 36 -6 0.5 5 24 0 texScaleU=16 texScaleV=16
@@ -149,9 +149,9 @@ add box 0 36 -0.25 16 0.5 24 0 texScaleU=8 texScaleV=8
 add cyl -3 30 -3 0.4 0.4 6 16 0
 add cyl 3 42 -3 0.4 0.4 6 16 0
 add box 0 11 -6 6 0.5 34 0 texScaleU=8 texScaleV=8
-add box 3 11 -6 0.5 5 34 0 texScaleU=16 texScaleV=16
-add box -3 11 -6 0.5 5 34 0 texScaleU=16 texScaleV=16
-add box 0 11 -1.5 6 0.5 34 0 texScaleU=8 texScaleV=8
+add box 3 11 -4.5 0.5 8 34 0 texScaleU=16 texScaleV=16
+add box -3 11 -4.5 0.5 8 34 0 texScaleU=16 texScaleV=16
+add box 0 11 -0.25 6 0.5 34 0 texScaleU=8 texScaleV=8
 add box 0 -5 -3 6 6 4 0 texScaleU=16 texScaleV=16
 add box -78 -4.5 4.5 4 9 3 0 3 texScaleU=16 texScaleV=16
 add box -78 6.5 4.5 4 9 3 0 3 texScaleU=16 texScaleV=16

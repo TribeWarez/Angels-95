@@ -159,13 +159,18 @@ struct ModelBounds {
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        printf("usage: worldcheck <world.ozone> [--glb-bounds <file.json>]\n");
+        printf("usage: worldcheck <world.ozone> [--glb-bounds <file.json>] [--headroom-all]\n");
         return 2;
     }
     std::string worldPath = argv[1];
     std::string glbJson;
-    for (int i = 2; i + 1 < argc; i++)
-        if (std::strcmp(argv[i], "--glb-bounds") == 0) glbJson = argv[i + 1];
+    // List every headroom trap instead of the first 8. The count is what CI
+    // sees; a full list is what you need to actually go and fix them.
+    bool headroomAll = false;
+    for (int i = 2; i < argc; i++) {
+        if (std::strcmp(argv[i], "--glb-bounds") == 0 && i + 1 < argc) glbJson = argv[i + 1];
+        else if (std::strcmp(argv[i], "--headroom-all") == 0)    headroomAll = true;
+    }
 
     std::string worldDir = dirName(worldPath);
     printf("=== worldcheck: %s ===\n", worldPath.c_str());
@@ -484,7 +489,7 @@ int main(int argc, char** argv) {
                                         // under a pergola), and failing CI on those would block
                                         // every unrelated change. Reported with a count and the
                                         // first few locations so it stays actionable.
-                                        if (traps <= 8) {
+                                        if (headroomAll || traps <= 8) {
                                             char buf[340];
                                             snprintf(buf, sizeof buf,
                                                      "headroom %.2fu at (%.1f, %.1f) over a floor top at "
