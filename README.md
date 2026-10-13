@@ -72,7 +72,7 @@ one zone of every zone type, and a portal to Dust Ravine.
   pickups, weapons, NPCs, and scripted sky/zone triggers (`on_enter`,
   `on_tick`, `on_collect`, …) with actions like `heal`, `damage`, `msg`,
   `consume`, `playerstat`, `spawn_pickup`, `spawn_pawn`.
-- **Data-driven pawn system** — NPC defs in `GameData/Global/PawnDefs/*.cfg`
+- **Data-driven pawn system** — NPC defs in `GameData/Pawn/PawnDefs/*.cfg`
   with an IDLE/PATROL/CHASE/RETURN/DEAD state machine.
 - **Weapons & combat** — ranged (projectiles, ammo/reload/magazine) and melee
   (`reach`, `on_swing`/`on_hit`) defined as `.ozls` entities.

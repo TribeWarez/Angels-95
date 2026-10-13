@@ -278,7 +278,7 @@ traps).
 A `light` line's `name=` resolves an `.ozls` def of type `: light` — exactly
 the way a zone's `name=` resolves its skyzone def. A world-scoped `torch.ozls`
 sitting beside `World.ozone` is picked up automatically; the reference def is
-`GameData/Global/Lights/Light.ozls`.
+`GameData/Pawn/Lights/Light.ozls`.
 
 ```
 light point 0 0 4 255 180 90 1.2 12 name=torch flare=1

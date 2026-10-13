@@ -17,14 +17,14 @@ double now_seconds() {
 
 // The guaranteed default. Chosen because it is rigged and carries its own
 // embedded textures, so it cannot be broken by losing a sibling PNG.
-constexpr const char* kDefaultMesh = "GameData/Global/Player/Plague_Arcanist.glb";
+constexpr const char* kDefaultMesh = "GameData/Pawn/Player/Plague_Arcanist.glb";
 // Last rung before the placeholder. Static and tiny; kept because a 61 KB file
 // is worth having when the 4 MB default is missing.
-constexpr const char* kLegacyMesh  = "GameData/Global/Player/Character_Killer_01.glb";
-constexpr const char* kLegacyTex   = "GameData/Global/Player/Character_Killer_01.png";
+constexpr const char* kLegacyMesh  = "GameData/Pawn/Player/Character_Killer_01.glb";
+constexpr const char* kLegacyTex   = "GameData/Pawn/Player/Character_Killer_01.png";
 
 // Directory handed to MeshCache for relative-path resolution. Note this differs
-// from the historical `GameData/Global/Player/`, because the def's `mesh` is a
+// from the historical `GameData/Pawn/Player/`, because the def's `mesh` is a
 // repo-root path and `ResolveMeshAsset` already passes GameData-rooted and
 // absolute paths through verbatim — pointing baseDir at the Player folder only
 // helped one of the two naming styles.

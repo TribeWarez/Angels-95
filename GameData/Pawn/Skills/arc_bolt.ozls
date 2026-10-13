@@ -1,7 +1,7 @@
 // Arc Bolt - the cheapest offensive spell. Single fast projectile on mana.
 // The tutorial spell: low cost, short cooldown, one bolt.
 entity "arc_bolt" : spell {
-    icon = "GameData/Global/Spells/arc_bolt.png"
+    icon = "GameData/Tex/Global/Skills/arc_bolt.png"
     stats {
         // Cost comes from mana unless cost_type says psychic_energy.
         mana_cost = 12

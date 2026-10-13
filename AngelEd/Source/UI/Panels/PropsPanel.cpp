@@ -388,7 +388,7 @@ const StatSpec* StatSchemaFor(EntityType type, int* outCount) {
     switch (type) {
         case EntityType::WEAPON: return set(kWeaponStats, (int)(sizeof(kWeaponStats)/sizeof(StatSpec)));
         case EntityType::PAWN:   return set(kPawnStats,   (int)(sizeof(kPawnStats)/sizeof(StatSpec)));
-        // Player.ozls is declared `: upgrade` (see GameData/Global/Objects),
+        // Player.ozls is declared `: upgrade` (see GameData/Tex/Global/Models),
         // so match on the def NAME as well - there is no dedicated player type.
         case EntityType::UPGRADE: return set(kPlayerStats, (int)(sizeof(kPlayerStats)/sizeof(StatSpec)));
         case EntityType::LIGHT:   return set(kLightStats,  (int)(sizeof(kLightStats)/sizeof(StatSpec)));
@@ -1777,7 +1777,7 @@ static void FillDefBlock(const std::string& defName, const std::string& fallback
     // No .ozls def - PawnDefs/*.cfg-only pawn fallback.
     if (addPawnDefFields(defName)) {
         std::string path = fallbackPath.empty()
-            ? ("GameData/Global/PawnDefs/" + defName + ".cfg") : fallbackPath;
+            ? ("GameData/Pawn/PawnDefs/" + defName + ".cfg") : fallbackPath;
         if (!fs::exists(path)) path.clear();
         P.propDefPath = path;
         P.propDefTitle = defName + "  [pawn - PawnDefs only]";
@@ -1888,7 +1888,7 @@ if (!z.name.empty()) FillDefBlock(z.name, "");
         } else if (g_editorPanels.propsTargetType == sel::SPAWN) {
             // `playerstart x y z yaw` carries no name, so the def is resolved by
             // a fixed name instead of a world lookup - the player a spawn points
-            // at is always the "Player" def (GameData/Global/Objects/
+            // at is always the "Player" def (GameData/Tex/Global/Models/
             // Player.ozls). This branch did not exist, so a PlayerStart showed
             // no def section at all and its .ozls stats (health, mana,
             // jump_sound, ...) were unreachable from the editor.

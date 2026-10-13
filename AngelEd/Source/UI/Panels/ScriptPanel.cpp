@@ -38,12 +38,12 @@ struct ScriptListEntry {
 static std::vector<ScriptListEntry> g_scripts;
 static bool s_scriptNewMode = false;
 
-// Folder for newly created defs, by entity type
+// Folder for newly created defs, by entity type. Paths are relative to GameData.
+// Skyzones are handled at the call site: they belong to the world being edited.
 static const char* ScriptFolderForType(const std::string& type) {
-    if (type == "weapon") return "gun";
-    if (type == "pawn") return "Pawns";
-    if (type == "skyzone") return "Zones";
-    return "Items"; // pickup / consumable / upgrade / armor
+    if (type == "weapon") return "Tex/Global/Gun";
+    if (type == "pawn") return "Pawn/Pawns";
+    return "Tex/Global/Items"; // pickup / consumable / upgrade / armor
 }
 
 // Minimal .ozls skeleton per type
@@ -236,7 +236,16 @@ static LRESULT CALLBACK ScriptMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
                 MessageBoxA(hwnd, "Script name must not be empty.", "New Script", MB_OK);
                 break;
             }
-            fs::path dir = fs::current_path() / "GameData" / "Global" / ScriptFolderForType(type);
+            // A skyzone def describes the open world's sky, so it is written next to
+            // World.ozone - LoadWorldOverrides resolves world defs by their path.
+            fs::path dir;
+            if (type == "skyzone") {
+                std::string worldDir = Editor_GetCurrentWorldDir();
+                dir = worldDir.empty() ? (fs::current_path() / "GameData" / "Worlds")
+                                       : fs::path(worldDir);
+            } else {
+                dir = fs::current_path() / "GameData" / ScriptFolderForType(type);
+            }
             std::error_code ec;
             fs::create_directories(dir, ec);
             fs::path out = dir / (name + ".ozls");

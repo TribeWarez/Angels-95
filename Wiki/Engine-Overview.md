@@ -281,7 +281,7 @@ interrupt weapon mechanics or NPC ticks. Client-only/cosmetic (not networked).
 
 ## Pawn System
 
-NPC definitions are loaded from `GameData/Global/PawnDefs/*.cfg` (name, speed, aggroRange, attackRange, damage, maxHealth, sprite_path, scream_path). Fallback hardcoded defs: Walker, Skaarj, Brute, Floater.
+NPC definitions are loaded from `GameData/Pawn/PawnDefs/*.cfg` (name, speed, aggroRange, attackRange, damage, maxHealth, sprite_path, scream_path). Fallback hardcoded defs: Walker, Skaarj, Brute, Floater.
 
 FSM states: IDLE, PATROL, CHASE, RETURN, DEAD (no ATTACK state — see
 `Source/Pawn/OzPawnSystem.hpp:25`). State transitions fire `.ozls` actions

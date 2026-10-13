@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "raylib.h"
 #include "../Renderer/LitLightning.hpp"
 #include "../Renderer/Mesh/MeshCache.hpp"
@@ -52,8 +52,8 @@ struct PawnDef {
     float attackRange = 1.5f;
     float damage = 10.0f;
     int maxHealth = 100;
-    std::string sprite_path;    // texture path (convention: GameData/Global/Pawn/<name>.png)
-    std::string scream_path;    // sound path (convention: GameData/Global/Pawn/<name>.wav)
+    std::string sprite_path;    // texture path (convention: GameData/Pawn/Pawns/<name>.png)
+    std::string scream_path;    // sound path (convention: GameData/Pawn/Pawns/<name>.wav)
     // Optional 3D model — when set (and loadable) the pawn renders as a real
     // model instead of a 2D billboard. Paths may be GameData-rooted or relative
     // to the .cfg that defined them.

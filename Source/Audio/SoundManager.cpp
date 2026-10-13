@@ -167,7 +167,7 @@ Sound SoundManager::LoadPawnScream(const std::string& defName,
             return snd;
     }
     // Convention fallbacks shipped next to the pawn sprites.
-    const std::string base = "GameData/Global/Pawn/" + defName;
+    const std::string base = "GameData/Pawn/Pawns/" + defName;
     for (const char* ext : {".wav", ".mp3"}) {
         Sound snd = LoadSoundWithFallback((base + ext).c_str());
         if (snd.frameCount > 0)

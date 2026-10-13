@@ -91,7 +91,7 @@ static AssetScopeItem Pkg(const char* name, const char* key) {
 static void test_root_shape() {
     printf("root shape\n");
     std::vector<AssetScopeItem> items = {
-        Loose("hero", "C:/repo/GameData/Global/Player/hero.glb"),
+        Loose("hero", "C:/repo/GameData/Pawn/Player/hero.glb"),
     };
     AssetScopeNode r = BuildAssetScope(items, "");
     check(r.label == "Assets", "root is labelled Assets");
@@ -99,8 +99,8 @@ static void test_root_shape() {
     check(r.children.size() == 1, "only the (GameData) scope appears when no packages");
 
     std::vector<AssetScopeItem> both = {
-        Loose("hero", "C:/repo/GameData/Global/Player/hero.glb"),
-        Pkg("hero", "Global/Player/hero.glb"),
+        Loose("hero", "C:/repo/GameData/Pawn/Player/hero.glb"),
+        Pkg("hero", "Pawn/Player/hero.glb"),
     };
     AssetScopeNode r2 = BuildAssetScope(both, "");
     check(r2.children.size() == 2, "both scopes appear when there is a package entry");
@@ -113,8 +113,8 @@ static void test_root_shape() {
 static void test_path_anchoring() {
     printf("path anchoring\n");
     std::vector<AssetScopeItem> items = {
-        Loose("hero", "C:/repo/GameData/Global/Player/hero.glb"),
-        Pkg("hero", "Global/Player/hero.glb"),
+        Loose("hero", "C:/repo/GameData/Pawn/Player/hero.glb"),
+        Pkg("hero", "Pawn/Player/hero.glb"),
     };
     AssetScopeNode r = BuildAssetScope(items, "");
 
@@ -127,20 +127,20 @@ static void test_path_anchoring() {
     check(gd && Child(*gd, "repo") == nullptr, "the repo directory is not shown");
     check(gd && Child(*gd, "GameData") == nullptr, "the GameData anchor itself is hidden");
 
-    const AssetScopeNode* g = gd ? Child(*gd, "Global") : nullptr;
+    const AssetScopeNode* g = gd ? Child(*gd, "Pawn") : nullptr;
     const AssetScopeNode* p = g ? Child(*g, "Player") : nullptr;
     const AssetScopeNode* leaf = p ? Child(*p, "hero") : nullptr;
-    check(leaf != nullptr, "loose file nests under Global/Player");
+    check(leaf != nullptr, "loose file nests under Pawn/Player");
     check(leaf && leaf->entryIndex == 0, "loose leaf carries its index into the items vector");
 
     // Same file, same visible path - only the root differs.
-    const AssetScopeNode* pg = pk ? Child(*pk, "Global") : nullptr;
+    const AssetScopeNode* pg = pk ? Child(*pk, "Pawn") : nullptr;
     check(pg && Child(*pg, "Player") && Child(*pg, "Player")->children.size() == 1,
           "package key is used whole, with no anchor to strip");
     std::string gdPaths = gd ? PathsUnder(*gd) : "";
     std::string pkPaths = pk ? PathsUnder(*pk) : "";
-    check(gdPaths == "Global/Player/hero;", "GameData side path is relative to GameData/");
-    check(pkPaths == "Global/Player/hero;", "Packages side path is the package key verbatim");
+    check(gdPaths == "Pawn/Player/hero;", "GameData side path is relative to GameData/");
+    check(pkPaths == "Pawn/Player/hero;", "Packages side path is the package key verbatim");
 }
 
 // THE invariant from AGENTS.md: a package holding a same-named copy does not make the
@@ -188,9 +188,9 @@ static void test_package_extension_on_disk_is_not_a_package() {
 static void test_search_filter() {
     printf("search filter\n");
     std::vector<AssetScopeItem> items = {
-        Loose("Hero", "C:/repo/GameData/Global/Player/Hero.glb"),
+        Loose("Hero", "C:/repo/GameData/Pawn/Player/Hero.glb"),
         Loose("prop", "C:/repo/GameData/Global/Props/rock.glb"),
-        Pkg("Hero", "Global/Player/Hero.glb"),
+        Pkg("Hero", "Pawn/Player/Hero.glb"),
     };
 
     AssetScopeNode byName = BuildAssetScope(items, "hero");

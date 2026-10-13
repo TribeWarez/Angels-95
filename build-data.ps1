@@ -143,14 +143,14 @@ if (Test-Path $skyDir) {
     Run-OzPack "OZTX" $skyDir "$OUT_TEX\sky.oztex"
 }
 
-# --- Pawn sprites/screams (Global/Pawn: <Name>.png / .mp3) ---
-$pawnDir = "$GAMEDATA\Global\Pawn"
+# --- Pawn defs + models + sprites (Pawn/Pawns: *.ozls, *.glb/.gltf, <Name>.png) ---
+$pawnDir = "$GAMEDATA\Pawn\Pawns"
 if (Test-Path $pawnDir) {
-    Run-OzPack "OZTX" $pawnDir "$OUT_TEX\pawn.oztex"
+    Run-OzPack "OZPK" $pawnDir "$OUT\pawns.ozpak"
 }
 
-# --- Player character model (Global/Player: *.glb + textures) ---
-$playerDir = "$GAMEDATA\Global\Player"
+# --- Player character model (Pawn/Player: *.glb + textures) ---
+$playerDir = "$GAMEDATA\Pawn\Player"
 if (Test-Path $playerDir) {
     Run-OzPack "OZPK" $playerDir "$OUT\player.ozpak"
 }
@@ -167,19 +167,12 @@ if (Test-Path $animsDir) {
     Run-OzPack "OZPK" $animsDir "$OUT\anims.ozpak"
 }
 
-# --- Ethereal / angelic skill tree nodes (Global/Skills: *.ozls) ---
-$skillsDir = "$GAMEDATA\Global\Skills"
+# --- Skill tree + spell defs (Pawn/Skills: *.ozls). ---
+$skillsDir = "$GAMEDATA\Pawn\Skills"
 if (Test-Path $skillsDir) {
     Run-OzPack "OZPK" $skillsDir "$OUT\skills.ozpak"
 }
 
-# --- Spells (Global/Spells: *.ozls). The registry also reads these loose from
-# GameData/, but the distributed System/ bundle carries only System\Data\*.oz*,
-# so without this block spell defs would be missing from a release build. ---
-$spellsDir = "$GAMEDATA\Global\Spells"
-if (Test-Path $spellsDir) {
-    Run-OzPack "OZPK" $spellsDir "$OUT\spells.ozpak"
-}
 
 Write-Step "=== Packaging Worlds ==="
 

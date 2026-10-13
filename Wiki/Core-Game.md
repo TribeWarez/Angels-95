@@ -141,7 +141,7 @@ IDLE -> PATROL -> CHASE -> RETURN -> DEAD
 - **RETURN**: goes back to spawn if target strays too far
 - **DEAD**: despawned state after health reaches zero
 
-NPCs are configured data-driven from `GameData/Global/PawnDefs/*.cfg` (name, speed, aggroRange, attackRange, damage, maxHealth) or via fallback hardcoded defs: Walker, Skaarj, Brute, Floater.
+NPCs are configured data-driven from `GameData/Pawn/PawnDefs/*.cfg` (name, speed, aggroRange, attackRange, damage, maxHealth) or via fallback hardcoded defs: Walker, Skaarj, Brute, Floater.
 
 ## Networking
 

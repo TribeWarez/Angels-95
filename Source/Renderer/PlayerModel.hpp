@@ -21,9 +21,9 @@ namespace oz {
 // RESOLUTION ORDER (first that loads wins, and the winner is logged)
 //   1. `mesh` / `texture` on the "Player" LightningScript def, when it names a
 //      mesh. This is the authoring hook — point it anywhere.
-//   2. GameData/Global/Player/Plague_Arcanist.glb — the guaranteed default.
+//   2. GameData/Pawn/Player/Plague_Arcanist.glb — the guaranteed default.
 //      Rigged, embedded textures, no external file to lose.
-//   3. GameData/Global/Player/Character_Killer_01.glb + .png — the historical
+//   3. GameData/Pawn/Player/Character_Killer_01.glb + .png — the historical
 //      default. Static, so it can never animate, but it is tiny.
 //   4. Nothing loaded: the caller draws a primitive placeholder.
 //

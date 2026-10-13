@@ -164,7 +164,7 @@ int main(int argc, char **argv){
     // Load pawn definitions from config files (data-driven)
     {
         auto& ps = PawnSystem::Instance();
-        const char* defsDir = "GameData/Global/PawnDefs";
+        const char* defsDir = "GameData/Pawn/PawnDefs";
         if (fs::exists(defsDir)) {
             int loaded = 0;
             for (auto& entry : fs::directory_iterator(defsDir)) {
@@ -242,7 +242,7 @@ int main(int argc, char **argv){
                     if (!sp.empty())
                         PawnManagerAddPawn(name.c_str(), sp.c_str());
                     else
-                        PawnManagerAddPawn(name.c_str(), (std::string("GameData/Global/Pawn/") + name + ".png").c_str());
+                        PawnManagerAddPawn(name.c_str(), (std::string("GameData/Pawn/Pawns/") + name + ".png").c_str());
                     loaded++;
                     EditorLog("Loaded pawn def: %s", name.c_str());
                 }
@@ -253,16 +253,16 @@ int main(int argc, char **argv){
             EditorLog("WARN: %s not found, using hardcoded defaults", defsDir);
             {
                 PawnDef d; d.name="Walker"; d.speed=1.5f; d.aggroRange=6.0f; d.attackRange=1.5f; d.damage=10.0f; d.maxHealth=100; ps.RegisterDef(d);
-                PawnManagerAddPawn("Walker", "GameData/Global/Pawn/Walker.png");
+                PawnManagerAddPawn("Walker", "GameData/Pawn/Pawns/Walker.png");
             } {
                 PawnDef d; d.name="Skaarj"; d.speed=2.5f; d.aggroRange=10.0f; d.attackRange=2.0f; d.damage=20.0f; d.maxHealth=150; ps.RegisterDef(d);
-                PawnManagerAddPawn("Skaarj", "GameData/Global/Pawn/Skaarj.png");
+                PawnManagerAddPawn("Skaarj", "GameData/Pawn/Pawns/Skaarj.png");
             } {
                 PawnDef d; d.name="Brute"; d.speed=1.0f; d.aggroRange=4.0f; d.attackRange=1.5f; d.damage=30.0f; d.maxHealth=250; ps.RegisterDef(d);
-                PawnManagerAddPawn("Brute", "GameData/Global/Pawn/Brute.png");
+                PawnManagerAddPawn("Brute", "GameData/Pawn/Pawns/Brute.png");
             } {
                 PawnDef d; d.name="Floater"; d.speed=1.2f; d.aggroRange=8.0f; d.attackRange=3.0f; d.damage=15.0f; d.maxHealth=80; ps.RegisterDef(d);
-                PawnManagerAddPawn("Floater", "GameData/Global/Pawn/Floater.png");
+                PawnManagerAddPawn("Floater", "GameData/Pawn/Pawns/Floater.png");
             }
         }
     }

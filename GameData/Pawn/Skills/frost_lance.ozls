@@ -2,7 +2,7 @@
 // the shots across the aim direction rather than jittering them, so it reads as
 // a deliberate volley instead of one shot with noise.
 entity "frost_lance" : spell {
-    icon = "GameData/Global/Spells/frost_lance.png"
+    icon = "GameData/Tex/Global/Skills/frost_lance.png"
     stats {
         mana_cost = 34
         cooldown = 1.8

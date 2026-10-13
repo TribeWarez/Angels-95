@@ -14,7 +14,7 @@
 // a wave of silent failures rather than one clear error. Two were reported from a real
 // session and neither said so:
 //
-//   WARN: GameData/Global/PawnDefs not found, using hardcoded defaults
+//   WARN: GameData/Pawn/PawnDefs not found, using hardcoded defaults
 //   Skybox: could not load 'GameData/Tex/Global/Sky/sky_noon.png'
 //
 // The previous code handled exactly one case: cwd whose final component is literally

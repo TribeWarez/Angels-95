@@ -129,11 +129,11 @@ int PawnSystem::Spawn(Vector3 pos, const char* defName) {
         if (!def->sprite_path.empty())
             p.sprite = LoadTextureWithFallback(def->sprite_path.c_str());
         if (p.sprite.id == 0) {
-            std::string fallbackSprite = std::string("GameData/Global/Pawn/") + defName + ".png";
+            std::string fallbackSprite = std::string("GameData/Pawn/Pawns/") + defName + ".png";
             p.sprite = LoadTextureWithFallback(fallbackSprite.c_str());
         }
 
-        // Aggro stinger: explicit def path, then GameData/Global/Pawn/<name>.{wav,mp3}
+        // Aggro stinger: explicit def path, then GameData/Pawn/Pawns/<name>.{wav,mp3}
         p.scream = SoundManager::LoadPawnScream(def->name, def->scream_path);
     }
 

@@ -3,7 +3,7 @@
 // spawning bolts. Costs PE, not mana, so it competes with Arc Bolt for the same
 // budget rather than being free alongside it.
 entity "void_nova" : spell {
-    icon = "GameData/Global/Spells/void_nova.png"
+    icon = "GameData/Tex/Global/Skills/void_nova.png"
     stats {
         cost_type = psychic_energy
         pe_cost = 45

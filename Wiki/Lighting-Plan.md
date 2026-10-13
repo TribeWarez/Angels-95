@@ -374,7 +374,7 @@ Recorded because they were found in the same audit and would otherwise be lost:
    simulation - and disables the *good* light gizmos, which live in `DrawEntities`.
 4. `restore_ambient` sets `{1,1,1,1}` under a comment claiming it matches the
    default, which is `{0.1,0.1,0.1,1}` - a script leaves the world 10x brighter.
-5. `GameData/Global/Lights/Light.Point.ozls` and `Light.Spot.ozls` are cited by name
+5. `GameData/Pawn/Lights/Light.Point.ozls` and `Light.Spot.ozls` are cited by name
    in `Placement.cpp` and `OzOzoneLoader.cpp` and **do not exist**; only `Light.ozls`
    ships. `Dust_Ravine` has `name=Light.Point` on two lights, which resolves to
    nothing, silently. **No spot light exists anywhere in the shipped worlds**, so the

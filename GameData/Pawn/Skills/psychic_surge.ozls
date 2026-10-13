@@ -2,7 +2,7 @@
 // alternative to Arc Bolt: roughly four times the damage for about four times
 // the cost, so it is a burst tool rather than a sustained one.
 entity "psychic_surge" : spell {
-    icon = "GameData/Global/Spells/psychic_surge.png"
+    icon = "GameData/Tex/Global/Skills/psychic_surge.png"
     stats {
         cost_type = psychic_energy
         pe_cost = 60

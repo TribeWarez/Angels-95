@@ -230,7 +230,7 @@ inline void ApplyUVTransform(const float* base, int vertexCount,
 // Precedence when resolving face f:
 //     face[f] if overridden  >  def  >  engine defaults
 //
-// This mirrors the rule GameData/Global/Lights/Light.ozls documents: a value
+// This mirrors the rule GameData/Pawn/Lights/Light.ozls documents: a value
 // the author set explicitly always wins over the shared default.
 // ---------------------------------------------------------------------------
 struct BrushSurface {

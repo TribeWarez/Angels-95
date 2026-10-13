@@ -6,7 +6,7 @@ entity "Player" : upgrade {
     // whose semantics are unknown, and guessing an idle/walk mapping would leave
     // the character playing an arbitrary animation. Rename the clips (editor
     // Anim panel) and set anim_idle / anim_chase here to switch it to skeletal.
-    mesh = "GameData/Global/Player/Plague_Arcanist.glb"
+    mesh = "GameData/Pawn/Player/Plague_Arcanist.glb"
     mesh_type = "static"
     // Rendered height in engine units for remote-player bodies. The character
     // GLBs are authored in metres while the collision box (PlayerMovement::

@@ -6,7 +6,7 @@
 // at the aimed point", and the effect is a spell-defined action, not always a
 // damage sweep. A self-cast is expressed as radius 0 + `targets_self`.
 entity "mend" : spell {
-    icon = "GameData/Global/Spells/mend.png"
+    icon = "GameData/Tex/Global/Skills/mend.png"
     stats {
         mana_cost = 25
         cooldown = 5.0

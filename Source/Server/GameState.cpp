@@ -27,9 +27,9 @@ static bool g_serverPawnDefsLoaded = false;
 static void seed_world_entities(WorldState& ws, const std::string& gamedata_dir);
 static void load_player_record(ServerPlayer& player, const std::string& gamedata_dir);
 
-static void load_server_pawn_defs() {
+static void load_server_pawn_defs(const std::string& gamedata_dir) {
     if (g_serverPawnDefsLoaded) return;
-    const char* defsDir = "GameData/Global/PawnDefs";
+    std::string defsDir = (gamedata_dir.empty() ? std::string("GameData") : gamedata_dir) + "/Pawn/PawnDefs";
     if (!fs::exists(defsDir)) {
         // Fallback hardcoded defs (match .cfg values)
         auto add = [&](const char* name, float speed, float aggro, float attack, float dmg, int hp) {
@@ -55,7 +55,7 @@ static void load_server_pawn_defs() {
         std::string name; float speed=1.5f, aggro=6.0f, attack=1.5f, dmg=10.0f; int hp=100;
         std::string line;
         // std::stof / std::stoi THROW on a non-numeric value and nothing caught them,
-        // so one typo in one GameData/Global/PawnDefs/*.cfg terminated the dedicated
+        // so one typo in one GameData/Pawn/PawnDefs/*.cfg terminated the dedicated
         // server during world init — no log line naming the file, no partial load, and
         // no way to tell a bad def from a bad build. OzoneParser wraps every stof for
         // exactly this reason. A malformed value now keeps the default and the rest of
@@ -214,7 +214,7 @@ void GameState::init_worlds(const std::string& gamedata_dir,
 
 void GameState::init_global_npcs_and_pickups(WorldState& ws) {
     // Load pawn defs from .cfg files (or fallback hardcoded)
-    load_server_pawn_defs();
+    load_server_pawn_defs(m_gamedata_dir);
     // Collect available type names for random assignment
     std::vector<std::string> pawnTypes;
     for (auto& [name, def] : g_serverPawnDefs)
@@ -329,7 +329,7 @@ static PickupType pickup_type_from_name(const std::string& name, bool& isWeapon)
 }
 
 static void seed_world_entities(WorldState& ws, const std::string& gamedata_dir) {
-    load_server_pawn_defs();
+    load_server_pawn_defs(gamedata_dir);
 
     std::string ozonePath = gamedata_dir + "/Worlds/" + ws.name + "/World.ozone";
     auto prims = OzoneParser::parse_file(ozonePath);

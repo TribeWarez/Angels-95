@@ -78,7 +78,7 @@ public:
     void PlayScream(const Sound& scream);
 
     // Resolve a pawn's aggro sound: the def's explicit scream_path first, then
-    // the conventional GameData/Global/Pawn/<name>.wav / .mp3 fallbacks.
+    // the conventional GameData/Pawn/Pawns/<name>.wav / .mp3 fallbacks.
     // Returns an empty Sound when nothing resolves.
     static Sound LoadPawnScream(const std::string& defName,
                                 const std::string& screamPath);

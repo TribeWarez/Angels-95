@@ -607,7 +607,7 @@ void OmegaTechInit()
     // Register pawn definitions from .cfg files (data-driven)
     {
         auto& ps = PawnSystem::Instance();
-        const char* defsDir = "GameData/Global/PawnDefs";
+        const char* defsDir = "GameData/Pawn/PawnDefs";
         namespace fs = std::filesystem;
         if (fs::exists(defsDir)) {
             int loaded = 0;
