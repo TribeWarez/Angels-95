@@ -79,7 +79,18 @@ struct ClientProjectile {
 class OmegaClient {
 public:
     OmegaClient() = default;
-    ~OmegaClient() { disconnect(); }
+    ~OmegaClient() {
+        // Disconnect first (its handler touches members that are still alive),
+        // then drop the callbacks. net::NetworkClient::~NetworkClient calls
+        // disconnect() unconditionally, so without this it fires
+        // on_disconnected() while THIS object is already being torn down - and
+        // m_msg_mutex, m_pickups, m_scores and friends are all declared after
+        // m_client, i.e. destroyed BEFORE it. Locking a destroyed mutex is
+        // undefined; glibc happens to tolerate it, and MSYS2's std::mutex
+        // reports it as std::system_error("Invalid argument") at process exit.
+        disconnect();
+        m_client.set_callbacks(net::ClientCallbacks{});
+    }
     OmegaClient(const OmegaClient&) = delete;
     OmegaClient& operator=(const OmegaClient&) = delete;
 
