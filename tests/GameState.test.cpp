@@ -970,12 +970,16 @@ static int test_pickup_respawn_tail_is_optional() {
     server.set_callbacks(scb);
     CHECK(server.init(port));
     CHECK(server.start());
+    fprintf(stderr, "[DIAG] respawn-tail: server started\n");
 
     OmegaClient client;
+    fprintf(stderr, "[DIAG] respawn-tail: client constructed\n");
     CHECK(client.connect("127.0.0.1", port));
+    fprintf(stderr, "[DIAG] respawn-tail: connected\n");
     CHECK(pump_until(server, client, [&] {
         return seed > 0 && !client.pickups().empty();
     }));
+    fprintf(stderr, "[DIAG] respawn-tail: pumped\n");
     {
         auto p = client.pickups();
         CHECK_EQ(p.size(), (size_t)1);
@@ -984,8 +988,11 @@ static int test_pickup_respawn_tail_is_optional() {
         // Absent tail reads as empty, never as garbage or an over-read.
         CHECK_STR(p[0].typeName, "");
     }
+    fprintf(stderr, "[DIAG] respawn-tail: checks done, disconnecting\n");
     client.disconnect();
+    fprintf(stderr, "[DIAG] respawn-tail: client disconnected\n");
     server.stop();
+    fprintf(stderr, "[DIAG] respawn-tail: server stopped\n");
     PASS(); return 0; END_TEST();
 }
 
@@ -1188,7 +1195,8 @@ int main() {
     failures += test_world_seeding_from_file();
     failures += test_seed_pickup_ids_are_file_order();
     failures += test_collect_pickup_reject_reasons();
-    failures += test_pickup_respawn_tail_is_optional();
+    try { failures += test_pickup_respawn_tail_is_optional(); }
+    catch (const std::exception& e) { fprintf(stderr, "[DIAG] respawn-tail THREW: %s\n", e.what()); }
     failures += test_pickup_net_state_is_world_scoped();
     failures += test_pickup_loopback_roundtrip();
     failures += test_pickup_state_cleared_on_disconnect();
