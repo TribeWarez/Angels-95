@@ -125,14 +125,15 @@ function Format-ReleaseBody {
   [void]$sb.AppendLine("- `AngelMaster-$Tag-linux-x86_64` / `AngelMaster-$Tag-windows-x86_64.exe` - master/listing server")
   [void]$sb.AppendLine("- `OzPack-$Tag-linux-x86_64` / `OzPack-$Tag-windows-x86_64.exe` - asset packer CLI")
   [void]$sb.AppendLine('')
-  [void]$sb.AppendLine("**Requires the full `System-$Tag.zip`** (ships raylib/GLFW DLLs, GameData, INI templates, run scripts):")
+  [void]$sb.AppendLine("**Requires the full `System-$Tag.zip`** (raylib/GLFW DLLs, the packaged assets in `System/Data`, INI templates, run scripts, `angels95-serv.service`; the client needs no loose GameData tree):")
   [void]$sb.AppendLine("- `Angels95-$Tag-linux-x86_64` / `Angels95-$Tag-windows-x86_64.exe` - game client")
   [void]$sb.AppendLine("- `AngelEd-$Tag-windows-x86_64.exe` - editor (Windows only; Win32 native panels)")
   [void]$sb.AppendLine('')
   [void]$sb.AppendLine('Platform notes:')
   [void]$sb.AppendLine('- Linux binaries are dynamically linked against the distro glibc; run on a modern x86_64 Linux.')
   [void]$sb.AppendLine('- `AngelEd` is Windows-only (Win32 API); there is no Linux build.')
-  [void]$sb.AppendLine('- For servers, see `System/angels95-serv.service` for VPS systemd units and `System/OzServer.ini` for config (`--bind 0.0.0.0` to accept remote clients).')
+  [void]$sb.AppendLine('- `AngelServ` reads loose world files (`--dir <GameData>` with `GameData/Worlds/<Name>/World.ozone`), so it needs a game-data checkout; the zip''s packaged data serves the client and editor.')
+  [void]$sb.AppendLine('- For VPS systemd units see `System/angels95-serv.service`; config lives in `System/OzServer.ini` (`--bind 0.0.0.0` to accept remote clients).')
   return $sb.ToString()
 }
 

@@ -148,7 +148,7 @@ GitHub Actions workflow (`.github/workflows/ci.yml`):
 5. Upload artifact
 
 Tags matching `b*` trigger a GitHub Release. The release contains:
-- `System-<tag>.zip` — full Windows bundle (client, editor, servers, raylib/GLFW DLLs, GameData, INI templates)
+- `System-<tag>.zip` — full Windows bundle (client, editor, servers, raylib/GLFW DLLs, the packaged assets in `System/Data`, INI templates, run scripts; no loose GameData tree - the client reads the packages)
 - **Per-binary assets** (directly downloadable, no build needed):
   - `AngelServ-<tag>-{linux-x86_64,windows-x86_64.exe}` — dedicated server
   - `AngelMaster-<tag>-{linux-x86_64,windows-x86_64.exe}` — master server
@@ -156,7 +156,7 @@ Tags matching `b*` trigger a GitHub Release. The release contains:
   - `Angels95-<tag>-{linux-x86_64,windows-x86_64.exe}` — client (Windows copy needs the zip's DLLs)
   - `AngelEd-<tag>-windows-x86_64.exe` — editor (**Windows only**, Win32 native panels)
 
-`AngelServ`/`AngelMaster`/`OzPack` are self-contained; `Angels95`/`AngelEd` need the `System-<tag>.zip` contents (raylib/GLFW DLLs + GameData).
+`AngelMaster`/`OzPack` are self-contained; `Angels95`/`AngelEd` need the `System-<tag>.zip` contents (raylib/GLFW DLLs + `System/Data` packages). `AngelServ` is self-contained but reads loose world files, so point `--dir` at a `GameData/` checkout.
 
 ## Running
 

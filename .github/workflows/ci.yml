@@ -177,15 +177,21 @@ jobs:
             - `AngelMaster-<tag>-<platform>` - master/listing server
             - `OzPack-<tag>-<platform>` - asset packer CLI
 
-            **Requires the full `System-<tag>.zip` (ships raylib/GLFW DLLs, GameData, INI templates, run scripts):**
+            **Requires the full `System-<tag>.zip`** (raylib/GLFW DLLs, the packaged
+            assets in `System/Data`, INI templates, run scripts,
+            `angels95-serv.service`). The client loads everything from the packages,
+            so the zip needs no loose GameData tree:
             - `Angels95-<tag>-windows-x86_64.exe` - game client
             - `AngelEd-<tag>-windows-x86_64.exe` - editor (Windows only; Win32 native panels)
 
             Platform notes:
             - Linux binaries are dynamically linked against the distro's glibc; run on a modern x86_64 Linux.
             - `AngelEd` is Windows-only (Win32 API); there is no Linux build.
-            - For servers, see `System/angels95-serv.service` for VPS systemd units
-              and `System/OzServer.ini` for config (`--bind 0.0.0.0` to accept remote clients).
+            - `AngelServ` reads loose world files, so it needs a game-data checkout
+              (`--dir <GameData>` containing `Worlds/<Name>/World.ozone`); the zip's
+              packaged data serves the client and the editor's asset browser.
+            - For VPS systemd units see `System/angels95-serv.service`; config lives in
+              `System/OzServer.ini` (`--bind 0.0.0.0` to accept remote clients).
           files: release/*
 
   windows:
@@ -386,6 +392,9 @@ jobs:
           & "`$PSScriptRoot\Angels95.exe"
           "@ | Set-Content System\run.ps1 -Encoding UTF8
 
+          # VPS systemd unit; the release notes point at System\angels95-serv.service.
+          Copy-Item tools\angels95-serv.service System\angels95-serv.service -Force
+
       - name: Package assets
         shell: msys2 {0}
         run: |
@@ -412,6 +421,25 @@ jobs:
             exit 1
           }
           Write-Host "All required EXEs present"
+
+          # The zip's GameData REPLACEMENT is the packaged data: without
+          # System/Data/*.oz* a bundle ships a client that finds no worlds,
+          # defs, HUD art or audio at all.
+          $pkgs = @(Get-ChildItem System\Data -Recurse -File -ErrorAction SilentlyContinue)
+          if ($pkgs.Count -lt 20) {
+            Write-Error "System\Data has only $($pkgs.Count) package file(s) - asset packaging did not run?"
+            exit 1
+          }
+          $zones = @(Get-ChildItem System\Data\Zones -File -ErrorAction SilentlyContinue)
+          if ($zones.Count -eq 0) {
+            Write-Error "System\Data\Zones has no world packages"
+            exit 1
+          }
+          Write-Host "Packaged data present: $($pkgs.Count) files, $($zones.Count) world(s)"
+          if (-not (Test-Path "System\angels95-serv.service")) {
+            Write-Error "System\angels95-serv.service missing (referenced by the release notes)"
+            exit 1
+          }
 
       - name: Upload System/ artifact
         uses: actions/upload-artifact@v4

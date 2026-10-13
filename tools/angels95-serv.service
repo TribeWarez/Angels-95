@@ -1,0 +1,32 @@
+# angels95-serv.service - the dedicated game server (AngelServ) as a VPS unit.
+#
+# The build scripts and CI copy this file into System/ next to the executables;
+# install it from there:
+#
+#   sudo cp System/angels95-serv.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now angels95-serv
+#
+# Adjust WorkingDirectory/ExecStart to the install root (the folder holding
+# GameData/ and System/). The server reads loose world files, so it needs a
+# game-data checkout: GameData/Worlds/<Name>/World.ozone. The master/listing
+# server (AngelMaster) has no game-data dependency and can run from anywhere;
+# give it its own unit with `ExecStart=.../System/AngelMaster --bind 0.0.0.0`.
+[Unit]
+Description=Angels95 dedicated server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/angels95
+ExecStart=/srv/angels95/System/AngelServ --port 27015 --http-port 8080 --dir /srv/angels95/GameData --bind 0.0.0.0
+Restart=on-failure
+RestartSec=5
+
+# Optional hardening / auth. OZ_AUTH_TOKEN gates the HTTP map API with a Bearer
+# token; OZ_ADMIN_TOKEN enables the COMMAND admin channel (list/say/kick).
+# Environment=OZ_AUTH_TOKEN=change-me
+# Environment=OZ_ADMIN_TOKEN=change-me
+
+[Install]
+WantedBy=multi-user.target

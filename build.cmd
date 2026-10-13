@@ -196,6 +196,11 @@ echo @echo off > "%OUT_DIR%\run.bat"
 echo cd /d "%%~dp0.." >> "%OUT_DIR%\run.bat"
 echo start "" "%%~dp0Angels95.exe" >> "%OUT_DIR%\run.bat"
 
+REM VPS systemd unit. The docs (and the release notes) point at
+REM System\angels95-serv.service, so the source template in tools\ is copied
+REM next to the executables it references.
+if exist "%ROOT%tools\angels95-serv.service" copy /y "%ROOT%tools\angels95-serv.service" "%OUT_DIR%\angels95-serv.service" >nul
+
 REM --- 6. Package assets ---
 echo.
 if "%SKIPDATA%"=="1" (

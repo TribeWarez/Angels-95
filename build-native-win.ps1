@@ -185,6 +185,11 @@ Set-Location -LiteralPath (Split-Path -Parent $PSScriptRoot)
 & "$PSScriptRoot\Angels95.exe"
 "@ | Set-Content "$OUT_DIR\run.ps1" -Encoding UTF8
 
+# VPS systemd unit. The docs (and the release notes) point at
+# System\angels95-serv.service, so the source template in tools/ is copied next
+# to the executables it references.
+Copy-Item "$PSScriptRoot\tools\angels95-serv.service" "$OUT_DIR\angels95-serv.service" -Force -ErrorAction SilentlyContinue
+
 # --- 6. Package assets (optional) ---
 if (-not $SkipData) {
     Write-Step "Packaging assets..."
