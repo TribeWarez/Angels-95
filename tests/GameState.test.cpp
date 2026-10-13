@@ -454,13 +454,29 @@ static int test_player_save_load_roundtrip() {
 
 static int test_world_seeding_from_file() {
     TEST("init_worlds seeds NPCs/pickups from World.ozone (EngineTest)");
+    // Derive the expected counts by re-reading the file rather than hard-coding
+    // them. The point of this test is "seeding follows the world file", and a
+    // literal count turns every content edit - adding a wave of NPCs to the
+    // showcase arena, say - into a failing test that proves nothing.
+    size_t wantNpcs = 0, wantPickups = 0;
+    {
+        FILE* f = fopen("GameData/Worlds/EngineTest/World.ozone", "r");
+        if (!f) { fprintf(stdout, "FAIL: cannot open EngineTest World.ozone\n"); return 1; }
+        char line[512];
+        while (fgets(line, sizeof line, f)) {
+            if (strncmp(line, "npc ", 4) == 0) wantNpcs++;
+            else if (strncmp(line, "pickup ", 7) == 0) wantPickups++;
+        }
+        fclose(f);
+    }
+    CHECK(wantNpcs > 0 && wantPickups > 0);
+
     GameState gs;
     gs.init_worlds("GameData", {"EngineTest"});
     WorldState* ws = gs.get_world(0);
     CHECK(ws != nullptr);
-// EngineTest world file defines 7 npc + 10 pickup entities
-  CHECK_EQ(ws->global_npcs.size(), (size_t)7);
-  CHECK_EQ(ws->global_pickups.size(), (size_t)10);
+    CHECK_EQ(ws->global_npcs.size(), wantNpcs);
+    CHECK_EQ(ws->global_pickups.size(), wantPickups);
     // Type names come from the file; stats resolved from PawnDefs
     CHECK(!ws->global_npcs[0].typeName.empty());
     CHECK(ws->global_npcs[0].max_health > 0);

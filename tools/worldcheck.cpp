@@ -403,6 +403,109 @@ int main(int argc, char** argv) {
     }
     printf("  meshes: %d placed (%d implausibly small)\n", meshCount, belowGround);
 
+    // ---------------- pass 2c: headroom ----------------
+    //
+    // A gap the player can STAND in but not JUMP in is a trap. The body is
+    // Height 3.0 anchored at the FEET and a jump rises jumpSpeed^2 / (2*gravity)
+    // = 81 / 36 = 2.25, so jumping freely needs 5.25 of clearance. A lower
+    // ceiling does not merely clip the jump: OverlapsObstacle rejects the move
+    // and RestorePosition puts the player back, so they appear to stick to the
+    // wall they jumped beside - which reads as broken collision, not as a low
+    // ceiling. Every EngineTest interior ceiling sat at 4.0 (a 1.0 clearance)
+    // for exactly that reason.
+    //
+    // The test is a COLUMN scan: sample the floor plane, and at each sample take
+    // the solids that actually contain the point, sort their z-spans, merge, and
+    // look at every free interval. That formulation is what avoids the false
+    // positives a naive "lowest solid above this surface" test produces: the
+    // inside of a stepped pyramid, or a 1200-unit ground slab under a building,
+    // is not a standing spot at all because the sample is buried inside another
+    // solid - and a column sees that immediately while a pair test does not.
+    {
+        constexpr float kBodyHeight = 3.0f;               // PlayerMovement::Height
+        constexpr float kJumpRise   = 2.25f;              // 9^2 / (2 * 18)
+        constexpr float kNeedClear  = kBodyHeight + kJumpRise;
+        constexpr uint32_t kNoBspCuts = 1u << 28;         // SURF_NO_BSP_CUTS
+
+        std::vector<Aabb> all;
+        for (const auto& p : prims) {
+            // sub/intersect/de_resc carve rather than add, so they are not ceilings.
+            if (p.csgOp == 2 || p.csgOp == 3 || p.csgOp == 4) continue;
+            if (p.type != OzonePrimitiveType::BOX &&
+                p.type != OzonePrimitiveType::CYLINDER &&
+                p.type != OzonePrimitiveType::SPHERE &&
+                p.type != OzonePrimitiveType::PYRAMID) continue;
+            if (p.surface.def.flags & kNoBspCuts) continue;   // opts out of collision
+            Aabb b = brushBounds(p);
+            if (b.valid) all.push_back(b);
+        }
+
+        int traps = 0;
+        if (!all.empty()) {
+            std::vector<std::pair<float, float>> spans;   // (bottom, top) per column
+            std::vector<std::pair<float, float>> hotspots; // dedupe by location
+
+            // Sample each surface's footprint rather than the whole world: the
+            // step is per-surface so a huge ground slab costs a bounded number of
+            // samples while a small prop is still examined closely.
+            for (const Aabb& surf : all) {
+                const float top = surf.hi[2];
+                const float fx = surf.hi[0] - surf.lo[0];
+                const float fy = surf.hi[1] - surf.lo[1];
+                if (fx < 2.0f || fy < 2.0f) continue;   // too small to stand on
+                const float fmax = std::max(fx, fy);
+                const float step = std::max(2.0f, std::min(8.0f, fmax / 64.0f));
+
+                for (float x = surf.lo[0] + step * 0.5f; x < surf.hi[0]; x += step) {
+                    for (float y = surf.lo[1] + step * 0.5f; y < surf.hi[1]; y += step) {
+                        spans.clear();
+                        for (const Aabb& b : all)
+                            if (x >= b.lo[0] && x <= b.hi[0] &&
+                                y >= b.lo[1] && y <= b.hi[1])
+                                spans.emplace_back(b.lo[2], b.hi[2]);
+                        if (spans.size() < 2) continue;   // nothing above: open sky
+                        std::sort(spans.begin(), spans.end());
+
+                        float floorTop = spans[0].second;
+                        for (size_t k = 1; k < spans.size(); k++) {
+                            if (spans[k].first > floorTop + 0.01f) {
+                                const float gap = spans[k].first - floorTop;
+                                if (gap >= kBodyHeight - 0.01f && gap < kNeedClear - 0.01f) {
+                                    bool dup = false;
+                                    for (const auto& h : hotspots) {
+                                        if (std::fabs(h.first - x) < 4.0f &&
+                                            std::fabs(h.second - y) < 4.0f) { dup = true; break; }
+                                    }
+                                    if (!dup) {
+                                        hotspots.emplace_back(x, y);
+                                        traps++;
+                                        // A WARNING, not an error: the shipped worlds carry many
+                                        // pre-existing instances (crates under a roof, wall tops
+                                        // under a pergola), and failing CI on those would block
+                                        // every unrelated change. Reported with a count and the
+                                        // first few locations so it stays actionable.
+                                        if (traps <= 8) {
+                                            char buf[340];
+                                            snprintf(buf, sizeof buf,
+                                                     "headroom %.2fu at (%.1f, %.1f) over a floor top at "
+                                                     "z=%.2f: a jump rises %.2f on a %.1f-tall body, so the "
+                                                     "move is rolled back and the player sticks against the "
+                                                     "wall beside them. Give it >= %.2fu of clearance",
+                                                     gap, x, y, floorTop, kJumpRise, kBodyHeight, kNeedClear);
+                                            warn(buf);
+                                        }
+                                    }
+                                }
+                            }
+                            floorTop = std::max(floorTop, spans[k].second);
+                        }
+                    }
+                }
+            }
+        }
+        printf("  headroom traps: %d (a standable gap under %.2fu cannot be jumped in)\n",
+               traps, kNeedClear);
+    }
     // ---------------- pass 3: zones ----------------
     printf("\n--- zones ---\n");
     int zones = 0, unnamed = 0;

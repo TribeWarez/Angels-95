@@ -348,6 +348,32 @@ The loader sorts explicitly, so slots are stable across machines.
 > it silently switched it to the per-face shader with the *auto-selected*
 > texture. If a level's textures look wrong after a reload, that is why.
 
+### Clearance: a gap you can stand in but not jump in is a trap
+
+The player body is **3.0 tall, anchored at the feet**, and a jump rises
+`jumpSpeed^2 / (2*gravity)` = `9^2 / 36` = **2.25**. A full jump therefore needs
+**5.25** of clearance above the surface being stood on.
+
+A lower ceiling does not just clip the jump. The obstacle test rejects the move
+and the position is rolled back - the horizontal part included - so the player
+appears to **stick to the wall they jumped beside**, which reads as broken
+collision rather than as a low ceiling.
+
+Authoring consequences:
+
+- an interior storey wants a ceiling at **8.0** when the tallest prop under it is
+  2.5 (`2.5 + 5.25 = 7.75`);
+- a **doorway opening** wants to be at least **5.5** tall, or a jump in the
+  doorway is jammed by the lintel;
+- a raised surface (dais, crate, ledge) is only safe under a ceiling if
+  `ceiling - surface >= 5.25`;
+- outdoors there is no limit, which is why tall props belong outside.
+
+`worldcheck` audits this: it samples the floor plane, takes the solids that
+actually contain each sample, sorts and merges their z-spans and inspects every
+free interval. It reports **warnings** (not errors) because shipped worlds carry
+pre-existing instances such as crates under a roof.
+
 ### `light directional <x> <y> <z>` is the light SOURCE
 
 The authored point is where the sun/moon **is**; the light is aimed at the world
