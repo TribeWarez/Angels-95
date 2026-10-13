@@ -753,115 +753,47 @@ Model OzoneLoader::BuildBox(float w, float h, float d) {
 // (radial, y) plane is (1, dr/dy) with dr/dy = (rTop - rBot)/h, so the outward
 // normal is normalize(radial * h, rBot - rTop). A straight cylinder reduces to
 // the radial direction, which is what GenMeshCylinder used to give.
+// Tapered cylinder (cone frustum). The geometry lives in
+// oz::brushmesh::BuildCylinderMesh (Source/World/BrushMesh.hpp) because building
+// the raylib Mesh needs a GL context but TRIANGLE WINDING does not - and both caps
+// of this cylinder shipped inside-out, which is invisible under backface culling:
+// the lid simply was not there and you could see into the tube. A headless test
+// can pin winding; it cannot pin it from in here.
+//
+// AXIS: the mesh spans y in [-h, 0], so the authored `cz` is the TOP. See the
+// convention note on the builder for the level-file evidence.
 Model OzoneLoader::BuildCylinder(float rTop, float rBot, float h, int slices) {
-    if (slices < 3) slices = 16;
-    if (h <= 0.0f) h = 0.001f;
-    if (rTop < 0.0f) rTop = 0.0f;
-    if (rBot < 0.0f) rBot = 0.0f;
-
-    const float yTop = 0.0f;      // local origin = authored cz
-    const float yBot = -h;
-
-    // Per side quad: 2 triangles. Plus a cap fan per end (r > 0).
-    const int sideVerts = slices * 6;
-    const int capVerts  = (rTop > 0.0f ? slices * 3 : 0) + (rBot > 0.0f ? slices * 3 : 0);
-    const int vertCount = sideVerts + capVerts;
+    BrushMeshData data;
+    oz::brushmesh::BuildCylinderMesh(data, rTop, rBot, h, slices);
 
     Mesh mesh = {0};
-    mesh.vertexCount = vertCount;
-    mesh.triangleCount = vertCount / 3;
-    mesh.vertices  = (float*)RL_MALLOC((size_t)vertCount * 3 * sizeof(float));
-    mesh.normals   = (float*)RL_MALLOC((size_t)vertCount * 3 * sizeof(float));
-    mesh.texcoords = (float*)RL_MALLOC((size_t)vertCount * 2 * sizeof(float));
-
-    int vi = 0;
-    auto emit = [&](float px, float py, float pz, float nx, float ny, float nz,
-                    float u, float v) {
-        mesh.vertices[vi * 3 + 0] = px;
-        mesh.vertices[vi * 3 + 1] = py;
-        mesh.vertices[vi * 3 + 2] = pz;
-        mesh.normals[vi * 3 + 0] = nx;
-        mesh.normals[vi * 3 + 1] = ny;
-        mesh.normals[vi * 3 + 2] = nz;
-        mesh.texcoords[vi * 2 + 0] = u;
-        mesh.texcoords[vi * 2 + 1] = v;
-        vi++;
-    };
-
-    // --- Sides ---
-    // Circumference-proportional U so the tiling matches around the tube; V runs
-    // 0..1 over the height, matching the old mesh's behaviour closely enough that
-    // shipped texScaleU/V values still read the same.
-    const float slopeScale = 1.0f / sqrtf(h * h + (rTop - rBot) * (rTop - rBot));
-    for (int i = 0; i < slices; i++) {
-        const float a0 = (float)i / (float)slices * 2.0f * PI;
-        const float a1 = (float)(i + 1) / (float)slices * 2.0f * PI;
-        const float c0 = cosf(a0), s0 = sinf(a0);
-        const float c1 = cosf(a1), s1 = sinf(a1);
-
-        // Normal follows the frustum surface, not the radial direction alone.
-        auto sideNormal = [&](float c, float s, float& nx, float& ny, float& nz) {
-            nx = c * h * slopeScale;
-            ny = (rBot - rTop) * slopeScale;
-            nz = s * h * slopeScale;
-        };
-        float n0x, n0y, n0z, n1x, n1y, n1z;
-        sideNormal(c0, s0, n0x, n0y, n0z);
-        sideNormal(c1, s1, n1x, n1y, n1z);
-
-        const float u0 = (float)i / (float)slices;
-        const float u1 = (float)(i + 1) / (float)slices;
-
-        // Wound so the outward face is front-facing for a +Y-up camera.
-        emit(c1 * rBot, yBot, s1 * rBot, n1x, n1y, n1z, u1, 1.0f);
-        emit(c0 * rBot, yBot, s0 * rBot, n0x, n0y, n0z, u0, 1.0f);
-        emit(c0 * rTop, yTop, s0 * rTop, n0x, n0y, n0z, u0, 0.0f);
-
-        emit(c1 * rBot, yBot, s1 * rBot, n1x, n1y, n1z, u1, 1.0f);
-        emit(c0 * rTop, yTop, s0 * rTop, n0x, n0y, n0z, u0, 0.0f);
-        emit(c1 * rTop, yTop, s1 * rTop, n1x, n1y, n1z, u1, 0.0f);
+    mesh.vertexCount   = data.VertexCount();
+    mesh.triangleCount = data.TriangleCount();
+    mesh.vertices  = (float*)RL_MALLOC(data.vertices.size()  * sizeof(float));
+    mesh.normals   = (float*)RL_MALLOC(data.normals.size()   * sizeof(float));
+    mesh.texcoords = (float*)RL_MALLOC(data.texcoords.size() * sizeof(float));
+    mesh.indices   = (unsigned short*)RL_MALLOC(data.indices.size() * sizeof(unsigned short));
+    if (!mesh.vertices || !mesh.normals || !mesh.texcoords || !mesh.indices) {
+        // Free whatever did allocate, then report rather than hand back a Mesh
+        // with null arrays - UploadMesh would read them.
+        if (mesh.vertices)  RL_FREE(mesh.vertices);
+        if (mesh.normals)   RL_FREE(mesh.normals);
+        if (mesh.texcoords) RL_FREE(mesh.texcoords);
+        if (mesh.indices)   RL_FREE(mesh.indices);
+        OZ_WARN("BuildCylinder: out of memory for %d vertices", data.VertexCount());
+        return Model{0};
     }
+    memcpy(mesh.vertices,  data.vertices.data(),  data.vertices.size()  * sizeof(float));
+    memcpy(mesh.normals,   data.normals.data(),   data.normals.size()   * sizeof(float));
+    memcpy(mesh.texcoords, data.texcoords.data(), data.texcoords.size() * sizeof(float));
+    memcpy(mesh.indices,   data.indices.data(),   data.indices.size()   * sizeof(unsigned short));
 
-    // --- Caps ---
-    auto emitCap = [&](float r, float y, float ny) {
-        if (r <= 0.0f) return;
-        for (int i = 0; i < slices; i++) {
-            const float a0 = (float)i / (float)slices * 2.0f * PI;
-            const float a1 = (float)(i + 1) / (float)slices * 2.0f * PI;
-            // UVs are the disc projected into 0..1 so a cap samples the texture
-            // rather than collapsing to one texel.
-            auto uv = [&](float c, float s, float& u, float& v) {
-                u = c * 0.5f + 0.5f;
-                v = s * 0.5f + 0.5f;
-            };
-            float u0, v0, u1, v1;
-            uv(cosf(a0), sinf(a0), u0, v0);
-            uv(cosf(a1), sinf(a1), u1, v1);
-            const float cx0 = cosf(a0) * r, sz0 = sinf(a0) * r;
-            const float cx1 = cosf(a1) * r, sz1 = sinf(a1) * r;
-            if (ny > 0.0f) {
-                emit(0, y, 0, 0, 1, 0, 0.5f, 0.5f);
-                emit(cx0, y, sz0, 0, 1, 0, u0, v0);
-                emit(cx1, y, sz1, 0, 1, 0, u1, v1);
-            } else {
-                emit(0, y, 0, 0, -1, 0, 0.5f, 0.5f);
-                emit(cx1, y, sz1, 0, -1, 0, u1, v1);
-                emit(cx0, y, sz0, 0, -1, 0, u0, v0);
-            }
-        }
-    };
-    emitCap(rTop, yTop, +1.0f);
-    emitCap(rBot, yBot, -1.0f);
-
-    mesh.vertexCount = vi;
-    mesh.triangleCount = vi / 3;
     UploadMesh(&mesh, false);
     Model model = LoadModelFromMesh(mesh);
     Texture2D tex = (m_tilesetTex.size() >= 3) ? m_tilesetTex[2] : Texture2D{0};
     ApplyTex(model, tex, SKYBLUE);
     return model;
 }
-
 Model OzoneLoader::BuildSphere(float r, int segments) {
     Mesh mesh = GenMeshSphere(r, segments, segments);
     Model model = LoadModelFromMesh(mesh);
@@ -872,53 +804,33 @@ Model OzoneLoader::BuildSphere(float r, int segments) {
 }
 
 Model OzoneLoader::BuildPyramid(float w, float d, float h) {
-    int triCount = 6;
-    int vertCount = triCount * 3;
+    // Geometry (and the winding/normal derivation) lives in
+    // oz::brushmesh::BuildPyramidMesh so tests/BrushMesh.test.cpp can check it.
+    // This builder previously hard-coded (0, 0.5, 0) normals and wound all six
+    // faces inside-out - a see-through pyramid. No shipped world uses `pyr`; the
+    // editor's toolbox can still place one.
+    BrushMeshData data;
+    oz::brushmesh::BuildPyramidMesh(data, w, d, h);
+
     Mesh mesh = {0};
-    mesh.triangleCount = triCount;
-    mesh.vertexCount = vertCount;
-
-    mesh.vertices = (float*)RL_MALLOC(vertCount * 3 * sizeof(float));
-    mesh.normals  = (float*)RL_MALLOC(vertCount * 3 * sizeof(float));
-    mesh.texcoords = (float*)RL_MALLOC(vertCount * 2 * sizeof(float));
-
-    float hw = w / 2.0f, hd = d / 2.0f;
-    // Same convention as BuildCylinder: the mesh spans y in [-h, 0] so the
-    // authored `cz` is the TOP. The exporter used to compensate with a bogus
-    // +h/2 for both cyl and pyr, which drifted every save by half a height.
-    float ax = 0, ay = 0, az = 0;          // apex
-    float b[4][3] = {
-        {-hw, -h, -hd},
-        { hw, -h, -hd},
-        { hw, -h,  hd},
-        {-hw, -h,  hd}
-    };
-    int faces[6][3] = {
-        {0,1,4}, {1,2,4}, {2,3,4}, {3,0,4},
-        {3,2,1}, {1,0,3}
-    };
-    float verts[5][3] = {
-        {b[0][0], b[0][1], b[0][2]},
-        {b[1][0], b[1][1], b[1][2]},
-        {b[2][0], b[2][1], b[2][2]},
-        {b[3][0], b[3][1], b[3][2]},
-        {ax, ay, az}
-    };
-    int vi = 0;
-    for (int f = 0; f < triCount; f++) {
-        for (int j = 0; j < 3; j++) {
-            int idx = faces[f][j];
-            mesh.vertices[vi * 3 + 0] = verts[idx][0];
-            mesh.vertices[vi * 3 + 1] = verts[idx][1];
-            mesh.vertices[vi * 3 + 2] = verts[idx][2];
-            mesh.normals[vi * 3 + 0] = 0;
-            mesh.normals[vi * 3 + 1] = (f < 4) ? 0.5f : -1.0f;
-            mesh.normals[vi * 3 + 2] = 0;
-            mesh.texcoords[vi * 2 + 0] = (j == 0) ? 0 : (j == 1) ? 1 : 0.5f;
-            mesh.texcoords[vi * 2 + 1] = (j == 2) ? 1 : 0;
-            vi++;
-        }
+    mesh.vertexCount   = data.VertexCount();
+    mesh.triangleCount = data.TriangleCount();
+    mesh.vertices  = (float*)RL_MALLOC(data.vertices.size()  * sizeof(float));
+    mesh.normals   = (float*)RL_MALLOC(data.normals.size()   * sizeof(float));
+    mesh.texcoords = (float*)RL_MALLOC(data.texcoords.size() * sizeof(float));
+    mesh.indices   = (unsigned short*)RL_MALLOC(data.indices.size() * sizeof(unsigned short));
+    if (!mesh.vertices || !mesh.normals || !mesh.texcoords || !mesh.indices) {
+        if (mesh.vertices)  RL_FREE(mesh.vertices);
+        if (mesh.normals)   RL_FREE(mesh.normals);
+        if (mesh.texcoords) RL_FREE(mesh.texcoords);
+        if (mesh.indices)   RL_FREE(mesh.indices);
+        OZ_WARN("BuildPyramid: out of memory");
+        return Model{0};
     }
+    memcpy(mesh.vertices,  data.vertices.data(),  data.vertices.size()  * sizeof(float));
+    memcpy(mesh.normals,   data.normals.data(),   data.normals.size()   * sizeof(float));
+    memcpy(mesh.texcoords, data.texcoords.data(), data.texcoords.size() * sizeof(float));
+    memcpy(mesh.indices,   data.indices.data(),   data.indices.size()   * sizeof(unsigned short));
 
     UploadMesh(&mesh, false);
     Model model = LoadModelFromMesh(mesh);
@@ -927,67 +839,35 @@ Model OzoneLoader::BuildPyramid(float w, float d, float h) {
         model.materials[0].shader = GetLitFogShader();
     return model;
 }
-
 Model OzoneLoader::BuildPlane(float nx, float ny, float nz, float dist) {
-    // Oriented 10x10 quad. `nx/ny/nz` is an ENGINE-space normal (the caller
-    // converts from OZONE's Z-up), and `dist` offsets the quad along that normal
-    // so `n . x = dist` holds for the plane it lies in. Written as a fixed
-    // horizontal GenMeshPlane before, which ignored all four arguments: a
-    // vertical or sloped `pln` was impossible and its normal was inert.
-    float len = sqrtf(nx * nx + ny * ny + nz * nz);
-    if (len < 1e-6f) { nx = 0.0f; ny = 1.0f; nz = 0.0f; len = 1.0f; }
-    nx /= len; ny /= len; nz /= len;
-
-    // Tangent basis: pick a helper axis that is not parallel to the normal.
-    float ux, uy, uz;
-    if (fabsf(ny) > 0.99f) {   // normal is vertical
-        ux = 1.0f; uy = 0.0f; uz = 0.0f;
-    } else {
-        ux = 0.0f; uy = 1.0f; uz = 0.0f;
-    }
-    // u = normalize(cross(helper, n))
-    float ax = uy * nz - uz * ny;
-    float ay = uz * nx - ux * nz;
-    float az = ux * ny - uy * nx;
-    float al = sqrtf(ax * ax + ay * ay + az * az);
-    if (al < 1e-6f) { ax = 1.0f; ay = 0.0f; az = 0.0f; al = 1.0f; }
-    ax /= al; ay /= al; az /= al;
-    // v = cross(n, u)
-    const float vx = ny * az - nz * ay;
-    const float vy = nz * ax - nx * az;
-    const float vz = nx * ay - ny * ax;
-
-    const float h = 5.0f;                       // half of the 10x10 patch
-    const float cx = nx * dist, cy = ny * dist, cz = nz * dist;
-
-    // Corners ordered a, b, c, d so (b-a) x (c-a) points along +n.
-    const float corners[4][3] = {
-        {cx - ax * h - vx * h, cy - ay * h - vy * h, cz - az * h - vz * h},
-        {cx + ax * h - vx * h, cy + ay * h - vy * h, cz + az * h - vz * h},
-        {cx + ax * h + vx * h, cy + ay * h + vy * h, cz + az * h + vz * h},
-        {cx - ax * h + vx * h, cy - ay * h + vy * h, cz - az * h + vz * h},
-    };
-    const float uvs[4][2] = {{0, 1}, {1, 1}, {1, 0}, {0, 0}};
-    const int idx[6] = {0, 1, 2, 0, 2, 3};
+    // Oriented 10x10 quad, `n . x = dist`. `nx/ny/nz` is an ENGINE-space normal
+    // (the caller converts from OZONE's Z-up) and the geometry - including the
+    // winding that makes the front face look along +n - is in
+    // oz::brushmesh::BuildPlaneMesh so a test can check it. Written as a fixed
+    // horizontal GenMeshPlane before, which ignored all four arguments: a vertical
+    // or sloped `pln` was impossible and its normal was inert.
+    BrushMeshData data;
+    oz::brushmesh::BuildPlaneMesh(data, nx, ny, nz, dist, 5.0f);
 
     Mesh mesh = {0};
-    mesh.vertexCount = 4;
-    mesh.triangleCount = 2;
-    mesh.vertices  = (float*)RL_MALLOC(4 * 3 * sizeof(float));
-    mesh.normals   = (float*)RL_MALLOC(4 * 3 * sizeof(float));
-    mesh.texcoords = (float*)RL_MALLOC(4 * 2 * sizeof(float));
-    mesh.indices   = (unsigned short*)RL_MALLOC(6 * sizeof(unsigned short));
-    for (int i = 0; i < 4; i++) {
-        mesh.vertices[i * 3 + 0] = corners[i][0];
-        mesh.vertices[i * 3 + 1] = corners[i][1];
-        mesh.vertices[i * 3 + 2] = corners[i][2];
-        mesh.normals[i * 3 + 0] = nx;
-        mesh.normals[i * 3 + 1] = ny;
-        mesh.normals[i * 3 + 2] = nz;
-        mesh.texcoords[i * 2 + 0] = uvs[i][0];
-        mesh.texcoords[i * 2 + 1] = uvs[i][1];
+    mesh.vertexCount   = data.VertexCount();
+    mesh.triangleCount = data.TriangleCount();
+    mesh.vertices  = (float*)RL_MALLOC(data.vertices.size()  * sizeof(float));
+    mesh.normals   = (float*)RL_MALLOC(data.normals.size()   * sizeof(float));
+    mesh.texcoords = (float*)RL_MALLOC(data.texcoords.size() * sizeof(float));
+    mesh.indices   = (unsigned short*)RL_MALLOC(data.indices.size() * sizeof(unsigned short));
+    if (!mesh.vertices || !mesh.normals || !mesh.texcoords || !mesh.indices) {
+        if (mesh.vertices)  RL_FREE(mesh.vertices);
+        if (mesh.normals)   RL_FREE(mesh.normals);
+        if (mesh.texcoords) RL_FREE(mesh.texcoords);
+        if (mesh.indices)   RL_FREE(mesh.indices);
+        OZ_WARN("BuildPlane: out of memory");
+        return Model{0};
     }
-    for (int i = 0; i < 6; i++) mesh.indices[i] = (unsigned short)idx[i];
+    memcpy(mesh.vertices,  data.vertices.data(),  data.vertices.size()  * sizeof(float));
+    memcpy(mesh.normals,   data.normals.data(),   data.normals.size()   * sizeof(float));
+    memcpy(mesh.texcoords, data.texcoords.data(), data.texcoords.size() * sizeof(float));
+    memcpy(mesh.indices,   data.indices.data(),   data.indices.size()   * sizeof(unsigned short));
 
     UploadMesh(&mesh, false);
     Model model = LoadModelFromMesh(mesh);
@@ -995,7 +875,6 @@ Model OzoneLoader::BuildPlane(float nx, float ny, float nz, float dist) {
     ApplyTex(model, tex, DARKGRAY);
     return model;
 }
-
 // Carry a PLANE's normal and distance onto the renderable, in ENGINE space.
 // Both load paths call this so the two cannot disagree about the conversion, and
 // so the editor can re-emit them (a plane's orientation is not recoverable from

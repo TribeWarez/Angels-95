@@ -377,6 +377,13 @@ test_surface: tests/Surface.test.cpp Source/World/SurfaceFlags.cpp
 test_csg: tests/Csg.test.cpp Source/Physics/OzBsp.cpp Source/Physics/WorldChunk.cpp
 	$(SERVER_CXX) $(TEST_FLAGS) -ISource $^ -o $@
 
+# Triangle winding for the hand-built brush meshes. Header-only, so nothing to
+# link: BrushMesh.hpp is raylib-free precisely so this can exist. A cylinder
+# shipped with both caps inside-out and no test could see it (the builder needs a
+# GL context), which is what these assertions are for.
+test_brushmesh: tests/BrushMesh.test.cpp Source/World/BrushMesh.hpp
+	$(SERVER_CXX) $(TEST_FLAGS) -ISource $^ -o $@
+
 # Game-mode taxonomy + ruleset data. Raylib-free; links the registry because
 # GameTypeInfoFromOverride resolves EntityType::GAMETYPE .ozls defs.
 test_gametype: tests/GameType.test.cpp Source/World/GameType.cpp Source/Script/LightningEntityRegistry.cpp Source/Script/LightningScriptParser.cpp Source/Script/LightningScriptContext.cpp Source/Log.cpp
@@ -445,7 +452,7 @@ test_ozls_writer: tests/OzlsWriter.test.cpp Source/Script/OzlsWriter.cpp Source/
 TEST_SUITES := test_parser test_context test_registry test_entity_manager \
                test_pawn_system test_ozone_parser test_join_uri test_master \
                test_network test_game_state test_ozanim test_ozls_writer \
-               test_autoconvex test_csg test_surface test_gametype \
+               test_autoconvex test_csg test_brushmesh test_surface test_gametype \
                test_editorbus test_assetscope
 
 # The editor is built twice from two hand-maintained object lists - AngelEd/Makefile
@@ -497,4 +504,4 @@ test: check-editor-objects $(TEST_SUITES) worldcheck
 	@echo "All suites passed."
 
 clean:
-	rm -rf $(BUILD_DIR) *.exe AngelServ Angels95 AngelMaster OzPack *.o AngelEd/*.o AngelEd/Source/*.o test_context test_parser test_registry test_ozone_parser test_join_uri test_master test_network test_game_state test_ozanim test_ozls_writer test_autoconvex test_csg test_surface test_gametype test_editorbus test_assetscope worldcheck
+	rm -rf $(BUILD_DIR) *.exe AngelServ Angels95 AngelMaster OzPack *.o AngelEd/*.o AngelEd/Source/*.o test_context test_parser test_registry test_ozone_parser test_join_uri test_master test_network test_game_state test_ozanim test_ozls_writer test_autoconvex test_csg test_brushmesh test_surface test_gametype test_editorbus test_assetscope worldcheck

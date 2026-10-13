@@ -1353,8 +1353,14 @@ static void test_cylinder_top_convention() {
           "cylinder collision AABB spans [cz - h, cz]");
 
     // The frustum normal must be slope-aware, or a cone shades as a straight tube.
-    check(loader.find("(rBot - rTop) * slopeScale") != std::string::npos,
-          "tapered cylinder side normals follow the frustum slope");
+    // This now lives in BrushMesh.hpp, where tests/BrushMesh.test.cpp checks the
+    // geometry itself rather than the source text; this assertion only keeps the
+    // scoped-per-face intent visible from here.
+    const std::string brushMesh = ReadFile("Source/World/BrushMesh.hpp");
+    if (!brushMesh.empty()) {
+        check(brushMesh.find("(rBot - rTop) * slopeScale") != std::string::npos,
+              "tapered cylinder side normals follow the frustum slope");
+    }
 
     // The plane must rotate the authored normal into engine space rather than
     // dropping it (which made every `pln` a horizontal patch).

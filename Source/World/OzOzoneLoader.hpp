@@ -8,6 +8,7 @@
 #include "../Physics/AutoConvex.hpp"   // AutoConvexFail, for AppendAutoConvexCollision
 #include "OzoneParser.hpp"
 #include "SurfaceFlags.hpp"
+#include "BrushMesh.hpp"   // oz::brushmesh builders (raylib-free, unit-tested)
 #include <cstdint>
 #include <string>
 #include <vector>
