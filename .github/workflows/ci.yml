@@ -88,6 +88,13 @@ jobs:
           # a no-op for models missing from the file.
           ./worldcheck GameData/Worlds/World_endless_snow/World.ozone \
             --glb-bounds GameData/Worlds/World_endless_snow/glb_bounds.json || failed=1
+          # --asset-refs is GameData-wide (not world-scoped): it audits every
+          # path-valued key in .ozls/.cfg and the levelinfo skybox pair against
+          # the filesystem. Paths whose basename is in tools/assetrefs-allow.txt
+          # are pre-existing missing content; anything else is a dangling
+          # reference and fails. `make test` runs it too, so the Windows job
+          # covers it as well.
+          ./worldcheck GameData/Worlds/EngineTest/World.ozone --asset-refs || failed=1
           exit $failed
 
       - name: Verify committed GLB bounds are up to date

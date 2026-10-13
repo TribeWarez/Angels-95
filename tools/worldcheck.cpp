@@ -18,14 +18,25 @@
 //
 // --glb-bounds <file.json> feeds exact model AABBs in so mesh placement can be
 // checked without loading a GLB. tools/glb_bounds.py emits that format.
+//
+// --asset-refs additionally audits every path-valued key in GameData's
+// .ozls/.cfg files (and the levelinfo skybox pair) against the filesystem. It
+// is the gate for folder restructures: a moved asset whose reference was not
+// updated is a dangling path, and that is the exact class of mistake a
+// restructure makes. Paths whose basename is listed in tools/assetrefs-allow.txt
+// (the register of pre-existing missing content) are reported as a count, not
+// an error, so the check is honest about NEW breakage instead of failing on old
+// debt. Invoked once by `make test` and the CI worldcheck step.
 
 #include "../Source/World/OzoneParser.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <set>
@@ -155,11 +166,222 @@ struct ModelBounds {
     std::map<std::string, Box3> models;
 };
 
+// ============================================================================
+// --asset-refs: audit every path-valued key in .ozls/.cfg (and the levelinfo
+// skybox pair) against the filesystem.
+// ============================================================================
+
+// Keys whose value is an asset path. This is the vocabulary the engine reads
+// through ResolveMeshAsset / Load*WithFallback; keys outside this set (stats,
+// numbers, names) are not paths and must not be reported.
+bool isAssetRefKey(const std::string& k) {
+    static const char* kKeys[] = {
+        "icon", "mesh", "mesh_override", "texture",
+        "model_path", "model_texture", "sprite_path", "scream_path",
+        "fire_sound", "swing_sound", "hit_sound", "reload_sound", "equip_sound",
+        "cast_sound", "jump_sound", "land_sound", "walk_sound", "run_sound",
+        "hurt_sound", "death_sound",
+        "projectile_mesh", "viewmodel_mesh", "viewmodel_texture",
+        "skybox", "set_skybox",
+        "music_on_enter", "music_on_exit", "ambience_loop", "sfx_on_enter",
+        "play_sound",
+    };
+    for (const char* s : kKeys)
+        if (k == s) return true;
+    return false;
+}
+
+std::string toLower(std::string s) {
+    for (char& c : s) c = (char)std::tolower((unsigned char)c);
+    return s;
+}
+
+bool endsWithCI(const std::string& s, const std::string& suffix) {
+    if (s.size() < suffix.size()) return false;
+    return toLower(s.substr(s.size() - suffix.size())) == toLower(suffix);
+}
+
+std::string baseName(const std::string& p) {
+    size_t slash = p.find_last_of("/\\");
+    return slash == std::string::npos ? p : p.substr(slash + 1);
+}
+
+// Strip a trailing `// comment` (and `; comment` in .cfg). Paths never contain
+// "//", so a plain find is safe.
+std::string stripLineComment(std::string s) {
+    size_t p = s.find("//");
+    if (p != std::string::npos) s = s.substr(0, p);
+    p = s.find(';');
+    if (p != std::string::npos) s = s.substr(0, p);
+    return trim(s);
+}
+
+std::string unquote(std::string v) {
+    v = trim(v);
+    if (v.size() >= 2 && ((v.front() == '"' && v.back() == '"') ||
+                          (v.front() == '\'' && v.back() == '\'')))
+        v = v.substr(1, v.size() - 2);
+    return trim(v);
+}
+
+// A token from a levelinfo tail is a path if it has a slash or a known asset
+// extension; the numeric game-rule args are not paths.
+bool looksLikePath(const std::string& v) {
+    if (v.empty()) return false;
+    if (v.find('/') != std::string::npos || v.find('\\') != std::string::npos) return true;
+    static const char* kExts[] = {
+        ".png", ".dds", ".jpg", ".jpeg", ".bmp", ".tga", ".gif",
+        ".obj", ".glb", ".gltf", ".iqm", ".vox", ".m3d",
+        ".wav", ".mp3", ".ogg", ".ttf", ".ozanim", ".ozone",
+    };
+    for (const char* e : kExts)
+        if (endsWithCI(v, e)) return true;
+    return false;
+}
+
+// Mirrors the engine's resolution family: a GameData/-rooted (or otherwise
+// cwd-rooted) path first, then repo-root-relative, then relative to the file
+// that contains the reference (the def folder / world folder).
+bool refResolves(const std::string& value, const std::string& fileDir,
+                 const std::string& repoRoot) {
+    std::string v = value;
+    for (char& c : v)
+        if (c == '\\') c = '/';
+    if (v.empty()) return true;
+    if (fileExists(v)) return true;
+    if ((v.size() > 1 && v[1] == ':') || v[0] == '/') return false; // absolute
+    if (fileExists(joinPath(repoRoot, v))) return true;
+    return fileExists(joinPath(fileDir, v));
+}
+
+// <root>/Worlds/<Name>/World.ozone -> <root>, with a GameData fallback.
+// Probes for real files: an ifstream cannot open a directory, so testing
+// fileExists("<root>/Worlds") would always fail.
+std::string guessGameDataRoot(const std::string& worldPath) {
+    std::string d1 = dirName(worldPath);      // .../Worlds/<Name>
+    std::string d2 = dirName(d1);             // .../Worlds
+    std::string d3 = dirName(d2);             // root
+    if (baseName(d2) == "Worlds" &&
+        fileExists(joinPath(joinPath(joinPath(d3, "Worlds"), baseName(d1)), "World.ozone")))
+        return d3;
+    if (fileExists("GameData/Launch.conf")) return "GameData";
+    return std::string();
+}
+
+void auditAssetRefs(const std::string& gameDataRoot) {
+    namespace fs = std::filesystem;
+    std::string repoRoot = dirName(gameDataRoot);
+    std::string allowPath = joinPath(joinPath(repoRoot, "tools"), "assetrefs-allow.txt");
+
+    std::set<std::string> allow;
+    if (fileExists(allowPath)) {
+        std::ifstream f(allowPath);
+        std::string line;
+        while (std::getline(f, line)) {
+            std::string t = stripLineComment(line);
+            if (t.empty() || t[0] == '#') continue;
+            allow.insert(baseName(t));
+        }
+    }
+
+    int defFiles = 0, refs = 0, allowed = 0, broken = 0;
+    std::error_code ec;
+    for (fs::recursive_directory_iterator it(gameDataRoot, ec), end;
+         !ec && it != end; it.increment(ec)) {
+        if (!it->is_regular_file(ec)) continue;
+        std::string p = it->path().generic_string();
+        std::string ext = toLower(it->path().extension().string());
+        bool isDef = (ext == ".ozls" || ext == ".cfg");
+        bool isWorld = (ext == ".ozone");
+        if (!isDef && !isWorld) continue;
+        defFiles++;
+        std::string fileDir = dirName(p);
+        std::ifstream f(p);
+        std::string line;
+        int lineNo = 0;
+        while (std::getline(f, line)) {
+            lineNo++;
+            std::string t = trim(line);
+            if (t.empty()) continue;
+            if (t.rfind("//", 0) == 0 || t[0] == '#' || t[0] == ';') continue;
+
+            std::string key, value;
+            size_t eq = t.find('=');
+            if (eq != std::string::npos) {
+                key = trim(t.substr(0, eq));
+                value = t.substr(eq + 1);
+            } else {
+                size_t sp = t.find_first_of(" \t");
+                if (sp == std::string::npos) continue;
+                key = t.substr(0, sp);
+                value = t.substr(sp + 1);
+            }
+
+            if (isWorld) {
+                if (key != "levelinfo") continue;
+                // levelinfo <7 game-rule numbers> <skybox> [<side skybox>] [gametype=]
+                std::istringstream ts(value);
+                std::string tok;
+                int idx = 0;
+                while (ts >> tok) {
+                    idx++;
+                    if (idx <= 7) continue;
+                    if (tok.rfind("gametype=", 0) == 0) continue;
+                    std::string v = unquote(stripLineComment(tok));
+                    if (!looksLikePath(v)) continue;
+                    refs++;
+                    if (!refResolves(v, fileDir, repoRoot)) {
+                        if (allow.count(baseName(v))) allowed++;
+                        else {
+                            broken++;
+                            char buf[512];
+                            snprintf(buf, sizeof buf,
+                                     "unresolved asset reference: %s:%d  levelinfo skybox = %s",
+                                     p.c_str(), lineNo, v.c_str());
+                            err(buf);
+                        }
+                    }
+                }
+                continue;
+            }
+
+            if (!isAssetRefKey(key)) continue;
+            std::string v = unquote(stripLineComment(value));
+            if (v.empty()) continue;
+            refs++;
+            if (refResolves(v, fileDir, repoRoot)) continue;
+            if (allow.count(baseName(v))) { allowed++; continue; }
+            broken++;
+            char buf[512];
+            snprintf(buf, sizeof buf, "unresolved asset reference: %s:%d  %s = %s",
+                     p.c_str(), lineNo, key.c_str(), v.c_str());
+            err(buf);
+        }
+    }
+
+    char buf[256];
+    snprintf(buf, sizeof buf, "scanned %d def/world files, %d asset references", defFiles, refs);
+    note(buf);
+    if (allowed) {
+        snprintf(buf, sizeof buf,
+                 "%d unresolved reference(s) are pre-existing missing content "
+                 "(tools/assetrefs-allow.txt)", allowed);
+        note(buf);
+    }
+    if (broken == 0) {
+        note("no new dangling asset references");
+    } else {
+        snprintf(buf, sizeof buf, "%d dangling asset reference(s) - fix the paths above", broken);
+        err(buf);
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        printf("usage: worldcheck <world.ozone> [--glb-bounds <file.json>] [--headroom-all]\n");
+        printf("usage: worldcheck <world.ozone> [--glb-bounds <file.json>] "
+               "[--headroom-all] [--asset-refs]\n");
         return 2;
     }
     std::string worldPath = argv[1];
@@ -167,9 +389,13 @@ int main(int argc, char** argv) {
     // List every headroom trap instead of the first 8. The count is what CI
     // sees; a full list is what you need to actually go and fix them.
     bool headroomAll = false;
+    // Audit GameData's .ozls/.cfg path keys against the filesystem. Run once
+    // (not per world) - it is GameData-wide, not world-scoped.
+    bool assetRefs = false;
     for (int i = 2; i < argc; i++) {
         if (std::strcmp(argv[i], "--glb-bounds") == 0 && i + 1 < argc) glbJson = argv[i + 1];
         else if (std::strcmp(argv[i], "--headroom-all") == 0)    headroomAll = true;
+        else if (std::strcmp(argv[i], "--asset-refs") == 0)      assetRefs = true;
     }
 
     std::string worldDir = dirName(worldPath);
@@ -556,6 +782,17 @@ int main(int argc, char** argv) {
                 warn(buf);
             }
         }
+    }
+
+    // ---------------- pass 4: asset references (.ozls / .cfg / levelinfo) ----
+    if (assetRefs) {
+        printf("\n--- asset references ---\n");
+        std::string gdRoot = guessGameDataRoot(worldPath);
+        if (gdRoot.empty())
+            warn("--asset-refs: could not locate the GameData root (run from the "
+                 "repo root or pass a GameData/Worlds/<Name>/World.ozone path)");
+        else
+            auditAssetRefs(gdRoot);
     }
 
     printf("\n=== %d error(s), %d warning(s) ===\n", g_errors, g_warnings);

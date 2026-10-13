@@ -492,6 +492,13 @@ test: check-editor-objects $(TEST_SUITES) worldcheck
 	  ./worldcheck "$$w" || echo "  worldcheck $$w" >> $(TEST_FAIL_FILE); \
 	done
 	@echo ""
+	@echo "=== worldcheck --asset-refs (every .ozls/.cfg path reference) ==="
+	# GameData-wide, not world-scoped: run it once. Dangling paths whose basename
+	# is in tools/assetrefs-allow.txt (pre-existing missing content) are counted,
+	# any other dangling path fails the build. This is the gate for folder moves.
+	@./worldcheck GameData/Worlds/EngineTest/World.ozone --asset-refs \
+	  || echo "  worldcheck --asset-refs" >> $(TEST_FAIL_FILE)
+	@echo ""
 	@if [ -s $(TEST_FAIL_FILE) ]; then \
 	  echo "**************"; \
 	  echo "FAILED SUITES:"; \
