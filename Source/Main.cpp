@@ -642,8 +642,13 @@ ShowSpellbook = false;
     // clicks at all and the process would look hung.
     PlaySplashScreen();
 
+    // Set by the screenshot tick once every camera is captured. It ends both
+    // loops without closing the window, so the single CloseWindow() at the end
+    // of main stays the only one (see the note at the shot-complete branch).
+    bool shotRunComplete = false;
+
     // Outer loop: return to menu after gameplay
-    while (!WindowShouldClose()) {
+    while (!WindowShouldClose() && !shotRunComplete) {
     PlayHomeScreen();
     if (WindowShouldClose()) break;
     g_returnToMenu = false;
@@ -1311,7 +1316,13 @@ ShowSpellbook = false;
         // the finished frame, and it consumes the loop when every camera is done.
         if (g_shot.active && TickScreenshot()) {
             OZ_INFO("Screenshot run complete: %d capture(s)", (int)g_shot.cams.size());
-            CloseWindow();   // unwind the outer menu/game loop cleanly
+            // End the loops WITHOUT closing the window. CloseWindow() is not
+            // idempotent-safe: the old code closed here and then again after
+            // this loop, so rlglClose() ran twice and its second
+            // rlUnloadRenderBatch() double-freed the default render batch -
+            // STATUS_HEAP_CORRUPTION on every single --shot run, after the
+            // capture had already succeeded. One CloseWindow(), at the end.
+            shotRunComplete = true;
             break;
         }
 
@@ -1326,22 +1337,20 @@ ShowSpellbook = false;
 
     } // end outer menu/game loop
     
-    // The screenshot tick already called CloseWindow() so the outer loop would
-    // unwind, which means the GL context is gone by this point. Unloading render
-    // textures, billboards and models now would call into a dead context and
-    // fault on exit (observed as 0xC0000005 after an otherwise successful
-    // capture), so skip the GPU teardown for shot runs.
-    if (!g_shot.active) {
-        UnloadRenderTexture(Target);
-        EngineBillboard::Shutdown();
-        oz::SurfaceMaterial::Instance().Shutdown();
-        oz::Skybox::Instance().Shutdown();
-        oz::SkyMaterial::Instance().Shutdown();
-        // Instanced particle VAO/VBOs + shader. Released with the other GPU
-        // resources and BEFORE CloseWindow(), while the GL context is still
-        // alive - the manager is an intentionally-leaked singleton, so without
-        // this its GL objects would outlive the context.
-        OzParticleSimulationManager::Instance().Shutdown();
-    }
+    // Cleanup after the game loop (and after a shot run): the GL context is
+    // still alive here, because the only CloseWindow() is the one below. The
+    // old ordering closed the window in the shot tick, which forced this whole
+    // teardown block to be skipped for shot runs (touching a dead context would
+    // fault) and left every GPU object to leak at process exit.
+    UnloadRenderTexture(Target);
+    EngineBillboard::Shutdown();
+    oz::SurfaceMaterial::Instance().Shutdown();
+    oz::Skybox::Instance().Shutdown();
+    oz::SkyMaterial::Instance().Shutdown();
+    // Instanced particle VAO/VBOs + shader. Released with the other GPU
+    // resources and BEFORE CloseWindow(), while the GL context is still alive -
+    // the manager is an intentionally-leaked singleton, so without this its GL
+    // objects would outlive the context.
+    OzParticleSimulationManager::Instance().Shutdown();
     CloseWindow();
 }

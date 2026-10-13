@@ -6,6 +6,7 @@
 #include "OzAssetMapper.hpp"
 #include "../Package/PackageAssetLoader.hpp"
 #include "../Script/LightningEntityRegistry.hpp"
+#include <cstring>
 #include <string>
 #include <unordered_map>
 
@@ -46,37 +47,56 @@ private:
         // were therefore garbage: the four "vertices" were not the quad corners
         // at all, so every sprite/gizmo billboard drew as a thin degenerate
         // sliver (or nothing). One array per attribute is the only correct form.
-        static float v[] = {
+        //
+        // The mesh OWNS heap copies. UnloadMesh() RL_FREEs every CPU array a Mesh
+        // points at, so pointing these at `static float[]` storage means a free()
+        // on a non-heap pointer the first time the model is unloaded - which is
+        // EngineBillboard::Shutdown() on every exit, reported by Windows as
+        // STATUS_HEAP_CORRUPTION (0xC0000374) after an otherwise successful run.
+        // `UploadMesh(&mesh, dynamic)` is only a GL buffer usage hint; it never
+        // transfers or waives ownership.
+        static const float v[] = {
             // x     y     z
             -0.5f, -0.5f, 0.0f,
              0.5f, -0.5f, 0.0f,
              0.5f,  0.5f, 0.0f,
             -0.5f,  0.5f, 0.0f,
         };
-        static float uv[] = {
+        static const float uv[] = {
             // u    v
             0.0f, 1.0f,
             1.0f, 1.0f,
             1.0f, 0.0f,
             0.0f, 0.0f,
         };
-        static float n[] = {
+        static const float n[] = {
              0.0f, 0.0f, 1.0f,
              0.0f, 0.0f, 1.0f,
              0.0f, 0.0f, 1.0f,
              0.0f, 0.0f, 1.0f,
         };
-        static unsigned short idx[] = { 0, 1, 2, 0, 2, 3 };
+        static const unsigned short idx[] = { 0, 1, 2, 0, 2, 3 };
         Mesh mesh = {0};
         mesh.vertexCount = 4;
         // triangleCount is the number of TRIANGLES (2 here), not the index count
         // (6). Raylib's DrawMesh draws `triangleCount * 3` indices, so the old
         // value of 6 made it read 18 indices from this 6-element array.
         mesh.triangleCount = 2;
-        mesh.vertices = v;
-        mesh.texcoords = uv;
-        mesh.normals = n;
-        mesh.indices = idx;
+        mesh.vertices  = (float*)RL_MALLOC(sizeof v);
+        mesh.texcoords = (float*)RL_MALLOC(sizeof uv);
+        mesh.normals   = (float*)RL_MALLOC(sizeof n);
+        mesh.indices   = (unsigned short*)RL_MALLOC(sizeof idx);
+        if (!mesh.vertices || !mesh.texcoords || !mesh.normals || !mesh.indices) {
+            if (mesh.vertices)  RL_FREE(mesh.vertices);
+            if (mesh.texcoords) RL_FREE(mesh.texcoords);
+            if (mesh.normals)   RL_FREE(mesh.normals);
+            if (mesh.indices)   RL_FREE(mesh.indices);
+            return Mesh{0};
+        }
+        memcpy(mesh.vertices,  v,   sizeof v);
+        memcpy(mesh.texcoords, uv,  sizeof uv);
+        memcpy(mesh.normals,   n,   sizeof n);
+        memcpy(mesh.indices,   idx, sizeof idx);
         return mesh;
     }
 
@@ -88,8 +108,7 @@ public:
         // raylib 6.0's LoadModelFromMesh does NOT upload the mesh to the GPU
         // (earlier versions did), so the model carried a CPU-side quad with
         // vaoId == 0 and every DrawModelEx of it rendered nothing. Upload it
-        // explicitly; the false keeps the static vertex arrays alive, which is
-        // fine because MakeBillboardQuad's arrays are static storage.
+        // explicitly; the mesh owns its CPU arrays, so UnloadModel can free them.
         if (s_BillboardModel.meshCount > 0 && s_BillboardModel.meshes[0].vaoId == 0)
             UploadMesh(&s_BillboardModel.meshes[0], false);
     }
