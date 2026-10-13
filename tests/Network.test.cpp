@@ -211,15 +211,25 @@ static int test_client_ping_rtt() {
     if (!client.is_connected()) { printf("FAIL: handshake never completed\n"); return 1; }
 
     // Fast ping cadence so wall-clock elapses within the loop budget.
+    //
+    // Watch get_rtt_s(), NOT get_ping_ms(): the ms accessor rounds, and a real
+    // loopback RTT is routinely under 0.5 ms, so get_ping_ms() legitimately
+    // reports 0 for a measurement that DID happen. The old check waited for
+    // ping_ms > 0 and failed as "no RTT measured" on any fast machine (it was
+    // Linux CI that reported it).
     client.set_ping_interval(0.01);
     int iters = 0;
-    for (; iters < 20000 && client.get_ping_ms() <= 0; ++iters) {
+    for (; iters < 20000 && client.get_rtt_s() <= 0.0; ++iters) {
         server.update();
         client.update();
         std::this_thread::sleep_for(std::chrono::microseconds(200));
     }
-    if (client.get_ping_ms() <= 0) { printf("FAIL: no RTT measured\n"); return 1; }
-    if (client.get_ping_ms() >= 1000) { printf("FAIL: implausible RTT %dms\n", client.get_ping_ms()); return 1; }
+    if (client.get_rtt_s() <= 0.0) { printf("FAIL: no RTT measured\n"); return 1; }
+    if (client.get_rtt_s() >= 1.0) {
+        printf("FAIL: implausible RTT %.3fs\n", client.get_rtt_s());
+        return 1;
+    }
+    printf("  (measured RTT %.3f ms after %d iterations)\n", client.get_rtt_s() * 1000.0, iters);
 
     client.disconnect();
     server.stop();

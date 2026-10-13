@@ -1,5 +1,5 @@
 entity "Key" : pickup {
-    icon = "Key.png"
+    icon = "key.png"
     stats {
         item_id = 12
         preview_color = (1.0, 0.84, 0.0)

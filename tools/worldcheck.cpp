@@ -239,19 +239,100 @@ bool looksLikePath(const std::string& v) {
     return false;
 }
 
-// Mirrors the engine's resolution family: a GameData/-rooted (or otherwise
-// cwd-rooted) path first, then repo-root-relative, then relative to the file
-// that contains the reference (the def folder / world folder).
-bool refResolves(const std::string& value, const std::string& fileDir,
-                 const std::string& repoRoot) {
+
+// ---------------------------------------------------------------------------
+// Case-EXACT resolution. Windows' filesystem is case-insensitive, so
+// fileExists(".../key.png") happily accepts a file stored as "Key.png" - and
+// the same reference then fails on Linux CI (`key.png` in PistonPart.ozls vs
+// the on-disk Key.png was the case that proved it, and only the Linux job saw
+// it until this check existed). Walk every component against the directory
+// listing: exact walk first, then a case-insensitive walk purely to EXPLAIN a
+// miss ("on disk it is Key.png").
+// ---------------------------------------------------------------------------
+enum class RefState { Exact, Missing, CaseMismatch };
+
+RefState resolveCaseWalk(const std::string& raw, bool caseInsensitive, std::string* onDisk) {
+    namespace fs = std::filesystem;
+    std::string norm = raw;
+    for (char& c : norm)
+        if (c == '\\') c = '/';
+    if (norm.empty()) return RefState::Exact;
+    if (norm[0] == '/' || (norm.size() > 1 && norm[1] == ':')) {
+        // Absolute path: no portable walk (and dev trees never use them).
+        return fileExists(norm) ? RefState::Exact : RefState::Missing;
+    }
+    std::error_code ec;
+    fs::path cur;
+    size_t start = 0;
+    while (start <= norm.size()) {
+        size_t slash = norm.find('/', start);
+        std::string seg = norm.substr(start, slash == std::string::npos
+                                                ? std::string::npos : slash - start);
+        if (!seg.empty() && seg != "." && seg != "..") {
+            fs::path parent = cur.empty() ? fs::path(".") : cur;
+            bool found = false;
+            std::string spelling;
+            for (auto& e : fs::directory_iterator(parent, ec)) {
+                std::string name = e.path().filename().string();
+                if (caseInsensitive) {
+                    if (name.size() != seg.size()) continue;
+                    bool same = true;
+                    for (size_t k = 0; k < name.size(); k++)
+                        if (std::tolower((unsigned char)name[k]) !=
+                            std::tolower((unsigned char)seg[k])) { same = false; break; }
+                    if (same) { found = true; spelling = name; break; }
+                } else if (name == seg) {
+                    found = true; spelling = name; break;
+                }
+            }
+            if (!found) return RefState::Missing;
+            if (spelling != seg && onDisk) {
+                *onDisk = (cur / spelling).generic_string();
+            }
+            cur /= spelling;
+        } else if (seg == "..") {
+            cur /= "..";
+        }
+        if (slash == std::string::npos) break;
+        start = slash + 1;
+    }
+    if (!fs::is_regular_file(cur, ec)) return RefState::Missing;
+    if (onDisk) *onDisk = cur.generic_string();
+    return RefState::Exact;
+}
+
+// Exact-or-explained: Exact when every component matches the on-disk spelling;
+// CaseMismatch when only a case-insensitive walk reaches it (which works on
+// Windows and breaks on Linux); Missing otherwise.
+RefState resolveRefCase(const std::string& value, const std::string& fileDir,
+                        const std::string& repoRoot, std::string& attempted,
+                        std::string& onDisk) {
     std::string v = value;
     for (char& c : v)
         if (c == '\\') c = '/';
-    if (v.empty()) return true;
-    if (fileExists(v)) return true;
-    if ((v.size() > 1 && v[1] == ':') || v[0] == '/') return false; // absolute
-    if (fileExists(joinPath(repoRoot, v))) return true;
-    return fileExists(joinPath(fileDir, v));
+    std::vector<std::string> cands;
+    if ((v.size() > 1 && v[1] == ':') || (!v.empty() && v[0] == '/')) {
+        cands.push_back(v);
+    } else {
+        cands.push_back(v);
+        cands.push_back(joinPath(repoRoot, v));
+        cands.push_back(joinPath(fileDir, v));
+    }
+    bool sawMismatch = false;
+    for (const std::string& c : cands) {
+        std::string od;
+        RefState st = resolveCaseWalk(c, false, &od);
+        if (st == RefState::Exact) return RefState::Exact;
+        if (st == RefState::Missing) {
+            std::string loose;
+            if (resolveCaseWalk(c, true, &loose) == RefState::Exact) {
+                sawMismatch = true;
+                attempted = c;
+                onDisk = loose;
+            }
+        }
+    }
+    return sawMismatch ? RefState::CaseMismatch : RefState::Missing;
 }
 
 // <root>/Worlds/<Name>/World.ozone -> <root>, with a GameData fallback.
@@ -266,6 +347,62 @@ std::string guessGameDataRoot(const std::string& worldPath) {
         return d3;
     if (fileExists("GameData/Launch.conf")) return "GameData";
     return std::string();
+}
+
+// C++ source literals: report CASE mismatches only. A literal that does not
+// exist at all (synthetic test-style paths, examples in comments) stays silent,
+// so the pass is zero-false-positive; what it catches is the real slip -
+// `Items.hpp` asking for `Key.png` beside a `key.png` on disk, which works on
+// Windows and silently loses the icon on Linux.
+void auditCodeLiterals(const std::string& repoRoot) {
+    namespace fs = std::filesystem;
+    const char* kRoots[] = { "Source", "AngelEd/Source" };
+    int checked = 0, mismatches = 0;
+    std::error_code ec;
+    for (const char* r : kRoots) {
+        std::string root = joinPath(repoRoot, r);
+        for (fs::recursive_directory_iterator it(root, ec), end;
+             !ec && it != end; it.increment(ec)) {
+            if (!it->is_regular_file(ec)) continue;
+            std::string ext = toLower(it->path().extension().string());
+            if (ext != ".cpp" && ext != ".hpp") continue;
+            std::ifstream f(it->path());
+            if (!f.is_open()) continue;
+            std::string text((std::istreambuf_iterator<char>(f)),
+                             std::istreambuf_iterator<char>());
+            std::string rel = it->path().generic_string();
+            if (rel.rfind("./", 0) == 0) rel = rel.substr(2);
+            size_t pos = 0;
+            while ((pos = text.find("GameData/", pos)) != std::string::npos) {
+                size_t endp = pos;
+                while (endp < text.size()) {
+                    char c = text[endp];
+                    if (c == '"' || c == '\\' || c == ')' || c == '\n' ||
+                        c == ' ' || c == '\t' || c == ';' || c == ',') break;
+                    endp++;
+                }
+                std::string lit = text.substr(pos, endp - pos);
+                pos = endp > pos ? endp : pos + 1;
+                if (lit.size() < 12 || lit.find('.') == std::string::npos) continue;
+                checked++;
+                std::string attempted, onDisk;
+                RefState st = resolveRefCase(lit, ".", repoRoot, attempted, onDisk);
+                if (st != RefState::CaseMismatch) continue;
+                mismatches++;
+                int line = 1 + (int)std::count(text.begin(), text.begin() + (ptrdiff_t)pos, '\n');
+                char buf[640];
+                snprintf(buf, sizeof buf,
+                         "code literal differs only in CASE: %s:%d  \"%s\"  ->  on disk "
+                         "it is '%s' (Windows accepts this, Linux does not)",
+                         rel.c_str(), line, lit.c_str(), onDisk.c_str());
+                err(buf);
+            }
+        }
+    }
+    char buf[192];
+    snprintf(buf, sizeof buf, "code literals: %d path literal(s) scanned, %d case mismatch(es)",
+             checked, mismatches);
+    note(buf);
 }
 
 void auditAssetRefs(const std::string& gameDataRoot) {
@@ -330,16 +467,28 @@ void auditAssetRefs(const std::string& gameDataRoot) {
                     std::string v = unquote(stripLineComment(tok));
                     if (!looksLikePath(v)) continue;
                     refs++;
-                    if (!refResolves(v, fileDir, repoRoot)) {
-                        if (allow.count(baseName(v))) allowed++;
-                        else {
-                            broken++;
-                            char buf[512];
-                            snprintf(buf, sizeof buf,
-                                     "unresolved asset reference: %s:%d  levelinfo skybox = %s",
-                                     p.c_str(), lineNo, v.c_str());
-                            err(buf);
-                        }
+                    std::string attempted, onDisk;
+                    RefState st = resolveRefCase(v, fileDir, repoRoot, attempted, onDisk);
+                    if (st == RefState::Exact) continue;
+                    if (st == RefState::CaseMismatch) {
+                        broken++;
+                        char buf[560];
+                        snprintf(buf, sizeof buf,
+                                 "asset reference differs only in CASE: %s:%d  levelinfo "
+                                 "skybox = %s  ->  on disk it is '%s' (Windows accepts "
+                                 "this, Linux does not)",
+                                 p.c_str(), lineNo, v.c_str(), onDisk.c_str());
+                        err(buf);
+                        continue;
+                    }
+                    if (allow.count(baseName(v))) allowed++;
+                    else {
+                        broken++;
+                        char buf[512];
+                        snprintf(buf, sizeof buf,
+                                 "unresolved asset reference: %s:%d  levelinfo skybox = %s",
+                                 p.c_str(), lineNo, v.c_str());
+                        err(buf);
                     }
                 }
                 continue;
@@ -349,7 +498,19 @@ void auditAssetRefs(const std::string& gameDataRoot) {
             std::string v = unquote(stripLineComment(value));
             if (v.empty()) continue;
             refs++;
-            if (refResolves(v, fileDir, repoRoot)) continue;
+            std::string attempted, onDisk;
+            RefState st = resolveRefCase(v, fileDir, repoRoot, attempted, onDisk);
+            if (st == RefState::Exact) continue;
+            if (st == RefState::CaseMismatch) {
+                broken++;
+                char buf[620];
+                snprintf(buf, sizeof buf,
+                         "asset reference differs only in CASE: %s:%d  %s = %s  ->  on "
+                         "disk it is '%s' (Windows accepts this, Linux does not)",
+                         p.c_str(), lineNo, key.c_str(), v.c_str(), onDisk.c_str());
+                err(buf);
+                continue;
+            }
             if (allow.count(baseName(v))) { allowed++; continue; }
             broken++;
             char buf[512];
@@ -362,6 +523,7 @@ void auditAssetRefs(const std::string& gameDataRoot) {
     char buf[256];
     snprintf(buf, sizeof buf, "scanned %d def/world files, %d asset references", defFiles, refs);
     note(buf);
+    auditCodeLiterals(repoRoot);
     if (allowed) {
         snprintf(buf, sizeof buf,
                  "%d unresolved reference(s) are pre-existing missing content "
@@ -450,19 +612,19 @@ int main(int argc, char** argv) {
     // ---------------- pass 1: references + bounds ----------------
     printf("--- references ---\n");
     std::set<std::string> missingRefs;
+    std::vector<std::string> caseRefs;
     // Mirrors OzoneLoader::ResolveWorldAssetPath: try the path as-is, then a
     // repo-relative GameData/ path, then an absolute path, and only then treat
     // it as world-relative. Without the as-is/GameData cases a perfectly valid
     // repo-relative ref like GameData/Worlds/X/oztex/foo.dds gets joined onto
-    // the world dir and reported missing.
+    // the world dir and reported missing. Case-exact on purpose: a texPath that
+    // only resolves case-insensitively renders on Windows and vanishes on Linux.
     auto resolves = [&](const std::string& raw) {
         if (raw.empty()) return true;
-        if (fileExists(raw)) return true;
-        if (raw.rfind("GameData/", 0) == 0 || raw.rfind("GameData\\", 0) == 0)
-            return fileExists(raw);
-        if ((raw.size() > 1 && raw[1] == ':') || raw[0] == '/' || raw[0] == '\\')
-            return fileExists(raw);
-        return fileExists(joinPath(worldDir, raw));
+        std::string attempted, onDisk;
+        RefState st = resolveRefCase(raw, worldDir, ".", attempted, onDisk);
+        if (st == RefState::CaseMismatch) caseRefs.push_back(raw + "  ->  " + onDisk);
+        return st == RefState::Exact;
     };
     for (const auto& p : prims) {
         if (!p.texPath.empty()) {
@@ -477,7 +639,14 @@ int main(int argc, char** argv) {
         snprintf(buf, sizeof buf, "referenced asset does not exist: %s", m.c_str());
         err(buf);
     }
-    if (missingRefs.empty()) note("all referenced assets resolve");
+    for (const auto& c : caseRefs) {
+        char buf[560];
+        snprintf(buf, sizeof buf,
+                 "referenced asset differs only in CASE: %s (Windows accepts this, "
+                 "Linux does not)", c.c_str());
+        err(buf);
+    }
+    if (missingRefs.empty() && caseRefs.empty()) note("all referenced assets resolve");
 
     // ---------------- pass 2: solid brushes, playerstart, lights -------
     printf("\n--- geometry / lighting ---\n");

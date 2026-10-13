@@ -65,7 +65,7 @@ static const ItemDBEntry ItemDB[ITEM_DB_SIZE] = {
     {9, ItemCategory::ENERGY_CRYSTAL,  EquipSlotType::NONE, "Energy Crystal (777)", "GameData/Tex/Global/Items/EnergyCrystal.png",  777, "Grants 777 Psychic Energy",      5},
     {10,ItemCategory::ENERGY_CRYSTAL,  EquipSlotType::NONE, "Energy Crystal (888)", "GameData/Tex/Global/Items/EnergyCrystal.png",  888, "Grants 888 Psychic Energy",      5},
     {11,ItemCategory::ENERGY_CRYSTAL,  EquipSlotType::NONE, "Energy Crystal (999)", "GameData/Tex/Global/Items/EnergyCrystal.png",  999, "Grants 999 Psychic Energy",      5},
-    {item_id::KEY,      ItemCategory::KEY,     EquipSlotType::NONE, "Key",       "GameData/Tex/Global/Items/Key.png",            1,   "Opens locked doors and chests",  20},
+    {item_id::KEY,      ItemCategory::KEY,     EquipSlotType::NONE, "Key",       "GameData/Tex/Global/Items/key.png",            1,   "Opens locked doors and chests",  20},
     {item_id::COIN,     ItemCategory::COIN,    EquipSlotType::NONE, "Coin",      "GameData/Tex/Global/Items/Coin.png",           1,   "Currency",                       99},
     {item_id::POWERUP,  ItemCategory::POWERUP, EquipSlotType::NONE, "Powerup",   "GameData/Tex/Global/Items/Powerup.png",        0,   "Mysterious power",               5},
     // Ammo previously shared item_id 14 with Powerup, so collecting an ammo box

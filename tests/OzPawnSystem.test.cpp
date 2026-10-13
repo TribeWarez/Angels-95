@@ -922,6 +922,11 @@ static int test_light_crud() {
 }
 
 int main() {
+    // Unbuffered: this binary is the one suite that has ever died without a
+    // diagnostic (a segfault on Linux CI printed nothing, because stdout is
+    // fully buffered when piped and the buffer dies with the process). With no
+    // buffering the last "TEST:" line in the log names the crashing test.
+    setvbuf(stdout, nullptr, _IONBF, 0);
     fprintf(stdout, "OzPawnSystem Tests\n");
     fprintf(stdout, "==================\n");
 
