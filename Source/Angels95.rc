@@ -1,2 +1,2 @@
 #include <windows.h>
-IDI_ICON1 ICON "..\\GameData\\Global\\Icon\\angels95.ico"
+IDI_ICON1 ICON "..\\GameData\\Tex\\Engine\\angels95.ico"

@@ -166,7 +166,7 @@ Angels95/
 ## Key Systems (b57–b82)
 
 ### GameUI / SlotBar object-bar HUD (b82)
-`GameData/Global/UI/GameUI.ozls` (`EntityType::GAMEUI`) is the authored source
+`GameData/Tex/Engine/GameUI.ozls` (`EntityType::GAMEUI`) is the authored source
 of the player's object bar: one atlas `texture =` plus a comma-separated
 `slot_rects` stat (source-texture pixels, no spaces). `GameUi.{hpp,cpp}` is the
 data-only bridge (`SlotCount()`, `SlotRect(i)`, layout stats); `SlotBar.{hpp,cpp}`

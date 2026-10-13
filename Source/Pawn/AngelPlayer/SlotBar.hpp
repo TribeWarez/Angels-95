@@ -4,7 +4,7 @@
 // SlotBar — shared HUD renderer for the GameUI-declared object/slot bar.
 //
 // The art is a single atlas texture plus a per-cell rect list, both authored in
-// `GameData/Global/UI/GameUI.ozls` (see the GameUi bridge). This maps the atlas
+// `GameData/Tex/Engine/GameUI.ozls` (see the GameUi bridge). This maps the atlas
 // to the screen, draws it once, then fills each occupied cell with the owning
 // entity's icon, and handles hover/click-to-select.
 //

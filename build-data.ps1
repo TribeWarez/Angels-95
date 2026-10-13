@@ -131,10 +131,10 @@ if (Test-Path $shaderDir) {
     Run-OzPack "OZPK" $shaderDir "$OUT\shaders.ozpak"
 }
 
-# --- Engine icons ---
-$engineDir = "$GAMEDATA\Global\Engine"
+# --- Editor icons (entity gizmos + editor app icon) ---
+$engineDir = "$GAMEDATA\Tex\Editor"
 if (Test-Path $engineDir) {
-    Run-OzPack "OZTX" $engineDir "$OUT_TEX\engine_icons.oztex"
+    Run-OzPack "OZTX" $engineDir "$OUT_TEX\editor_icons.oztex"
 }
 
 # --- Skybox library (Tex/Global/Sky: *.png panoramas used by levelinfo skybox paths) ---
@@ -155,8 +155,8 @@ if (Test-Path $playerDir) {
     Run-OzPack "OZPK" $playerDir "$OUT\player.ozpak"
 }
 
-# --- Title/menu art + music ---
-$titleDir = "$GAMEDATA\Global\Title"
+# --- Title/menu art ---
+$titleDir = "$GAMEDATA\Tex\Title"
 if (Test-Path $titleDir) {
     Run-OzPack "OZTX" $titleDir "$OUT_TEX\title.oztex"
 }

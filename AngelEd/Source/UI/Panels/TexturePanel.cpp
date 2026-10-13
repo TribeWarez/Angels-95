@@ -120,7 +120,7 @@ void ScanTextureBrowserFiles() {
     }
     g_textureFiles.clear();
     // Every shipped texture is now PNG (tools/convert_dds.py converted the .dds
-    // library), so the sky panoramas in Global/sky are selectable from the same
+    // library), so the sky panoramas in Tex/Global/Sky are selectable from the same
     // list as everything else.
     const std::vector<std::string> exts = { ".png", ".tga", ".bmp", ".jpg", ".jpeg" };
 

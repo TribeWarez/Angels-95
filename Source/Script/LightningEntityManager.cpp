@@ -1355,7 +1355,7 @@ void LightningEntityManager::HandleInput(bool uiBlocking) {
 // when GameUI.ozls declares no usable bar (missing texture or slot_rects).
 // ---------------------------------------------------------------------------
 void LightningEntityManager::DrawHotbar() {
-    // Authored path: GameData/Global/UI/GameUI.ozls supplies the atlas plus a
+    // Authored path: GameData/Tex/Engine/GameUI.ozls supplies the atlas plus a
     // per-cell rect list, and SlotBar does the mapping/drawing.
 #ifndef OMEGA_TEST_ENV
     {

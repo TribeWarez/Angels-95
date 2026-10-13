@@ -9,7 +9,7 @@ entity "GameUI" : GameUI {
     // texture to `hud_width_pct` of the screen width and then maps each cell
     // with slot_rects below, so a differently-sized atlas only needs new
     // slot_rects -- no recompile.
-    texture = "GameData/Global/ObjectBar_Redesigned_8_Slot.png"
+    texture = "GameData/Tex/Engine/ObjectBar_Redesigned_8_Slot.png"
     stats {
         // Per-cell rects (x,y,w,h) in SOURCE TEXTURE pixels, left to right.
         // Measured off ObjectBar_Redesigned_8_Slot.png: the cell band is

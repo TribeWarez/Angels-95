@@ -764,17 +764,17 @@ void OmegaTechInit()
     float timeVal = (float)GetTime();
     SetShaderValue(OmegaTechData.Lights, uTimeLoc, &timeVal, SHADER_UNIFORM_FLOAT);
 
-    OmegaTechData.HomeScreen = LoadTextureWithFallback("GameData/Global/Title/Title.png");
-    OmegaTechData.PauseHeading = LoadTexture("GameData/Global/Title/menu_heading.png");
-    OmegaTechData.BtnNormal = LoadTexture("GameData/Global/Title/menu_button.png");
-    OmegaTechData.BtnHover = LoadTexture("GameData/Global/Title/menu_button_hover.png");
-    OmegaTechData.BtnClicked = LoadTexture("GameData/Global/Title/menu_button_clicked.png");
-    if (IsPathFile("GameData/Global/Title/Title.mpg"))
-        OmegaTechData.HomeScreenVideo = ray_video_open("GameData/Global/Title/Title.mpg");
+    OmegaTechData.HomeScreen = LoadTextureWithFallback("GameData/Tex/Title/Title.png");
+    OmegaTechData.PauseHeading = LoadTexture("GameData/Tex/Title/menu_heading.png");
+    OmegaTechData.BtnNormal = LoadTexture("GameData/Tex/Title/menu_button.png");
+    OmegaTechData.BtnHover = LoadTexture("GameData/Tex/Title/menu_button_hover.png");
+    OmegaTechData.BtnClicked = LoadTexture("GameData/Tex/Title/menu_button_clicked.png");
+    if (IsPathFile("GameData/Tex/Title/Title.mpg"))
+        OmegaTechData.HomeScreenVideo = ray_video_open("GameData/Tex/Title/Title.mpg");
     OmegaTechData.HomeScreenMusic = LoadMusicWithFallback("GameData/Audio/Music/Title.mp3");
 
-    OmegaTechTextSystem.Bar = LoadTextureWithFallback("GameData/Global/TextBar.png");
-    OmegaTechTextSystem.BarFont = LoadFontWithFallback("GameData/Global/Font.ttf");
+    OmegaTechTextSystem.Bar = LoadTextureWithFallback("GameData/Tex/Engine/TextBar.png");
+    OmegaTechTextSystem.BarFont = LoadFontWithFallback("GameData/Tex/Engine/Font.ttf");
     // UI/gameplay one-shots + the typewriter blip (all owned by SoundManager).
     SoundManager::Instance().LoadCoreSounds();
 
@@ -822,7 +822,7 @@ void PlaySplashScreen()
     if (HWND hwnd = GetActiveWindow()) ShowWindow(hwnd, SW_SHOW);
     #endif
 
-    Texture2D splash = LoadTexture("GameData/Global/Title/splash.png");
+    Texture2D splash = LoadTexture("GameData/Tex/Title/splash.png");
     double startTime = GetTime();
 
     while (!WindowShouldClose() && GetTime() - startTime < 2.5)
@@ -846,8 +846,8 @@ void PlaySplashScreen()
 void PlayHomeScreen()
 {
     // Re-open the title video if a previous menu visit released it.
-    if (!OmegaTechData.HomeScreenVideo.ok && IsPathFile("GameData/Global/Title/Title.mpg"))
-        OmegaTechData.HomeScreenVideo = ray_video_open("GameData/Global/Title/Title.mpg");
+    if (!OmegaTechData.HomeScreenVideo.ok && IsPathFile("GameData/Tex/Title/Title.mpg"))
+        OmegaTechData.HomeScreenVideo = ray_video_open("GameData/Tex/Title/Title.mpg");
 
     if (g_skipMenu)
     {

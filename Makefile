@@ -318,10 +318,10 @@ $(BUILD_DIR)/LightningEntityManager.o: Source/Script/LightningEntityManager.cpp 
 
 # 6a. Compile Windows resource files
 ifneq ($(EXE),)
-$(BUILD_DIR)/Angels95.res: Source/Angels95.rc GameData/Global/Icon/angels95.ico | $(BUILD_DIR)
+$(BUILD_DIR)/Angels95.res: Source/Angels95.rc GameData/Tex/Engine/angels95.ico | $(BUILD_DIR)
 	windres Source/Angels95.rc -O coff -o $@
 
-$(BUILD_DIR)/AngelServ.res: Source/AngelServ.rc GameData/Global/Icon/AngelServ.ico | $(BUILD_DIR)
+$(BUILD_DIR)/AngelServ.res: Source/AngelServ.rc GameData/Tex/Engine/AngelServ.ico | $(BUILD_DIR)
 	windres Source/AngelServ.rc -O coff -o $@
 endif
 

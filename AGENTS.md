@@ -255,7 +255,7 @@ World/
 - Run scripts (`System/run.bat`, `run.ps1`) set cwd to repo root before launching - the game expects repo-relative paths.
 
 ## Script/entities: GameUI + SlotBar (HUD object bar)
-- `GameData/Global/UI/GameUI.ozls` (`EntityType::GAMEUI`) is the **authored** source of the player's HUD object bar: one atlas `texture =` plus a `slot_rects` stat.
+- `GameData/Tex/Engine/GameUI.ozls` (`EntityType::GAMEUI`) is the **authored** source of the player's HUD object bar: one atlas `texture =` plus a `slot_rects` stat.
 - `Source/Pawn/AngelPlayer/GameUi.{hpp,cpp}` = C++ bridge. Exposes the texture plus `SlotCount()`/`SlotRect(i)` and the layout stats (`hud_width_pct`, `hud_bottom_margin`, `icon_inset`, `show_slot_numbers`, `show_slot_name`). Still data-only — it never draws.
 - `Source/Pawn/AngelPlayer/SlotBar.{hpp,cpp}` = the **one** renderer. `DrawSlotBar(SlotBarOptions&, int& hover)` maps the atlas to the screen, draws it once, then fits each occupied cell's entity icon (aspect preserved, centred), the slot number, the gold selection/hover outline, and the selected item's name. It also does click-to-select.
 - Both call sites share it: `LightningEntityManager::DrawHotbar()` (in-world, bottom centre) and `InventoryBehaviour::DrawOverlay()` (overlay mini-bar via `forcedWidth`). Each keeps its plain-rectangle fallback for when `GameUi::HasBar()` is false, so a missing/!def'd `GameUI.ozls` degrades instead of blanking.

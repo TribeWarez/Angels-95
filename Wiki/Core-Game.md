@@ -25,7 +25,7 @@
 - **Health / Mana / Psychic Energy** — three resource pools displayed at top, automatic regeneration (tick-based). Max values default to 100.
 - **Level & XP** — exponential XP curve (`XP_BASE_TO_NEXT=100`, growth 1.3x per level). XP gained from pickups, NPC kills, and exploration.
 - **SlotBar object bar (b82)** — 8 cells rendered from a data-driven atlas
-  (`GameData/Global/UI/GameUI.ozls`: `texture` + comma-separated `slot_rects`
+  (`GameData/Tex/Engine/GameUI.ozls`: `texture` + comma-separated `slot_rects`
   in source-texture pixels). Occupied cells get a fitted entity icon, slot
   numbers and a gold selection/hover outline; number keys, mouse wheel and
   **click-to-select** all work. The same bar renders in-world (bottom centre)
@@ -174,4 +174,4 @@ Press **Escape** during gameplay to open the pause menu overlay:
 - **Main Menu** — return to title screen (world is unloaded)
 - **Quit** — exit the game
 
-The pause menu uses custom button textures (`menu_button.png`, `menu_button_hover.png`, `menu_button_clicked.png`) and heading (`menu_heading.png`) from `GameData/Global/Title/`.
+The pause menu uses custom button textures (`menu_button.png`, `menu_button_hover.png`, `menu_button_clicked.png`) and heading (`menu_heading.png`) from `GameData/Tex/Title/`.

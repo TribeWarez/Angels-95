@@ -1,6 +1,6 @@
 # Angels95 — OmegaTech Engine
 
-![Angels95 Title Splash](GameData/Global/Title/menu_heading.png)
+![Angels95 Title Splash](GameData/Tex/Title/menu_heading.png)
 
 Angels95 reimagines the OmegaTech Engine as a **multiplayer game world** — a
 persistent, server-authoritative realm where players explore partitioned

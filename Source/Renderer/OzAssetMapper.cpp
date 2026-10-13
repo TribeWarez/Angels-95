@@ -120,7 +120,7 @@ void AssetMapper::RegisterEngineTextures() {
         {"ZoneSound"},
         {"ZoneReverb"},
     };
-    const char* baseDir = "GameData/Global/Engine";
+    const char* baseDir = "GameData/Tex/Editor";
     for (auto& ic : engineIcons) {
         m_entries.push_back({ic.alias, probe_path(baseDir, ic.alias, ".png"),
                              "engine", {0}, true});

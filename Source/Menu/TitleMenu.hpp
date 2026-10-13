@@ -40,25 +40,25 @@ struct TitleMenuTextures {
 
     void Load() {
         if (loaded) return;
-        titleBg = LoadTextureWithFallback("GameData/Global/Title/Title.png");
-        fTL = LoadTexture("GameData/Global/Menu/BlueMenuTL.png");
-        fT  = LoadTexture("GameData/Global/Menu/BlueMenuT.png");
-        fTR = LoadTexture("GameData/Global/Menu/BlueMenuTR.png");
-        fL  = LoadTexture("GameData/Global/Menu/BlueMenuL.png");
-        fArea = LoadTexture("GameData/Global/Menu/BlueMenuArea.png");
-        fR  = LoadTexture("GameData/Global/Menu/BlueMenuR.png");
-        fBL = LoadTexture("GameData/Global/Menu/BlueMenuBL.png");
-        fB  = LoadTexture("GameData/Global/Menu/BlueMenuB.png");
-        fBR = LoadTexture("GameData/Global/Menu/BlueMenuBR.png");
-        barL    = LoadTexture("GameData/Global/Menu/BlueBarL.png");
-        barTile = LoadTexture("GameData/Global/Menu/BlueBarTile.png");
-        barWin  = LoadTexture("GameData/Global/Menu/BlueBarWin.png");
-        barMax  = LoadTexture("GameData/Global/Menu/BlueBarMax.png");
-        menuLine = LoadTexture("GameData/Global/Menu/BlueMenuLine.png");
-        clientArea = LoadTexture("GameData/Global/Menu/BlueClientArea.png");
-        btnNormal  = LoadTexture("GameData/Global/Title/menu_button.png");
-        btnHover   = LoadTexture("GameData/Global/Title/menu_button_hover.png");
-        btnClicked = LoadTexture("GameData/Global/Title/menu_button_clicked.png");
+        titleBg = LoadTextureWithFallback("GameData/Tex/Title/Title.png");
+        fTL = LoadTexture("GameData/Tex/Menu/BlueMenuTL.png");
+        fT  = LoadTexture("GameData/Tex/Menu/BlueMenuT.png");
+        fTR = LoadTexture("GameData/Tex/Menu/BlueMenuTR.png");
+        fL  = LoadTexture("GameData/Tex/Menu/BlueMenuL.png");
+        fArea = LoadTexture("GameData/Tex/Menu/BlueMenuArea.png");
+        fR  = LoadTexture("GameData/Tex/Menu/BlueMenuR.png");
+        fBL = LoadTexture("GameData/Tex/Menu/BlueMenuBL.png");
+        fB  = LoadTexture("GameData/Tex/Menu/BlueMenuB.png");
+        fBR = LoadTexture("GameData/Tex/Menu/BlueMenuBR.png");
+        barL    = LoadTexture("GameData/Tex/Menu/BlueBarL.png");
+        barTile = LoadTexture("GameData/Tex/Menu/BlueBarTile.png");
+        barWin  = LoadTexture("GameData/Tex/Menu/BlueBarWin.png");
+        barMax  = LoadTexture("GameData/Tex/Menu/BlueBarMax.png");
+        menuLine = LoadTexture("GameData/Tex/Menu/BlueMenuLine.png");
+        clientArea = LoadTexture("GameData/Tex/Menu/BlueClientArea.png");
+        btnNormal  = LoadTexture("GameData/Tex/Title/menu_button.png");
+        btnHover   = LoadTexture("GameData/Tex/Title/menu_button_hover.png");
+        btnClicked = LoadTexture("GameData/Tex/Title/menu_button_clicked.png");
         loaded = true;
     }
 

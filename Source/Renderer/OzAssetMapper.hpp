@@ -10,7 +10,7 @@
 // Aliases map short logical names to real paths under GameData/.
 // Two built-in groups are registered at Init():
 //   "items"  → GameData/Tex/Global/Items/<alias>.png
-//   "engine" → GameData/Global/Engine/<alias>.png
+//   "engine" → GameData/Tex/Editor/<alias>.png
 //
 // Example usage:
 //   AssetMapper::Instance().PreloadCategory("items");
