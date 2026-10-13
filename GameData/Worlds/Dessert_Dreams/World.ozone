@@ -118,15 +118,15 @@ npc Floater 0 11 2
 npc Walker -20 58 1
 light directional 60 50 40 150 175 205 0.28
 light directional -60 -50 110 255 250 235 1.15
-light point -18 -18 6 255 205 150 0.7 18
-light point -42 -7 6 255 190 120 0.6 14
+light point -16.4 -18 6 255 205 150 0.7 18
+light point -42 -2.5 6 255 190 120 0.6 14
 light point 0 0 0 120 180 220 0.55 26
-light point -18 18 6 255 205 150 0.7 18
-light point -42 7 5 255 190 120 0.6 14
-light point 18 18 6 255 205 150 0.7 18
+light point -16.4 18 6 255 205 150 0.7 18
+light point -42 12 5 255 190 120 0.6 14
+light point 16.4 18 6 255 205 150 0.7 18
 light point -70 0 5 255 235 200 0.5 30
 light point -18 68 14 255 220 170 0.5 30
-light point 52 -50 5 255 170 90 0.7 20
+light point 48.5 -50 5 255 170 90 0.7 20
 light point 60 10 5 255 235 200 0.4 25
 zone sky -120 -120 -30 120 120 90 1 name=dd_sky gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
 zone water -8 -8 -2 8 8 -0.3 1 name=dd_oasis gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5

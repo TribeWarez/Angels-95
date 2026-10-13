@@ -258,13 +258,13 @@ light directional 60 50 40 150 165 195 0.25
 
 # Courtyard: daylight through the oculus plus warm braziers on the towers
 light point 0 0 6 255 240 210 0.7 22
-light point -17 -17 11 255 180 90 0.6 16 2
-light point 17 -17 11 255 180 90 0.6 16 2
-light point -17 17 11 255 180 90 0.6 16 2
-light point 17 17 11 255 180 90 0.6 16 2
+light point -17 -17 16.2 255 180 90 0.6 16 2
+light point 17 -17 16.2 255 180 90 0.6 16 2
+light point -17 17 16.2 255 180 90 0.6 16 2
+light point 17 17 16.2 255 180 90 0.6 16 2
 # Gate lanterns
-light point -3 -15 4 255 190 120 0.5 10 2
-light point 3 -15 4 255 190 120 0.5 10 2
+light point -3 -13.6 4 255 190 120 0.5 10 2
+light point 3 -13.6 4 255 190 120 0.5 10 2
 # Balcony lamps
 light point -13 8 6.5 255 205 150 0.45 12
 light point 13 8 6.5 255 205 150 0.45 12
