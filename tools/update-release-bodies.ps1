@@ -120,8 +120,8 @@ function Format-ReleaseBody {
 
   [void]$sb.AppendLine('### Downloads')
   [void]$sb.AppendLine('')
-  [void]$sb.AppendLine('**Standalone (run directly, no other files needed):**')
-  [void]$sb.AppendLine("- `AngelServ-$Tag-linux-x86_64` / `AngelServ-$Tag-windows-x86_64.exe` - dedicated game server")
+  [void]$sb.AppendLine('**Runs directly (binary only; AngelServ additionally needs a game-data checkout to serve):**')
+  [void]$sb.AppendLine("- `AngelServ-$Tag-linux-x86_64` / `AngelServ-$Tag-windows-x86_64.exe` - dedicated game server (self-contained; point ``--dir`` at a ``GameData/`` with ``Worlds/<Name>/World.ozone``)")
   [void]$sb.AppendLine("- `AngelMaster-$Tag-linux-x86_64` / `AngelMaster-$Tag-windows-x86_64.exe` - master/listing server")
   [void]$sb.AppendLine("- `OzPack-$Tag-linux-x86_64` / `OzPack-$Tag-windows-x86_64.exe` - asset packer CLI")
   [void]$sb.AppendLine('')

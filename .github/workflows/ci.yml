@@ -172,8 +172,8 @@ jobs:
             ## Angels95 ${{ github.ref_name }}
 
             ### Downloads
-            **Standalone (run directly, no other files needed):**
-            - `AngelServ-<tag>-<platform>` - dedicated game server
+            **Runs directly (binary only; AngelServ additionally needs a game-data checkout to serve):**
+            - `AngelServ-<tag>-<platform>` - dedicated game server (self-contained; point `--dir` at a `GameData/` with `Worlds/<Name>/World.ozone`)
             - `AngelMaster-<tag>-<platform>` - master/listing server
             - `OzPack-<tag>-<platform>` - asset packer CLI
 
