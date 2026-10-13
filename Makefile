@@ -438,66 +438,63 @@ test_ozanim: tests/OzAnim.test.cpp Source/Package/Anim/OzAnimFormat.cpp
 test_ozls_writer: tests/OzlsWriter.test.cpp Source/Script/OzlsWriter.cpp Source/Script/LightningScriptParser.cpp
 	$(SERVER_CXX) $(TEST_FLAGS) -ISource $^ -o $@
 
-test: test_parser test_context test_registry test_entity_manager test_pawn_system test_ozone_parser test_join_uri test_master test_network test_game_state test_ozanim test_ozls_writer test_autoconvex test_csg test_surface test_gametype test_editorbus test_assetscope worldcheck
-	@echo "=== LightningScriptParser Tests ==="
-	-./test_parser
-	@echo ""
-	@echo "=== LightningScriptContext Tests ==="
-	-./test_context
-	@echo ""
-	@echo "=== LightningEntityRegistry Tests ==="
-	-./test_registry
-	@echo ""
-	@echo "=== LightningEntityManager Tests ==="
-	-./test_entity_manager
-	@echo ""
-	@echo "=== OzPawnSystem Tests ==="
-	-./test_pawn_system
-	@echo ""
-	@echo "=== OzoneParser Tests ==="
-	-./test_ozone_parser
-	@echo ""
-	@echo "=== JoinUri Tests ==="
-	-./test_join_uri
-	@echo ""
-	@echo "=== Master Protocol Tests ==="
-	-./test_master
-	@echo ""
-	@echo "=== Network Packet Tests ==="
-	-./test_network
-	@echo ""
-	@echo "=== GameState Tests ==="
-	-./test_game_state
-	@echo ""
-	@echo "=== OzAnim Tests ==="
-	-./test_ozanim
-	@echo ""
-	@echo "=== OzlsWriter Tests ==="
-	-./test_ozls_writer
-	@echo ""
-	@echo "=== AutoConvex Tests ==="
-	-./test_autoconvex
-	@echo ""
-	@echo "=== CSG / Collision Query Tests ==="
-	-./test_csg
-	@echo ""
-	@echo "=== Surface Tests ==="
-	-./test_surface
-	@echo ""
-	@echo "=== GameType Tests ==="
-	-./test_gametype
-	@echo ""
-	@echo "=== EditorEventBus Tests ==="
-	-./test_editorbus
+# The suites, in the order they run. ONE list: the `test` target's prerequisites
+# and its runner both read it, so adding a suite cannot leave it built-but-not-run
+# (the old shape spelled the list twice - once as prerequisites, once as `-./suite`
+# lines - and the two had to be kept in step by hand).
+TEST_SUITES := test_parser test_context test_registry test_entity_manager \
+               test_pawn_system test_ozone_parser test_join_uri test_master \
+               test_network test_game_state test_ozanim test_ozls_writer \
+               test_autoconvex test_csg test_surface test_gametype \
+               test_editorbus test_assetscope
 
-	echo "=== AssetScope Tests ==="
-	./test_assetscope
-	@echo ""
-	@echo "=== Worldcheck (.ozone auditor) ==="
-	# Run worldcheck on every shipped .ozone world (errors are printed, warnings do not fail).
-	@for w in GameData/Worlds/*/World.ozone; do \
-	  ./worldcheck "$$w" || echo "  --> $$w failed"; \
+# The editor is built twice from two hand-maintained object lists - AngelEd/Makefile
+# and the inline `g++` list in ci.yml - because CI does not use the Makefile. They
+# drift silently: an object compiled but not linked produces no error, just missing
+# code. tools/check_editor_objects.sh compares them. Text-only, so it runs on both
+# CI jobs and locally.
+check-editor-objects:
+	@sh tools/check_editor_objects.sh
+
+# Names of suites that failed, written by the runner and read by the summary.
+# A FILE rather than a shell variable because each recipe line is its own shell.
+TEST_FAIL_FILE := $(BUILD_DIR)/failed_suites.txt
+
+# Run every suite, report all failures, and FAIL if any suite did.
+#
+# Each suite is invoked through `|| echo ... >> $(TEST_FAIL_FILE)` instead of the
+# old `-./suite`. The `-` prefix made make ignore the exit code, which was
+# deliberate (one broken suite must not hide the rest) but had a hole: a suite that
+# CRASHES - segfault, uncaught exception, abort - never reaches its summary line and
+# prints no `FAIL`, and its status was discarded, so `make test` reported success
+# and CI stayed green. That is not hypothetical: a malformed-vec3 input produced
+# exit 0xC0000409 with a green log, and a CI step that greps for `FAIL` cannot see a
+# crash by construction. The summary below makes a crash fail the build exactly the
+# way an assertion does, WITHOUT giving up on running the remaining suites.
+test: check-editor-objects $(TEST_SUITES) worldcheck
+	@mkdir -p $(BUILD_DIR)
+	@rm -f $(TEST_FAIL_FILE)
+	@for t in $(TEST_SUITES); do \
+	  echo ""; \
+	  echo "=== $$t ==="; \
+	  ./$$t || echo "  $$t" >> $(TEST_FAIL_FILE); \
 	done
+	@echo ""
+	@echo "=== worldcheck (.ozone auditor, every shipped world) ==="
+	@for w in GameData/Worlds/*/World.ozone; do \
+	  ./worldcheck "$$w" || echo "  worldcheck $$w" >> $(TEST_FAIL_FILE); \
+	done
+	@echo ""
+	@if [ -s $(TEST_FAIL_FILE) ]; then \
+	  echo "**************"; \
+	  echo "FAILED SUITES:"; \
+	  cat $(TEST_FAIL_FILE); \
+	  rm -f $(TEST_FAIL_FILE); \
+	  echo "**************"; \
+	  exit 1; \
+	fi
+	@rm -f $(TEST_FAIL_FILE)
+	@echo "All suites passed."
 
 clean:
 	rm -rf $(BUILD_DIR) *.exe AngelServ Angels95 AngelMaster OzPack *.o AngelEd/*.o AngelEd/Source/*.o test_context test_parser test_registry test_ozone_parser test_join_uri test_master test_network test_game_state test_ozanim test_ozls_writer test_autoconvex test_csg test_surface test_gametype test_editorbus test_assetscope worldcheck

@@ -50,7 +50,7 @@ jobs:
       - name: Build server (AngelServ)
         run: make AngelServ
 
-      - name: Build and run worldcheck
+      - name: Build worldcheck (the .ozone auditor; run in a later step)
         run: make worldcheck
 
       - name: Build client (Angels95)
@@ -58,23 +58,17 @@ jobs:
 
       - name: Build and run the test suites
         run: |
-          # CI previously ran worldcheck but never `make test`, so a new suite was
-          # not exercised until someone ran it locally - which is how
-          # test_ozls_writer and test_surface sat unrun for a long time.
-          #
-          # `make test` deliberately CONTINUES PAST FAILURES (each suite is
-          # invoked as `-./suite`) so one broken suite still reports the rest.
-          # That makes its exit code useless for execution failures, hence the
-          # grep below. A COMPILE failure is still fatal: only the `./suite`
-          # invocation is `-`-prefixed, the compile rules are not.
-          #
-          # Every suite prints its failures as optional-whitespace + "FAIL", so
-          # one pattern covers them all.
-          make test 2>&1 | tee /tmp/testlog
-          if grep -qE '^[[:space:]]*FAIL' /tmp/testlog; then
-            echo "::error::a test suite reported a failure (see the log above)"
-            exit 1
-          fi
+          # `make test` is authoritative now: every suite runs, its EXIT CODE is
+          # recorded, and the target prints the names of the failures and exits 1.
+          # That closes two holes at once:
+          #   * the old recipe used `-./suite`, which told make to ignore the
+          #     status, so a suite that CRASHES (segfault / uncaught exception,
+          #     which prints no FAIL line) passed both make and the grep below;
+          #   * the list of suites was written twice (prerequisites and runner
+          #     lines), so a new suite could be built but never run.
+          # It also runs tools/check_editor_objects.sh and worldcheck over every
+          # shipped world, so those cannot silently stop being exercised either.
+          make test
 
       - name: Run worldcheck on every world
         run: |
@@ -231,6 +225,15 @@ jobs:
       - name: Build master server (AngelMaster)
         run: make AngelMaster SERVER_CXX=g++
 
+      # The Windows job used to BUILD but never TEST, so a suite that only breaks
+      # under MinGW - a header glibc forgives, a path separator, a Windows-only
+      # API pulled into a shared TU - was invisible here and only surfaced on a
+      # developer's machine. `make test` needs nothing the build steps have not
+      # already produced (raylib lands in /mingw64, and the raylib-linking suites
+      # take RAYLIB_INC from the default).
+      - name: Run the test suites
+        run: make test SERVER_CXX=g++
+
       - name: Build editor (AngelEd)
         run: |
           cd AngelEd
@@ -242,11 +245,11 @@ jobs:
           gcc -O3 -std=c99 -I ../Source/miniz -c ../Source/miniz/miniz.c -o miniz.o
           g++ $EDITOR_FLAGS $EDITOR_INC -c Source/Main.cpp -o Main.o
           # The UI layer: one unity TU (Source/UI/UiShell.cpp includes every
-# Source/UI/Panels/*.cpp). Must match AngelEd/Makefile's WIN32_OBJS = UiShell.o.
-# Adding a panel means adding a fragment, NOT a line here - see UiShell.cpp.
-g++ $EDITOR_FLAGS $EDITOR_INC -c Source/UI/UiShell.cpp -o UiShell.o
-# The editor event bus. Must match AngelEd/Makefile's EDITOR_OBJS.
-g++ $EDITOR_FLAGS $EDITOR_INC -c Source/Core/EditorEventBus.cpp -o EditorEventBus.o
+          # Source/UI/Panels/*.cpp). Must match AngelEd/Makefile's WIN32_OBJS = UiShell.o.
+          # Adding a panel means adding a fragment, NOT a line here - see UiShell.cpp.
+          g++ $EDITOR_FLAGS $EDITOR_INC -c Source/UI/UiShell.cpp -o UiShell.o
+          # The editor event bus. Must match AngelEd/Makefile's EDITOR_OBJS.
+          g++ $EDITOR_FLAGS $EDITOR_INC -c Source/Core/EditorEventBus.cpp -o EditorEventBus.o
           g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/Pawn/OzPawnSystem.cpp -o OzPawnSystem.o
           g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/Renderer/OzAssetMapper.cpp -o OzAssetMapper.o
           g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/World/OzOzoneLoader.cpp -o OzOzoneLoader.o
