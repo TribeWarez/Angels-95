@@ -361,7 +361,7 @@ animation for `Mesh.Skeletal` entities — the text `.ozanim` format
 - **Clip list** — New/Delete clips, per-clip FPS + loop toggle
 - **Transport** — Play / Pause / Stop + timeline scrub
 - **Convert to Animated** (Mesh properties / Entity Properties) — writes a
-  default clip under `GameData/Global/Anims/` and switches the entity to an
+  default clip under `GameData/Environment/Anims/` and switches the entity to an
   animated mesh
 - **Edit Verts** — vertex picking (click / Shift-add / Sel All); keyboard
   deform moves verts with **U/J/H/K/Y/I** (X/Z/Y) and rotates with **O/L**;

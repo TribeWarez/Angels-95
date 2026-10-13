@@ -604,7 +604,7 @@ static int test_parse_gameui() {
     TEST("parse GameUI entity type (declarative HUD)");
     std::string ozls = R"(
         entity "GameUI" : GameUI {
-            texture = "GameData/Global/TextBar.png"
+            texture = "GameData/Tex/Engine/TextBar.png"
             stats {
                 hud_scale = 1.5
                 hud_x = 0
@@ -614,7 +614,7 @@ static int test_parse_gameui() {
     EntityDef def = LightningScriptParser::Parse(ozls, "test_gameui.ozls");
     CHECK(def.name == "GameUI");
     CHECK(def.type == EntityType::GAMEUI);
-    CHECK(def.texture == "GameData/Global/TextBar.png");
+    CHECK(def.texture == "GameData/Tex/Engine/TextBar.png");
     CHECK_APROX(def.stats.floats["hud_scale"], 1.5f, 0.001f);
     PASS(); return 0; END_TEST();
 }
@@ -627,7 +627,7 @@ static int test_parse_gameui_slot_rects() {
     TEST("parse GameUI slot_rects bar geometry (no spaces, string stat)");
     std::string ozls = R"(
         entity "GameUI" : GameUI {
-            texture = "GameData/Global/ObjectBar_Redesigned_8_Slot.png"
+            texture = "GameData/Tex/Engine/ObjectBar_Redesigned_8_Slot.png"
             stats {
                 slot_rects = "114,126,681,494,807,126,683,494,1502,126,682,494"
                 hud_width_pct = 0.42
@@ -637,7 +637,7 @@ static int test_parse_gameui_slot_rects() {
     )";
     EntityDef def = LightningScriptParser::Parse(ozls, "test_slotbar.ozls");
     CHECK(def.type == EntityType::GAMEUI);
-    CHECK(def.texture == "GameData/Global/ObjectBar_Redesigned_8_Slot.png");
+    CHECK(def.texture == "GameData/Tex/Engine/ObjectBar_Redesigned_8_Slot.png");
 
     auto it = def.stats.strings.find("slot_rects");
     CHECK(it != def.stats.strings.end());

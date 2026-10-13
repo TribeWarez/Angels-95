@@ -170,7 +170,7 @@ static LRESULT CALLBACK ScriptMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
             SendMessage(hCombo, CB_SETCURSEL, 0, 0);
             CreateButton(hwnd, L"Create", 320, 10, 90, 26, ID_SCRIPT_NEWCREATE);
             CreateButton(hwnd, L"Cancel", 320, 40, 90, 26, ID_SCRIPT_NEWCANCEL);
-            CreateLabel(hwnd, L"Folder: GameData/Global/<type>  â€”  opened in your editor after creation.",
+            CreateLabel(hwnd, L"Folder: the type's home under GameData (skyzones: the open world)  â€”  opened in your editor after creation.",
                         10, 72, 500, 20, 0);
         } else {
             CreateLabel(hwnd, L"LightningScript files (.ozls â€” GameData/ + packages):", 10, 10, 520, 20, 1);

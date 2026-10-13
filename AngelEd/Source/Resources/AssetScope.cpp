@@ -68,7 +68,7 @@ AssetScopeNode BuildAssetScope(const std::vector<AssetScopeItem>& items,
         if (!segs.empty()) segs.pop_back();          // drop the file name itself
 
         // A loose path scanned from disk is absolute
-        // ("C:/repo/GameData/Global/x.glb"), so hide everything up to and
+        // ("C:/repo/GameData/Tex/Global/Gun/x.glb"), so hide everything up to and
         // including the GameData anchor: the visible hierarchy is just the part
         // under GameData/. Package keys have no such anchor and are used whole.
         size_t start = 0;

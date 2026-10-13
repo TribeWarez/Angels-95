@@ -36,7 +36,7 @@ void ShowSoundManager(bool show) {
 void ScanSoundBrowserFiles() {
     ScanFilesAndPackages("Audio/Sounds", { ".wav", ".ogg", ".mp3" }, g_sfxFiles);
     ScanFilesAndPackages("Audio/Ambience", { ".wav", ".ogg", ".mp3" }, g_ambFiles);
-    ScanFilesAndPackages("", { ".wav", ".ogg", ".mp3" }, g_musicFiles);
+    ScanFilesAndPackages("Audio/Music", { ".wav", ".ogg", ".mp3" }, g_musicFiles);
     if (g_editorPanels.hSoundMgr)
         SendMessage((HWND)g_editorPanels.hSoundMgr, WM_USER + 50, 0, 0);
 }
@@ -93,7 +93,7 @@ static LRESULT CALLBACK SoundMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
     case WM_USER + 50: {
         SoundMgrPopulateList(hList);
         // Update source label
-        const char* cats[] = {"Global/Sounds/ (SFX)", "Global/ (Music)", "Global/Sounds/Ambience/"};
+        const char* cats[] = {"Audio/Sounds/ (SFX)", "Audio/Music/", "Audio/Ambience/"};
         SetWindowTextA(hSrcLabel, TextFormat("Source: GameData/%s", cats[g_soundCategory]));
         break;
     }
@@ -133,8 +133,8 @@ static LRESULT CALLBACK SoundMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
             g_soundCategory = (id == ID_SOUND_CAT_SFX) ? 0 : (id == ID_SOUND_CAT_MUS) ? 1 : 2;
             SoundMgrPopulateList(hList);
             SetWindowTextA(hSrcLabel, TextFormat("Source: %s",
-                (g_soundCategory == 0) ? "GameData/Global/Sounds/" :
-                (g_soundCategory == 1) ? "GameData/ (Music)" : "GameData/Global/Sounds/Ambience/"));
+                (g_soundCategory == 0) ? "GameData/Audio/Sounds/" :
+                (g_soundCategory == 1) ? "GameData/Audio/Music/" : "GameData/Audio/Ambience/"));
         }
         break;
     }

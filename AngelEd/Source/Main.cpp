@@ -1909,9 +1909,9 @@ OmegaTechEditor.DrawModel = false;
                 size_t dot = file.rfind('.');
                 if (dot != std::string::npos) file = file.substr(0, dot);
                 if (file.empty()) file = "anim";
-                std::string path = "GameData/Global/Anims/" + file + ".ozanim";
+                std::string path = "GameData/Environment/Anims/" + file + ".ozanim";
                 std::error_code ec;
-                fs::create_directories("GameData/Global/Anims", ec);
+                fs::create_directories("GameData/Environment/Anims", ec);
                 if (!fs::exists(path)) {
                     ozanim::Animation a;
                     ozanim::Clip c; c.name = "Idle"; c.fps = 30.0f; c.loop = true;

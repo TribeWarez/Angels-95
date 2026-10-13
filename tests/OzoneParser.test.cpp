@@ -202,9 +202,9 @@ static void test_mesh_animfile() {
     test_count++;
     printf("  TEST Mesh.Skeletal animfile=/speed=... ");
     auto e = OzoneParser::parse_string(
-        "Mesh.Skeletal GameData/M.glb 0 0 0 0 animfile=Global/Anims/m.ozanim speed=2.5\n");
+        "Mesh.Skeletal GameData/M.glb 0 0 0 0 animfile=Environment/Anims/m.ozanim speed=2.5\n");
     bool ok = e.size() == 1 && e[0].type == OzonePrimitiveType::ENTITY_MESH_SKELETAL
-        && e[0].animFile == "Global/Anims/m.ozanim"
+        && e[0].animFile == "Environment/Anims/m.ozanim"
         && e[0].animSpeed == 2.5f
         && e[0].args.size() == 4;
     if (ok) { pass_count++; printf("PASS\n"); }

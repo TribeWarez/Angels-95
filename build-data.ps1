@@ -161,8 +161,8 @@ if (Test-Path $titleDir) {
     Run-OzPack "OZTX" $titleDir "$OUT_TEX\title.oztex"
 }
 
-# --- Vertex-keyframe animation clips (Global/Anims: *.ozanim) ---
-$animsDir = "$GAMEDATA\Global\Anims"
+# --- Vertex-keyframe animation clips (Environment/Anims: *.ozanim) ---
+$animsDir = "$GAMEDATA\Environment\Anims"
 if (Test-Path $animsDir) {
     Run-OzPack "OZPK" $animsDir "$OUT\anims.ozpak"
 }
