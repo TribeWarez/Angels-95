@@ -128,7 +128,7 @@ std::string StripTrailingSlash(std::string s) {
 }
 
 // The world NAME a def was parsed from, or "" when the def is global
-// (GameData/Global, GameData/Pawns, packages) and therefore always valid.
+// (a category folder such as Pawn/Pawns or Tex/Global/Gun, or a package)
 // Comparing names rather than full paths keeps this working for the absolute
 // paths the .ozls scanner records and for packaged worlds.
 std::string WorldNameOfDef(const std::string& sourcePath) {

@@ -86,6 +86,30 @@ public:
         return nullptr;
     }
 
+    // Basenames across every loaded package whose filename ends with `suffix`
+    // (case-insensitive). For loaders that DISCOVER content rather than name one
+    // file: the pawn .cfg defs live in pawns_defs.ozpak so a packaged-only
+    // install keeps the authored defs instead of the hardcoded fallbacks.
+    std::vector<std::string> ListAssetBasenames(const char* suffix) {
+        std::vector<std::string> out;
+        std::string suf = suffix;
+        for (char& c : suf) c = (char)std::tolower((unsigned char)c);
+        for (auto& r : m_readers) {
+            uint32_t n = r.EntryCount();
+            for (uint32_t i = 0; i < n; i++) {
+                const OzPackageEntry* e = r.EntryAt(i);
+                if (!e) continue;
+                std::string low = e->filename;
+                for (char& c : low) c = (char)std::tolower((unsigned char)c);
+                if (low.size() < suf.size()) continue;
+                if (low.compare(low.size() - suf.size(), suf.size(), suf) != 0) continue;
+                const char* slash = strrchr(e->filename, '/');
+                out.push_back(slash ? slash + 1 : e->filename);
+            }
+        }
+        return out;
+    }
+
     // Resolve a key inside ONE named package, matched on the package's own filename.
     //
     // Needed wherever a basename is ambiguous across packages. Per-world music is the
@@ -162,6 +186,41 @@ public:
         if (!ofs) return "";
         ofs.write((const char*)data, sz);
         ofs.close();
+
+        // A .gltf is JSON that references its buffers (and sometimes images) by
+        // relative URI. Extracting only the .gltf leaves e.g. `Predator.bin`
+        // missing next to the cached copy, and raylib then reports "Failed to
+        // load mesh/material buffers" for a model that loads fine from a loose
+        // checkout - the packaged install silently loses the pawn. Pull every
+        // relative URI out of the same package into the cache directory.
+        std::string ext = cachePath.extension().string();
+        for (char& c : ext) c = (char)std::tolower((unsigned char)c);
+        if (ext == ".gltf") {
+            std::string json((const char*)data, sz);
+            std::string keyDir;
+            size_t slash = normalized.find_last_of('/');
+            if (slash != std::string::npos) keyDir = normalized.substr(0, slash + 1);
+            size_t pos = 0;
+            while ((pos = json.find("\"uri\"", pos)) != std::string::npos) {
+                size_t colon = json.find(':', pos);
+                if (colon == std::string::npos) break;
+                size_t q1 = json.find('"', colon + 1);
+                if (q1 == std::string::npos) break;
+                size_t q2 = json.find('"', q1 + 1);
+                if (q2 == std::string::npos) break;
+                std::string uri = json.substr(q1 + 1, q2 - q1 - 1);
+                pos = q2 + 1;
+                if (uri.empty() || uri.rfind("data:", 0) == 0) continue;
+                if (uri.find("..") != std::string::npos) continue; // no escapes
+                size_t bsz = 0;
+                const uint8_t* bdata = ResolvePackageKey((keyDir + uri).c_str(), bsz);
+                if (!bdata) continue;
+                size_t us = uri.find_last_of("/\\");
+                std::string base = (us == std::string::npos) ? uri : uri.substr(us + 1);
+                std::ofstream bf(cacheDir / base, std::ios::binary);
+                if (bf) bf.write((const char*)bdata, bsz);
+            }
+        }
 
         m_modelCache[normalized] = cachePath.string();
         return cachePath.string();

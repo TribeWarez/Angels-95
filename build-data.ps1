@@ -78,9 +78,36 @@ foreach ($d in @($OUT, $OUT_TEX, $OUT_MUS, $OUT_SND, $OUT_ZONES)) {
     if (-not (Test-Path $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
 }
 
-Write-Step "=== Packaging Global Assets ==="
+# --- Prune the packages this script owns ---
+# OzPack has no notion of a stale output: a renamed source folder used to leave
+# its old .oz* behind, and PackageAssetLoader opens EVERY .oz* under System/Data,
+# so a stale package keeps resolving paths that no longer exist (and can win a
+# basename tie against the current one). Delete what a previous run wrote first.
+# imported_*.oz* are the editor's own import packages - not ours, keep them.
+Get-ChildItem -Path $OUT -Recurse -File |
+    Where-Object { $_.Name -like "*.oz*" -and $_.Name -notlike "imported_*" } |
+    ForEach-Object { Remove-Item $_.FullName -Force }
 
-# --- Guns / Weapons ---
+Write-Step "=== Packaging Shared Assets ==="
+
+# --- Audio ---
+$sndDir = "$GAMEDATA\Audio\Sounds"
+if (Test-Path $sndDir) {
+    Run-OzPack "OZSD" "$sndDir" "$OUT_SND\global.ozsnd"
+}
+
+$ambDir = "$GAMEDATA\Audio\Ambience"
+if (Test-Path $ambDir) {
+    Run-OzPack "OZMX" $ambDir "$OUT_MUS\ambience.ozmux"
+}
+
+$musicDir = "$GAMEDATA\Audio\Music"
+if (Test-Path $musicDir) {
+    Run-OzPack "OZMX" $musicDir "$OUT_MUS\library.ozmux"
+}
+
+# --- Weapons (one package per weapon, so a weapon's def, model, textures and
+#     source art stay together and its def-relative stats keep resolving) ---
 $gunDir = "$GAMEDATA\Tex\Global\Gun"
 if (Test-Path $gunDir) {
     Get-ChildItem $gunDir -Directory | ForEach-Object {
@@ -94,59 +121,72 @@ if (Test-Path $gunDir) {
     }
 }
 
-# --- Objects / Props ---
+# --- Gear / objects (defs at the root next to the meshes and the plant folder;
+#     the registry reads packaged defs, so the whole folder is one package) ---
 $objDir = "$GAMEDATA\Tex\Global\Models"
 if (Test-Path $objDir) {
-    Get-ChildItem $objDir -Directory | ForEach-Object {
-        $name = $_.Name
-        if ((Get-ChildItem $_.FullName -File -Recurse | Measure-Object).Count -gt 0) {
-            Run-OzPack "OZPK" "$objDir\$name" "$OUT\object_$name.ozpak"
-        } else {
-            Write-Host "  (skipping empty: $name)" -ForegroundColor DarkGray
-        }
-    }
+    Run-OzPack "OZPK" $objDir "$OUT\models.ozpak"
 }
 
-# --- Items (textures) ---
+# --- Items (item icons + MedMeshes) ---
 $itemsDir = "$GAMEDATA\Tex\Global\Items"
 if (Test-Path $itemsDir) {
     Run-OzPack "OZTX" $itemsDir "$OUT_TEX\items.oztex"
 }
 
-# --- Sounds ---
-$sndDir = "$GAMEDATA\Audio\Sounds"
-if (Test-Path $sndDir) {
-    Run-OzPack "OZSD" "$sndDir" "$OUT_SND\global.ozsnd"
-}
-
-# --- Music (ambience) ---
-$ambDir = "$GAMEDATA\Audio\Ambience"
-if (Test-Path $ambDir) {
-    Run-OzPack "OZMX" $ambDir "$OUT_MUS\ambience.ozmux"
-}
-
-# --- Shaders ---
-$shaderDir = "$GAMEDATA\Shaders"
-if (Test-Path $shaderDir) {
-    Run-OzPack "OZPK" $shaderDir "$OUT\shaders.ozpak"
-}
-
-# --- Editor icons (entity gizmos + editor app icon) ---
-$engineDir = "$GAMEDATA\Tex\Editor"
-if (Test-Path $engineDir) {
-    Run-OzPack "OZTX" $engineDir "$OUT_TEX\editor_icons.oztex"
-}
-
-# --- Skybox library (Tex/Global/Sky: *.png panoramas used by levelinfo skybox paths) ---
+# --- Skybox library (*.png panoramas used by levelinfo skybox paths) ---
 $skyDir = "$GAMEDATA\Tex\Global\Sky"
 if (Test-Path $skyDir) {
     Run-OzPack "OZTX" $skyDir "$OUT_TEX\sky.oztex"
 }
 
-# --- Pawn defs + models + sprites (Pawn/Pawns: *.ozls, *.glb/.gltf, <Name>.png) ---
+# --- Portal/effect textures ---
+$efxDir = "$GAMEDATA\Tex\Global\EFX"
+if (Test-Path $efxDir) {
+    Run-OzPack "OZTX" $efxDir "$OUT_TEX\efx.oztex"
+}
+
+# --- Title art ---
+$titleDir = "$GAMEDATA\Tex\Title"
+if (Test-Path $titleDir) {
+    Run-OzPack "OZTX" $titleDir "$OUT_TEX\title.oztex"
+}
+
+# --- Menu widget skin ---
+$menuDir = "$GAMEDATA\Tex\Menu"
+if (Test-Path $menuDir) {
+    Run-OzPack "OZTX" $menuDir "$OUT_TEX\menu.oztex"
+}
+
+# --- Editor icons (entity gizmos + editor app icon) ---
+$editorDir = "$GAMEDATA\Tex\Editor"
+if (Test-Path $editorDir) {
+    Run-OzPack "OZTX" $editorDir "$OUT_TEX\editor_icons.oztex"
+}
+
+# --- Engine art (HUD atlas, bar font, text bar, GameUI.ozls, app icons) ---
+$engineArtDir = "$GAMEDATA\Tex\Engine"
+if (Test-Path $engineArtDir) {
+    Run-OzPack "OZPK" $engineArtDir "$OUT\engine.ozpak"
+}
+
+# --- Shared tileset library ---
+$tilesetDir = "$GAMEDATA\Tex\Tileset"
+if (Test-Path $tilesetDir) {
+    Run-OzPack "OZTX" $tilesetDir "$OUT_TEX\tileset.oztex"
+}
+
+# --- Pawn models + sprites (Pawn/Pawns: *.ozls, *.glb/.gltf, <Name>.png) ---
 $pawnDir = "$GAMEDATA\Pawn\Pawns"
 if (Test-Path $pawnDir) {
     Run-OzPack "OZPK" $pawnDir "$OUT\pawns.ozpak"
+}
+
+# --- Pawn definitions (*.cfg). The client and the editor read these from the
+#     package too, so a packaged-only install keeps the authored defs. ---
+$pawnDefsDir = "$GAMEDATA\Pawn\PawnDefs"
+if (Test-Path $pawnDefsDir) {
+    Run-OzPack "OZPK" $pawnDefsDir "$OUT\pawns_defs.ozpak"
 }
 
 # --- Player character model (Pawn/Player: *.glb + textures) ---
@@ -155,24 +195,29 @@ if (Test-Path $playerDir) {
     Run-OzPack "OZPK" $playerDir "$OUT\player.ozpak"
 }
 
-# --- Title/menu art ---
-$titleDir = "$GAMEDATA\Tex\Title"
-if (Test-Path $titleDir) {
-    Run-OzPack "OZTX" $titleDir "$OUT_TEX\title.oztex"
-}
-
-# --- Vertex-keyframe animation clips (Environment/Anims: *.ozanim) ---
-$animsDir = "$GAMEDATA\Environment\Anims"
-if (Test-Path $animsDir) {
-    Run-OzPack "OZPK" $animsDir "$OUT\anims.ozpak"
-}
-
-# --- Skill tree + spell defs (Pawn/Skills: *.ozls). ---
+# --- Skill tree + spell defs (Pawn/Skills: *.ozls) ---
 $skillsDir = "$GAMEDATA\Pawn\Skills"
 if (Test-Path $skillsDir) {
     Run-OzPack "OZPK" $skillsDir "$OUT\skills.ozpak"
 }
 
+# --- Light defaults (Pawn/Lights: *.ozls) ---
+$lightsDir = "$GAMEDATA\Pawn\Lights"
+if (Test-Path $lightsDir) {
+    Run-OzPack "OZPK" $lightsDir "$OUT\lights.ozpak"
+}
+
+# --- Environment meshes + vertex-keyframe clips (Environment/**: *.glb/.obj/.ozanim) ---
+$envDir = "$GAMEDATA\Environment"
+if (Test-Path $envDir) {
+    Run-OzPack "OZPK" $envDir "$OUT\environment.ozpak"
+}
+
+# --- Shaders ---
+$shaderDir = "$GAMEDATA\Shaders"
+if (Test-Path $shaderDir) {
+    Run-OzPack "OZPK" $shaderDir "$OUT\shaders.ozpak"
+}
 
 Write-Step "=== Packaging Worlds ==="
 

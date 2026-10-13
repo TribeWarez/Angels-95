@@ -177,9 +177,22 @@ Full tree: `Wiki/Engine-Overview.md`. Key modules:
 
 ## Package system (OzPackage)
 - Extensions + magic: `.ozpak`/OZPK (generic: models/scripts/shaders), `.oztex`/OZTX (textures), `.ozsnd`/OZSD (sounds), `.ozmux`/OZMX (music), `.ozone`/OZWN (worlds).
-- Runtime: `PackageAssetLoader::Instance().Init()` scans `System/Data/*.oz*`. Read assets via `*WithFallback` wrappers (filesystem first, then packages).
-- Models use temp-file cache in `System/Cache/` (raylib has no `LoadModelFromMemory`).
-- Packaging: `OzPack pack <magic|auto> <dir> <out>`; also `unpack`, `list`, `dir`. `build-data.ps1` drives it per GameData subdirectory.
+- Runtime: `PackageAssetLoader::Instance().Init()` scans `System/Data/*.oz*`. Read assets via `*WithFallback` wrappers (filesystem first, then packages). A `GameData/...` path resolves by exact key, then basename, then first-segment-stripped key.
+- Models use temp-file cache in `System/Cache/` (raylib has no `LoadModelFromMemory`). A packaged `.gltf` also has its relative `"uri"` buffers extracted into the cache; without that raylib fails on the missing `.bin` beside the extracted text (`Predator.gltf` was the case that proved it).
+- Packaging: `OzPack pack <magic|auto> <dir> <out>`; also `unpack`, `list`, `dir`. `build-data.ps1` drives it, one package per asset root, and **deletes the packages it owns first** (everything but `imported_*`) because a renamed folder otherwise leaves a stale `.oz*` that still resolves.
+- Loose-only loaders need a package path or a release install silently drops content: the pawn `.cfg` defs are read from `pawns_defs.ozpak` via `PackageAssetLoader::ListAssetBasenames(".cfg")`, and the **server's** `load_server_pawn_defs` takes `<gamedata_dir>/Pawn/PawnDefs` so `--dir` is honoured.
+
+## GameData asset layout
+```
+Audio/{Sounds/{Entities,Guns,Items,Skills,UI},Ambience,Music}   Tex/{Global/{Gun,Models,Items,Sky,EFX,Skills,Lights},Editor,Engine,Title,Menu,Tileset,World}
+Pawn/{Pawns,PawnDefs,Player,Lights,Skills}                      Environment/{Rocks,Plant,Industrial,Ethereal,Greece,Egypt,Anims}
+Shaders/  Worlds/<Name>/{World.ozone,oztex,Models,Music}  Saves/  Screenshots/  Launch.conf
+```
+- **No folder name may contain a space or parenthesis.** The `.ozls` stats parser reads one whitespace-delimited token and OZONE has no quote parsing, so `Environment (Meshes)/x.glb` breaks silently.
+- A def lives beside its category: weapon defs+models+textures in `Tex/Global/Gun/<weapon>/` (its relative stats survive), gear in `Tex/Global/Models/`, HUD def in `Tex/Engine/`, spell/skill and light defs in `Pawn/{Skills,Lights}/`. The registry scans all of GameData, so defs resolve wherever they sit.
+- World-local assets stay world-local (`Worlds/<Name>/oztex` is the tileset-slot contract, `Models/` the props, `Music/` the track); `Tex/World` and the `Environment/<theme>` folders are the shared-asset homes.
+- **`make test` runs `worldcheck --asset-refs`**: it resolves every path-valued key in GameData's `.ozls`/`.cfg` files and fails on a dangling path. Pre-existing missing content is listed by basename in `tools/assetrefs-allow.txt`, so the gate is about NEW breakage. A folder move that forgets a reference fails the build instead of rendering a missing asset.
+- `tools/probe_at.ps1 <world.ozone> <x> <y>` prints the brushes containing a world point; useful for turning a worldcheck/headroom coordinate into a source line.
 
 ## World format (OZONE) - sole source of truth
 - The legacy WDL format and its fallback loader have been **removed**. OZONE + the LightningScript/Pawn entity system are the only world source of truth. A missing `GameData/Worlds/<Name>/World.ozone` is a hard error.
@@ -351,7 +364,7 @@ World/
 - Runtime: `oz::AnimatedMesh` (`Source/Renderer/Mesh/AnimatedMesh.*`) samples the clip and CPU-uploads positions via `UpdateMeshBuffer(mesh, 0, ...)` (apply-pose-then-draw; never `UploadMesh` on a loaded mesh). `oz::MeshCache::GetAnimated(mesh, tex, animFile, ...)` (cache key includes the anim file); falls back to StaticMesh.
 - `MeshObjectNode` fields `animFile`, `animSpeed`, `animPaused`, `editPose` (editor-only live pose). OZONE: `Mesh.Skeletal <path> x y z yaw [scale=] [tex=] [animfile=Environment/Anims/x.ozanim] [speed=] [wind=1]`. `speed=` / `animfile=` parsed in `OzoneParser`, applied in `OzOzoneLoader`, exported in `AngelEd` `ExportToOzone`.
 - Editor: toolbar **Anim** opens the Animation panel — clip list, New/Delete, FPS/loop, Play/Pause/Stop, timeline scrub; **Convert to Animated** (Mesh properties / Entity Properties) writes a default clip under `GameData/Environment/Anims/`; **Edit Verts** enables vertex picking (click / Shift-add / Sel All), keyboard deform (U/J/H/K/Y/I move, O/L rotate; Ctrl+Z/Y undo/redo, tool-scoped) and **Add Key/Del Key** capture sparse offsets. `SelType::MESH` selection highlight + selection raycast are wired.
-- Packaging: `build-data.ps1` packs `GameData/Environment/Anims` → `System/Data/anims.ozpak` (`OZPK`). Playback is client-cosmetic (not networked).
+- Packaging: `build-data.ps1` packs `GameData/Environment` → `System/Data/environment.ozpak` (`OZPK`). Playback is client-cosmetic (not networked).
 
 ## Weapons (b54+)
 - Data-driven `.ozls` entities of type `weapon`: ranged (ProjectileNode; speed/spread/damage/lifetime; `magazine`/`reload_time` stats) or melee (`reach` stat, `on_swing`/`on_hit` actions).

@@ -148,8 +148,8 @@ static void test_path_anchoring() {
 static void test_same_name_in_both_scopes() {
     printf("same name on disk AND in a package\n");
     std::vector<AssetScopeItem> items = {
-        Loose("hero", "C:/repo/GameData/Global/hero.glb"),
-        Pkg("hero", "Global/hero.glb"),
+        Loose("hero", "C:/repo/GameData/Environment/hero.glb"),
+        Pkg("hero", "Environment/hero.glb"),
     };
     AssetScopeNode r = BuildAssetScope(items, "");
     const AssetScopeNode* gd = Root(r, "(GameData)");
@@ -172,7 +172,7 @@ static void test_package_extension_on_disk_is_not_a_package() {
     printf("a .oz* file on disk stays a loose file\n");
     std::vector<AssetScopeItem> items = {
         Loose("models", "C:/repo/System/Data/models.ozpak"),
-        Pkg("hero", "Global/hero.glb"),
+        Pkg("hero", "Environment/hero.glb"),
     };
     AssetScopeNode r = BuildAssetScope(items, "");
     const AssetScopeNode* gd = Root(r, "(GameData)");
@@ -189,7 +189,7 @@ static void test_search_filter() {
     printf("search filter\n");
     std::vector<AssetScopeItem> items = {
         Loose("Hero", "C:/repo/GameData/Pawn/Player/Hero.glb"),
-        Loose("prop", "C:/repo/GameData/Global/Props/rock.glb"),
+        Loose("prop", "C:/repo/GameData/Environment/Props/rock.glb"),
         Pkg("Hero", "Pawn/Player/Hero.glb"),
     };
 
@@ -210,8 +210,8 @@ static void test_search_filter() {
 
     // Pruning must be recursive - an intermediate folder with no match disappears
     // entirely rather than surviving as an empty parent.
-    check(Child(*gd, "Global") != nullptr, "the surviving branch keeps its folders");
-    check(Child(*Child(*gd, "Global"), "Player") == nullptr,
+    check(Child(*gd, "Environment") != nullptr, "the surviving branch keeps its folders");
+    check(Child(*Child(*gd, "Environment"), "Player") == nullptr,
           "a folder whose only leaf was filtered out is pruned");
 }
 
@@ -286,11 +286,11 @@ static void test_degenerate_inputs() {
     // Windows backslash separators must split the same as forward slashes: loose
     // paths scanned from disk use '\'.
     std::vector<AssetScopeItem> win = {
-        Loose("hero", "C:\\repo\\GameData\\Global\\hero.glb"),
+        Loose("hero", "C:\\repo\\GameData\\Environment\\hero.glb"),
     };
     AssetScopeNode w = BuildAssetScope(win, "");
     const AssetScopeNode* gd = Root(w, "(GameData)");
-    check(gd && Child(*gd, "Global") != nullptr, "backslash separators split like forward slashes");
+    check(gd && Child(*gd, "Environment") != nullptr, "backslash separators split like forward slashes");
     check(gd && Child(*gd, "GameData") == nullptr, "anchor still stripped with backslashes");
 }
 
@@ -303,18 +303,18 @@ static void test_dedupe_prefers_real_file() {
 
     // The exact case the old code had to guess at: a packaged copy listed FIRST.
     std::vector<AssetScopeItem> v = {
-        Pkg("hero", "Global/hero.glb"),
-        Loose("hero", "C:/repo/GameData/Global/hero.glb"),
+        Pkg("hero", "Environment/hero.glb"),
+        Loose("hero", "C:/repo/GameData/Environment/hero.glb"),
     };
     DedupeAssetItemsByName(v);
     check(v.size() == 1, "a same-named package copy does not duplicate the real file");
     check(!v[0].fromPackage, "the surviving entry is the real file");
-    check(v[0].path == "C:/repo/GameData/Global/hero.glb", "the real file's path survives");
+    check(v[0].path == "C:/repo/GameData/Environment/hero.glb", "the real file's path survives");
 
     // And the reverse order, because the sort has to not care about input order.
     std::vector<AssetScopeItem> v2 = {
-        Loose("hero", "C:/repo/GameData/Global/hero.glb"),
-        Pkg("hero", "Global/hero.glb"),
+        Loose("hero", "C:/repo/GameData/Environment/hero.glb"),
+        Pkg("hero", "Environment/hero.glb"),
     };
     DedupeAssetItemsByName(v2);
     check(v2.size() == 1 && !v2[0].fromPackage, "same result regardless of input order");

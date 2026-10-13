@@ -143,17 +143,44 @@ Angels95/
     Makefile                # Separate editor Makefile
 
   GameData/                 # Loose assets, worlds, saves
+    Audio/                  # every sound and music call lives under here
+      Sounds/
+        Entities/           # player/creature: jump, land, hurt, gait, aggro
+        Guns/               # weapon fire one-shots
+        Items/              # item pickup sounds (reserved)
+        Skills/             # spell/skill cast sounds
+        UI/                 # menu clicks, dialogue text noise
+      Ambience/             # looping ambience beds
+      Music/                # music library (worlds keep their own Music/Main.mp3)
+    Tex/
+      Global/
+        Gun/<weapon>/       # weapon .ozls + model + textures, kept together
+        Models/<name>/      # gear/object .ozls + meshes + icons
+        Items/              # item icons + MedMeshes
+        Sky/                # skybox panoramas (levelinfo + skyzone defs)
+        EFX/                # portal/effect textures
+        Skills/ Lights/     # spell icons, light art (reserved)
+      Editor/               # entity gizmo icons + editor app icon
+      Engine/               # HUD atlas, bar font, TextBar, GameUI.ozls, app icons
+      Title/ Menu/          # title art, menu widget skin
+      Tileset/              # shared tile library (Ancient/Egypt/Iced)
+      World/                # shared world textures (reserved)
+    Pawn/
+      Pawns/                # pawn models + sprite fallbacks + Textures/
+      PawnDefs/*.cfg        # Data-driven NPC definitions
+      Player/               # player character models + textures
+      Lights/Light.ozls     # light defaults layer
+      Skills/*.ozls         # skill-tree nodes + spell defs
+    Environment/
+      Rocks/ Plant/ Industrial/ Ethereal/ Greece/ Egypt/   # shared prop meshes
+      Anims/*.ozanim        # vertex-keyframe clips
+    Shaders/                # .vs/.fs (System/Shaders is a build-time copy)
     Worlds/
       <WorldName>/
         World.ozone         # World description (OZONE format)
-        Models/             # .obj/.glb models, textures, heightmap, Skybox.png
-        Music/              # Background music
-        oztex/              # Tileset + free-placement textures
-    Global/
-      PawnDefs/*.cfg        # Data-driven NPC definitions
-      UI/GameUI.ozls        # Authored HUD object-bar def
-      gun/                  # Weapon .ozls defs + FBX-derived .glb view-models
-      sky/                  # Skybox textures (.dds)
+        Models/             # world-local props (.glb, Skybox.png)
+        Music/              # per-world track (Main.mp3)
+        oztex/              # tileset slots + brush textures
     Saves/                  # Binary save files (gitignored)
 
   System/                   # Release directory (gitignored, assembled by scripts)
@@ -263,11 +290,22 @@ Assets can be distributed as loose files in `GameData/` OR packaged into `.oz*` 
 | `.ozmux` | Music | OZMX | WAV/MP3 |
 | `.ozone` | World | OZWN | World files |
 
-Loading is handled by `PackageAssetLoader::Instance().Init()` which scans `System/Data/*.oz*`. Use `*WithFallback` wrappers (`LoadTextureWithFallback`, `LoadModelWithFallback`, etc.) which check the filesystem first, then search packages.
+Loading is handled by `PackageAssetLoader::Instance().Init()` which scans `System/Data/*.oz*`. Use `*WithFallback` wrappers (`LoadTextureWithFallback`, `LoadModelWithFallback`, etc.) which check the filesystem first, then search packages. A `GameData/...` path is matched by stripping that prefix, then by basename, then by stripping the first segment — which is why a packaged install resolves a reference like `GameData/Audio/Sounds/Guns/machgf3b.wav`.
 
-Models require a temp-file cache in `System/Cache/` because raylib has no `LoadModelFromMemory`.
+`build-data.ps1` packs each asset root under `GameData/` into `System/Data`:
 
-Packaging is done via `.\build-data.ps1` which uses `OzPack.exe`.
+| Package | Contents |
+|---|---|
+| `gun_<weapon>.ozpak` | one per weapon folder (`gun/`, `models.ozpak`, `player.ozpak`, `pawns.ozpak`, `pawns_defs.ozpak`, `skills.ozpak`, `lights.ozpak`, `environment.ozpak`, `engine.ozpak`, `shaders.ozpak`) |
+| `.oztex` under `Textures/` | `items`, `sky`, `efx`, `title`, `menu`, `editor_icons`, `tileset`, `world_<W>_tex` |
+| `Sound/global.ozsnd`, `Music/{ambience,library}.ozmux` | audio |
+| `Zones/world_<W>.ozone` | the whole world folder (World.ozone, `.ozls`, Models/, Music/, oztex/) |
+
+The script deletes the packages it owns first (everything except `imported_*`): a renamed source folder used to leave its old `.oz*` behind, and the loader opens every package under `System/Data`, so the stale copy kept resolving.
+
+`worldcheck --asset-refs` audits every path-valued key in GameData's `.ozls`/`.cfg` files (and the levelinfo skybox pair) against the filesystem. It runs in `make test` and in CI, so a folder move that forgets a reference fails the build instead of silently rendering a missing asset. The pre-existing missing content is registered by basename in `tools/assetrefs-allow.txt`.
+
+Models require a temp-file cache in `System/Cache/` because raylib has no `LoadModelFromMemory`. A packaged `.gltf` also has its relative `"uri"` buffers extracted into the cache, or raylib fails on the missing `.bin` next to the extracted text.
 
 ## Particle System
 

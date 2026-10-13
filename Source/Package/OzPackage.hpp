@@ -274,6 +274,12 @@ public:
     uint32_t Magic() const { return m_magic; }
     uint32_t EntryCount() const { return (uint32_t)m_entries.size(); }
 
+    // Entry access by index. For loaders that ENUMERATE a package instead of
+    // naming one file - the pawn .cfg defs are the case that needed it.
+    const OzPackageEntry* EntryAt(uint32_t i) const {
+        return i < m_entries.size() ? &m_entries[i] : nullptr;
+    }
+
     // Find entry by exact filename (forward slashes)
     const OzPackageEntry* Find(const char* name) const {
         for (auto& e : m_entries) {

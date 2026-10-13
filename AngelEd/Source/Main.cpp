@@ -165,8 +165,11 @@ int main(int argc, char **argv){
     {
         auto& ps = PawnSystem::Instance();
         const char* defsDir = "GameData/Pawn/PawnDefs";
+        // Loose defs first, then packaged ones (.cfg ship in pawns_defs.ozpak).
+        // Loose wins: the editor runs from a checkout, where the author's file is
+        // the authority, and a packaged copy must not shadow it.
+        std::vector<std::pair<std::string, std::string>> cfgFiles; // basename, text
         if (fs::exists(defsDir)) {
-            int loaded = 0;
             for (auto& entry : fs::directory_iterator(defsDir)) {
                 if (!entry.is_regular_file()) continue;
                 std::string ext = entry.path().extension().string();
@@ -174,6 +177,23 @@ int main(int argc, char **argv){
                 if (ext != ".cfg") continue;
                 std::ifstream f(entry.path());
                 if (!f.is_open()) continue;
+                std::stringstream ss;
+                ss << f.rdbuf();
+                cfgFiles.emplace_back(entry.path().filename().string(), ss.str());
+            }
+        }
+        for (const std::string& cfg : PackageAssetLoader::Instance().ListAssetBasenames(".cfg")) {
+            bool seen = false;
+            for (auto& cf : cfgFiles) if (cf.first == cfg) { seen = true; break; }
+            if (seen) continue;
+            std::string text = LoadFileTextWithFallback(("GameData/Pawn/PawnDefs/" + cfg).c_str());
+            if (!text.empty()) cfgFiles.emplace_back(cfg, text);
+        }
+
+        if (!cfgFiles.empty()) {
+            int loaded = 0;
+            for (auto& cf : cfgFiles) {
+                std::istringstream f(cf.second);
                 std::string name, sp, sc;
                 std::string modelPath, modelTex, meshType;
                 std::string animIdle, animPatrol, animChase, animReturn, animDeath;
@@ -236,8 +256,7 @@ int main(int argc, char **argv){
                     def.anim_return = animReturn;
                     def.anim_death = animDeath;
                     def.anim_speed = animSpeed;
-                    def.baseDir = entry.path().parent_path().string();
-                    if (!def.baseDir.empty()) def.baseDir += "/";
+                    def.baseDir = std::string(defsDir) + "/";
                     ps.RegisterDef(def);
                     if (!sp.empty())
                         PawnManagerAddPawn(name.c_str(), sp.c_str());
@@ -247,10 +266,10 @@ int main(int argc, char **argv){
                     EditorLog("Loaded pawn def: %s", name.c_str());
                 }
             }
-            EditorLog("Loaded %d pawn definitions from %s", loaded, defsDir);
+            EditorLog("Loaded %d pawn definitions from %s (loose + packaged)", loaded, defsDir);
         } else {
-            // Legacy fallback if no config directory exists
-            EditorLog("WARN: %s not found, using hardcoded defaults", defsDir);
+            // Legacy fallback if no config files are available at all
+            EditorLog("WARN: no pawn defs loose or packaged (%s), using hardcoded defaults", defsDir);
             {
                 PawnDef d; d.name="Walker"; d.speed=1.5f; d.aggroRange=6.0f; d.attackRange=1.5f; d.damage=10.0f; d.maxHealth=100; ps.RegisterDef(d);
                 PawnManagerAddPawn("Walker", "GameData/Pawn/Pawns/Walker.png");

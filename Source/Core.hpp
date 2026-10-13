@@ -23,10 +23,12 @@
 #include "raymath.h"
 #include "Renderer/rlights/rlights.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 
 #include "Screenshot.hpp"
 
@@ -609,8 +611,12 @@ void OmegaTechInit()
         auto& ps = PawnSystem::Instance();
         const char* defsDir = "GameData/Pawn/PawnDefs";
         namespace fs = std::filesystem;
+        // Collect from the loose directory first, then from the packages: a
+        // release install carries System/Data/*.oz* only, so the .cfg defs ship
+        // inside pawns_defs.ozpak. Loose files win - a dev edit must not be
+        // overridden by a packaged copy.
+        std::vector<std::pair<std::string, std::string>> cfgFiles; // basename, text
         if (fs::exists(defsDir)) {
-            int loaded = 0;
             for (auto& entry : std::filesystem::directory_iterator(defsDir)) {
                 if (!entry.is_regular_file()) continue;
                 std::string ext = entry.path().extension().string();
@@ -618,6 +624,23 @@ void OmegaTechInit()
                 if (ext != ".cfg") continue;
                 std::ifstream f(entry.path());
                 if (!f.is_open()) continue;
+                std::stringstream ss;
+                ss << f.rdbuf();
+                cfgFiles.emplace_back(entry.path().filename().string(), ss.str());
+            }
+        }
+        for (const std::string& cfg : PackageAssetLoader::Instance().ListAssetBasenames(".cfg")) {
+            bool seen = false;
+            for (auto& cf : cfgFiles) if (cf.first == cfg) { seen = true; break; }
+            if (seen) continue;
+            std::string text = LoadFileTextWithFallback(("GameData/Pawn/PawnDefs/" + cfg).c_str());
+            if (!text.empty()) cfgFiles.emplace_back(cfg, text);
+        }
+
+        if (!cfgFiles.empty()) {
+            int loaded = 0;
+            for (auto& cf : cfgFiles) {
+                std::istringstream f(cf.second);
                 std::string name, sp, sc, modelPath, modelTex;
                 std::string meshType, animIdle, animPatrol, animChase, animReturn, animDeath;
                 float speed = 1.5f, aggroRange = 6.0f, attackRange = 1.5f, damage = 10.0f;
@@ -674,16 +697,16 @@ void OmegaTechInit()
                     def.anim_return = animReturn;
                     def.anim_death = animDeath;
                     def.anim_speed = animSpeed;
-                    def.baseDir = entry.path().parent_path().string();
+                    def.baseDir = std::string(defsDir) + "/";
                     if (!def.baseDir.empty()) def.baseDir += "/";
                     ps.RegisterDef(def);
                     loaded++;
                 }
             }
-            OZ_INFO("Loaded %d pawn definitions from %s", loaded, defsDir);
+            OZ_INFO("Loaded %d pawn definitions from %s (loose + packaged)", loaded, defsDir);
         } else {
-            // Fallback if no config directory exists
-            OZ_INFO("PawnDefs dir not found, using hardcoded defaults");
+            // Fallback if no config files are available at all
+            OZ_INFO("No pawn defs found loose or packaged, using hardcoded defaults");
             PawnDef d;
             d.name="Walker"; d.speed=1.5f; d.aggroRange=6.0f; d.attackRange=1.5f; d.damage=10.0f; d.maxHealth=100; ps.RegisterDef(d);
             d.name="Skaarj"; d.speed=2.5f; d.aggroRange=10.0f; d.attackRange=2.0f; d.damage=20.0f; d.maxHealth=150; ps.RegisterDef(d);
