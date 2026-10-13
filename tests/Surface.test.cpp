@@ -1370,6 +1370,58 @@ static void test_cylinder_top_convention() {
           "exporter writes the stored plane normal");
 }
 
+// Every path that opens a world must run the `levelinfo`/`particles` parse, and
+// that parse must have one definition.
+//
+// This is the bug that deleted a level's skybox: the parse lived inline in
+// WorldIO's LoadWorldDocument, and the NO-ARGUMENT startup load in main() - which
+// is what the run scripts take - loaded geometry with `OzoneLoader::LoadFile` +
+// `InjectOzoneEntities` instead, skipping it. g_levelMeta stayed default, and
+// ExportToOzone omits `levelinfo` when every field is default, so opening the
+// editor normally and saving wrote a level with no levelinfo at all: skybox and
+// game rules gone, geometry perfect, nothing reported. HistoryRestore had the same
+// hole.
+//
+// The editor is Windows-only and not unit-testable (Win32 panels, GL viewport), so
+// this is a source contract - the same technique the Props-panel check above uses.
+static void test_level_metadata_parse_is_shared() {
+    const std::string mainSrc = ReadFile("AngelEd/Source/Main.cpp");
+    const std::string io    = ReadFile("AngelEd/Source/Subsystems/WorldIO.cpp");
+    const std::string hist  = ReadFile("AngelEd/Source/Subsystems/History.cpp");
+    const std::string state = ReadFile("AngelEd/Source/Subsystems/LevelState.cpp");
+    if (mainSrc.empty() || io.empty() || hist.empty() || state.empty()) {
+        printf("  SKIP  level-metadata contract (sources not found)\n");
+        return;
+    }
+
+    // One definition, owned by the metadata's owner.
+    check(state.find("void LoadLevelMetadataFromPrims") != std::string::npos,
+          "LevelState.cpp defines the levelinfo/particles parse");
+
+    // Every world-opening path calls it.
+    check(io.find("LoadLevelMetadataFromPrims") != std::string::npos,
+          "WorldIO's LoadWorldDocument parses the metadata");
+    check(hist.find("LoadLevelMetadataFromPrims") != std::string::npos,
+          "HistoryRestore re-parses it from the snapshot");
+
+    // The inline copy must not come back to WorldIO.
+    check(io.find("meta.skyboxTexturePath = pr.entityType") == std::string::npos,
+          "WorldIO does not parse levelinfo inline any more");
+
+    // Startup must go through the ONE open path, not a hand-rolled subset. The old
+    // bypass was `OzoneLoader::Instance().LoadFile(ozonePath...)`.
+    check(mainSrc.find("LoadWorldDocument(g_documentPath)") != std::string::npos,
+          "startup loads the document through LoadWorldDocument");
+    check(mainSrc.find("LoadFile(ozonePath") == std::string::npos,
+          "startup no longer bypasses LoadWorldDocument with a bare LoadFile");
+
+    // The header must expose it so the real-TU callers can see it.
+    const std::string hdr = ReadFile("AngelEd/Source/Subsystems/LevelState.hpp");
+    if (!hdr.empty())
+        check(hdr.find("void LoadLevelMetadataFromPrims") != std::string::npos,
+              "LevelState.hpp declares it for History.cpp/WorldIO.cpp");
+}
+
 int main() {
     printf("Surface tests:\n");
     test_legacy_bits_stable();
@@ -1402,6 +1454,7 @@ int main() {
     test_face_texture_resolution();
     test_uv_transform();
     test_cylinder_top_convention();
+    test_level_metadata_parse_is_shared();
     printf("\nResults: %d/%d passed\n", pass_count, test_count);
     return (pass_count == test_count) ? 0 : 1;
 }

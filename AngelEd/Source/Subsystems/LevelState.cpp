@@ -29,6 +29,76 @@ void SetLevelMetadata(const LevelMetadata& meta) {
 }
 #endif
 
+// Parse an OZONE document's `levelinfo` / `particles` lines into g_levelMeta.
+//
+// Moved here from WorldIO's LoadWorldDocument, where being local to that one
+// function meant two other world-loading paths skipped it - the no-argument
+// startup load and HistoryRestore. Both left the metadata default, and
+// ExportToOzone omits `levelinfo` when everything is default, so a plain
+// open-save round trip DELETED the level's skybox and rules.
+void LoadLevelMetadataFromPrims(const std::vector<OzonePrimitive>& prims) {
+    for (const auto& pr : prims) {
+        if (pr.type == OzonePrimitiveType::ENTITY_LEVELINFO) {
+            LevelMetadata meta = GetLevelMetadata();
+            auto arg = [&](int i) -> float {
+                return (i >= 0 && i < (int)pr.args.size()) ? pr.args[i] : 0.0f;
+            };
+            meta.gameType = (GameType)(int)arg(0);
+            meta.maxPlayers = (int)arg(1);
+            meta.respawnTime = arg(2);
+            meta.timeLimitEnabled = arg(3) != 0.0f;
+            meta.timeLimitMinutes = arg(4);
+            meta.scoreLimit = (int)arg(5);
+            meta.friendlyFire = arg(6) != 0.0f;
+
+            // Prefer the human-readable `gametype=<key>` tail when present.
+            // OzoneParser classifies it separately (otherwise it would be mistaken
+            // for the skybox path), and the runtime's ParseLevelInfo gives the key
+            // priority over the numeric id with a warned fallback. Reading only
+            // arg(0) meant the editor and the client could resolve a hand-edited
+            // file to DIFFERENT modes, and then disagree on score limit and team
+            // count.
+            if (!pr.gametypeKey.empty()) {
+                // Same rule as ParseLevelInfo (LevelSettings.hpp): GameTypeFromName
+                // returns SINGLEPLAYER for an unknown key rather than signalling
+                // failure, so validity is checked first.
+                if (oz::gametype::IsGameTypeKey(pr.gametypeKey)) {
+                    meta.gameType = oz::gametype::GameTypeFromName(pr.gametypeKey);
+                } else {
+                    OZ_WARN("levelinfo: unknown gametype='%s', using positional id %d",
+                            pr.gametypeKey.c_str(), (int)meta.gameType);
+                }
+            }
+
+            meta.skyboxTexturePath = pr.entityType;
+            // Second path token = side/cap skybox. It was previously parsed into
+            // OzonePrimitive::entitySubType and then dropped: nothing read it on
+            // load and ExportToOzone never wrote it, so opening and re-saving a
+            // world silently deleted it.
+            meta.skyboxSidePath = pr.entitySubType;
+            SetLevelMetadata(meta);
+            EditorLog("OZONE levelinfo: mode=%d skybox='%s'%s%s",
+                      (int)meta.gameType, meta.skyboxTexturePath.c_str(),
+                      meta.skyboxSidePath.empty() ? "" : " side=",
+                      meta.skyboxSidePath.c_str());
+        } else if (pr.type == OzonePrimitiveType::ENTITY_PARTICLES) {
+            LevelMetadata meta = GetLevelMetadata();
+            auto arg = [&](int i) -> float {
+                return (i >= 0 && i < (int)pr.args.size()) ? pr.args[i] : 0.0f;
+            };
+            meta.particleType = (ParticleType)(int)arg(0);
+            meta.particleDensity = arg(1);
+            meta.particleSpeed = arg(2);
+            meta.particleColorR = (int)arg(3);
+            meta.particleColorG = (int)arg(4);
+            meta.particleColorB = (int)arg(5);
+            meta.particleWindX = arg(6);
+            meta.particleWindZ = arg(7);
+            SetLevelMetadata(meta);
+        }
+    }
+}
+
 // Write the SelType::MAP property rows back into LevelMetadata.
 //
 // Only pushes an undo entry when something actually changed. Every other Apply

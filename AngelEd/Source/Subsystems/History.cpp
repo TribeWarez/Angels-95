@@ -1,6 +1,7 @@
 #include "../Core/EditorShell.hpp"
 #include "../Core/EditorState.hpp"
 #include "History.hpp"
+#include "LevelState.hpp"
 #include "OzoneExport.hpp"
 
 // Subsystems/History.cpp
@@ -45,6 +46,12 @@ void HistoryRestore(const std::string& text) {
     InjectOzoneEntities(OzoneLoader::Instance().GetEntities(),
                         PawnSystem::Instance());
     OzoneLoader::Instance().RebuildCollisionVolumes();
+    // The snapshot carries the `levelinfo` / `particles` lines (ExportToOzone wrote
+    // them), so the editor's metadata has to be re-read from it too. Skipping this
+    // left g_levelMeta at whatever it was, and since a snapshot taken after a
+    // metadata-less load is itself metadata-less, an undo followed by a save wrote
+    // the level with no levelinfo at all - the same data loss as the startup path.
+    LoadLevelMetadataFromPrims(OzoneParser::parse_string(text));
     g_sel = { SelType::NONE, -1, "", {0,0,0} };
     g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
     OmegaTechEditor.DrawModel = false;

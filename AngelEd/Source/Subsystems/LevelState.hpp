@@ -21,6 +21,7 @@
 // ============================================================================
 
 #include "../../../Source/World/GameType.hpp"
+#include "../../../Source/World/OzoneParser.hpp"
 
 // GameType is now defined in Source/World/GameType.hpp (oz::gametype::GameType)
 // so the editor, server and tests share one source of truth. The numeric values
@@ -70,6 +71,22 @@ void SetLevelMetadata(const LevelMetadata& meta);
 inline LevelMetadata GetLevelMetadata() { return {}; }
 inline void SetLevelMetadata(const LevelMetadata&) {}
 #endif
+// Parse an OZONE document's `levelinfo` and `particles` lines into the editor's
+// metadata.
+//
+// ONE definition, and every path that opens a world must call it. The parse used
+// to live inline in WorldIO's LoadWorldDocument, which left two paths that load a
+// world WITHOUT it:
+//   * the no-argument startup load in main(), which is what a normal launch takes
+//     (the run scripts pass no world), and
+//   * HistoryRestore, which reloads from a snapshot.
+// Either one leaves the metadata at its DEFAULTS - empty skybox, default rules -
+// and ExportToOzone omits `levelinfo` entirely when every field is default. So
+// opening the editor normally, saving, and reopening silently deleted the level's
+// skybox and its game rules, and re-saving from an undo stack did the same. The
+// file looked fine; the line was simply gone.
+void LoadLevelMetadataFromPrims(const std::vector<OzonePrimitive>& prims);
+
 // Write the SelType::MAP property rows back into the metadata.
 //
 // Lives here rather than in PropsApply because it is level state, not a per-entity

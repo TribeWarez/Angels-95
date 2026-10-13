@@ -80,68 +80,15 @@ static bool LoadWorldDocument(const fs::path& path) {
         // scene is an explicit step.
         InjectOzoneEntities(OzoneLoader::Instance().GetEntities(),
                             PawnSystem::Instance());
-        // The OZONE loader does not populate the editor's level metadata, so a
-        // saved levelinfo skybox/particles would be invisible in the viewport.
-        // Parse them here into GetLevelMetadata()/SetLevelMetadata().
-        auto prims = OzoneParser::parse_file(path.string().c_str());
-        for (auto& pr : prims) {
-            if (pr.type == OzonePrimitiveType::ENTITY_LEVELINFO) {
-                LevelMetadata meta = GetLevelMetadata();
-                auto arg = [&](int i) -> float {
-                    return (i >= 0 && i < (int)pr.args.size()) ? pr.args[i] : 0.0f;
-                };
-                meta.gameType = (GameType)(int)arg(0);
-                meta.maxPlayers = (int)arg(1);
-                meta.respawnTime = arg(2);
-                meta.timeLimitEnabled = arg(3) != 0.0f;
-                meta.timeLimitMinutes = arg(4);
-                meta.scoreLimit = (int)arg(5);
-                meta.friendlyFire = arg(6) != 0.0f;
-
-                // Prefer the human-readable `gametype=<key>` tail when present.
-                // OzoneParser classifies it separately (otherwise it would be
-                // mistaken for the skybox path), and the runtime's ParseLevelInfo
-                // gives the key priority over the numeric id with a warned
-                // fallback. Reading only arg(0) here meant the editor and the
-                // client could resolve a hand-edited file to DIFFERENT modes, and
-                // then disagree on score limit and team count.
-                if (!pr.gametypeKey.empty()) {
-                    // Same rule as ParseLevelInfo (LevelSettings.hpp:59-67):
-                    // GameTypeFromName returns SINGLEPLAYER for an unknown key
-                    // rather than signalling failure, so validity is checked first.
-                    if (oz::gametype::IsGameTypeKey(pr.gametypeKey)) {
-                        meta.gameType = oz::gametype::GameTypeFromName(pr.gametypeKey);
-                    } else {
-                        OZ_WARN("levelinfo: unknown gametype='%s', using positional id %d",
-                                pr.gametypeKey.c_str(), (int)meta.gameType);
-                    }
-                }
-
-                meta.skyboxTexturePath = pr.entityType;
-                // Second path token = side/cap skybox. Previously unread, so it
-                // never reached the model and was then lost on the next save.
-                meta.skyboxSidePath = pr.entitySubType;
-                SetLevelMetadata(meta);
-                EditorLog("OZONE levelinfo: mode=%d skybox='%s'%s%s",
-                          (int)meta.gameType, meta.skyboxTexturePath.c_str(),
-                          meta.skyboxSidePath.empty() ? "" : " side=",
-                          meta.skyboxSidePath.c_str());
-            } else if (pr.type == OzonePrimitiveType::ENTITY_PARTICLES) {
-                LevelMetadata meta = GetLevelMetadata();
-                auto arg = [&](int i) -> float {
-                    return (i >= 0 && i < (int)pr.args.size()) ? pr.args[i] : 0.0f;
-                };
-                meta.particleType = (ParticleType)(int)arg(0);
-                meta.particleDensity = arg(1);
-                meta.particleSpeed = arg(2);
-                meta.particleColorR = (int)arg(3);
-                meta.particleColorG = (int)arg(4);
-                meta.particleColorB = (int)arg(5);
-                meta.particleWindX = arg(6);
-                meta.particleWindZ = arg(7);
-                SetLevelMetadata(meta);
-            }
-        }
+        // Level metadata (`levelinfo` / `particles`). The parse lives in
+        // Subsystems/LevelState.cpp so that EVERY path which opens a world runs it -
+        // it used to be inline here, and the no-argument startup load and
+        // HistoryRestore both bypassed it, which meant a plain open-save round trip
+        // wrote a level with NO levelinfo (skybox and game rules gone).
+        //
+        // The OZONE loader itself does not populate the editor's metadata (it
+        // parses entities only), so the document is re-parsed here for it.
+        LoadLevelMetadataFromPrims(OzoneParser::parse_file(path.string().c_str()));
         // The scene was just replaced wholesale. The WorldGraph list is derived from
         // PawnSystem/ZoneManager/OzoneLoader, so every row is now stale.
         MarkWorldGraphDirty();

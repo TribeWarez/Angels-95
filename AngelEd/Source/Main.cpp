@@ -273,15 +273,20 @@ int main(int argc, char **argv){
     // can be spawned from it.
     RefreshPawnManager();
 
-    if (argc > 1 && argv[1]) {
+    // Load the document through the ONE open path, whichever way the world was
+    // chosen (argv[1] or FirstAvailableWorld()).
+    //
+    // This used to branch: with argv[1] it called LoadWorldDocument, and without
+    // one it loaded the geometry directly - `OzoneLoader::LoadFile` +
+    // InjectOzoneEntities - which is a subset that skips the `levelinfo` parse,
+    // the .oztex package autoload and MarkWorldGraphDirty. The run scripts pass no
+    // world, so a normal launch took the shortcut, left g_levelMeta at its
+    // defaults, and the next save wrote a level with NO levelinfo: skybox and game
+    // rules silently deleted. Rendering looked right, because the geometry did load.
+    if (!g_documentPath.empty()) {
         LoadWorldDocument(g_documentPath);
     } else {
-        fs::path ozonePath = g_documentPath.parent_path() / "World.ozone";
-        if (fs::exists(ozonePath)) {
-            OzoneLoader::Instance().LoadFile(ozonePath.string().c_str());
-            InjectOzoneEntities(OzoneLoader::Instance().GetEntities(),
-                                PawnSystem::Instance());
-        }
+        EditorLog("No world to load - starting with an empty scene.");
     }
 
     // Suppress raylib's texture-not-found warnings from .obj material refs
