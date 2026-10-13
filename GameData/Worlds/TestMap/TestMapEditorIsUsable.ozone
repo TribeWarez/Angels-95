@@ -7,6 +7,6 @@ sub box 0 0 4 128 4 128 0
 playerstart 38.2561 22.1942 57.7181 0
 pickup rifle_01 3.79373 -18.2151 16.8169 30
 zone sky -1020.21 -1042.22 -1007.18 1027.79 1005.78 1040.82 1 gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
-levelinfo 0 8 5 0 10 50 0 GameData/Global/sky/cloud01.png
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/cloud01.png
 
 # End of OZONE export

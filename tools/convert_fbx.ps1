@@ -14,11 +14,11 @@
 #
 # Usage (from the repo root):
 #   powershell -ExecutionPolicy Bypass -File tools/convert_fbx.ps1
-#   powershell ... -File tools/convert_fbx.ps1 -Root "GameData/Global/gun/Pistol_01"
+#   powershell ... -File tools/convert_fbx.ps1 -Root "GameData/Tex/Global/Gun/Pistol_01"
 #   powershell ... -File tools/convert_fbx.ps1 -NoFlatten
 
 param(
-    [string]$Root = "GameData/Global/gun",
+    [string]$Root = "GameData/Tex/Global/Gun",
     [string]$Fbx2gltf = "",
     [switch]$NoFlatten
 )

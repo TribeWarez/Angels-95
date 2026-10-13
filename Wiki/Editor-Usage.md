@@ -335,7 +335,7 @@ The Properties panel resolves a def per selection type:
 | Brush / Mesh / Portal / Emitter / PathNode / WindZone | *(instance fields only, no def)* | — |
 
 `playerstart x y z yaw` carries no name, so a PlayerStart always resolves the
-`Player` def (`GameData/Global/Objects/Player.ozls`) — the player the spawn
+`Player` def (`GameData/Tex/Global/Models/Player.ozls`) — the player the spawn
 points at is the same def whichever spawn you select.
 
 A light's `name=` resolves an `: light` def exactly the way a zone's `name=`

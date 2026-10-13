@@ -290,4 +290,4 @@ zone sound -20 -40 -1 20 -16 1 name=citadel_approach
 
 # Evening sky, matching skyzone_citadel.ozls (which previously disagreed with
 # levelinfo, so the authored dusk sky was overridden by a night one).
-levelinfo 0 8 5 0 10 50 0 GameData/Global/sky/sky_evening.png GameData/Global/sky/sky_death_land.png
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_evening.png GameData/Tex/Global/Sky/sky_death_land.png

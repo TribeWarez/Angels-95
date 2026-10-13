@@ -1,7 +1,7 @@
 entity "Object5" : weapon {
-    mesh = "GameData/Global/Objects/Object5.obj"
-    texture = "GameData/Global/Objects/Object5Texture.png"
-    icon = "GameData/Global/Objects/Object5Icon.png"
+    mesh = "GameData/Tex/Global/Models/Object5.obj"
+    texture = "GameData/Tex/Global/Models/Object5Texture.png"
+    icon = "GameData/Tex/Global/Models/Object5Icon.png"
     stats {
         item_id = 105
         damage = 50

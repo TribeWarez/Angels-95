@@ -271,11 +271,11 @@ add pln 41 -12 6 1 0 0 0 flags=268435456 texPath=oztex/tileset/04_ceiling_tech_1
 # --- Mesh showcase ---
 # A prop on a pedestal: Med_01 is 0.5u wide, so scale 3 makes it 1.5u.
 add cyl 45 0 1.2 0.9 1.1 1.2 12 0 3
-Mesh.Static GameData/Global/Items/MedMeshes/Med_01.glb 45 0 1.2 0 scale=3.0
+Mesh.Static GameData/Tex/Global/Items/MedMeshes/Med_01.glb 45 0 1.2 0 scale=3.0
 # A SKELETAL mesh playing a named clip (the weapon GLBs carry Idle/Fire/Reload
 # from tools/merge_glb_anims.py). Rifle_01 is 0.83u long, so scale 3 is 2.5u.
 add box 45 -14 1 3 2 1 0 3
-Mesh.Skeletal GameData/Global/gun/Rifle_01/Fbx_Files/Rifle_01.glb 45 -14 2.0 90 scale=3.0 anim=Idle
+Mesh.Skeletal GameData/Tex/Global/Gun/Rifle_01/Fbx_Files/Rifle_01.glb 45 -14 2.0 90 scale=3.0 anim=Idle
 
 # --- Wind demo: trees with wind=1 inside the WindZone below ---
 # BORROWED from World_endless_snow rather than copying a binary into this world.
@@ -456,4 +456,4 @@ zone sound 12.5 2.5 0 27.5 17.5 8 name=engine_sound
 
 # gameType is numeric; the old SINGLEPLAYER token only parsed because std::stof
 # threw and the parser substituted 0.
-levelinfo 0 8 5 0 10 50 0 GameData/Global/sky/sky_day.png GameData/Global/sky/sky_noon.png
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_day.png GameData/Tex/Global/Sky/sky_noon.png

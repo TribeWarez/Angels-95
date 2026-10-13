@@ -1,0 +1,10 @@
+entity "Helmet" : armor {
+    mesh = "GameData/Tex/Global/Models/Helmet.obj"
+    texture = "GameData/Tex/Global/Models/HelmetTexture.png"
+    icon = "GameData/Tex/Global/Models/HelmetIcon.png"
+    stats {
+        item_id = 401
+        defense = 10
+        equip_slot = "helmet"
+    }
+}

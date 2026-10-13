@@ -1,7 +1,7 @@
 entity "flux_carbine" : weapon {
-    mesh = "GameData/Global/gun/automag/automag_lvl2_alt.obj"
-    texture = "GameData/Global/gun/automag/automag_lvl1_texture.png"
-    icon = "GameData/Global/Objects/Object1Icon.png"
+    mesh = "GameData/Tex/Global/Gun/automag/automag_lvl2_alt.obj"
+    texture = "GameData/Tex/Global/Gun/automag/automag_lvl1_texture.png"
+    icon = "GameData/Tex/Global/Models/Object1Icon.png"
     stats {
         damage = 18
         fire_rate = 0.18

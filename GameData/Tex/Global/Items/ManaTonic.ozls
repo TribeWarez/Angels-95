@@ -1,5 +1,5 @@
 entity "ManaTonic" : consumable {
-    icon = "GameData/Global/Items/ManaVial.png"
+    icon = "GameData/Tex/Global/Items/ManaVial.png"
     stats {
         value = 25
         respawn_time = 30.0

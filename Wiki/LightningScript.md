@@ -84,7 +84,7 @@ inside a `.ozsnd` works exactly like a loose file.
 | `fire_volume` / `swing_volume` / `hit_volume` / `reload_volume` / `equip_volume` | float | matching key | 1.0 | Linear gain |
 | `fire_pitch` / `swing_pitch` / `hit_pitch` | float | matching key | 1.0 | Playback rate (`0.85` = deeper) |
 
-Player sound lives on `Player.ozls` (`GameData/Global/Objects/`), read off the
+Player sound lives on `Player.ozls` (`GameData/Tex/Global/Models/`), read off the
 auto-spawned Player entity: `jump_sound`, `land_sound`, `walk_sound`,
 `run_sound`, `hurt_sound`, `death_sound`, each with a `_volume`.
 

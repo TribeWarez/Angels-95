@@ -1,11 +1,11 @@
 entity "Medkit" : consumable {
-    icon = "GameData/Global/Items/HealthVial.png"
+    icon = "GameData/Tex/Global/Items/HealthVial.png"
     // 3D world model (PSX MED pack). The GLB carries its own texture, so
     // `texture` is deliberately omitted - Mesh::Load would otherwise force one
     // diffuse across the material. mesh_scale trims the 0.5m asset to ~0.34m
     // on screen (pickups draw at a fixed 1.5x base). Swap the Med_NN index for
-    // any of the 20 kits in GameData/Global/Items/MedMeshes/.
-    mesh = "GameData/Global/Items/MedMeshes/Med_01.glb"
+    // any of the 20 kits in GameData/Tex/Global/Items/MedMeshes/.
+    mesh = "GameData/Tex/Global/Items/MedMeshes/Med_01.glb"
     mesh_type = "static"
     stats {
         value = 50

@@ -81,7 +81,7 @@ foreach ($d in @($OUT, $OUT_TEX, $OUT_MUS, $OUT_SND, $OUT_ZONES)) {
 Write-Step "=== Packaging Global Assets ==="
 
 # --- Guns / Weapons ---
-$gunDir = "$GAMEDATA\Global\gun"
+$gunDir = "$GAMEDATA\Tex\Global\Gun"
 if (Test-Path $gunDir) {
     Get-ChildItem $gunDir -Directory | ForEach-Object {
         $name = $_.Name
@@ -95,7 +95,7 @@ if (Test-Path $gunDir) {
 }
 
 # --- Objects / Props ---
-$objDir = "$GAMEDATA\Global\Objects"
+$objDir = "$GAMEDATA\Tex\Global\Models"
 if (Test-Path $objDir) {
     Get-ChildItem $objDir -Directory | ForEach-Object {
         $name = $_.Name
@@ -108,7 +108,7 @@ if (Test-Path $objDir) {
 }
 
 # --- Items (textures) ---
-$itemsDir = "$GAMEDATA\Global\Items"
+$itemsDir = "$GAMEDATA\Tex\Global\Items"
 if (Test-Path $itemsDir) {
     Run-OzPack "OZTX" $itemsDir "$OUT_TEX\items.oztex"
 }
@@ -137,8 +137,8 @@ if (Test-Path $engineDir) {
     Run-OzPack "OZTX" $engineDir "$OUT_TEX\engine_icons.oztex"
 }
 
-# --- Skybox library (Global/sky: *.png panoramas used by levelinfo skybox paths) ---
-$skyDir = "$GAMEDATA\Global\sky"
+# --- Skybox library (Tex/Global/Sky: *.png panoramas used by levelinfo skybox paths) ---
+$skyDir = "$GAMEDATA\Tex\Global\Sky"
 if (Test-Path $skyDir) {
     Run-OzPack "OZTX" $skyDir "$OUT_TEX\sky.oztex"
 }

@@ -9,7 +9,7 @@
 //
 // Aliases map short logical names to real paths under GameData/.
 // Two built-in groups are registered at Init():
-//   "items"  → GameData/Global/Items/<alias>.png
+//   "items"  → GameData/Tex/Global/Items/<alias>.png
 //   "engine" → GameData/Global/Engine/<alias>.png
 //
 // Example usage:

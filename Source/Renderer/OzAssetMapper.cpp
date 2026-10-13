@@ -139,7 +139,7 @@ void AssetMapper::RegisterItemTextures() {
         {"ManaVial"},
         {"Powerup"},
     };
-    const char* baseDir = "GameData/Global/Items";
+    const char* baseDir = "GameData/Tex/Global/Items";
     for (auto& ic : itemIcons) {
         // Try .gif first (animated billboard), fall back to .png
         m_entries.push_back({ic.alias, probe_path(baseDir, ic.alias, ".gif"),

@@ -4,12 +4,12 @@ entity "engine_sky" : skyzone {
     fog_color = (0.62, 0.66, 0.72)
     fog_density = 0.003
     ambient_light = (0.58, 0.58, 0.60)
-    skybox = "GameData/Global/sky/sky_day.png"
+    skybox = "GameData/Tex/Global/Sky/sky_day.png"
     actions {
         on_enter {
             set_fog 0.62 0.66 0.72 0.003
             set_ambient 0.58 0.58 0.60
-            set_skybox "GameData/Global/sky/sky_day.png"
+            set_skybox "GameData/Tex/Global/Sky/sky_day.png"
             say "Engine Test - ambient, fog and skybox active"
         }
         on_exit {

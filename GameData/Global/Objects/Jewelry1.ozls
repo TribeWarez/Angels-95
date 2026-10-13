@@ -1,9 +1,0 @@
-entity "Jewelry1" : armor {
-    mesh = "GameData/Global/Objects/Jewelry1.obj"
-    texture = "GameData/Global/Objects/Jewelry1Texture.png"
-    icon = "GameData/Global/Objects/Jewelry1Icon.png"
-    stats {
-        item_id = 301
-        equip_slot = "jewelry1"
-    }
-}

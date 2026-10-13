@@ -1,9 +1,0 @@
-entity "Accessory2" : upgrade {
-    mesh = "GameData/Global/Objects/Accessory2.obj"
-    texture = "GameData/Global/Objects/Accessory2Texture.png"
-    icon = "GameData/Global/Objects/Accessory2Icon.png"
-    stats {
-        item_id = 502
-        equip_slot = "accessory2"
-    }
-}

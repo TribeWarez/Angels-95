@@ -15,7 +15,7 @@
 // session and neither said so:
 //
 //   WARN: GameData/Global/PawnDefs not found, using hardcoded defaults
-//   Skybox: could not load 'GameData/Global/sky/sky_noon.png'
+//   Skybox: could not load 'GameData/Tex/Global/Sky/sky_noon.png'
 //
 // The previous code handled exactly one case: cwd whose final component is literally
 // "System". That is the case the run scripts set up and nothing else, so a shortcut with

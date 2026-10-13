@@ -1,0 +1,10 @@
+entity "Legs" : armor {
+    mesh = "GameData/Tex/Global/Models/Legs.obj"
+    texture = "GameData/Tex/Global/Models/LegsTexture.png"
+    icon = "GameData/Tex/Global/Models/LegsIcon.png"
+    stats {
+        item_id = 403
+        defense = 12
+        equip_slot = "legs"
+    }
+}

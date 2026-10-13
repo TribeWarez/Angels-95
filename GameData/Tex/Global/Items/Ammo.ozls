@@ -1,11 +1,11 @@
 entity "Ammo" : pickup {
-    icon = "GameData/Global/Items/Ammo_Box.png"
+    icon = "GameData/Tex/Global/Items/Ammo_Box.png"
     // Ammunition box. Refills the shared ammo pool collected by the ranged
     // weapons; mapped to PickupType::AMMO in the server's pickup_type_from_name
     // and to item_id 17 over the wire. (It used to declare item_id 14, which
     // collided with Powerup and granted a Powerup instead.)
     // The GLB has its own texture, so `texture` is omitted on purpose.
-    mesh = "GameData/Global/Items/Ammo_Box.glb"
+    mesh = "GameData/Tex/Global/Items/Ammo_Box.glb"
     mesh_type = "static"
     stats {
         item_id = 17

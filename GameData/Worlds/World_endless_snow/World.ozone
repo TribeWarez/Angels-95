@@ -358,7 +358,7 @@ PathNode power_patrol_b 290 30 0.1 radius=4 next=power_patrol_a
 PathNode security_patrol_a 335 -40 0.1 radius=3 next=security_patrol_b
 PathNode security_patrol_b 335 40 0.1 radius=3 next=security_patrol_a
 WindZone -600 -600 -50 600 600 300 0.5 0.2 0 0.3 0.1
-levelinfo 0 8 5 0 10 50 0 GameData/Global/sky/cloud02.png
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/cloud02.png
 particles 4 120 2 220 230 235 0.3 0.2
 
 # End of OZONE export

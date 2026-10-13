@@ -1,0 +1,10 @@
+entity "Boots" : armor {
+    mesh = "GameData/Tex/Global/Models/Boots.obj"
+    texture = "GameData/Tex/Global/Models/BootsTexture.png"
+    icon = "GameData/Tex/Global/Models/BootsIcon.png"
+    stats {
+        item_id = 402
+        defense = 8
+        equip_slot = "boots"
+    }
+}

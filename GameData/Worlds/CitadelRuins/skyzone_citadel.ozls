@@ -4,12 +4,12 @@ entity "citadel_sky" : skyzone {
     fog_color = (0.62, 0.52, 0.46)
     fog_density = 0.005
     ambient_light = (0.50, 0.46, 0.46)
-    skybox = "GameData/Global/sky/sky_evening.png"
+    skybox = "GameData/Tex/Global/Sky/sky_evening.png"
     actions {
         on_enter {
             set_fog 0.62 0.52 0.46 0.005
             set_ambient 0.50 0.46 0.46
-            set_skybox "GameData/Global/sky/sky_evening.png"
+            set_skybox "GameData/Tex/Global/Sky/sky_evening.png"
             say "Citadel Ruins - hold the courtyard, watch the towers"
         }
         on_exit {

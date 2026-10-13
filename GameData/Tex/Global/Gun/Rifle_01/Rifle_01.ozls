@@ -12,7 +12,7 @@ entity "rifle_01" : weapon {
         magazine = 30
         reload_time = 1.9
         recoil = 2.2
-        projectile_mesh = GameData/Global/gun/Projectiles/FbxFile/Projectiles.glb
+        projectile_mesh = GameData/Tex/Global/Gun/Projectiles/FbxFile/Projectiles.glb
         projectile_submesh = 4
         projectile_scale = 4.0
         projectile_color = (0.6, 1.0, 0.4)
