@@ -15,6 +15,11 @@ entity "selenite_blade" : weapon {
         viewmodel_offset = (0.26, -0.30, 0.44)
         viewmodel_rot = (90, 0, 0)
         viewmodel_scale = 1.0
+        // The 3.9-unit source model is right for the viewmodel (ViewModel::Fit
+        // normalises source scales) but four times too long on the ground: a
+        // drawn pickup uses this _unfitted_ size times the historical 1.5, so
+        // the blade stood as tall as two players. 1.5 * 0.2 * 3.9 = 1.17 units.
+        mesh_scale = 0.2
         // Melee sound stats.
         swing_sound = GameData/Audio/Sounds/Entities/boot2.wav
         swing_volume = 0.6

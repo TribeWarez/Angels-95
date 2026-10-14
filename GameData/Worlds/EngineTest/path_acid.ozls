@@ -1,0 +1,27 @@
+// The acid pool on the eastern desert path. Same tick-damage shape as
+// Dust_Ravine's acidpool: the damage is on a timer, not per frame, so the
+// burn rate does not depend on the frame rate.
+entity "path_acid" : skyzone {
+    actions {
+        on_enter {
+            wtflag 1 1
+            var timer = 60
+            play_sound "GameData/Audio/Sounds/Entities/Hurt.mp3"
+            msg "Acid! Get out - it eats through your boots."
+        }
+        on_tick {
+            if ($flag1 >= 1) {
+                $timer = $timer - 1
+                if ($timer <= 0) {
+                    playerstat health -= 5
+                    var timer = 60
+                }
+            }
+        }
+        on_exit {
+            wtflag 1 0
+            var timer = -1
+            msg "You scramble clear of the acid."
+        }
+    }
+}

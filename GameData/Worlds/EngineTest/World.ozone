@@ -48,7 +48,7 @@ OZONE
 # ==============================================================================
 add box 10 -2.5 -0.25 60 0.5 95 0 1        # facility slab, y -50..45
 add box 20 -71 -0.25 46 0.5 42 0 5         # outdoor grass, butts at y=-50
-add box 59 0 -0.25 38 0.5 56 0 5           # arena slab, butts at x=40
+add box 59 0 -0.25 38 0.5 56 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=12 texScaleV=18           # arena slab, butts at x=40
 
 # ==============================================================================
 # Chamber floors as inlays, 0.4 proud and clear of the slab top.
@@ -58,7 +58,7 @@ add box 20 10 0.25 15 0.4 15 0 1          # Room 2
 add box 20 -10 0.25 15 0.4 15 0 1         # Room 3
 add box 0 -10 0.25 15 0.4 15 0 1          # Room 4
 add box 20 -38 0.25 23 0.4 23 0 1         # Great Hall
-add box 59 0 0.1 36 0.4 52 0 1            # arena paving inlay
+add box 59 0 0.1 36 0.4 52 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=9 texScaleV=13            # arena paving inlay
 
 # ==============================================================================
 # ROOM 1 (NW) - lobby. North wall is split to carve the Dust_Ravine portal; the
@@ -221,42 +221,44 @@ add box 20 -70 0.9 6 1.8 2 0 3
 # ladder. Open to the sky, so its tall pieces are safe by the clearance rule.
 # ==============================================================================
 # --- Enclosure ---
-add box 59 28 4 38 8 1 0 2                # north wall
-add box 59 -28 4 38 8 1 0 2               # south wall
-add box 78 0 4 1 8 56 0 2                 # east wall
-add box 40 15.25 4 1 8 25.5 0 2           # west wall, north of the doorway
-add box 40 -15.25 4 1 8 25.5 0 2          # west wall, south of the doorway
-add box 40 0 6.75 1 2.5 5 0 2             # doorway surround, opening z 0..5.5
+add box 59 28 4 38 8 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=8 texScaleV=2                # north wall
+add box 59 -28 4 38 8 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_02.png texScaleU=8 texScaleV=2               # south wall
+add box 78 -18 4 1 8 20 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_02.png texScaleU=3 texScaleV=2   # east wall, south of the gate
+add box 78 18 4 1 8 20 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_02.png texScaleU=3 texScaleV=2    # east wall, north of the gate
+add box 78 0 6.75 1 2.5 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=2 texScaleV=1 # gate lintel, opening z 0..5.5                 # east wall
+add box 40 15.25 4 1 8 25.5 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_03.png texScaleU=5 texScaleV=2           # west wall, north of the doorway
+add box 40 -15.25 4 1 8 25.5 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_04.png texScaleU=5 texScaleV=2          # west wall, south of the doorway
+add box 40 0 6.75 1 2.5 5 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=1 texScaleV=1             # doorway surround, opening z 0..5.5
 # Facility east edge, above and below the arena's span, so the slab edge is not
 # an open drop into the void between the two slabs.
-add box 40 36.5 4 1 8 17 0 2
-add box 40 -39 4 1 8 22 0 2
+add box 40 36.5 4 1 8 17 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=5 texScaleV=2
+add box 40 -39 4 1 8 22 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=5 texScaleV=2
 
 # --- Stepped pyramid, 1.0 steps so it is WALKED, not jumped ---
-add box 59 0 0.5 18 1 18 0 3
-add box 59 0 1.5 15 1 15 0 3
-add box 59 0 2.5 12 1 12 0 3
-add box 59 0 3.5 9 1 9 0 3
-add box 59 0 4.5 6 1 6 0 3
-add box 59 0 5.5 3 1 3 0 3
+add box 59 0 0.5 18 1 18 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_01.png texScaleU=6 texScaleV=6
+add box 59 0 1.5 15 1 15 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_02.png texScaleU=5 texScaleV=5
+add box 59 0 2.5 12 1 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_03.png texScaleU=4 texScaleV=4
+add box 59 0 3.5 9 1 9 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_04.png texScaleU=3 texScaleV=3
+add box 59 0 4.5 6 1 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_01.png texScaleU=2 texScaleV=2
+add box 59 0 5.5 3 1 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_02.png texScaleU=1 texScaleV=1
 # --- Glowing orb floating over the apex (SURF_GLOW; see the flag table) ---
 sph 59 0 7.2 1.0 24 flags=16384 surfGlow=(1.0,0.75,0.25) surfGlowScale=1.6
 # --- Tapered obelisk behind the pyramid: rTop 0.3 vs rBot 1.6 ---
-add cyl 59 22 14 0.3 1.6 14 16 0 3
+add cyl 59 22 14 0.3 1.6 14 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineaglestone.png texScaleU=2 texScaleV=4
 # --- Tapered colonnade (the other three corners) ---
-add cyl 44 -22 8 0.35 0.6 8 14 0 3
-add cyl 44 22 8 0.35 0.6 8 14 0 3
-add cyl 74 -22 8 0.35 0.6 8 14 0 3
+add cyl 44 -22 8 0.35 0.6 8 14 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=2 texScaleV=3
+add cyl 44 22 8 0.35 0.6 8 14 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=2 texScaleV=3
+add cyl 74 -22 8 0.35 0.6 8 14 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=2 texScaleV=3
 
 # --- Brazier pedestals (the fire itself is a ParticleEmitter below) ---
-add cyl 49 -9 1.5 0.45 0.6 1.5 12 0 3
-add cyl 69 -9 1.5 0.45 0.6 1.5 12 0 3
-add cyl 49 9 1.5 0.45 0.6 1.5 12 0 3
-add cyl 69 9 1.5 0.45 0.6 1.5 12 0 3
+add cyl 49 -9 1.5 0.45 0.6 1.5 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1
+add cyl 69 -9 1.5 0.45 0.6 1.5 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1
+add cyl 49 9 1.5 0.45 0.6 1.5 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1
+add cyl 69 9 1.5 0.45 0.6 1.5 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1
 
 # --- Watchtower: solid body, platform on top, ladder up its west face ---
-add box 74 22 4 5 8 5 0 3
-add box 74 22 8.5 5 1 5 0 2               # platform, top z=9
+add box 74 22 4 5 8 5 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_06.png texScaleU=2 texScaleV=3
+add box 74 22 8.5 5 1 5 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=2 texScaleV=2               # platform, top z=9
 
 # --- Surface showcases ---
 # Brush-wide glow: a light strip along the north wall base
@@ -316,17 +318,84 @@ add box 30.5 -38 1.25 1 2.5 20 0 3
 # inside the arena doorway would have been a wall across the entrance. The arena
 # gets its own shell instead.
 # ==============================================================================
-add box 0 45 8 60 16 1 0 flags=8 texPath=oztex/tileset/04_ceiling_tech_128.png texScaleU=4 texScaleV=2
-add box -40 0 8 1 16 60 0 flags=8 texPath=oztex/tileset/04_ceiling_tech_128.png texScaleU=4 texScaleV=2
-add box 0 -92 9 60 18 1 0 flags=8 texPath=oztex/tileset/04_ceiling_tech_128.png texScaleU=5 texScaleV=2
-add box 43 -70 8 1 16 44 0 flags=8 texPath=oztex/tileset/04_ceiling_tech_128.png texScaleU=5 texScaleV=2
-add box -43 -70 8 1 16 44 0 flags=8 texPath=oztex/tileset/04_ceiling_tech_128.png texScaleU=5 texScaleV=2
+add box 0 45 8 60 16 1 0 flags=8 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_07.png texScaleU=6 texScaleV=2
+add box -40 0 8 1 16 60 0 flags=8 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_08.png texScaleU=6 texScaleV=2
+add box 0 -92 9 60 18 1 0 flags=8 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_09.png texScaleU=6 texScaleV=2
+add box 43 -70 8 1 16 44 0 flags=8 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=5 texScaleV=2
+add box -43 -70 8 1 16 44 0 flags=8 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_03.png texScaleU=5 texScaleV=2
 # Arena shell
-add box 59 31 9 40 18 1 0 flags=8 texPath=oztex/tileset/04_ceiling_tech_128.png texScaleU=5 texScaleV=2
-add box 59 -31 9 40 18 1 0 flags=8 texPath=oztex/tileset/04_ceiling_tech_128.png texScaleU=5 texScaleV=2
-add box 81 0 9 1 18 60 0 flags=8 texPath=oztex/tileset/04_ceiling_tech_128.png texScaleU=5 texScaleV=2
+add box 59 31 9 40 18 1 0 flags=8 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_03.png texScaleU=5 texScaleV=2
+add box 59 -31 9 40 18 1 0 flags=8 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_04.png texScaleU=5 texScaleV=2
+add box 81 -19 9 1 18 22 0 flags=8 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_04.png texScaleU=3 texScaleV=3
+add box 81 19 9 1 18 22 0 flags=8 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_04.png texScaleU=3 texScaleV=3
+add box 81 0 11.75 1 12.5 16 0 flags=8 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=2 texScaleV=2
 
 # ==============================================================================
+
+# ==============================================================================
+# EASTERN DESERT PATH - the arena gate leads onto a long Egypt-dressed walkway.
+#   left  (north, y=9)    : one cube per surface property (flags=/pan/glow/...)
+#   right (south, y=-10)  : water, acid and lava pools (zone water + tick script)
+# Everything here is inside the engine_sky zone, which now reaches x=320.
+# ==============================================================================
+add box 192 0 -0.5 222 1 34 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=24 texScaleV=4    # path slab, x 81..303, top z=0
+add box 192 0 0.05 222 0.1 10 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=22 texScaleV=2  # walkway inlay, 0.1 proud
+add box 192 17.3 1.25 222 2.5 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=22 texScaleV=1
+add box 192 -17.3 1.25 222 2.5 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=22 texScaleV=1
+add box 303.5 0 5 1 10 35.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_02.png texScaleU=4 texScaleV=2   # path end wall
+add box 84 11 3 2.4 6 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=1 texScaleV=2
+add box 84 11 6.4 3 0.8 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
+add box 84 -11 3 2.4 6 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=1 texScaleV=2
+add box 84 -11 6.4 3 0.8 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
+add cyl 138 7 7 0.55 0.75 7 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineaglestone.png texScaleU=1 texScaleV=2
+add box 138 7 7.4 2.2 0.8 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
+add cyl 170 7 7 0.55 0.75 7 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineaglestone.png texScaleU=1 texScaleV=2
+add box 170 7 7.4 2.2 0.8 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
+add cyl 202 7 7 0.55 0.75 7 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineaglestone.png texScaleU=1 texScaleV=2
+add box 202 7 7.4 2.2 0.8 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
+add cyl 234 7 7 0.55 0.75 7 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineaglestone.png texScaleU=1 texScaleV=2
+add box 234 7 7.4 2.2 0.8 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
+add cyl 266 7 7 0.55 0.75 7 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineaglestone.png texScaleU=1 texScaleV=2
+add box 266 7 7.4 2.2 0.8 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
+add box 96 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1   # plain
+add box 112 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1 flags=2048   # UNLIT
+add box 128 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1 flags=4096   # FAKE_LIT
+add box 144 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1 flags=16384 surfGlow=(0.10,0.22,0.40)   # GLOW
+add box 176 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1 flags=262144 panU=0.15   # PAN_U
+add box 192 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1 flags=524288 panV=0.12   # PAN_V
+add box 208 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1 flags=128 surfAlpha=0.45   # TRANSLUCENT
+add box 224 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1 flags=256 surfAlpha=0.8   # ALPHABLEND
+add box 240 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Global/Items/Key.png texScaleU=1 texScaleV=1 flags=64 surfCutoff=0.5   # MASKED
+add box 256 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1 flags=268435456   # NO_BSP_CUTS (walk through)
+add box 272 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1 flags=67108864   # NO_FOG
+add box 288 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1 flags=8   # FAKEBACKDROP
+add pln 160 11 3.5 1 0 0 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=1 texScaleV=1 flags=268436480   # TWO_SIDED relief banner
+add box 109 -6.9 0.35 19.2 0.7 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=8 texScaleV=1
+add box 109 -13.1 0.35 19.2 0.7 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=8 texScaleV=1
+add box 99.4 -10 0.35 0.6 0.7 6.8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=3 texScaleV=1
+add box 118.6 -10 0.35 0.6 0.7 6.8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=3 texScaleV=1
+add box 109 -10 0.25 18 0.3 7 0 texPath=GameData/Tex/Global/EFX/liquid_water.png texScaleU=1 texScaleV=1 flags=2048 surfAlpha=0.6 panU=0.05 panV=0.03    # path_water surface
+add box 157 -6.9 0.35 19.2 0.7 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=8 texScaleV=1
+add box 157 -13.1 0.35 19.2 0.7 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=8 texScaleV=1
+add box 147.4 -10 0.35 0.6 0.7 6.8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=3 texScaleV=1
+add box 166.6 -10 0.35 0.6 0.7 6.8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=3 texScaleV=1
+add box 157 -10 0.25 18 0.3 7 0 texPath=GameData/Tex/Global/EFX/liquid_acid.png texScaleU=1 texScaleV=1 flags=2048 surfAlpha=0.75 panU=-0.04 panV=0.02   # path_acid surface
+add box 205 -6.9 0.35 19.2 0.7 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=8 texScaleV=1
+add box 205 -13.1 0.35 19.2 0.7 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=8 texScaleV=1
+add box 195.4 -10 0.35 0.6 0.7 6.8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=3 texScaleV=1
+add box 214.6 -10 0.35 0.6 0.7 6.8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=3 texScaleV=1
+add box 205 -10 0.25 18 0.3 7 0 texPath=GameData/Tex/Global/EFX/liquid_lava.png texScaleU=1 texScaleV=1 flags=2048 surfAlpha=0.85 panU=0.03 panV=0.05 surfGlow=(0.12,0.04,0.01)   # path_lava surface
+add box 296 0 0.75 7 1.5 7 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=1 texScaleV=1
+add cyl 296 0 16.5 0.7 1.6 15 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineaglestone.png texScaleU=1 texScaleV=4
+add sph 296 0 18 1.1 16 flags=16384 surfGlow=(1,0.75,0.25)
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_2m_0.glb 100 13 0 0 scale=0.9
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_2m_2.glb 126 14 0 47 scale=1.1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_4m_1.glb 168 13.5 0 94 scale=0.8
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_4m_3.glb 214 14 0 141 scale=1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_4m_5.glb 232 -14.5 0 188 scale=0.9
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_8m_1.glb 258 13 0 235 scale=1.15
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_8m_4.glb 286 -14 0 282 scale=0.85
+
 # Entities
 # ==============================================================================
 playerstart 0 8 0 0
@@ -448,7 +517,7 @@ light point 74 22 10.5 120 200 255 0.5 16
 # ==============================================================================
 # Zones - named explicitly and sized to their actual chambers (z 0..8 now).
 # ==============================================================================
-zone sky -90 -90 -30 90 90 90 1 name=engine_sky
+zone sky -90 -90 -30 320 90 90 1 name=engine_sky
 zone water -4.5 -14.5 -0.2 4.5 -5.5 3.5 name=engine_water
 zone ladder 70.4 20 0 71.6 24 11 name=arena_ladder
 zone reverb 8.5 -49.5 0 31.5 -26.5 8 name=engine_reverb
@@ -456,4 +525,26 @@ zone sound 12.5 2.5 0 27.5 17.5 8 name=engine_sound
 
 # gameType is numeric; the old SINGLEPLAYER token only parsed because std::stof
 # threw and the parser substituted 0.
+zone water 99.4 -13.5 -1 118.6 -6.5 2.5 1 name=path_water gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
+zone water 147.4 -13.5 -1 166.6 -6.5 2.5 1 name=path_acid gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
+zone water 195.4 -13.5 -1 214.6 -6.5 2.5 1 name=path_lava gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
+zone gameplay_sound 82 4 0 302 15 8 1 name=path_surface_demo gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
+light point 86 6.5 3.4 255 175 80 0.7 16 effect=2
+ParticleEmitter fire 86 6.5 1.5 34 0.9 3.2 12 0.35 0.05 255 175 70 255 60 0 -2 6 0 0 1 0
+light point 150 -6.2 3.4 255 175 80 0.7 16 effect=2
+ParticleEmitter fire 150 -6.2 1.5 34 0.9 3.2 12 0.35 0.05 255 175 70 255 60 0 -2 6 0 0 1 0
+light point 255 6.5 3.4 255 175 80 0.7 16 effect=2
+ParticleEmitter fire 255 6.5 1.5 34 0.9 3.2 12 0.35 0.05 255 175 70 255 60 0 -2 6 0 0 1 0
+light point 205 -10 2.2 255 150 60 0.6 18
+ParticleEmitter fire 200 -10 1.2 22 0.7 2.4 10 0.4 0.05 255 160 60 255 60 0 -1.6 5 0 0 1 0
+ParticleEmitter fire 210 -10 1.2 22 0.7 2.4 10 0.4 0.05 255 160 60 255 60 0 -1.6 5 0 0 1 0
+PathNode path_a 96 0 0.5 radius=4 next=path_b
+PathNode path_b 150 0 0.5 radius=4 next=path_c
+PathNode path_c 205 0 0.5 radius=4 next=path_d
+PathNode path_d 260 0 0.5 radius=4 next=path_e
+PathNode path_e 294 0 0.5 radius=4 next=arena_d
+npc Skaarj 150 3 0.5
+npc Walker 230 -3 0.5
+npc Brute 285 4 0.5
+
 levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_day.png GameData/Tex/Global/Sky/sky_noon.png

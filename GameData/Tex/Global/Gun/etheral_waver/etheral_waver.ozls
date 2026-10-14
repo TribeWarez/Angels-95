@@ -9,6 +9,11 @@ entity "etheral_waver" : weapon {
         viewmodel_offset = (0.30, -0.26, 0.52)
         viewmodel_rot = (0, 90, 0)
         viewmodel_scale = 1.0
+        // Same reason as selenite_blade: the source GLB is ~9.9 units long
+        // (authored with a 100/100/64.8 node scale), which the viewmodel Fit
+        // handles but the 1.5x world pickup does not - it rendered ~15 units
+        // tall. 1.5 * 0.08 * 9.9 = 1.19 units.
+        mesh_scale = 0.08
         // Melee sound stats. swing_sound plays on every swing; hit_sound only
         // on a connect that is not blocked by geometry (see FireSelectedWeapon).
         swing_sound = GameData/Audio/Sounds/Entities/boot1.wav

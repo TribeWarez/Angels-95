@@ -222,4 +222,34 @@ Save-Wav (Join-Path $pawnDir 'Brute.wav')  0.55 180 110 0.35 3.5
 Save-Wav (Join-Path $pawnDir 'Floater.wav') 0.30 700 380 0.30 9.0
 Write-Host '  pawn screams (4)'
 
+# --------------------------------------------------------------- liquids/effects
+# Pool surfaces for the EngineTest outdoor extension. Flat pattern textures that
+# read as liquid once SURF_TRANSLUCENT / SURF_GLOW and panU/panV animate them;
+# the engine has no water/lava/acid texture of its own (shipped pools are
+# zone-only and invisible).
+$efxDir = Ensure 'GameData\Tex\Global\EFX'
+function Save-Liquid([string]$name, [int]$size, [byte]$r0, [byte]$g0, [byte]$b0,
+                     [byte]$r1, [byte]$g1, [byte]$b1, [double]$freq, [double]$wob) {
+    $path = Join-Path $efxDir $name
+    if (Test-Path $path) { Write-Host "  (exists) $path"; return }
+    $bmp = New-Object System.Drawing.Bitmap($size, $size)
+    for ($y = 0; $y -lt $size; $y++) {
+        for ($x = 0; $x -lt $size; $x++) {
+            $u = $x / [double]$size; $v = $y / [double]$size
+            $w = 0.5 + 0.5 * [Math]::Sin(2 * [Math]::PI * ($u * $freq + [Math]::Sin(2 * [Math]::PI * $v * $wob)))
+            $w2 = 0.5 + 0.5 * [Math]::Sin(2 * [Math]::PI * ($v * $freq * 0.7 + [Math]::Cos(2 * [Math]::PI * $u * $wob * 1.3)))
+            $m = 0.5 * ($w + $w2)
+            $r = [byte]($r0 + ($r1 - $r0) * $m)
+            $g = [byte]($g0 + ($g1 - $g0) * $m)
+            $b = [byte]($b0 + ($b1 - $b0) * $m)
+            $bmp.SetPixel($x, $y, [System.Drawing.Color]::FromArgb(255, $r, $g, $b))
+        }
+    }
+    $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+    $bmp.Dispose()
+    Write-Host "  liquid $name"
+}
+Save-Liquid 'liquid_water.png' 64 30 70 140   110 190 235  4.0 3.0
+Save-Liquid 'liquid_lava.png'  64 90 20 10    255 190 60   3.0 2.0
+Save-Liquid 'liquid_acid.png'  64 20 80 30    160 230 80   5.0 4.0
 Write-Host 'Placeholders written. Overwrite any file with real art; the defs stay valid.'

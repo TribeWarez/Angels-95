@@ -3,6 +3,8 @@ entity "flux_carbine" : weapon {
     texture = "GameData/Tex/Global/Gun/automag/automag_lvl1_texture.png"
     icon = "GameData/Tex/Global/Models/Object1Icon.png"
     stats {
+        // 4.4-unit source mesh; see automag. 1.5 * 0.2 * 4.4 = 1.32 units.
+        mesh_scale = 0.2
         damage = 18
         fire_rate = 0.18
         projectile_speed = 24.0

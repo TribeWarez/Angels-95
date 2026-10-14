@@ -7,6 +7,9 @@ entity "automag" : weapon {
         range = 50.0
         magazine = 12
         reload_time = 2.0
+        // The source OBJ is 2.7 units long (a 0.3-unit SMG scaled up); the
+        // world pickup draws it unfitted at 1.5x. 1.5 * 0.3 * 2.7 = 1.22 units.
+        mesh_scale = 0.3
         // Sound stats: quote-free, space-free asset paths.
         fire_sound = GameData/Audio/Sounds/Guns/machgf3b.wav
         fire_volume = 0.95
