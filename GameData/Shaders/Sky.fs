@@ -84,8 +84,16 @@ void main()
     // Term 1: the world's own fog, at this fragment, on the same curve the
     // geometry around it uses. This is the half that guarantees the seam closes.
     float fog = clamp(fogFactorAt(dist) * fogIntensity, 0.0, 1.0);
+    // The sky is drawn FIRST with the depth mask off, so it is the background:
+    // nothing is ever blended through it and it must be opaque. The shipped sky
+    // panoramas are RGBA with alpha 0 across their LOWER HALF (the artist's way
+    // of saying "the sky is the top part"), so forwarding sky.a made the whole
+    // box transparent below the horizon and the clear colour - black - showed in
+    // every gap between the world's silhouette and the horizon. That read as
+    // "the world is visible through the walls" and "the sky has holes in it".
+    // Keep the RGB, force the alpha.
     if (fog <= 0.0) {
-        finalColor = sky;
+        finalColor = vec4(sky.rgb, 1.0);
         return;
     }
 
@@ -95,5 +103,5 @@ void main()
     float up = normalize(toFrag).y;
     float clear = clamp(up / max(uSkyHorizonBlend, 0.001), 0.0, 1.0);
 
-    finalColor = vec4(mix(sky.rgb, fogColor, fog * (1.0 - clear)), sky.a);
+    finalColor = vec4(mix(sky.rgb, fogColor, fog * (1.0 - clear)), 1.0);
 }

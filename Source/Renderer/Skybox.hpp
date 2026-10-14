@@ -177,11 +177,25 @@ public:
             // 1 bottom  at y=-D, normal +Y (faces up)
             { 1, {  0.0f, -D, 0.0f },   0.0f, 0.0f,   0.0f, true,  { 80, 120, 200, 255 } },
             // 2 +X       3 -X
-            { 2, {  D, 0.0f,  0.0f },   0.0f, 0.0f,  90.0f, false, { 120, 180, 240, 255 } },
-            { 3, { -D, 0.0f,  0.0f },   0.0f, 0.0f, -90.0f, false, { 120, 180, 240, 255 } },
+            //
+            // Every side must put the panorama's V axis on WORLD +Y, or the sky
+            // hangs sideways on that wall. raylib applies the listed rotations
+            // rz then ry then rx, so the plain `rz = +/-90` the X faces used to
+            // carry left V on Z: a vertical wall whose texture is rotated 90
+            // degrees. The Z faces (4/5) always used rx = -90, which is the
+            // construction that puts V on +Y, so the X faces are the same
+            // rotation with the wall turned onto X by rz.
+            //
+            // Face 5's rx was +90, which points V DOWN: the south wall's
+            // panorama was upside down, horizon at the top. The normal direction
+            // is irrelevant - the cube is drawn two-sided and Sky.fs derives its
+            // horizon from fragPosition, not the normal - so rx = -90 is right
+            // on every side.
+            { 2, {  D, 0.0f,  0.0f }, -90.0f, 0.0f,  90.0f, false, { 120, 180, 240, 255 } },
+            { 3, { -D, 0.0f,  0.0f }, -90.0f, 0.0f, -90.0f, false, { 120, 180, 240, 255 } },
             // 4 +Z       5 -Z
-            { 4, { 0.0f, 0.0f,  D },  -90.0f, 0.0f,   0.0f, false, { 120, 180, 240, 255 } },
-            { 5, { 0.0f, 0.0f, -D },   90.0f, 0.0f,   0.0f, false, { 120, 180, 240, 255 } },
+            { 4, { 0.0f, 0.0f,  D }, -90.0f, 0.0f,   0.0f, false, { 120, 180, 240, 255 } },
+            { 5, { 0.0f, 0.0f, -D }, -90.0f, 0.0f,   0.0f, false, { 120, 180, 240, 255 } },
         };
 
         rlDisableDepthMask();

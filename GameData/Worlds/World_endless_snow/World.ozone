@@ -323,12 +323,12 @@ Mesh.Static Models/bushes/bush_long_winter.glb -300 100 0 30 scale=1.7
 Mesh.Static Models/bushes/bush_overgrown_winter.glb -400 200 0 60 scale=3
 Mesh.Static Models/bushes/bush_tall_single_winter.glb -280 -200 0 0 scale=1.6
 Mesh.Static Models/bushes/bush_long_single_winter.glb -220 -150 0 -20 scale=1.6
-Mesh.Static Models/forest/forest_pine_1.glb -350 -250 0 0 scale=1.2
+Mesh.Static Models/forest/forest_pine_1.glb -350 -250 0 0 tex=GameData/Tex/Global/EFX/tree_pine_needles.png scale=1.2
 Mesh.Static Models/forest/forest_stump_1.glb -300 -220 0 0 scale=3.6
 Mesh.Static Models/forest/forest_log_1.glb -260 -180 0 45
 Mesh.Static Models/bushes/bush_long_overgrown_winter.glb 400 -300 0 90 scale=1.7
 Mesh.Static Models/bushes/bush_tall_overgrown_winter.glb 350 -400 0 20 scale=1.7
-Mesh.Static Models/forest/forest_pine_2.glb 450 -450 0 0 scale=1.3
+Mesh.Static Models/forest/forest_pine_2.glb 450 -450 0 0 tex=GameData/Tex/Global/EFX/tree_pine_needles.png scale=1.3
 Mesh.Static Models/forest/forest_stump_2.glb 420 -420 0 0 scale=3
 Mesh.Static Models/rocks/SM_RP_Rock_2m_0.glb -350 120 0 0 tex=oztex/props/rocks_T_RP_Rocks_2_2K.png
 Mesh.Static Models/rocks/SM_RP_Rock_2m_1.glb -280 -120 0 30 tex=oztex/props/rocks_T_RP_Rocks_0_2K.png

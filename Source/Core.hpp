@@ -475,6 +475,64 @@ void UpdateLightSources()
                                                 OmegaTechData.MainCamera,
                                                 GetFrameTime(), amb);
     }
+
+    // The wind program (Wind.vs + LitFog.fs) is a THIRD consumer of the same
+    // uniform contract, and it was the only one nothing refreshed. Every wind=1
+    // mesh was therefore drawn with the program's GLSL defaults - no lights, no
+    // viewPos, no ambient, no fog - and a lit, textured tree rendered as an
+    // untinted pale blob. That is what made the pines look like they had no
+    // texture at all, through two rounds of "the model must be wrong": the model
+    // was fine, its uniforms were never uploaded.
+    //
+    // Deliberately LitLightning_Update and NOT LitLightning_UpdateFrame: the
+    // frame-level version advances every light's phase, so running it once per
+    // program runs all flicker at double speed (see its comment). This is the
+    // per-program half only, exactly as SurfaceMaterial::UpdateFrame uses it.
+    if (OmegaTechData.WindShader.id > 0 &&
+        OmegaTechData.WindShader.id != OmegaTechData.Lights.id) {
+        static int s_windViewPosLoc = -2, s_windAmbientLoc = -2;
+        static int s_windFogColorLoc = -2, s_windFogStartLoc = -2, s_windFogEndLoc = -2;
+        static int s_windFogDensityLoc = -2, s_windFogIntensityLoc = -2;
+        if (s_windViewPosLoc == -2) {
+            s_windViewPosLoc = OmegaTechData.WindShader.locs[SHADER_LOC_VECTOR_VIEW];
+            s_windAmbientLoc = GetShaderLocation(OmegaTechData.WindShader, "ambient");
+            s_windFogColorLoc = GetShaderLocation(OmegaTechData.WindShader, "fogColor");
+            s_windFogStartLoc = GetShaderLocation(OmegaTechData.WindShader, "fogStart");
+            s_windFogEndLoc = GetShaderLocation(OmegaTechData.WindShader, "fogEnd");
+            s_windFogDensityLoc = GetShaderLocation(OmegaTechData.WindShader, "fogDensity");
+            s_windFogIntensityLoc = GetShaderLocation(OmegaTechData.WindShader, "fogIntensity");
+        }
+
+        LitLightning_Update(PawnSystem::Instance().GetLights(), OmegaTechData.WindShader,
+                            OmegaTechData.MainCamera, GetFrameTime());
+
+        const float windViewPos[3] = { OmegaTechData.MainCamera.position.x,
+                                       OmegaTechData.MainCamera.position.y,
+                                       OmegaTechData.MainCamera.position.z };
+        if (s_windViewPosLoc >= 0)
+            SetShaderValue(OmegaTechData.WindShader, s_windViewPosLoc, windViewPos, SHADER_UNIFORM_VEC3);
+
+        float windAmb[4];
+        FillDefaultAmbient(windAmb);
+        OzoneLoader::Instance().GetWorldAmbient(windAmb);
+        if (s_windAmbientLoc >= 0)
+            SetShaderValue(OmegaTechData.WindShader, s_windAmbientLoc, windAmb, SHADER_UNIFORM_VEC4);
+
+        float windFogCol[3] = {0.7f, 0.7f, 0.8f};
+        float windFogStart = 10.0f, windFogEnd = 100.0f, windFogDensity = 1.0f, windFogIntensity = 1.0f;
+        OzoneLoader::Instance().GetWorldFog(windFogCol, windFogStart, windFogEnd,
+                                            windFogDensity, windFogIntensity);
+        if (s_windFogColorLoc >= 0)
+            SetShaderValue(OmegaTechData.WindShader, s_windFogColorLoc, windFogCol, SHADER_UNIFORM_VEC3);
+        if (s_windFogStartLoc >= 0)
+            SetShaderValue(OmegaTechData.WindShader, s_windFogStartLoc, &windFogStart, SHADER_UNIFORM_FLOAT);
+        if (s_windFogEndLoc >= 0)
+            SetShaderValue(OmegaTechData.WindShader, s_windFogEndLoc, &windFogEnd, SHADER_UNIFORM_FLOAT);
+        if (s_windFogDensityLoc >= 0)
+            SetShaderValue(OmegaTechData.WindShader, s_windFogDensityLoc, &windFogDensity, SHADER_UNIFORM_FLOAT);
+        if (s_windFogIntensityLoc >= 0)
+            SetShaderValue(OmegaTechData.WindShader, s_windFogIntensityLoc, &windFogIntensity, SHADER_UNIFORM_FLOAT);
+    }
 }
 
 void DrawLights()

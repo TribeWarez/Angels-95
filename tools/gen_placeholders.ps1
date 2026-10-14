@@ -252,4 +252,39 @@ function Save-Liquid([string]$name, [int]$size, [byte]$r0, [byte]$g0, [byte]$b0,
 Save-Liquid 'liquid_water.png' 64 30 70 140   110 190 235  4.0 3.0
 Save-Liquid 'liquid_lava.png'  64 90 20 10    255 190 60   3.0 2.0
 Save-Liquid 'liquid_acid.png'  64 20 80 30    160 230 80   5.0 4.0
+# ------------------------------------------------------------------- foliage
+# forest_pine_1/2.glb ship with a 1x1 WHITE data-URI as their only texture, so
+# every pine in EngineTest and World_endless_snow rendered as a flat pale blob.
+# The mesh lines now point `tex=` at these; the model UVs are produced by the
+# FBX2glTF export, so a plain tiling needle texture is enough (the canopy is
+# real geometry, not crossed cards - no alpha cutout needed).
+$treeDir = Ensure 'GameData\Tex\Global\EFX'
+$pine = Join-Path $treeDir 'tree_pine_needles.png'
+if (-not (Test-Path $pine)) {
+    $size = 128
+    $bmp = New-Object System.Drawing.Bitmap($size, $size)
+    $rnd = New-Object System.Random(4711)
+    for ($y = 0; $y -lt $size; $y++) {
+        for ($x = 0; $x -lt $size; $x++) {
+            $n = ($x * 12 + $y * 7 + ($x * $y) % 11) % 17
+            $g = 70 + 34 * [Math]::Sin($x * 0.7) * [Math]::Cos($y * 0.55) + 8 * $n
+            $g = [Math]::Max(38, [Math]::Min(150, $g))
+            $r = $g * 0.42
+            $b = $g * 0.5
+            $bmp.SetPixel($x, $y, [System.Drawing.Color]::FromArgb(255, [byte]$r, [byte]$g, [byte]$b))
+        }
+    }
+    for ($i = 0; $i -lt 900; $i++) {
+        $x = $rnd.Next(0, $size); $y = $rnd.Next(0, $size)
+        $len = $rnd.Next(3, 8); $shade = $rnd.Next(0, 2)
+        for ($k = 0; $k -lt $len; $k++) {
+            $px = ($x + $k * 2) % $size; $py = ($y + [int]($k * 1.4)) % $size
+            $g = if ($shade -eq 0) { 96 + $rnd.Next(0, 40) } else { 30 + $rnd.Next(0, 22) }
+            $bmp.SetPixel($px, $py, [System.Drawing.Color]::FromArgb(255, [byte]($g * 0.38), [byte]$g, [byte]($g * 0.45)))
+        }
+    }
+    $bmp.Save($pine, [System.Drawing.Imaging.ImageFormat]::Png)
+    $bmp.Dispose()
+    Write-Host '  foliage tree_pine_needles.png'
+} else { Write-Host "  (exists) $pine" }
 Write-Host 'Placeholders written. Overwrite any file with real art; the defs stay valid.'
