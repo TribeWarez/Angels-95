@@ -327,6 +327,13 @@ struct WorldState {
     // Set once all objectives complete and the mission has advanced, so the
     // coordinated transition fires exactly once.
     bool mission_transitioned = false;
+    // Set when `--mission <name>` pinned a LATER starting mission: this world
+    // lies BEHIND the operator's chosen frontier, so it is never entered,
+    // never offered to joiners and never gates the arc. Deliberately distinct
+    // from mission_transitioned ("this world was played and finished") so the
+    // two facts do not have to be re-derived - a world skipped this way was
+    // never played at all.
+    bool mission_skipped = false;
 };
 
 // Pickup collect range (world units)
@@ -450,10 +457,19 @@ public:
     std::vector<WorldState>& worlds() { return m_worlds; }
     WorldState* get_world(int idx);
 
-    // The world a NEW player should spawn in: the first world with objectives
-    // that has not yet transitioned. Falls back to world 0 when no world has
-    // objectives or all have transitioned (mission complete).
+    // The world a NEW player should spawn in: the first world that is still the
+    // arc's frontier (see IsFrontier). Falls back to world 0 when no world
+    // qualifies (no objectives seeded, or the mission is complete).
     int current_mission_world_index() const;
+
+    // A world is the arc's FRONTIER when it has objectives, has not already
+    // advanced, and was not skipped by --mission. The single definition of
+    // "the mission runs here", shared by the join placement above and Server's
+    // coordinated transition loop - two hand-copied predicates is exactly how
+    // a pinned frontier and a joiner's spawn drift apart.
+    static bool IsFrontier(const WorldState& ws) {
+        return !ws.objectives.empty() && !ws.mission_transitioned && !ws.mission_skipped;
+    }
 
     // --campaign opt-in (Server.cpp sets this BEFORE init_worlds). OFF =
     // classic co-op: init_worlds seeds no objectives (neither a `: mission`
@@ -463,6 +479,14 @@ public:
     // both sides.
     void set_campaign_enabled(bool on) { m_campaignEnabled = on; }
     bool campaign_enabled() const { return m_campaignEnabled; }
+
+    // `--mission <name>` (implies --campaign): pin the arc's starting frontier
+    // to a named mission instead of the campaign's first one. Set BEFORE
+    // init_worlds; the named mission must resolve to a loaded world - Server.cpp
+    // validates that and refuses to start on an unknown name rather than
+    // silently falling back to world 0. Empty = default (first mission).
+    void set_starting_mission(const std::string& name) { m_startingMission = name; }
+    const std::string& starting_mission() const { return m_startingMission; }
 
     // Respawned pickups notifier (consumed by server for broadcast)
     struct RespawnedPickupInfo { int world_index; int pickup_id; };
@@ -492,10 +516,16 @@ private:
     oz::gametype::GameTypeInfo m_gameTypeInfo; // resolved per-world from levelinfo + .ozls override
     std::string m_gamedata_dir;                // captured by init_worlds for save/load
     bool m_campaignEnabled = false;            // --campaign (default OFF = classic co-op)
+    std::string m_startingMission;             // --mission <name> (empty = campaign's first)
     uint32_t m_next_player_id = 1;
     uint32_t m_tick_count = 0;
     std::vector<WorldState> m_worlds;
     std::vector<RespawnedPickupInfo> m_respawned_this_tick;
+
+    // `--mission <name>`: mark every world BEFORE the pinned starting mission
+    // in the mission graph as mission_skipped. Runs at the end of init_worlds
+    // (it needs ws.mission seeded and m_worlds populated).
+    void apply_starting_mission();
 
     static int get_player_xp_level(int xp);
 };

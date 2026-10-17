@@ -276,6 +276,75 @@ void GameState::init_worlds(const std::string& gamedata_dir,
                 ws.name.c_str(), PARTITIONS_PER_WORLD,
                  ws.global_npcs.size(), ws.global_pickups.size());
     }
+
+    // Last, because it needs every world's `mission` seeded above.
+    apply_starting_mission();
+}
+
+// `--mission <name>`: the operator chose WHERE the arc starts, so every world
+// before it in the mission graph must not be a frontier. Marking them
+// mission_skipped (not mission_transitioned - they were never played) keeps
+// three things consistent without a second predicate each: join placement,
+// Server's transition loop, and "which world does a late joiner get".
+//
+// The walk is the MISSION GRAPH (FirstMissionWorld -> NextMissionWorld), not
+// world-list order: the world list comes from a directory scan and its order
+// has nothing to do with mission progression.
+void GameState::apply_starting_mission() {
+    if (!m_campaignEnabled || m_startingMission.empty()) return;
+
+    auto& gm = oz::game::GameManager::Instance();
+    if (!gm.Loaded()) {
+        OZ_WARN("--mission '%s' ignored: the game hierarchy (GameData/Game) did not load",
+                m_startingMission.c_str());
+        return;
+    }
+
+    const std::string startWorld = gm.MissionWorld(m_startingMission);
+    if (startWorld.empty()) {
+        // Server.cpp refuses to start on this, so reaching it means the flag was
+        // set programmatically (tests) - keep it loud and non-fatal.
+        OZ_WARN("--mission '%s' does not resolve to a world; the arc starts at the first mission",
+                m_startingMission.c_str());
+        return;
+    }
+
+    // Collect first, apply second: a walk that fails halfway must not leave the
+    // world list half-skipped.
+    std::vector<std::string> before;
+    std::string cur = gm.FirstMissionWorld();
+    int guard = 0;
+    bool reached = false;
+    while (!cur.empty() && guard++ < 512) {
+        if (cur == startWorld) { reached = true; break; }
+        before.push_back(cur);
+        const oz::game::MissionDef* md = gm.FindMissionByWorld(cur);
+        if (!md) break;
+        cur = gm.NextMissionWorld(md->name);
+    }
+
+    if (!reached) {
+        OZ_WARN("--mission '%s': mission graph never reached world '%s' from '%s' - "
+                "no worlds were skipped and the arc starts at the first mission",
+                m_startingMission.c_str(), startWorld.c_str(), gm.FirstMissionWorld().c_str());
+        return;
+    }
+
+    int skipped = 0, missing = 0;
+    for (const std::string& worldName : before) {
+        bool found = false;
+        for (auto& ws : m_worlds) {
+            if (ws.name != worldName) continue;
+            found = true;
+            if (!ws.mission_transitioned) ws.mission_skipped = true;
+            ++skipped;
+            break;
+        }
+        if (!found) ++missing;
+    }
+    OZ_INFO("--mission '%s': arc starts at world '%s' (%d earlier mission world(s) skipped%s)",
+            m_startingMission.c_str(), startWorld.c_str(), skipped,
+            missing ? ", some not loaded" : "");
 }
 
 void GameState::init_global_npcs_and_pickups(WorldState& ws) {
@@ -680,8 +749,7 @@ int GameState::current_mission_world_index() const {
     // future objective source.
     if (!m_campaignEnabled) return 0;
     for (const auto& ws : m_worlds) {
-        if (!ws.objectives.empty() && !ws.mission_transitioned)
-            return ws.world_index;
+        if (IsFrontier(ws)) return ws.world_index;
     }
     return 0;
 }

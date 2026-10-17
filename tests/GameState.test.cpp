@@ -9,6 +9,8 @@
 #include "../Source/Server/GameState.hpp"
 #include "../Source/Client/Client.hpp"
 #include "../Source/Pawn/PickupItems.hpp"
+#include "../Source/Script/LightningEntityRegistry.hpp"
+#include "../Source/Game/GameManager.hpp"
 #include <cstdio>
 #include <cstring>
 #include <cassert>
@@ -1179,6 +1181,111 @@ static int test_objective_id_fits_wire_field() {
     PASS(); return 0; END_TEST();
 }
 
+// --- --mission starting-mission pin (Phase 4) ---
+
+static int test_starting_mission_flag_roundtrip() {
+    TEST("--mission round-trips; IsFrontier is the shared frontier predicate");
+    GameState gs;
+    CHECK(gs.starting_mission().empty());
+    gs.set_starting_mission("Sektor_02_MegacityGrid");
+    CHECK_STR(gs.starting_mission(), "Sektor_02_MegacityGrid");
+
+    // IsFrontier is what BOTH join placement and Server's transition loop read,
+    // so each of its three clauses gets pinned here rather than at the callers.
+    WorldState ws = make_test_world(1);
+    WorldState::Objective o; o.id = "Obj"; o.type = "kill"; o.target = 1;
+    ws.objectives.push_back(o);
+    CHECK(GameState::IsFrontier(ws));
+    ws.mission_skipped = true;                      // behind a --mission start
+    CHECK(!GameState::IsFrontier(ws));
+    ws.mission_skipped = false;
+    ws.mission_transitioned = true;                 // already played/advanced
+    CHECK(!GameState::IsFrontier(ws));
+    ws.mission_transitioned = false;
+    ws.objectives.clear();                          // plain co-op world
+    CHECK(!GameState::IsFrontier(ws));
+    PASS(); return 0; END_TEST();
+}
+
+// A skipped world must never be handed to a joiner: that is the whole difference
+// between "--mission starts the arc here" and "start where you asked, then get
+// yanked back to mission 1 by the next join".
+static int test_starting_mission_pins_frontier() {
+    TEST("mission_skipped worlds are never the join frontier");
+    GameState gs;
+    gs.set_campaign_enabled(true);
+    for (int i = 0; i < 3; i++) {
+        WorldState ws = make_test_world(i);
+        WorldState::Objective o; o.id = "Obj"; o.type = "kill"; o.target = 1;
+        ws.objectives.push_back(o);
+        gs.worlds().push_back(ws);
+    }
+    CHECK_EQ(gs.current_mission_world_index(), 0);
+
+    gs.worlds()[0].mission_skipped = true;          // as --mission would mark them
+    gs.worlds()[1].mission_skipped = true;
+    CHECK_EQ(gs.current_mission_world_index(), 2);
+
+    gs.worlds()[2].mission_transitioned = true;     // arc complete -> world 0
+    CHECK_EQ(gs.current_mission_world_index(), 0);
+    PASS(); return 0; END_TEST();
+}
+
+// Integration: --mission resolves through the real GameManager and marks every
+// EARLIER mission world skipped. Reads the real GameData hierarchy (like
+// tests/GameManager.test.cpp), so it may run last.
+static int test_starting_mission_skips_earlier_worlds() {
+    TEST("--mission skips every earlier mission world (real hierarchy)");
+    LightningEntityRegistry::Instance().Init();
+    auto& gm = oz::game::GameManager::Instance();
+    gm.Init();
+    CHECK(gm.Loaded());
+    // A mission that is NOT the campaign's first, so the walk has work to do.
+    CHECK_STR(gm.FirstMissionWorld(), "Sektor_01_SilentPines");
+    CHECK_STR(gm.MissionWorld("Sektor_03_AegisBaseAlpha"), "Sektor_03_AegisBaseAlpha");
+    CHECK(!gm.NextMissionWorld("Sektor_02_MegacityGrid").empty());
+
+    GameState gs;
+    gs.set_campaign_enabled(true);
+    gs.set_starting_mission("Sektor_03_AegisBaseAlpha");
+    gs.init_worlds("GameData", {"Sektor_01_SilentPines",
+                                "Sektor_02_MegacityGrid",
+                                "Sektor_03_AegisBaseAlpha"});
+
+    CHECK_EQ(gs.world_count(), 3);
+    CHECK(gs.worlds()[0].mission_skipped);          // behind the chosen start
+    CHECK(gs.worlds()[1].mission_skipped);
+    CHECK(!gs.worlds()[2].mission_skipped);         // the chosen start
+    CHECK_EQ(gs.current_mission_world_index(), 2);
+
+    // The chosen mission still runs: its objectives are seeded, not skipped.
+    CHECK(!gs.worlds()[2].objectives.empty());
+    PASS(); return 0; END_TEST();
+}
+
+// An unknown name must not silently start earlier than asked. GameState itself
+// only warns (Server.cpp turns the same condition into a startup error before
+// init_worlds is ever reached), so pin "no worlds skipped" here.
+static int test_starting_mission_unknown_is_inert() {
+    TEST("unknown --mission skips nothing (Server refuses it earlier)");
+    namespace fs = std::filesystem;
+    const fs::path worldDir = fs::path("build_test_gamedata") / "Worlds" / "CampaignGateTest";
+    fs::create_directories(worldDir);
+    {
+        std::ofstream out((worldDir / "World.ozone").string());
+        out << "levelinfo 0 8 5 0 10 50 0 gametype=cooperative\n";
+    }
+    GameState gs;
+    gs.set_campaign_enabled(true);
+    gs.set_starting_mission("NoSuchMission_XYZ");
+    gs.init_worlds("build_test_gamedata", {"CampaignGateTest"});
+    CHECK_EQ(gs.world_count(), 1);
+    CHECK(!gs.worlds()[0].mission_skipped);
+    CHECK_EQ(gs.current_mission_world_index(), 0);
+    fs::remove_all(worldDir);
+    PASS(); return 0; END_TEST();
+}
+
 // --- Campaign gating (--campaign opt-in, Phase G) ---
 
 static int test_campaign_flag_defaults_off() {
@@ -1301,6 +1408,14 @@ int main() {
     failures += test_campaign_flag_defaults_off();
     failures += test_campaign_gates_frontier_placement();
     failures += test_campaign_gates_objective_seeding();
+    failures += test_starting_mission_flag_roundtrip();
+    failures += test_starting_mission_pins_frontier();
+    // The integration test inits the real hierarchy (LightningEntityRegistry::
+    // Init clears + rescans defs), so it runs after every test that reads the
+    // registry, and the unknown-name case runs after it with the hierarchy
+    // genuinely loaded.
+    failures += test_starting_mission_skips_earlier_worlds();
+    failures += test_starting_mission_unknown_is_inert();
 
     fprintf(stdout, "===============\n");
     fprintf(stdout, "%d/%d passed, %d failed\n",

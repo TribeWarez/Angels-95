@@ -54,8 +54,17 @@ std::vector<std::string> g_master_http;  // --master-http http://host:port
 std::string g_public_ip;                 // --public-ip (NAT)
 std::string g_bind_ip;                   // --bind (default = all interfaces)
 bool g_campaign = false;                 // --campaign (mission arc; default OFF)
+std::string g_mission;                   // --mission <name> (implies --campaign)
+// The world the named mission resolves to, filled during startup validation.
+// Only used to report the map; empty = no --mission.
+std::string g_mission_world;
 
 std::string current_map_name() {
+    // With --mission the players start (and stay, until the objectives
+    // complete) in the named mission's world, NOT in world_list[0]. Naming the
+    // alphabetically-first world in the server browser and in HTTP /map would
+    // tell joining players the wrong map.
+    if (!g_mission_world.empty()) return g_mission_world;
     return g_world_list.empty() ? std::string("unknown") : g_world_list[0];
 }
 
@@ -1000,12 +1009,20 @@ int main(int argc, char** argv) {
             g_public_ip = argv[++i];
         else if (strcmp(argv[i], "--campaign") == 0)
             g_campaign = true;
+        else if (strcmp(argv[i], "--mission") == 0 && i + 1 < argc) {
+            g_mission = argv[++i];
+            // A named mission is a campaign concept by definition: without the
+            // arc flag no world carries objectives, so the pin would be inert.
+            // Implying it matches the client, which sends both together.
+            g_campaign = true;
+        }
         else if (strcmp(argv[i], "--help") == 0) {
             printf("AngelServ -- OzWorld/OmegaTech dedicated server\n");
             printf("Usage: AngelServ [--port P] [--http-port P] [--dir GameData]"
                    " [--bind IP|HOST] [--auth-token T] [--admin-token T]\n");
             printf("                  [--server-name NAME] [--master host[:port]]"
                    " [--master-http URL] [--public-ip IP] [--campaign]\n");
+            printf("                  [--mission NAME]\n");
             printf("  --bind         Interface for UDP+HTTP (default 0.0.0.0 = all).\n");
             printf("  --auth-token   Require Bearer auth for the HTTP API (env: OZ_AUTH_TOKEN)\n");
             printf("  --admin-token  Enable admin COMMANDs (list/say/kick; env: OZ_ADMIN_TOKEN)\n");
@@ -1016,6 +1033,9 @@ int main(int argc, char** argv) {
             printf("  --campaign     Run the campaign arc: seed mission objectives, join at the\n");
             printf("                 mission frontier, advance worlds when objectives complete\n");
             printf("                 (default OFF = plain co-op: no objectives, join in world 0)\n");
+            printf("  --mission NAME Start the arc at this `: mission` def's world (implies\n");
+            printf("                 --campaign). Unknown name = startup error, never a\n");
+            printf("                 silent fallback to world 0.\n");
             printf("  Config file:   System/OzServer.ini ([Server]/[Auth]/[MasterServers]; CLI overrides)\n");
             return 0;
         }
@@ -1051,13 +1071,53 @@ int main(int argc, char** argv) {
     // read the same flag later. OFF is classic co-op: one world, no objectives.
     g_game_state.set_campaign_enabled(g_campaign);
     OZ_INFO("Campaign mode: %s", g_campaign
-                ? "ON (--campaign): mission objectives seeded, joiners start at the "
-                  "mission frontier, worlds advance on completion"
+                ? (g_mission.empty()
+                       ? "ON (--campaign): mission objectives seeded, joiners start at the "
+                         "mission frontier, worlds advance on completion"
+                       : "ON (--campaign --mission): objectives seeded, the arc STARTS at the "
+                         "named mission, worlds advance on completion")
                 : "OFF (default): no objectives, joiners start in world 0; pass "
                   "--campaign to run the mission arc");
+    if (!g_mission.empty())
+        OZ_INFO("Requested starting mission: %s", g_mission.c_str());
 
     // Scan worlds
     scan_worlds(g_gamedata_dir + "/Worlds");
+
+    // Load the game hierarchy and the world state BEFORE binding anything. The
+    // hierarchy is needed by GameManager (and therefore by --mission
+    // validation), and failing here must not leave a started server and a live
+    // HTTP thread behind — an early `return` from main with a joinable
+    // std::thread aborts the process instead of exiting cleanly. It also closes
+    // the old window where the HTTP thread could read g_game_state while
+    // init_worlds was still filling it.
+    LightningEntityRegistry::Instance().Init();
+    oz::game::GameManager::Instance().Init();
+    oz::game::RegisterGameBoxedTypes();
+    oz::game::RegisterGameOpcodes();
+
+    // --mission must be validated AFTER GameManager::Init (only then are the
+    // `: mission` defs resolvable) and BEFORE init_worlds (it decides the
+    // starting frontier). An unknown name is a startup ERROR: silently starting
+    // a campaign host on a different level than the operator asked for is worse
+    // than not starting, because the players have no way to tell.
+    if (!g_mission.empty()) {
+        auto& gm = oz::game::GameManager::Instance();
+        const std::string missionWorld =
+            gm.Loaded() ? gm.MissionWorld(g_mission) : std::string();
+        if (missionWorld.empty()) {
+            fprintf(stderr,
+                    "AngelServ: --mission '%s' is unknown: no `: mission` def maps it to a "
+                    "world (game hierarchy %s). Refusing to start.\n",
+                    g_mission.c_str(), gm.Loaded() ? "loaded" : "FAILED TO LOAD");
+            return 1;
+        }
+        g_mission_world = missionWorld;
+        OZ_INFO("--mission '%s' -> world '%s'", g_mission.c_str(), missionWorld.c_str());
+        g_game_state.set_starting_mission(g_mission);
+    }
+
+    g_game_state.init_worlds(g_gamedata_dir, g_world_list);
 
     // Start UDP game server
     net::NetworkServer game_server;
@@ -1102,15 +1162,6 @@ int main(int argc, char** argv) {
         OZ_WARN("No --master/--master-http configured: server will not appear in internet lists");
     }
 
-    // Initialize game state with worlds. The game hierarchy (GameData/Game) is
-    // loaded first so init_worlds CAN seed each world's COOP objectives from
-    // its `: mission` def — the seeding only runs when --campaign set the flag
-    // above; without it no world carries objectives at all.
-    LightningEntityRegistry::Instance().Init();
-    oz::game::GameManager::Instance().Init();
-    oz::game::RegisterGameBoxedTypes();
-    oz::game::RegisterGameOpcodes();
-    g_game_state.init_worlds(g_gamedata_dir, g_world_list);
     {
         std::lock_guard<std::mutex> lock(g_print_mutex);
         printf("AngelServ ready\n");
@@ -1150,11 +1201,15 @@ int main(int argc, char** argv) {
             // only — with the default OFF no objectives were seeded, so the loop
             // would never fire anyway; the explicit gate keeps that true even if
             // another objective source appears later.
+            //
+            // The frontier test is GameState::IsFrontier, the same one join
+            // placement uses: worlds behind a --mission starting point are
+            // mission_skipped and are never entered or advanced through.
             if (g_game_state.campaign_enabled()) {
                 auto& gm = oz::game::GameManager::Instance();
                 if (gm.Loaded()) {
                     for (auto& ws : g_game_state.worlds()) {
-                        if (ws.mission_transitioned || ws.objectives.empty()) continue;
+                        if (!GameState::IsFrontier(ws)) continue;
                         bool allDone = true;
                         for (const auto& o : ws.objectives)
                             if (o.target > 0 && o.progress < o.target) { allDone = false; break; }
