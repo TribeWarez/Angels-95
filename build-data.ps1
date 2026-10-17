@@ -177,11 +177,33 @@ if (Test-Path $engineArtDir) {
 }
 
 # --- Game hierarchy (GameData/Game: : game / : campaign / : sector / : mission
-#     / : objective / : trigger / : event defs). One package for the whole
-#     Angels95 game layer so a packaged install keeps the campaign graph. ---
-$gameDir = "$GAMEDATA\Game"
-if (Test-Path $gameDir) {
-    Run-OzPack "OZPK" $gameDir "$OUT\game.ozpak"
+#     / : objective / : trigger / : event defs). One package PER GAME, so a
+#     second game added under GameData/Game/<OtherGame>/ never shares a
+#     container with Angels95's defs. Same shape as the weapons section above.
+#     The registry lists .ozls from every loaded package, so no runtime change.
+#     NOTE: registry dedup is by BASENAME, so two games must not ship files of
+#     the same name (verified for Angels95: mission files are named after their
+#     worlds and world-local defs are skyzone_*/arena/etc - no collision). ---
+$gameRoot = "$GAMEDATA\Game"
+if (Test-Path $gameRoot) {
+    Get-ChildItem $gameRoot -Directory | ForEach-Object {
+        $name = $_.Name
+        if ((Get-ChildItem $_.FullName -File -Recurse | Measure-Object).Count -gt 0) {
+            Run-OzPack "OZPK" "$gameRoot\$name" "$OUT\game_$name.ozpak"
+        } else {
+            Write-Host "  (skipping empty: $name)" -ForegroundColor DarkGray
+        }
+    }
+    # Defs sitting loose in GameData/Game itself (not under a game folder) have
+    # no home in a per-game layout, and packing the root recursively would
+    # duplicate every game's entries. Warn instead of silently dropping them.
+    $loose = Get-ChildItem $gameRoot -File |
+        Where-Object { $_.Extension -ieq ".ozls" }
+    if ($loose) {
+        Write-Host "WARNING: .ozls files sit outside a game folder and will NOT be packaged:" -ForegroundColor Yellow
+        $loose | ForEach-Object { Write-Host "  $($_.FullName)" -ForegroundColor Yellow }
+        Write-Host "  Move them under GameData/Game/<Game>/ to include them." -ForegroundColor Yellow
+    }
 }
 
 # --- Shared tileset library ---
