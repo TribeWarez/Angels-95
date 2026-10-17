@@ -267,6 +267,25 @@ $(BUILD_DIR)/PackageIO.o: Source/Resources/PackageIO.cpp Source/Resources/Packag
 $(BUILD_DIR)/AssetScan.o: Source/Resources/AssetScan.cpp Source/Resources/AssetScan.hpp Source/Resources/AssetScope.hpp | $(BUILD_DIR)
 	$(COMP) $(CFLAGS) -c Source/Resources/AssetScan.cpp -o $@
 
+# Game-hierarchy engine objects the editor links because its own objects call
+# them: OzPawnSystem emits EventBus facts (pickup.collect / zone.enter / entity.*),
+# OzOzoneLoader injects trigger volumes into TriggerSystem and world entities
+# through BoxedTypeRegistry, and LightningEntityManager subscribes the bus bridge
+# and reads/writes ObjectiveSystem. All four are raylib-free. A line here MUST
+# have a matching `g++ -c` + link entry in .github/workflows/ci.yml (which
+# compiles the editor by hand); tools/check_editor_objects.sh enforces it.
+$(BUILD_DIR)/EventBus.o: ../Source/Events/EventBus.cpp ../Source/Events/EventBus.hpp | $(BUILD_DIR)
+	$(COMP) $(CFLAGS) -c ../Source/Events/EventBus.cpp -o $@
+
+$(BUILD_DIR)/TriggerSystem.o: ../Source/Events/TriggerSystem.cpp ../Source/Events/TriggerSystem.hpp ../Source/Events/EventBus.hpp | $(BUILD_DIR)
+	$(COMP) $(CFLAGS) -c ../Source/Events/TriggerSystem.cpp -o $@
+
+$(BUILD_DIR)/ObjectiveSystem.o: ../Source/Events/ObjectiveSystem.cpp ../Source/Events/ObjectiveSystem.hpp ../Source/Events/EventBus.hpp | $(BUILD_DIR)
+	$(COMP) $(CFLAGS) -c ../Source/Events/ObjectiveSystem.cpp -o $@
+
+$(BUILD_DIR)/BoxedTypeRegistry.o: ../Source/Boxed/BoxedTypeRegistry.cpp ../Source/Boxed/BoxedTypeRegistry.hpp | $(BUILD_DIR)
+	$(COMP) $(CFLAGS) -c ../Source/Boxed/BoxedTypeRegistry.cpp -o $@
+
 CORE_OBJS := $(BUILD_DIR)/OzPawnSystem.o $(BUILD_DIR)/OzOzoneLoader.o $(BUILD_DIR)/OzoneFrustum.o $(BUILD_DIR)/OzoneHeightmap.o $(BUILD_DIR)/OzBsp.o \
              $(BUILD_DIR)/AutoConvex.o \
              $(BUILD_DIR)/OzoneParser.o $(BUILD_DIR)/ZoneManager.o $(BUILD_DIR)/SoundManager.o $(BUILD_DIR)/GameType.o \
@@ -274,7 +293,9 @@ CORE_OBJS := $(BUILD_DIR)/OzPawnSystem.o $(BUILD_DIR)/OzOzoneLoader.o $(BUILD_DI
              $(BUILD_DIR)/WorldChunk.o $(BUILD_DIR)/LitLightning.o $(BUILD_DIR)/Mesh.o $(BUILD_DIR)/SkeletalMesh.o \
              $(BUILD_DIR)/MeshCache.o $(BUILD_DIR)/AnimatedMesh.o $(BUILD_DIR)/OzAnimFormat.o \
              $(BUILD_DIR)/OzParticleSimulationManager.o $(BUILD_DIR)/rlights.o $(BUILD_DIR)/miniz.o \
-              $(BUILD_DIR)/OzlsWriter.o
+             $(BUILD_DIR)/EventBus.o $(BUILD_DIR)/TriggerSystem.o $(BUILD_DIR)/ObjectiveSystem.o \
+             $(BUILD_DIR)/BoxedTypeRegistry.o \
+             $(BUILD_DIR)/OzlsWriter.o
 
 # 5c. Editor Windows resource
 $(BUILD_DIR)/AngelEd.res: AngelEd.rc ../GameData/Tex/Editor/angelEd.ico | $(BUILD_DIR)

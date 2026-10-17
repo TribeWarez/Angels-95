@@ -266,6 +266,14 @@ jobs:
           g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/Pawn/OzPawnSystem.cpp -o OzPawnSystem.o
           g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/Renderer/OzAssetMapper.cpp -o OzAssetMapper.o
           g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/World/OzOzoneLoader.cpp -o OzOzoneLoader.o
+          # Game-hierarchy engine objects the editor links because OzPawnSystem,
+          # OzOzoneLoader and LightningEntityManager call them (EventBus facts,
+          # trigger volumes, boxed type injection, objective/worldflag store).
+          # All raylib-free. Must match AngelEd/Makefile's CORE_OBJS.
+          g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/Events/EventBus.cpp -o EventBus.o
+          g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/Events/TriggerSystem.cpp -o TriggerSystem.o
+          g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/Events/ObjectiveSystem.cpp -o ObjectiveSystem.o
+          g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/Boxed/BoxedTypeRegistry.cpp -o BoxedTypeRegistry.o
           g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/World/OzoneFrustum.cpp -o OzoneFrustum.o
           g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/World/OzoneHeightmap.cpp -o OzoneHeightmap.o
           g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/World/OzoneParser.cpp -o OzoneParser.o
@@ -321,7 +329,7 @@ jobs:
           g++ $EDITOR_FLAGS $EDITOR_INC -c Source/Subsystems/History.cpp -o History.o
           echo 'int main_custom() { return 0; }' | g++ $EDITOR_FLAGS $EDITOR_INC -x c++ -c - -o OTCustom_stub.o
           
-          g++ Main.o UiShell.o EditorEventBus.o OzPawnSystem.o OzAssetMapper.o OzOzoneLoader.o OzoneFrustum.o OzoneHeightmap.o OzoneParser.o ZoneManager.o GameType.o SurfaceFlags.o SurfaceMaterial.o SoundManager.o Log.o OzBsp.o AutoConvex.o WorldChunk.o LightningScriptContext.o LightningScriptParser.o LightningEntityRegistry.o LightningEntityManager.o OzlsWriter.o EditorIcons.o AssetScope.o PackageIO.o AssetScan.o SurfaceOps.o Placement.o PropsApply.o LevelState.o History.o LitLightning.o Mesh.o SkeletalMesh.o MeshCache.o AnimatedMesh.o OzAnimFormat.o OzParticleSimulationManager.o rlights.o miniz.o raygui.o OTCustom_stub.o -o AngelEd.exe $EDITOR_FLAGS $EDITOR_INC $EDITOR_LIBS
+          g++ Main.o UiShell.o EditorEventBus.o OzPawnSystem.o OzAssetMapper.o OzOzoneLoader.o EventBus.o TriggerSystem.o ObjectiveSystem.o BoxedTypeRegistry.o OzoneFrustum.o OzoneHeightmap.o OzoneParser.o ZoneManager.o GameType.o SurfaceFlags.o SurfaceMaterial.o SoundManager.o Log.o OzBsp.o AutoConvex.o WorldChunk.o LightningScriptContext.o LightningScriptParser.o LightningEntityRegistry.o LightningEntityManager.o OzlsWriter.o EditorIcons.o AssetScope.o PackageIO.o AssetScan.o SurfaceOps.o Placement.o PropsApply.o LevelState.o History.o LitLightning.o Mesh.o SkeletalMesh.o MeshCache.o AnimatedMesh.o OzAnimFormat.o OzParticleSimulationManager.o rlights.o miniz.o raygui.o OTCustom_stub.o -o AngelEd.exe $EDITOR_FLAGS $EDITOR_INC $EDITOR_LIBS
           cd ..
 
       - name: Assemble System/ release
