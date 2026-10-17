@@ -242,6 +242,15 @@ void GameState::init_worlds(const std::string& gamedata_dir,
                     o.id = objName;
                     o.type = otype;
                     o.target = target;
+                    // OBJECTIVE_STATE carries the id in a fixed 32-byte field
+                    // (strncpy at the send site). A longer def name truncates
+                    // on the wire with no error anywhere - fail loudly here,
+                    // once, at seed time.
+                    if (!net::ObjectiveIdFits(o.id))
+                        OZ_WARN("objective id '%s' is %zu chars - OBJECTIVE_STATE "
+                                "carries at most %zu; clients will see it truncated. "
+                                "Shorten the ': objective' def name.",
+                                o.id.c_str(), o.id.size(), net::kObjectiveIdMax - 1);
                     ws.objectives.push_back(o);
                 }
             } else if (coop) {

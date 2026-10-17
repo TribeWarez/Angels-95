@@ -343,15 +343,23 @@ struct WorldChangeData {
 // trap as PickupRespawnData::typeName.
 constexpr uint32_t kWorldChangeSizeBase = offsetof(WorldChangeData, spawnX);
 
-// Server -> client COOP objective progress. One objective per message; the
-// server sends the player's own world's objectives periodically, so a lost
-// datagram self-heals. See OBJECTIVE_STATE in MessageType.
+// Server -> client COOP objective progress (OBJECTIVE_STATE). One objective per
+// message; the server sends the player's own world's objectives periodically, so
+// a lost datagram self-heals. See OBJECTIVE_STATE in MessageType.
 struct ObjectiveStateData {
     int  world_index;      // which world the objective belongs to
     int  progress;
     int  target;           // <= 0 = binary objective
     char id[32];           // objective id (null-terminated)
 };
+// The id field is a fixed 32 bytes and the send site uses strncpy: a longer id
+// is silently truncated on the wire, so the client's copy stops matching the
+// server's. Objective ids are def names (shipped max: 24 chars). GameState
+// warns at seed time when this fails; this predicate is the one definition.
+constexpr size_t kObjectiveIdMax = sizeof(ObjectiveStateData::id);
+constexpr bool ObjectiveIdFits(const std::string& id) {
+    return id.size() < kObjectiveIdMax;
+}
 
 // --- Party / lobby (Phase 4 scaffold) ---
 constexpr size_t kMaxName = PLAYER_NAME_MAX;

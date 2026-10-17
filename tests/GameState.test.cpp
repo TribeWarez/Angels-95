@@ -1157,6 +1157,26 @@ static int test_log_calls_have_no_duplicate_args() {
     PASS(); return 0; END_TEST();
 }
 
+static int test_objective_id_fits_wire_field() {
+    TEST("Objective ids fit OBJECTIVE_STATE's fixed id[32] field");
+
+    // The wire struct's field, pinned: the send site strncpy's into it, so an
+    // id of kObjectiveIdMax or more chars truncates silently mid-campaign.
+    CHECK_EQ((int)net::kObjectiveIdMax, 32);
+
+    // Shipped ids (def names) top out at 24 chars.
+    CHECK(net::ObjectiveIdFits("Objective_CollectRelics"));
+    CHECK(net::ObjectiveIdFits("Objective_ClearArea"));
+    CHECK(net::ObjectiveIdFits("ClearArea"));
+
+    // Boundary: 31 chars + NUL fits, 32 chars does not.
+    CHECK(net::ObjectiveIdFits(std::string(31, 'x')));
+    CHECK(!net::ObjectiveIdFits(std::string(32, 'x')));
+    CHECK(!net::ObjectiveIdFits(std::string(64, 'y')));
+    CHECK(net::ObjectiveIdFits(""));
+    PASS(); return 0; END_TEST();
+}
+
 int main() {
     // Unbuffered: when a suite dies without a summary line, a piped stdout keeps
     // the last "TEST:" line in the log, which is what names the culprit (the
@@ -1193,6 +1213,7 @@ int main() {
     failures += test_pickup_loopback_roundtrip();
     failures += test_pickup_state_cleared_on_disconnect();
     failures += test_log_calls_have_no_duplicate_args();
+    failures += test_objective_id_fits_wire_field();
 
     fprintf(stdout, "===============\n");
     fprintf(stdout, "%d/%d passed, %d failed\n",
