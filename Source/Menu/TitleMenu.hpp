@@ -28,7 +28,17 @@ static const Color TEAM_COLORS[8] = {
 static const char* TEAM_COLOR_NAMES[8] = {"Unassigned","Red","Blue","Green","Gold","Azure","Purple","Orange"};
 static const int   TEAM_COLOR_COUNT = 8;
 
-struct WorldEntry { std::string name; std::string dirName; };
+// WorldEntry describes a world discovered on disk (via ScanWorlds). When the
+// campaign hierarchy is loaded, entries that correspond to a `: mission` def are
+// enriched with `mode`/`sector` (from GameManager::FindMissionByWorld) so the
+// practice/campaign picker can show a mode tag and honour `m_gameTypeFilter`.
+// ScanWorlds is the CLIENT title-menu picker, NOT AngelEd's asset browser.
+struct WorldEntry {
+    std::string name;     // display name (defaults to dirName)
+    std::string dirName;  // world folder name under GameData/Worlds
+    std::string mode;     // mission mode or empty if unknown (e.g. "campaign")
+    std::string sector;   // sector name or empty if unknown
+};
 
 struct TitleMenuTextures {
     Texture2D titleBg{0};
@@ -91,7 +101,7 @@ static std::vector<WorldEntry> ScanWorlds() {
             if (fs::exists(oz) && dirName != "." && dirName != "..") {
                 bool dup = false;
                 for (auto& w : worlds) if (w.dirName == dirName) { dup = true; break; }
-                if (!dup) worlds.push_back({dirName, dirName});
+                if (!dup) worlds.push_back({dirName, dirName, std::string(), std::string()});
             }
         }
         if (!worlds.empty()) break; // found some, stop searching
@@ -110,7 +120,7 @@ static std::vector<WorldEntry> ScanWorlds() {
                     if (dot != std::string::npos) dirName = dirName.substr(0, dot);
                     bool dup = false;
                     for (auto& w : worlds) if (w.dirName == dirName) { dup = true; break; }
-                    if (!dup) worlds.push_back({dirName, dirName});
+                    if (!dup) worlds.push_back({dirName, dirName, std::string(), std::string()});
                 }
             }
             if (!worlds.empty()) break;
@@ -129,8 +139,25 @@ static std::vector<WorldEntry> ScanWorlds() {
             };
             for (auto& p : paths) {
                 if (fs::exists(p)) {
-                    worlds.push_back({name, name});
+                    worlds.push_back({name, name, std::string(), std::string()});
                     break;
+                }
+            }
+        }
+    }
+    // Enrich with campaign hierarchy metadata (mode/sector) when GameManager is
+    // loaded. ScanWorlds is the CLIENT title-menu picker, NOT AngelEd's.
+    {
+        auto& gm = oz::game::GameManager::Instance();
+        if (gm.Loaded()) {
+            for (auto& w : worlds) {
+                if (const oz::game::MissionDef* m = gm.FindMissionByWorld(w.dirName)) {
+                    // Mission names equal their world name in the shipped campaign,
+                    // but keep the display name as the mission/world name; the mode
+                    // and sector are the useful bits here.
+                    w.name = m->name;
+                    w.mode = m->mode;
+                    w.sector = m->sector;
                 }
             }
         }
@@ -933,6 +960,20 @@ private:
         Vector2 mp = GetMousePosition();
 
         for (size_t i = 0; i < m_worlds.size(); i++) {
+            // Honour the game-type filter: 0=All, 1=Campaign, 2=Deathmatch, 3=CTF.
+            // m_gameTypeFilter is the dropdown index set by GuiDropdownBox. Only
+            // filter when a mission mode is known; worlds with no mode (practice/
+            // loose worlds) show under "All Types" and are hidden for specific
+            // types - this is intentional so the Practice grid continues to show
+            // non-campaign worlds.
+            if (m_gameTypeFilter == 1) {
+                // Campaign only
+                if (!m_worlds[i].mode.empty() && m_worlds[i].mode != "campaign") continue;
+            } else if (m_gameTypeFilter == 2) {
+                if (m_worlds[i].mode != "deathmatch") continue;
+            } else if (m_gameTypeFilter == 3) {
+                if (m_worlds[i].mode != "ctf") continue;
+            }
             int r = (int)(i / cols), c = (int)(i % cols);
             Rectangle cell = {(float)(sx + c * (CELL_W + CELL_GAP)), (float)(sy + r * (CELL_H + CELL_GAP)), (float)CELL_W, (float)CELL_H};
             bool hover = CheckCollisionPointRec(mp, cell);
@@ -940,7 +981,16 @@ private:
             DrawRectangleRoundedLinesEx(cell, 0.15f, 8, 1.0f, hover ? (Color){100,160,220,200} : (Color){40,60,100,150});
             const char* wn = m_worlds[i].name.c_str();
             int fs = 13;
-            DrawText(wn, (int)(cell.x + (cell.width - MeasureText(wn, fs))/2), (int)(cell.y + (cell.height - fs)/2), fs, hover ? WHITE : (Color){180,200,230,255});
+            // Show a mode tag when the world is known to belong to the campaign
+            // hierarchy (via FindMissionByWorld). Keep the text small so it
+            // doesn't overflow the 48px-tall cell.
+            DrawText(wn, (int)(cell.x + (cell.width - MeasureText(wn, fs))/2), (int)(cell.y + (cell.height - fs)/2 - 6), fs, hover ? WHITE : (Color){180,200,230,255});
+            if (!m_worlds[i].mode.empty()) {
+                const char* mt = m_worlds[i].mode.c_str();
+                int mfs = 10;
+                int mw = MeasureText(mt, mfs);
+                DrawText(mt, (int)(cell.x + (cell.width - mw)/2), (int)(cell.y + (cell.height - mfs)/2 + 8), mfs, hover ? (Color){200,220,240,255} : (Color){150,170,200,220});
+            }
         }
         if (m_worlds.empty())
             DrawText("No worlds found in GameData/Worlds/", (int)(area.x + 12), (int)(area.y + 64), 14, (Color){180,180,180,200});
