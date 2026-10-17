@@ -146,6 +146,12 @@ if (Test-Path $efxDir) {
     Run-OzPack "OZTX" $efxDir "$OUT_TEX\efx.oztex"
 }
 
+# --- Gore: blood splat decals (Tex/Global/Gibs/*.jpg) ---
+$gibsDir = "$GAMEDATA\Tex\Global\Gibs"
+if (Test-Path $gibsDir) {
+    Run-OzPack "OZTX" $gibsDir "$OUT_TEX\gibs.oztex"
+}
+
 # --- Title art ---
 $titleDir = "$GAMEDATA\Tex\Title"
 if (Test-Path $titleDir) {
@@ -168,6 +174,14 @@ if (Test-Path $editorDir) {
 $engineArtDir = "$GAMEDATA\Tex\Engine"
 if (Test-Path $engineArtDir) {
     Run-OzPack "OZPK" $engineArtDir "$OUT\engine.ozpak"
+}
+
+# --- Game hierarchy (GameData/Game: : game / : campaign / : sector / : mission
+#     / : objective / : trigger / : event defs). One package for the whole
+#     Angels95 game layer so a packaged install keeps the campaign graph. ---
+$gameDir = "$GAMEDATA\Game"
+if (Test-Path $gameDir) {
+    Run-OzPack "OZPK" $gameDir "$OUT\game.ozpak"
 }
 
 # --- Shared tileset library ---

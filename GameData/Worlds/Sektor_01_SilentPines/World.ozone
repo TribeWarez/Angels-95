@@ -1,0 +1,19 @@
+# OZONE world scaffold - Sektor_01_SilentPines
+# Sector: Sefirah_1_TerranPrime   (see Wiki/Game-Hierarchy.md)
+# Placeholder geometry only: a floor, a perimeter and a sky zone.
+# Format: ozone v1.0
+
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_day.png
+
+# Floor (placeholder)
+add box 0 0 -0.25 80 0.5 80 0
+# Perimeter walls (placeholder)
+add box 0 -40 1 80 2 2 0
+add box 0 40 1 80 2 2 0
+add box -40 0 1 2 2 80 0
+add box 40 0 1 2 2 80 0
+
+playerstart 0 0 0 0
+light directional 50 50 80 200 205 215 0.3
+
+zone sky -60 -60 -30 60 60 60 1 name=Sektor_01_SilentPines_sky

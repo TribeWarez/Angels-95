@@ -14,7 +14,7 @@ entity "rifle_01" : weapon {
         recoil = 2.2
         projectile_mesh = GameData/Tex/Global/Gun/Projectiles/FbxFile/Projectiles.glb
         projectile_submesh = 4
-        projectile_scale = 4.0
+        projectile_scale = 8.0
         projectile_color = (0.6, 1.0, 0.4)
         viewmodel_offset = (0.3, -0.22, 0.55)
         viewmodel_rot = (0, 90, 0)

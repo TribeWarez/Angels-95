@@ -48,14 +48,11 @@ public:
     // LitLightning_TransientLights().
     void Draw(Camera3D& camera, const std::vector<struct LightNode>* transientLights = nullptr);
 
-    // Master on/off, driven by the user's "Particles" setting.
+    // Ambient-layer on/off, driven by the user's "Particles" setting.
     //
-    // That setting is a header-static (Settings.hpp), so EVERY translation unit
-    // including it gets its own copy. Reading it from inside the manager or from
-    // OzPawnSystem would therefore consult a different variable from the one the
-    // settings menu just flipped - so the flag is pushed in from Core.hpp once a
-    // frame instead. Before this existed the toggle was wired to nothing at all:
-    // the menu flipped a bool, the config saved it, and particles drew anyway.
+    // Gates OZONE emitters and weather ONLY. Gameplay bursts spawned by Burst()
+    // (muzzle smoke, impact sparks, blood/gibs) still draw when this is off, so
+    // the setting cannot silently remove combat feedback/gore.
     void SetEnabled(bool enabled) { m_enabled = enabled; }
 
     // Drop every live particle (emitter nodes are cleared separately).
@@ -103,6 +100,12 @@ private:
         // weather changes, and it has its own share of the pool cap - so the two
         // sources cannot be told apart after the fact without this.
         bool weather = false;
+        // Spawned by Burst(): gameplay feedback (muzzle smoke, impact sparks,
+        // blood/gibs) rather than an ambient emitter or weather. The "Particles"
+        // master toggle gates the AMBIENT layer only; gameplay bursts still draw
+        // when it is off, so turning particles off cannot silently remove gore
+        // from every hit.
+        bool gameplay = false;
     };
 
     static constexpr int MAX_PARTICLES = 4096;

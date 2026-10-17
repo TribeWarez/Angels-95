@@ -35,6 +35,19 @@ enum class EntityType : uint8_t {
     // Distinct from SKILL (a passive stat node) and from WEAPON (which is
     // gated on ammo/stamina and drives the view-model).
     SPELL,
+    // --- Game-hierarchy vocabulary (SCAFFOLD, Phase 0) ---
+    // Metadata-only defs that describe the Angels95 World/Game hierarchy. They
+    // parse and register but have NO runtime consumer yet; Phase 1/2 wires them
+    // to GameManager/ObjectiveSystem/TriggerSystem. See Wiki/Game-Hierarchy.md.
+    // Kept here (not a separate parser) so the game layer reuses one def system
+    // instead of inventing a second file format.
+    GAME,
+    CAMPAIGN,
+    SECTOR,
+    MISSION,
+    OBJECTIVE,
+    TRIGGER,
+    EVENT,
     UNKNOWN
 };
 
@@ -57,6 +70,13 @@ inline const char* EntityTypeName(EntityType t) {
         case EntityType::LIGHT:          return "light";
         case EntityType::GAMETYPE:       return "gametype";
         case EntityType::SPELL:          return "spell";
+        case EntityType::GAME:           return "game";
+        case EntityType::CAMPAIGN:       return "campaign";
+        case EntityType::SECTOR:         return "sector";
+        case EntityType::MISSION:        return "mission";
+        case EntityType::OBJECTIVE:      return "objective";
+        case EntityType::TRIGGER:        return "trigger";
+        case EntityType::EVENT:          return "event";
         default:                          return "unknown";
     }
 }
@@ -79,6 +99,13 @@ inline EntityType EntityTypeFromName(const std::string& n) {
     if (n == "light")          return EntityType::LIGHT;
     if (n == "gametype")       return EntityType::GAMETYPE;
     if (n == "spell")          return EntityType::SPELL;
+    if (n == "game")           return EntityType::GAME;
+    if (n == "campaign")       return EntityType::CAMPAIGN;
+    if (n == "sector")         return EntityType::SECTOR;
+    if (n == "mission")        return EntityType::MISSION;
+    if (n == "objective")      return EntityType::OBJECTIVE;
+    if (n == "trigger")        return EntityType::TRIGGER;
+    if (n == "event")          return EntityType::EVENT;
     return EntityType::UNKNOWN;
 }
 

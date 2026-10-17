@@ -924,6 +924,40 @@ void PlaySplashScreen()
 
 #include "Menu/TitleMenu.hpp"
 
+// Move the borderless window with Alt+Left-drag.
+//
+// The window is created FLAG_WINDOW_UNDECORATED, so outside the title menu's
+// custom chrome there is no OS title bar to grab - which made the window
+// effectively immovable. This applies the frame-to-frame delta of the cursor's
+// SCREEN-space position (window origin + window-relative mouse) to the window
+// origin, which is stable while the window moves out from under the cursor
+// (a window-relative delta would feed back into itself).
+inline void HandleBorderlessWindowDrag() {
+    if (!BorderlessWindow) return;
+
+    static bool dragging = false;
+    static Vector2 lastGlobal = {0.0f, 0.0f};
+
+    const bool alt = IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT);
+    const Vector2 win = GetWindowPosition();
+    const Vector2 rel = GetMousePosition();
+    const Vector2 global = { win.x + rel.x, win.y + rel.y };
+
+    if (alt && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        dragging = true;
+        lastGlobal = global;
+    }
+    if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT)) dragging = false;
+
+    if (dragging) {
+        const float dx = global.x - lastGlobal.x;
+        const float dy = global.y - lastGlobal.y;
+        if (dx != 0.0f || dy != 0.0f)
+            SetWindowPosition((int)(win.x + dx), (int)(win.y + dy));
+        lastGlobal = global;
+    }
+}
+
 void PlayHomeScreen()
 {
     // Re-open the title video if a previous menu visit released it.
@@ -943,6 +977,7 @@ void PlayHomeScreen()
 
     while (!menu.Tick() && !WindowShouldClose())
     {
+        HandleBorderlessWindowDrag();
     }
 
     SoundManager::Instance().StopStream(OmegaTechData.HomeScreenMusic);
@@ -1210,30 +1245,53 @@ void UpdateEntitiesSim(float dt)
 
 void UpdatePlayer()
 {
-    if (IsKeyDown(KEY_W) || GetGamepadAxisMovement(0, GAMEPAD_AXIS_LEFT_Y) != 0 && !Debug)
-    {
-        if (g_playerMovement.HeadBob)
-        {
-            if (OmegaTechData.Ticker % 4 == 0)
-            {
-                float bob = (g_playerMovement.HeadBobDirection == 1) ? 0.05f : -0.05f;
-                OmegaTechData.MainCamera.target.y += bob;
-                if (g_playerMovement.HeadBob >= 1)
-                    g_playerMovement.HeadBobDirection = 0;
-                else if (g_playerMovement.HeadBob <= -1)
-                    g_playerMovement.HeadBobDirection = 1;
-                g_playerMovement.HeadBob += (g_playerMovement.HeadBobDirection == 1) ? 1 : -1;
-            }
-        }
-        // Footsteps are now gait-aware and .ozls-driven (walk_sound /
-        // run_sound on Player.ozls), with the preloaded WalkingSound as the
-        // fallback when neither is authored.
+    // Head-bob. The setting is the global `HeadBob` (Settings -> H.Bob). The old
+    // code read `g_playerMovement.HeadBob`, a counter that starts at 0 and is
+    // only ever mutated inside the block that tested it - so the toggle was
+    // wired to nothing and the effect never ran. This is a smooth sine driven by
+    // actual horizontal movement, gated on the setting and on being grounded.
+    static Vector3 s_prevPos = {0.0f, 0.0f, 0.0f};
+    static bool s_prevInit = false;
+    static float s_phase = 0.0f;
+    static float s_prevBobY = 0.0f;
+
+    const Vector3 camPos = OmegaTechData.MainCamera.position;
+    if (!s_prevInit) { s_prevPos = camPos; s_prevInit = true; }
+    const float dt = GetFrameTime();
+    const float dx = camPos.x - s_prevPos.x;
+    const float dz = camPos.z - s_prevPos.z;
+    const float speed = (dt > 1e-4f) ? sqrtf(dx * dx + dz * dz) / dt : 0.0f;
+    s_prevPos = camPos;
+
+    const bool walking = speed > 0.5f;
+    float bobY = 0.0f;
+    float bobAmp = 0.0f;
+    if (HeadBob && !Debug && g_playerMovement.onGround && walking) {
+        // ~1.6 cycles/sec at the base walk speed.
+        s_phase += speed * 1.8f * dt;
+        const float base = g_playerMovement.BaseSpeed > 0.0f ? g_playerMovement.BaseSpeed : 5.4f;
+        // Sprinting raises `speed` by the sprint multiplier, so the same formula
+        // bobbed harder AND faster. Damp the amplitude while sprinting (the
+        // frequency is left alone so a run still reads as a stride) - "a little",
+        // not a different feel.
+        const float sprintBobScale = g_playerMovement.isSprinting ? 0.65f : 1.0f;
+        bobAmp = 0.05f * fminf(speed / base, 1.4f) * sprintBobScale;
+        bobY = sinf(s_phase) * bobAmp;
         PlayerController::Instance().PlayWalkLoop(g_playerMovement.isSprinting);
-    }
-    else
-    {
+    } else {
         PlayerController::Instance().StopWalkLoop();
     }
+
+    OmegaTechData.MainCamera.position.y += bobY;
+    // Move the target by the bob DELTA, not the absolute bob: UpdateLookAndMove
+    // already folded last frame's bob into the target through the camera
+    // position, so an absolute add would double it and pitch the view. The delta
+    // keeps target - position == look direction, i.e. a true eye bob.
+    OmegaTechData.MainCamera.target.y += (bobY - s_prevBobY);
+    s_prevBobY = bobY;
+
+    // Feed the weapon view-model so it sways on the same phase.
+    oz::ViewModel::Instance().SetViewBob(s_phase, bobAmp);
 
     g_playerMovement.UpdateBounds(OmegaTechData.MainCamera);
 }

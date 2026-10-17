@@ -187,6 +187,34 @@ $gfx.Dispose(); $bmp.Dispose()
 Write-Host '  selenite_blade_icon.png'
 }
 
+# ------------------------------------------------------------------ etheral icon
+# Same reason as selenite: the etheral_waver def shipped with no icon key and no
+# icon asset at all, so the hotbar/slotbar drew an empty cell for it. A spectral
+# blade silhouette with a glow halo.
+$ethDir = Ensure 'GameData\Tex\Global\Gun\etheral_waver'
+$ethIcon = Join-Path $ethDir 'etheral_waver_icon.png'
+if (Test-Path $ethIcon) { Write-Host "  (exists) $ethIcon" } else {
+$bmp = New-Object System.Drawing.Bitmap(32, 32)
+$gfx = [System.Drawing.Graphics]::FromImage($bmp)
+$gfx.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+$gfx.Clear([System.Drawing.Color]::Transparent)
+# Halo: a soft translucent blade behind the solid one.
+$halo = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(90, 150, 240, 220), 7)
+$halo.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+$halo.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+$gfx.DrawLine($halo, 7, 27, 25, 5)
+$blade = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(200, 235, 255), 3)
+$blade.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+$blade.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+$gfx.DrawLine($blade, 7, 27, 25, 5)
+$grip = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(150, 90, 210), 4)
+$gfx.DrawLine($grip, 5, 29, 9, 25)
+$gfx.DrawLine($grip, 11, 21, 15, 17)
+$bmp.Save($ethIcon, [System.Drawing.Imaging.ImageFormat]::Png)
+$gfx.Dispose(); $bmp.Dispose()
+Write-Host '  etheral_waver_icon.png'
+}
+
 # ------------------------------------------------------------------- spell icons
 $skills = Ensure 'GameData\Tex\Global\Skills'
 $spells = @(

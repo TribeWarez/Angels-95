@@ -109,7 +109,11 @@ void Mesh::DrawSubmesh(int index, const MeshTransform& t, Shader litShader, Colo
     if (!m_valid || index < 0 || index >= m_model.meshCount || m_model.materialCount <= 0) return;
 
     int matIdx = 0;
-    if (m_model.meshMaterial && index < m_model.materialCount)
+    // meshMaterial is indexed by MESH index and has meshCount entries, so the
+    // bound must be meshCount. It read materialCount, which is a different
+    // array's length: with more meshes than materials the correct entry was
+    // skipped and the submesh fell back to material 0.
+    if (m_model.meshMaterial && index < m_model.meshCount)
         matIdx = m_model.meshMaterial[index];
     if (matIdx < 0 || matIdx >= m_model.materialCount) matIdx = 0;
     Material& mat = m_model.materials[matIdx];

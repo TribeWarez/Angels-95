@@ -1,6 +1,7 @@
 entity "etheral_waver" : weapon {
     mesh = "EtheralWeaver_Sword.glb"
     texture = "EtheralWeaverTex.png"
+    icon = "etheral_waver_icon.png"
     stats {
         damage = 55
         swing_speed = 0.7

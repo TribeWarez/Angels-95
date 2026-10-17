@@ -12,6 +12,7 @@
 #include "../Pawn/OzPawnSystem.hpp"
 #include "../Pawn/AngelPlayer/SlotBar.hpp"
 #include "../Renderer/CombatFX.hpp"
+#include "../GameplayFlags.hpp"
 #include "../World/OzOzoneLoader.hpp"
 #endif
 #include <algorithm>
@@ -241,6 +242,8 @@ int LightningEntityManager::FireSelectedWeapon(const Vector3& origin, const Vect
                 // a melee connect reads in an unlit room like a gunshot did.
                 CombatFX::Instance().SpawnImpact(hitPos, hitNormal,
                                                  Color{255, 210, 120, 255}, 9, 5.0f);
+                if (g_goreEnabled)
+                    CombatFX::Instance().SpawnBlood(hitPos, hitNormal, 14, 1.0f);
                 CombatFX::Instance().ArmTransientLight(hitPos,
                                                         Color{255, 190, 120, 255}, 0.10f, 4.0f);
                 Pawn* target = PawnSystem::Instance().Get((int)bestPawn->id);
@@ -288,6 +291,7 @@ else {
     }
     int projSub = (int)readStat("projectile_submesh", 0.0f);
     float projScale = readStat("projectile_scale", 0.05f);
+    float projYaw = readStat("projectile_yaw", 0.0f);
     float projCol[3] = {1.0f, 0.8f, 0.3f};
     {
         auto it = ent->def->stats.vec3s.find("projectile_color");
@@ -359,6 +363,7 @@ else {
         p.texturePath = projTex;
         p.submesh = projSub;
         p.scale = projScale;
+        p.yawOffset = projYaw;
         p.tint = Color{(unsigned char)(projCol[0] * 255.0f),
                        (unsigned char)(projCol[1] * 255.0f),
                        (unsigned char)(projCol[2] * 255.0f), 255};
@@ -573,6 +578,7 @@ int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vec
     if (tit != ent->def->stats.strings.end()) projTex = ResolveDefPath(defDir, tit->second);
     const int projSub = (int)readStat("projectile_submesh", 0.0f);
     const float projScale = readStat("projectile_scale", 0.15f);
+    const float projYaw = readStat("projectile_yaw", 0.0f);
     float projCol[3] = {0.65f, 0.5f, 1.0f};
     auto cit = ent->def->stats.vec3s.find("projectile_color");
     if (cit != ent->def->stats.vec3s.end()) {
@@ -600,6 +606,7 @@ int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vec
         p.texturePath = projTex;
         p.submesh = projSub;
         p.scale = projScale;
+        p.yawOffset = projYaw;
         p.tint = Color{(unsigned char)(projCol[0] * 255.0f),
                        (unsigned char)(projCol[1] * 255.0f),
                        (unsigned char)(projCol[2] * 255.0f), 255};
@@ -901,10 +908,17 @@ int LightningEntityManager::Spawn(const EntityDef* def) {
     inst.def = def;
     inst.variantIndex = variantIdx;
 
-    // Load resources
+    // Load resources. The icon is resolved def-relative exactly like
+    // projectile_mesh / viewmodel_mesh / the sound stats: a weapon keeps its
+    // icon beside its def (`icon = "selenite_blade_icon.png"`), which resolves
+    // from a loose checkout as well as from a package. Caching the raw def
+    // string only worked when the basename happened to match a packaged entry.
     if (!mesh.empty())  inst.modelIdx   = CacheModel(mesh);
     if (!tex.empty())   inst.textureIdx = CacheTexture(tex);
-    if (!icon.empty())  inst.iconIdx    = CacheTexture(icon);
+    if (!icon.empty()) {
+        icon = ResolveDefPath(DefSourceDir(def->sourcePath), icon);
+        inst.iconIdx = CacheTexture(icon);
+    }
     OZ_INFO("[CHAIN] LEM::Spawn cached model=%d tex=%d icon=%d",
             inst.modelIdx, inst.textureIdx, inst.iconIdx);
 
@@ -1345,6 +1359,9 @@ void LightningEntityManager::HandleInput(bool uiBlocking) {
                 RunAction(sel, "on_unequip");
                 m_hotbar[m_selectedSlot] = -1;
                 Despawn(idx);
+                // A consumed item frees its cell; a weapon queued while the bar
+                // was full can land now.
+                FlushNextStashedWeapon();
             }
         }
     }

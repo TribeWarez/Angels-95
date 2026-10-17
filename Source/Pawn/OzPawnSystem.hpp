@@ -196,6 +196,8 @@ struct ProjectileNode {
     std::string texturePath;   // optional diffuse texture
     int   submesh = 0;         // mesh index within meshPath's model
     float scale = 0.05f;       // world scale
+    float yaw = 0.0f;          // degrees; orients the round's long axis along travel
+    float yawOffset = 0.0f;    // per-weapon correction (projectile_yaw stat)
     Color tint{255, 200, 50, 255};
 };
 

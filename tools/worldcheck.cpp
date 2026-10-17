@@ -822,7 +822,7 @@ int main(int argc, char** argv) {
     // is not a standing spot at all because the sample is buried inside another
     // solid - and a column sees that immediately while a pair test does not.
     {
-        constexpr float kBodyHeight = 3.0f;               // PlayerMovement::Height
+        constexpr float kBodyHeight = 2.8f;               // PlayerMovement::Height
         constexpr float kJumpRise   = 2.25f;              // 9^2 / (2 * 18)
         constexpr float kNeedClear  = kBodyHeight + kJumpRise;
         constexpr uint32_t kNoBspCuts = 1u << 28;         // SURF_NO_BSP_CUTS

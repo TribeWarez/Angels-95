@@ -21,8 +21,14 @@ public:
     // full standing body height; PLAYER_EYE_HEIGHT is where the camera sits
     // inside that box. Keeping the two related is what stops walls reading as
     // five-times-taller-than-the-player shafts.
-    float Height = 3.0f;
-    float Width = 2.0f;
+    //
+    // Deliberately a little smaller than the visual silhouette: brush collision
+    // is AABB-only and over-covers rotated/tapered geometry (RotatedAabbY), so a
+    // box the exact size of the visual snags in doorways and tight corners the
+    // player can plainly see a gap through. The old 2.0 x 3.0 hull left no
+    // clearance in a 2.0-wide opening.
+    float Height = 2.8f;
+    float Width = 1.5f;
 
     int HeadBob = 0;
     int HeadBobDirection = 1;

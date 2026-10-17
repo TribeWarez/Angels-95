@@ -80,6 +80,31 @@ inline const ItemDBEntry* GetItemDef(int id) {
     return nullptr;
 }
 
+// Map a backpack item id onto the world pickup def name it drops as. The name
+// must be a def that the walk-over collect path resolves back to this same item
+// (or, for a stack, to its category), so a dropped item is recoverable.
+//
+// Returns nullptr for an item with no matching pickup def (the Armor Bundle,
+// which has no `.ozls` pickup); the drop path refuses it rather than silently
+// converting it into a different item.
+inline const char* PickupTypeNameForItem(int itemId) {
+    switch (itemId) {
+        case item_id::HEALTH_VIAL: return "HealthVial";
+        case item_id::MANA_VIAL:   return "ManaVial";
+        case item_id::KEY:         return "Key";
+        case item_id::COIN:        return "Coin";
+        case item_id::POWERUP:     return "Powerup";
+        case item_id::AMMO:        return "Ammo";
+        default: break;
+    }
+    // Every energy-crystal tier shares one pickup def; re-collecting it grants
+    // the first tier, which is the same behaviour the authored world pickups
+    // already have.
+    if (itemId >= item_id::ENERGY_FIRST && itemId <= item_id::ENERGY_LAST)
+        return "EnergyCrystal";
+    return nullptr;
+}
+
 // ---------------------------------------------------------------------------
 // Shared item-effect application.
 //

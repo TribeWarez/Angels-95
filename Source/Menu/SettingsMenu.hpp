@@ -4,6 +4,8 @@
 // settings *state* header stays free of raygui panel code.
 
 #include "../Settings.hpp"
+#include "../GameplayFlags.hpp"
+#include "../Audio/SoundManager.hpp"
 #include "../Renderer/raygui/raygui.h"
 #include "MenuStyle.hpp"
 
@@ -22,12 +24,13 @@ void ToggleSettings() {
 void UpdateSettings() {
     if (!ShowSettings) return;
 
-    // Tall enough for every group including the crosshair section, but clamped
-    // to the viewport so the last group never falls off a 720p screen. The
-    // content is laid out top-down from a fixed cursor, so on a short screen the
-    // bottom is simply not reached rather than overlapping the hotbar.
+    // Tall enough for every group including the crosshair section. The content
+    // is laid out top-down from a fixed cursor, so on a short screen the bottom
+    // (the crosshair group) is simply not reached rather than overlapping the
+    // hotbar. The cap is generous so a 1080p screen shows the whole panel - the
+    // Audio/Gameplay/Window groups sit near the top and are always visible.
     const float W = 380.0f;
-    const float H = fminf(700.0f, (float)GetScreenHeight() - 40.0f);
+    const float H = fminf(1000.0f, (float)GetScreenHeight() - 40.0f);
     Rectangle win = { 20, 20, W, H };
     if (angelsui::Panel(win, "Angels95 Settings")) {
         ShowSettings = false;
@@ -63,6 +66,55 @@ void UpdateSettings() {
     if (tgl(1, "Jitter", JitterEnabled)) JitterEnabled = !JitterEnabled;
     if (tgl(2, "Fog",    FogEnabled))    FogEnabled = !FogEnabled;
     y += 42;
+
+    // Audio: master plus the two per-category gains. raylib has only a global
+    // master volume, so music and SFX are separate gains on SoundManager.
+    angelsui::Group({ x0, y, x1 - x0, 96 }, "Audio");
+    {
+        float mv = angelsui::Slider({ x0 + 8, y + 22, x1 - x0 - 16, 20 },
+                                    TextFormat("Master  %.0f", AudioSlider), AudioSlider, 0.0f, 100.0f);
+        if (mv != AudioSlider) { AudioSlider = mv; ApplyMasterVolume(); }
+
+        float mus = angelsui::Slider({ x0 + 8, y + 46, x1 - x0 - 16, 20 },
+                                     TextFormat("Music  %.0f", MusicVolume), MusicVolume, 0.0f, 100.0f);
+        if (mus != MusicVolume) { MusicVolume = mus; SoundManager::Instance().SetMusicGain(MusicVolume / 100.0f); }
+
+        float sfx = angelsui::Slider({ x0 + 8, y + 70, x1 - x0 - 16, 20 },
+                                     TextFormat("Sound  %.0f", SfxVolume), SfxVolume, 0.0f, 100.0f);
+        if (sfx != SfxVolume) { SfxVolume = sfx; SoundManager::Instance().SetSfxGain(SfxVolume / 100.0f); }
+    }
+    y += 108;
+
+    // Gameplay: weapon hand + gore. Both mirror into GameplayFlags.hpp so the
+    // gameplay TUs (ViewModel, OzPawnSystem) read what the player chose.
+    angelsui::Group({ x0, y, x1 - x0, 60 }, "Gameplay");
+    {
+        const float half = (x1 - x0 - 24) / 2.0f;
+        if (angelsui::Button({ x0 + 8, y + 24, half, 24 },
+                             WeaponHand ? "Hand: LEFT" : "Hand: RIGHT", WeaponHand != 0)) {
+            WeaponHand = WeaponHand ? 0 : 1;
+            g_weaponHand = WeaponHand;
+        }
+        if (angelsui::Button({ x0 + 16 + half, y + 24, half, 24 },
+                             GoreEnabled ? "Gore: ON" : "Gore: OFF", GoreEnabled)) {
+            GoreEnabled = !GoreEnabled;
+            g_goreEnabled = GoreEnabled;
+        }
+    }
+    y += 72;
+
+    // Window: borderless (Alt+Left-drag to move) or a decorated window with a
+    // title bar. Applies live.
+    angelsui::Group({ x0, y, x1 - x0, 60 }, "Window");
+    if (angelsui::Button({ x0 + 8, y + 24, x1 - x0 - 16, 24 },
+                         BorderlessWindow ? "Borderless (Alt+Drag to move)"
+                                          : "Windowed (title bar)",
+                         BorderlessWindow)) {
+        BorderlessWindow = !BorderlessWindow;
+        if (BorderlessWindow) SetWindowState(FLAG_WINDOW_UNDECORATED);
+        else                  ClearWindowState(FLAG_WINDOW_UNDECORATED);
+    }
+    y += 72;
 
     // Texture filter (click-to-cycle, so no raygui dropdown).
     angelsui::Group({ x0, y, x1 - x0, 60 }, "Texture Filter");

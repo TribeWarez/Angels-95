@@ -91,16 +91,21 @@ void WeaponBehaviour::FireWeapon(Camera3D& cam) {
     // reuse `origin` (camera + 2u forward), which put the glow inside the
     // view-model instead of at the barrel; fall back to that only when no
     // weapon is loaded. The projectile origin is deliberately unchanged.
-    Vector3 muzzle = origin;
-    if (!oz::ViewModel::Instance().MuzzleWorldPos(cam, &muzzle))
-        muzzle = origin;
-    CombatFX::Instance().ArmMuzzleFlash(muzzle, 0.12f);
+    //
+    // RANGED ONLY. This ran unconditionally, so a melee swing armed the flash
+    // too - and the flash is drawn as a glowing sphere at the barrel plus a
+    // transient light, so every sword swing looked like it fired a bullet. A
+    // sword has no muzzle; `result == 0` is the melee swing.
+    if (result > 0) {
+        Vector3 muzzle = origin;
+        if (!oz::ViewModel::Instance().MuzzleWorldPos(cam, &muzzle))
+            muzzle = origin;
+        CombatFX::Instance().ArmMuzzleFlash(muzzle, 0.12f);
 
-    // Muzzle smoke. Ranged weapons get a small hot-gas puff; melee swings do
-    // not, since a sword has no muzzle. Particles are lit now (see
-    // OzParticleSimulationManager::ApplyLighting), so this catches the flash
-    // light instead of floating at full brightness.
-    if (SelectedWeaponStat("reach", 0.0f) <= 0.0f) {
+        // Muzzle smoke. Ranged weapons get a small hot-gas puff; melee swings
+        // do not, since a sword has no muzzle. Particles are lit now (see
+        // OzParticleSimulationManager::ApplyLighting), so this catches the
+        // flash light instead of floating at full brightness.
         OzParticleSimulationManager::Instance().Burst(
             muzzle, forward, 5,
             /*speed*/ 2.2f, /*spread*/ 22.0f,

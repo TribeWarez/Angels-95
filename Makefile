@@ -138,7 +138,9 @@ OBJS := $(addprefix $(BUILD_DIR)/, \
           LightningEntityRegistry.o LightningEntityManager.o \
           LitLightning.o SurfaceMaterial.o Mesh.o SkeletalMesh.o MeshCache.o AnimatedMesh.o OzAnimFormat.o \
           ViewModel.o PlayerModel.o OzParticleSimulationManager.o rlights.o UiHandler.o \
-          PlayerProfile.o)
+          PlayerProfile.o \
+          EventBus.o TriggerSystem.o ObjectiveSystem.o BoxedTypeRegistry.o \
+          GameDef.o GameManager.o GameBoxedTypes.o GameOpcodes.o)
 
 .PHONY: all clean test help
 all: OTENGINE AngelServ AngelMaster ozpack
@@ -343,6 +345,34 @@ AngelMaster: $(BUILD_DIR)/Log.o Source/Server/Master/Master.cpp Source/Network/M
 # 8. Build OzPack (standalone packer/unpacker, no raylib)
 ozpack: Source/OzPack.cpp Source/Package/OzPackage.hpp Source/miniz/miniz.h $(BUILD_DIR)/miniz.o
 	$(SERVER_CXX) $(SERVER_FLAGS) Source/OzPack.cpp $(BUILD_DIR)/miniz.o -o OzPack$(EXE) $(SERVER_LIBS) $(LDEXTRA)
+
+# 8b. Engine-generic gameplay systems + Angels95 game layer (SCAFFOLD, Phase 0).
+#     These are raylib-free and currently inert (nothing emits/subscribes yet);
+#     they are compiled + linked so the skeleton exists and Phase 1/2 only fill
+#     in bodies. Keep them raylib-free so a future test_events suite can link them.
+$(BUILD_DIR)/EventBus.o: Source/Events/EventBus.cpp Source/Events/EventBus.hpp | $(BUILD_DIR)
+	$(SERVER_CXX) $(SERVER_FLAGS) -c Source/Events/EventBus.cpp -o $@
+
+$(BUILD_DIR)/TriggerSystem.o: Source/Events/TriggerSystem.cpp Source/Events/TriggerSystem.hpp | $(BUILD_DIR)
+	$(SERVER_CXX) $(SERVER_FLAGS) -c Source/Events/TriggerSystem.cpp -o $@
+
+$(BUILD_DIR)/ObjectiveSystem.o: Source/Events/ObjectiveSystem.cpp Source/Events/ObjectiveSystem.hpp Source/Events/EventBus.hpp | $(BUILD_DIR)
+	$(SERVER_CXX) $(SERVER_FLAGS) -c Source/Events/ObjectiveSystem.cpp -o $@
+
+$(BUILD_DIR)/BoxedTypeRegistry.o: Source/Boxed/BoxedTypeRegistry.cpp Source/Boxed/BoxedTypeRegistry.hpp | $(BUILD_DIR)
+	$(SERVER_CXX) $(SERVER_FLAGS) -c Source/Boxed/BoxedTypeRegistry.cpp -o $@
+
+$(BUILD_DIR)/GameDef.o: Source/Game/GameDef.cpp Source/Game/GameDef.hpp | $(BUILD_DIR)
+	$(SERVER_CXX) $(SERVER_FLAGS) -c Source/Game/GameDef.cpp -o $@
+
+$(BUILD_DIR)/GameManager.o: Source/Game/GameManager.cpp Source/Game/GameManager.hpp Source/Game/GameDef.hpp | $(BUILD_DIR)
+	$(SERVER_CXX) $(SERVER_FLAGS) -c Source/Game/GameManager.cpp -o $@
+
+$(BUILD_DIR)/GameBoxedTypes.o: Source/Game/GameBoxedTypes.cpp Source/Game/GameBoxedTypes.hpp Source/Boxed/BoxedTypeRegistry.hpp | $(BUILD_DIR)
+	$(SERVER_CXX) $(SERVER_FLAGS) -c Source/Game/GameBoxedTypes.cpp -o $@
+
+$(BUILD_DIR)/GameOpcodes.o: Source/Game/GameOpcodes.cpp Source/Game/GameOpcodes.hpp | $(BUILD_DIR)
+	$(SERVER_CXX) $(SERVER_FLAGS) -c Source/Game/GameOpcodes.cpp -o $@
 
 # 9. Unit tests (no raylib dependency)
 TEST_FLAGS := -O0 -g --std=c++20 -DOMEGA_TEST_ENV

@@ -33,6 +33,11 @@ public:
     void TriggerReload();
     void Clear();
 
+    // Head-bob sync. The camera bob is computed in Core.hpp; the view-model
+    // reads the same phase/amount so the weapon sways with the walk instead of
+    // staying rigidly locked to a bobbing camera.
+    void SetViewBob(float phase, float amount) { m_bobPhase = phase; m_bobAmount = amount; }
+
     // World-space point at the weapon's muzzle, derived from the same transform
     // the model is drawn with. Used to anchor the muzzle flash / light to the
     // gun rather than to the camera, which previously put the flash inside the
@@ -58,6 +63,11 @@ private:
     Vector3 m_offset{0.22f, -0.18f, 0.45f};
     Vector3 m_rot{0.0f, 0.0f, 0.0f};
     float m_scale = 1.0f;
+
+    // Head-bob phase/amount fed from Core.hpp. Sway is a fraction of the camera
+    // bob so the weapon lags the view rather than sliding in lockstep.
+    float m_bobPhase = 0.0f;
+    float m_bobAmount = 0.0f;
     // Midpoint of the loaded mesh's bounds, subtracted before rotation so the
     // weapon spins about its middle. Recomputed on every (re)load.
     Vector3 m_center{0.0f, 0.0f, 0.0f};

@@ -37,8 +37,16 @@ public:
     // Always-visible stat bars (draw inside the 2D pass).
     void DrawHud(const Camera3D& cam, int ticker, bool isCrouching, bool isSprinting);
 
-    // Diablo-style inventory overlay (draw when the inventory is open).
-    void DrawOverlay();
+    // Diablo-style inventory overlay (draw when the inventory is open). The
+    // camera is needed to place a dropped item in front of the player.
+    void DrawOverlay(const Camera3D& cam);
+
+    // Drop actions (the overlay's Q key). Backpack items are removed and
+    // respawned as a world pickup; hotbar/equipment entities are despawned and
+    // respawned the same way. Return false when there is nothing to drop.
+    bool DropBackpackItem(int slot, const Camera3D& cam);
+    bool DropHotbarSlot(int slot, const Camera3D& cam);
+    bool DropEquipmentSlot(int slot, const Camera3D& cam);
 
     // Network pickup hooks (delegated from OmegaClient callbacks).
     void OnItemCollected(int item_id, int quantity);
@@ -48,6 +56,9 @@ private:
     InventoryBehaviour() = default;
 
     void Emit(const std::string& msg);
+
+    // Spawn a world pickup for a dropped item/weapon def in front of the player.
+    void SpawnDroppedPickup(const char* typeName, const Camera3D& cam);
 
     class OmegaClient* m_client = nullptr;  // scoreboard rendering; not owned
 

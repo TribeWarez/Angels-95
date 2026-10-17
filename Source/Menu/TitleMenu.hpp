@@ -5,6 +5,7 @@
 #include "InternetBrowser.hpp"
 #include "../Client/MasterList.hpp"
 #include "../Audio/SoundManager.hpp"
+#include "../GameplayFlags.hpp"
 #include "../PlayerProfile.hpp"
 #include <string>
 #include <vector>
@@ -637,6 +638,7 @@ private:
                 checkBtn(0, {bx, by, 140, 32});
                 checkBtn(1, {bx, by + 40, 140, 32});
                 checkBtn(2, {bx, by + 80, 140, 32});
+                checkBtn(3, {bx, by + 120, 140, 32});
                 break;
             }
             case PANE_CHARACTER: {
@@ -936,6 +938,7 @@ private:
         drawBtn(0, "Video", {bx, by, 140, 32});
         drawBtn(1, "Audio", {bx, by + 40, 140, 32});
         drawBtn(2, "Controls", {bx, by + 80, 140, 32});
+        drawBtn(3, "Gameplay", {bx, by + 120, 140, 32});
 
         float sx = bx + 160, sw = area.x + area.width - sx - 12;
         Rectangle sub = {sx, by, sw, area.y + area.height - by - 8};
@@ -952,16 +955,41 @@ private:
             }
             case 1: {
                 DrawText("Audio Settings", (int)(sx + 8), y, 14, WHITE); y += 24;
-                // Drive the persisted AudioSlider (0..100) so the value survives
-                // SaveClientSettings() on exit.
+                // Drive the persisted values so they survive SaveClientSettings()
+                // on exit. Master is raylib's global volume; Music/SFX are the
+                // per-category gains on SoundManager.
                 float vol = GuiSlider({sx+8, (float)y, 200, 20}, "Volume", NULL, AudioSlider, 0.0f, 100.0f);
                 if (vol != AudioSlider) { AudioSlider = vol; ApplyMasterVolume(); }
+                y += 30;
+                float mus = GuiSlider({sx+8, (float)y, 200, 20}, "Music", NULL, MusicVolume, 0.0f, 100.0f);
+                if (mus != MusicVolume) { MusicVolume = mus; SoundManager::Instance().SetMusicGain(MusicVolume / 100.0f); }
+                y += 30;
+                float sfx = GuiSlider({sx+8, (float)y, 200, 20}, "Sound", NULL, SfxVolume, 0.0f, 100.0f);
+                if (sfx != SfxVolume) { SfxVolume = sfx; SoundManager::Instance().SetSfxGain(SfxVolume / 100.0f); }
                 break;
             }
             case 2: {
                 DrawText("Controls", (int)(sx + 8), y, 14, WHITE); y += 24;
                 const char* c[] = {"WASD - Move","Mouse - Look","Left Click - Fire","E - Interact","Tab - Inventory","Escape - Pause","` - Console"};
                 for (int i = 0; i < 7; i++) { DrawText(c[i], (int)(sx + 8), y, 13, LIGHTGRAY); y += 20; }
+                break;
+            }
+            case 3: {
+                DrawText("Gameplay", (int)(sx + 8), y, 14, WHITE); y += 24;
+                if (GuiButton({sx+8, (float)y, 220, 24},
+                              WeaponHand ? "Weapon Hand: LEFT" : "Weapon Hand: RIGHT")) {
+                    WeaponHand = WeaponHand ? 0 : 1;
+                    g_weaponHand = WeaponHand;
+                }
+                y += 32;
+                if (GuiButton({sx+8, (float)y, 220, 24},
+                              GoreEnabled ? "Gore: ON" : "Gore: OFF")) {
+                    GoreEnabled = !GoreEnabled;
+                    g_goreEnabled = GoreEnabled;
+                }
+                y += 32;
+                DrawText("Gore adds blood on hits and gibs on kills.", (int)(sx + 8), y, 11,
+                         (Color){140,160,180,200});
                 break;
             }
         }

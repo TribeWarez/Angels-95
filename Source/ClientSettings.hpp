@@ -6,6 +6,7 @@
 // The ini is a plain [Settings] key=value file written by SaveClientSettings.
 
 #include "Settings.hpp"
+#include "GameplayFlags.hpp"
 #include "IniConfig.hpp"
 
 static const char* kClientIniPath = "System/Angels95.ini";
@@ -41,6 +42,16 @@ static inline void LoadClientSettings() {
     g_debugEnabled   = Debug;   // mirror into the cross-TU flag (see Settings.hpp)
     MuteToggle       = cfg.GetBool(S, "mute",         MuteToggle);
     AudioSlider      = CfgClampF(cfg.GetFloat(S, "audio_volume", AudioSlider), 0.0f, 100.0f);
+    MusicVolume      = CfgClampF(cfg.GetFloat(S, "music_volume", MusicVolume), 0.0f, 100.0f);
+    SfxVolume        = CfgClampF(cfg.GetFloat(S, "sfx_volume",   SfxVolume),   0.0f, 100.0f);
+
+    // Gameplay. Mirror the cross-TU flags gameplay code actually reads
+    // (GameplayFlags.hpp); the statics above are this TU's persisted UI state.
+    GoreEnabled      = cfg.GetBool(S, "gore", GoreEnabled);
+    WeaponHand       = CfgClampI(cfg.GetInt(S, "weapon_hand", WeaponHand), 0, 1);
+    g_goreEnabled    = GoreEnabled;
+    g_weaponHand     = WeaponHand;
+    BorderlessWindow = cfg.GetBool(S, "borderless", BorderlessWindow);
 
     CrosshairStyleSel = CfgClampI(cfg.GetInt(S, "crosshair_style", CrosshairStyleSel),
                                   0, CROSSHAIR_STYLE_COUNT - 1);
@@ -79,6 +90,11 @@ static inline void SaveClientSettings() {
     cfg.SetBool(S, "debug",         Debug);
     cfg.SetBool(S, "mute",          MuteToggle);
     cfg.SetFloat(S, "audio_volume", AudioSlider);
+    cfg.SetFloat(S, "music_volume", MusicVolume);
+    cfg.SetFloat(S, "sfx_volume",   SfxVolume);
+    cfg.SetBool(S, "gore",          GoreEnabled);
+    cfg.SetInt(S,  "weapon_hand",   WeaponHand);
+    cfg.SetBool(S, "borderless",    BorderlessWindow);
     cfg.SetInt(S,   "crosshair_style",     CrosshairStyleSel);
     cfg.SetBool(S,  "crosshair_visible",   CrosshairVisible);
     cfg.SetInt(S,   "crosshair_size",      CrosshairSize);

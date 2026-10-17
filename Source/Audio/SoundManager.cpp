@@ -17,6 +17,37 @@ SoundManager& SoundManager::Instance() {
 }
 
 // ---------------------------------------------------------------------------
+// Per-category volume
+// ---------------------------------------------------------------------------
+void SoundManager::SetMusicGain(float v) {
+    if (v < 0.0f) v = 0.0f;
+    if (v > 1.0f) v = 1.0f;
+    m_musicGain = v;
+    ApplyMusicGain();
+}
+
+void SoundManager::SetSfxGain(float v) {
+    if (v < 0.0f) v = 0.0f;
+    if (v > 1.0f) v = 1.0f;
+    m_sfxGain = v;
+}
+
+void SoundManager::ApplyMusicGain() {
+    if (!m_sounds.MusicFound) return;
+    // raylib's global function; the class member is deliberately named *Gain so
+    // this unqualified call still finds ::SetMusicVolume.
+    ::SetMusicVolume(m_sounds.BackgroundMusic, m_musicGain * m_musicDuck);
+}
+
+void SoundManager::PlaySfxAt(Sound s, float authored) {
+    if (s.frameCount == 0) return;
+    float v = authored * m_sfxGain;
+    if (v < 0.0f) v = 0.0f;
+    SetSoundVolume(s, v);
+    PlaySound(s);
+}
+
+// ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
 void SoundManager::AttachReverbProcessor() {
@@ -103,30 +134,27 @@ void SoundManager::ResetWorldAudio() {
 // One-shot effects
 // ---------------------------------------------------------------------------
 void SoundManager::PlayUIClick() {
-    if (m_sounds.UIClick.frameCount > 0)
-        PlaySound(m_sounds.UIClick);
+    PlaySfxAt(m_sounds.UIClick);
 }
 
 void SoundManager::PlayChasing() {
     if (m_sounds.ChasingSound.frameCount == 0) return;
     // Throttle so a pack of NPCs cannot stack the stinger on one frame.
     if (!IsSoundPlaying(m_sounds.ChasingSound))
-        PlaySound(m_sounds.ChasingSound);
+        PlaySfxAt(m_sounds.ChasingSound);
 }
 
 void SoundManager::PlayDeath() {
     if (m_sounds.Death.frameCount > 0 && !IsSoundPlaying(m_sounds.Death))
-        PlaySound(m_sounds.Death);
+        PlaySfxAt(m_sounds.Death);
 }
 
 void SoundManager::PlayCollision() {
-    if (m_sounds.CollisionSound.frameCount > 0)
-        PlaySound(m_sounds.CollisionSound);
+    PlaySfxAt(m_sounds.CollisionSound);
 }
 
 void SoundManager::PlayTextNoise() {
-    if (m_textNoise.frameCount > 0)
-        PlaySound(m_textNoise);
+    PlaySfxAt(m_textNoise);
 }
 
 void SoundManager::StopTextNoise() {
@@ -135,28 +163,23 @@ void SoundManager::StopTextNoise() {
 }
 
 void SoundManager::PlayJump() {
-    if (m_sounds.JumpSound.frameCount > 0)
-        PlaySound(m_sounds.JumpSound);
+    PlaySfxAt(m_sounds.JumpSound);
 }
 
 void SoundManager::PlayWeaponLoad() {
-    if (m_sounds.WeaponLoadSound.frameCount > 0)
-        PlaySound(m_sounds.WeaponLoadSound);
+    PlaySfxAt(m_sounds.WeaponLoadSound);
 }
 
 void SoundManager::PlayMenuSelect() {
-    if (m_sounds.MenuSelectSound.frameCount > 0)
-        PlaySound(m_sounds.MenuSelectSound);
+    PlaySfxAt(m_sounds.MenuSelectSound);
 }
 
 void SoundManager::PlayMatchStart() {
-    if (m_sounds.MatchStartSound.frameCount > 0)
-        PlaySound(m_sounds.MatchStartSound);
+    PlaySfxAt(m_sounds.MatchStartSound);
 }
 
 void SoundManager::PlayScream(const Sound& scream) {
-    if (scream.frameCount > 0)
-        PlaySound(scream);
+    PlaySfxAt(scream);
 }
 
 Sound SoundManager::LoadPawnScream(const std::string& defName,
@@ -180,7 +203,7 @@ Sound SoundManager::LoadPawnScream(const std::string& defName,
 void SoundManager::StartWalkLoop() {
     if (m_sounds.WalkingSound.frameCount == 0) return;
     if (!IsSoundPlaying(m_sounds.WalkingSound))
-        PlaySound(m_sounds.WalkingSound);
+        PlaySfxAt(m_sounds.WalkingSound);
 }
 
 void SoundManager::StopWalkLoop() {
@@ -192,8 +215,10 @@ void SoundManager::StopWalkLoop() {
 // Music
 // ---------------------------------------------------------------------------
 void SoundManager::PlayStream(Music music) {
-    if (music.ctxData != nullptr)
+    if (music.ctxData != nullptr) {
+        ::SetMusicVolume(music, m_musicGain);
         PlayMusicStream(music);
+    }
 }
 
 void SoundManager::StopStream(Music music) {
@@ -265,6 +290,7 @@ void SoundManager::PlayWorldMusic(const std::string& assetPrefix) {
     m_sounds.BackgroundMusic = m;
     m_sounds.MusicFound = true;
     PlayMusicStream(m_sounds.BackgroundMusic);
+    ApplyMusicGain();
     OZ_INFO("PlayWorldMusic: %s", playingFrom.c_str());
 }
 
@@ -301,6 +327,7 @@ void SoundManager::EnterSoundZone(const ZoneVolumeNode& zone) {
             m_sounds.BackgroundMusic = newMusic;
             m_sounds.MusicFound = true;
             PlayMusicStream(m_sounds.BackgroundMusic);
+            ApplyMusicGain();
         } else {
             OZ_WARN("Sound zone '%s': music '%s' not found",
                     zone.name.c_str(), sp.music_on_enter.c_str());
@@ -315,12 +342,12 @@ void SoundManager::EnterSoundZone(const ZoneVolumeNode& zone) {
             StopAmbience();
             m_ambienceHandle = LoadSoundWithFallback(sp.ambience_loop.c_str());
             if (m_ambienceHandle.frameCount > 0)
-                PlaySound(m_ambienceHandle);
+                PlaySfxAt(m_ambienceHandle);
             m_ambienceZoneName = zone.name;
         }
         // Keep-alive: raylib stops a sound when its stream drains.
         if (m_ambienceHandle.frameCount > 0 && !IsSoundPlaying(m_ambienceHandle))
-            PlaySound(m_ambienceHandle);
+            PlaySfxAt(m_ambienceHandle);
     }
 
     if (sp.HasEnterSfx()) {
@@ -330,7 +357,7 @@ void SoundManager::EnterSoundZone(const ZoneVolumeNode& zone) {
                 UnloadSound(m_oneShot);
             m_oneShot = sfx;
             m_oneShotIdle = 0.0f;
-            PlaySound(m_oneShot);
+            PlaySfxAt(m_oneShot);
         }
     }
 
@@ -354,6 +381,7 @@ void SoundManager::ExitSoundZone() {
         m_sounds.BackgroundMusic = m_defaultWorldMusic;
         m_sounds.MusicFound = true;
         PlayMusicStream(m_sounds.BackgroundMusic);
+        ApplyMusicGain();
         m_defaultWorldMusic = Music{0};
     }
     m_prevSoundZone.clear();
@@ -373,7 +401,7 @@ void SoundManager::UpdateSoundZones(const PointRegion& region) {
             if (soundZone->soundProfile.HasAmbience() &&
                 m_ambienceHandle.frameCount > 0 &&
                 !IsSoundPlaying(m_ambienceHandle)) {
-                PlaySound(m_ambienceHandle);
+                PlaySfxAt(m_ambienceHandle);
             }
             return;
         }
@@ -399,14 +427,17 @@ void SoundManager::UpdateReverb(const PointRegion& region) {
         if (decay <= 0.0f) decay = 0.5f;
         float vol = 1.0f - mix * 0.5f;
         OZ_INFO("ZONE_REVERB entered - mix=%.2f decay=%.2f vol=%.2f", mix, decay, vol);
-        if (m_sounds.MusicFound)
-            SetMusicVolume(m_sounds.BackgroundMusic, vol);
+        // Duck the world track under the reverb. This is a *relative* duck, so it
+        // multiplies the player's music gain rather than replacing it - the old
+        // code wrote a bare 1.0 on exit and would have discarded the setting.
+        m_musicDuck = vol;
+        ApplyMusicGain();
         DspReverb::SetMix(mix);
         DspReverb::SetDecay(decay);
     } else {
         OZ_INFO("ZONE_REVERB exited - restoring audio");
-        if (m_sounds.MusicFound)
-            SetMusicVolume(m_sounds.BackgroundMusic, 1.0f);
+        m_musicDuck = 1.0f;
+        ApplyMusicGain();
         DspReverb::SetMix(0.0f);
         DspReverb::SetDecay(0.5f);
     }
@@ -432,13 +463,13 @@ bool SoundManager::PlayScriptSound(const std::string& path) {
         it->second.idle = 0.0f;   // keep alive
     }
 
-    // Reset to unity. The handle is shared with PlayStatSound, which writes a
-    // weapon's authored volume/pitch onto it, so without this a `play_sound`
-    // opcode of a path a weapon also uses would inherit that weapon's volume.
-    SetSoundVolume(it->second.sound, 1.0f);
+    // Reset pitch to unity. The handle is shared with PlayStatSound, which
+    // writes a weapon's authored volume/pitch onto it, so without this a
+    // `play_sound` opcode of a path a weapon also uses would inherit that
+    // weapon's pitch. Volume is set by PlaySfxAt (authored 1.0 * sfx gain).
     SetSoundPitch(it->second.sound, 1.0f);
 
-    PlaySound(it->second.sound);
+    PlaySfxAt(it->second.sound);
     return true;
 }
 
@@ -492,7 +523,10 @@ bool SoundManager::PlayStatSound(const std::string& path, float volume, float pi
     // 0.95, with the pitch still wherever the previous weapon left it. The
     // `!= 1.0f` guard WAS the bug. There is nothing to restore afterwards,
     // because every play now writes the value it wants.
-    SetSoundVolume(it->second.sound, volume);
+    //
+    // The authored volume is scaled by the player's SFX gain here, at play time,
+    // because the handle is shared and re-used.
+    SetSoundVolume(it->second.sound, volume * m_sfxGain);
     SetSoundPitch(it->second.sound, pitch);
 
     PlaySound(it->second.sound);
@@ -523,7 +557,11 @@ void SoundManager::StartLoopSound(const std::string& key, const std::string& pat
     loop.path   = path;
     loop.volume = volume;
     loop.pitch  = pitch;
-    SetSoundVolume(loop.sound, volume);
+    // Persisted on the handle; PruneLoops re-plays it without re-writing volume,
+    // so the SFX gain is baked in here. Changing the gain while a loop plays
+    // takes effect on the next StartLoopSound for that key (a loop is short and
+    // retriggered continuously for footsteps, so this is imperceptible).
+    SetSoundVolume(loop.sound, volume * m_sfxGain);
     SetSoundPitch(loop.sound, pitch);
     PlaySound(loop.sound);
     m_loops.emplace(key, loop);

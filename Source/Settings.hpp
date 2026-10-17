@@ -14,6 +14,22 @@ static bool FPSEnabled = false;
 static bool ShowLogWindow = false;
 static float ResolutionScale = 1.0f;
 
+// --- Gameplay settings (Settings -> Gameplay) ---
+// Cross-TU consumers read the inline mirrors in GameplayFlags.hpp; these are the
+// persisted UI state, written by LoadClientSettings and the settings menu.
+static bool GoreEnabled = true;        // blood/gore on enemy hit + death
+static int  WeaponHand = 0;            // 0 = right hand, 1 = left hand
+
+// --- Window ---
+// The window is created borderless (undecorated). Turning this off gives the OS
+// title bar back so it can be moved the ordinary way; with it on, Alt+Left-drag
+// moves the window instead.
+static bool BorderlessWindow = true;
+
+// --- Per-category audio volume (0..100). Master is AudioSlider above. ---
+static float MusicVolume = 100.0f;
+static float SfxVolume   = 100.0f;
+
 // Persisted window size (loaded before InitWindow from System/Angels95.ini).
 static int ConfigWindowWidth = 1280;
 static int ConfigWindowHeight = 720;

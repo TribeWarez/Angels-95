@@ -181,7 +181,7 @@ void DrawRemotePlayers3D(Shader litShader) {
     const float dt = GetFrameTime();
 
     // Scale the character to the local player's collision silhouette. The
-    // character GLBs are authored in metres while PlayerMovement::Height is 3.0,
+    // character GLBs are authored in metres while PlayerMovement::Height is 2.8,
     // so drawing them unscaled leaves remote players at roughly half size.
     // A `model_height` stat on the Player def overrides the target; a NEGATIVE
     // value means "draw at the authored scale, do not normalise".
@@ -590,7 +590,9 @@ ShowSpellbook = false;
     // the client - the editor owns its own splash and its window configuration
     // (FLAG_VSYNC_HINT is set in AngelEd/Source/Main.cpp).
     SetConfigFlags(FLAG_WINDOW_HIDDEN);
-    if (!g_shot.active) SetConfigFlags(FLAG_WINDOW_UNDECORATED);
+    // Borderless unless the player turned it off (Settings -> Window). A shot
+    // run always wants the plain window so a capture is not affected.
+    if (!g_shot.active && BorderlessWindow) SetConfigFlags(FLAG_WINDOW_UNDECORATED);
 
     InitWindow(ConfigWindowWidth, ConfigWindowHeight,
                g_shot.active ? "Angels95 [shot]" : "Angels95");
@@ -609,6 +611,9 @@ ShowSpellbook = false;
             CloseAudioDevice();
         }
         ApplyMasterVolume();
+        // Per-category gains (music/sfx), restored from System/Angels95.ini.
+        SoundManager::Instance().SetMusicGain(MusicVolume / 100.0f);
+        SoundManager::Instance().SetSfxGain(SfxVolume / 100.0f);
     }
 
     OmegaTechInit();
@@ -844,6 +849,10 @@ ShowSpellbook = false;
     
     while (!WindowShouldClose() && !g_returnToMenu)
     {
+        // Borderless window drag (Alt+Left), so the window can be moved while
+        // paused or in a menu even though it has no OS title bar.
+        HandleBorderlessWindowDrag();
+
         // Console toggle with ^ (grave) key
         if (IsKeyPressed(KEY_GRAVE)) {
             g_consoleOpen = !g_consoleOpen;
@@ -1118,8 +1127,12 @@ ShowSpellbook = false;
             DrawTexturePro(Target.texture, (Rectangle){ 0, 0, Target.texture.width, -Target.texture.height }, (Rectangle){ 0, 0, float(GetScreenWidth()), float(GetScreenHeight())}, (Vector2){ 0, 0 } , 0.f , WHITE);
             if (shaderActive) EndShaderMode();
         }
-        // LightningScript dynamic hotbar
-        if (!g_shot.active || !g_shot.hideHud)
+        // LightningScript dynamic hotbar. Hidden while the inventory overlay is
+        // open: the overlay draws its own interactive mini bar, and the two bars
+        // share the hotbar drag state - the in-world bar ran first each frame and
+        // processed the release with no hovered cell, cancelling the overlay's
+        // reorder before it could complete.
+        if ((!g_shot.active || !g_shot.hideHud) && !ShowInventory)
             LightningEntityManager::Instance().DrawHotbar();
         // Hotbar input. Suppressed while a modal is up or during --shot captures:
         // these keys/wheel previously fired underneath the inventory, skill tree
@@ -1181,6 +1194,13 @@ ShowSpellbook = false;
 
                     if (p) {
                         p->position = { npcs[i].position.x, npcs[i].position.y, npcs[i].position.z };
+                        // Server-owned NPCs die on the server; the client learns
+                        // it here when `active` flips false. Spawn the gore once
+                        // on that transition (the local ApplyPawnDamage path is
+                        // skipped for networkControlled pawns).
+                        if (p->active && !npcs[i].active && g_goreEnabled)
+                            CombatFX::Instance().SpawnGibs(
+                                {p->position.x, p->position.y + 0.6f, p->position.z});
                         p->active = npcs[i].active;
                     } else if (npcs[i].active) {
                         // Spawn with the server-reported def type (falls back to Walker)
@@ -1274,7 +1294,7 @@ ShowSpellbook = false;
 
         // Inventory overlay
         if (ShowInventory) {
-            InventoryBehaviour::Instance().DrawOverlay();
+            InventoryBehaviour::Instance().DrawOverlay(OmegaTechData.MainCamera);
         }
 
         // Ethereal skill tree overlay

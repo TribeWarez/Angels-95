@@ -394,7 +394,15 @@ OzParticleSimulationManager::Particle* OzParticleSimulationManager::Acquire() {
     for (int tries = 0; tries < MAX_PARTICLES; tries++) {
         Particle& cand = m_pool[m_next];
         m_next = (m_next + 1) % MAX_PARTICLES;
-        if (!cand.active) { m_live++; return &cand; }
+        if (!cand.active) {
+            m_live++;
+            // Reset the source tags on reuse: a slot that held a weather or
+            // gameplay particle must not keep that tag when an emitter takes it,
+            // or the weather counter and the "Particles" gate would misread it.
+            cand.weather = false;
+            cand.gameplay = false;
+            return &cand;
+        }
     }
     return nullptr;   // pool exhausted
 }
@@ -494,11 +502,14 @@ void OzParticleSimulationManager::Shutdown() {
 
 void OzParticleSimulationManager::Draw(Camera3D& camera,
                                        const std::vector<LightNode>* transientLights) {
-    // Honour the user's master toggle (pushed in from Core.hpp; see SetEnabled).
-    // Weather particles are retired by ClearWeather, not here, so re-enabling
-    // resumes an authored field rather than restarting it.
-    if (!m_enabled) return;
     if (m_live <= 0) return;
+
+    // The "Particles" master toggle gates the AMBIENT layer (OZONE emitters and
+    // weather) only. Gameplay bursts - muzzle smoke, impact sparks and the
+    // blood/gibs - are combat feedback and still draw when it is off. Gating
+    // them behind it made turning particles off silently remove blood from every
+    // hit, which reads as "gore is broken".
+    const bool ambient = m_enabled;
 
     // Gather lights once per frame, transient first (matching the priority the
     // shader uses) so a muzzle flash visibly lights the smoke sitting in it.
@@ -526,7 +537,7 @@ void OzParticleSimulationManager::Draw(Camera3D& camera,
     if (EnsureInstancedResources()) {
         bool anyBillboard = false;
         for (const auto& p : m_pool)
-            if (p.active && p.billboard && p.texture.id > 0) { anyBillboard = true; break; }
+            if (p.active && (ambient || p.gameplay) && p.billboard && p.texture.id > 0) { anyBillboard = true; break; }
         if (anyBillboard) {
             DrawInstanced(camera, lit);
             instancedDrew = true;
@@ -536,6 +547,7 @@ void OzParticleSimulationManager::Draw(Camera3D& camera,
     BeginBlendMode(BLEND_ALPHA);
     for (auto& p : m_pool) {
         if (!p.active) continue;
+        if (!ambient && !p.gameplay) continue;   // ambient layer is toggled off
         // Skip textured billboards when the instanced shader already drew them.
         if (instancedDrew && p.billboard && p.texture.id > 0) continue;
         const RenderState rs = ComputeRenderState(p, lit);
@@ -545,10 +557,22 @@ void OzParticleSimulationManager::Draw(Camera3D& camera,
         // texture==0 fallback below is unchanged (that is how a Burst without a
         // texture renders), so this only adds a way to author solid particles
         // from an OZONE emitter.
-        if (p.billboard && p.texture.id > 0)
-            DrawBillboard(camera, p.texture, p.position, rs.size, rs.color);
-        else
+        // billboard particles are camera-facing quads. An untextured one (a
+        // one-shot Burst with no `tex`) now uses the manager's soft default
+        // sprite instead of a solid DrawSphere: every gameplay burst - muzzle
+        // smoke, impact sparks and blood - is untextured, so they ALL rendered
+        // as hard little balls that read as debug placeholders. The soft sprite
+        // is only resolved HERE, in the draw path (a GL context is guaranteed),
+        // never in Burst(), which runs on headless update-only paths.
+        if (p.billboard) {
+            Texture2D tex = (p.texture.id > 0) ? p.texture : DefaultTexture();
+            if (tex.id > 0)
+                DrawBillboard(camera, tex, p.position, rs.size, rs.color);
+            else
+                DrawSphere(p.position, rs.size * 0.5f, rs.color);   // no GL: keep visible
+        } else {
             DrawSphere(p.position, rs.size * 0.5f, rs.color);
+        }
     }
     EndBlendMode();
 }
@@ -647,6 +671,8 @@ void OzParticleSimulationManager::Burst(Vector3 pos, Vector3 dir, int count,
         // One-shot bursts are billboarded by default; a caller wanting solid
         // spheres passes tex == 0 and Draw already falls back to a sphere.
         p->billboard = true;
+        // Gameplay feedback, not ambient: the "Particles" toggle must not hide it.
+        p->gameplay = true;
         // Left as 0 when no texture is given: Draw falls back to a sphere, so a
         // one-shot burst does not need a GL upload. Resolving the soft sprite
         // here would touch the GPU even on paths that never draw (tests).

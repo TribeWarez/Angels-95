@@ -87,6 +87,19 @@ public:
     void StartWalkLoop();
     void StopWalkLoop();
 
+    // --- per-category volume -------------------------------------------------
+    // raylib has only a global master volume; music and SFX need to be tunable
+    // independently. These are 0..1 gains applied to every handle this manager
+    // plays (music streams, one-shots, loops, script/stat sounds). Master stays
+    // raylib's SetMasterVolume.
+    //
+    // Named *Gain rather than SetMusicVolume/SfxVolume so the member does not
+    // hide raylib's global SetMusicVolume(Music, float) inside this class.
+    void SetMusicGain(float v);
+    void SetSfxGain(float v);
+    float MusicGain() const { return m_musicGain; }
+    float SfxGain() const { return m_sfxGain; }
+
     // --- music -------------------------------------------------------------
 
     // Generic stream helpers for callers that own their own Music handle (the
@@ -166,6 +179,12 @@ public:
 private:
     SoundManager() = default;
 
+    // Apply the current music gain (times the reverb duck) to the live world
+    // track. Called whenever the track changes or the gain/duck changes.
+    void ApplyMusicGain();
+    // Set an SFX handle's volume to authored * sfx gain, then play it.
+    void PlaySfxAt(Sound s, float authored = 1.0f);
+
     // Resolve + play the zone enter music, remembering the world track so it
     // can be restored on exit.
     void EnterSoundZone(const ZoneVolumeNode& zone);
@@ -175,6 +194,11 @@ private:
 
     GameSounds m_sounds;
     Sound m_textNoise{0};
+
+    // Per-category gains (0..1) and the music duck applied inside a reverb zone.
+    float m_musicGain = 1.0f;
+    float m_sfxGain = 1.0f;
+    float m_musicDuck = 1.0f;
 
     // Per-world zone audio state
     Music m_defaultWorldMusic{0};   // world track captured before a zone crossfade

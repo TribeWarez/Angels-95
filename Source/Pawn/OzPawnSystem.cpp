@@ -11,6 +11,7 @@
 #include "PlayerMovement.hpp"
 #include "Items.hpp"
 #include "../DebugFlags.hpp"
+#include "../GameplayFlags.hpp"
 #include "../Log.hpp"
 #include <rlgl.h>
 #include <cmath>
@@ -288,6 +289,10 @@ void PawnSystem::ApplyPawnDamage(Pawn& p, int damage) {
     if (p.networkControlled) return;
     p.health -= damage;
     if (p.health <= 0) {
+        // Gore on death: a gib burst at the body plus a ground splat, before the
+        // pawn is hidden. Gated on the "Gore" setting.
+        if (g_goreEnabled)
+            CombatFX::Instance().SpawnGibs({p.position.x, p.position.y + 0.6f, p.position.z});
         p.active = false;
         TransitionState(p, PawnState::DEAD);
     }
@@ -338,6 +343,15 @@ int PawnSystem::SpawnProjectile(const ProjectileNode& node) {
     p.id = m_nextEntityId++;
     p.active = true;
     p.age = 0.0f;
+    // Orient a model projectile along its travel. The ammo GLBs' nose is along
+    // +X. raylib's rendered Y-rotation maps +X to (cos, 0, -sin) (verified by
+    // rendering against world axis lines), so the yaw that points +X along the
+    // horizontal velocity (vx, vz) is atan2(-vz, vx). Using atan2(vz, vx) - the
+    // CPU row-vector convention - mirrored the round across the X axis, so a
+    // forward shot flew tail-first. yawOffset is an optional per-weapon
+    // correction (projectile_yaw stat).
+    if (!p.meshPath.empty() && (p.velocity.x != 0.0f || p.velocity.z != 0.0f))
+        p.yaw = atan2f(-p.velocity.z, p.velocity.x) * 57.29578f + p.yawOffset;
     m_projectiles.push_back(p);
     return (int)m_projectiles.size() - 1;
 }
@@ -375,9 +389,11 @@ void PawnSystem::UpdateProjectiles(float dt) {
             if (dist < 1.5f) {
                 p.active = false;
                 Vector3 hitNormal = Vector3Normalize(Vector3Scale(p.velocity, -1.0f));
+                Vector3 hitPos = {pawn.position.x, pawn.position.y + 0.5f, pawn.position.z};
                 CombatFX::Instance().SpawnImpact(
-                    {pawn.position.x, pawn.position.y + 0.5f, pawn.position.z},
-                    hitNormal, Color{200, 30, 30, 255}, 10, 4.0f);
+                    hitPos, hitNormal, Color{200, 30, 30, 255}, 10, 4.0f);
+                if (g_goreEnabled)
+                    CombatFX::Instance().SpawnBlood(hitPos, hitNormal, 12, 1.0f);
                 ApplyPawnDamage(pawn, (int)p.damage);
                 break;
             }
@@ -398,18 +414,43 @@ void PawnSystem::DrawProjectiles(Camera3D& camera, Shader litShader) {
         if (!p.meshPath.empty()) {
             auto mesh = oz::MeshCache::Instance().GetStatic(p.meshPath, p.texturePath, "", true);
             if (mesh) {
-                oz::MeshTransform t;
-                t.position = p.position;
-                t.scale = {p.scale, p.scale, p.scale};
-                mesh->DrawSubmesh(p.submesh, t, litShader, p.tint);
+                if (p.submesh < 0 || p.submesh >= mesh->MeshCount()) {
+                    // A configured projectile model whose submesh index does not
+                    // exist draws NOTHING (DrawSubmesh bounds-checks and returns),
+                    // which is indistinguishable from a broken weapon. Name it
+                    // once instead of letting it vanish silently.
+                    static std::unordered_map<std::string, bool> s_subWarned;
+                    if (!s_subWarned.count(p.meshPath)) {
+                        s_subWarned[p.meshPath] = true;
+                        OZ_WARN("Projectile '%s': submesh %d out of range (mesh has %d) - "
+                                "check projectile_submesh in the weapon def",
+                                p.meshPath.c_str(), p.submesh, mesh->MeshCount());
+                    }
+                } else {
+                    oz::MeshTransform t;
+                    t.position = p.position;
+                    t.yaw = p.yaw;
+                    t.scale = {p.scale, p.scale, p.scale};
+                    mesh->DrawSubmesh(p.submesh, t, litShader, p.tint);
+                }
                 continue;
             }
+            // meshPath set but the model failed to load (MeshCache caches the
+            // negative result, so this fires once per path, not per frame). The
+            // sphere below is then a fallback, and it must be reported or a
+            // missing projectile GLB reads as "the weapon fires a ball".
+            static std::unordered_map<std::string, bool> s_meshWarned;
+            if (!s_meshWarned.count(p.meshPath)) {
+                s_meshWarned[p.meshPath] = true;
+                OZ_WARN("Projectile model '%s' failed to load - using fallback sphere",
+                        p.meshPath.c_str());
+            }
         }
-        // Draw as small glowing spheres. The travel tracer is emitted from
-        // UpdateProjectiles through CombatFX, so it fades with every other
-        // effect instead of being a fixed-length streak re-rendered each frame.
+        // Fallback tracer. Small and elongated-looking: the travel tracer is
+        // emitted from UpdateProjectiles through CombatFX, so this sphere is
+        // just the round itself and should not read as a placeholder ball.
         Color c = p.tint;
-        float radius = 0.3f;
+        float radius = 0.12f;
         DrawSphere(p.position, radius, c);
         // Optional glow sprite
         if (p.sprite && p.sprite->id > 0) {

@@ -4,6 +4,7 @@
 #include <rlgl.h>
 #include "../Script/LightningEntityManager.hpp"
 #include "../Script/LightningEntityDef.hpp"
+#include "../GameplayFlags.hpp"
 #include "../Log.hpp"
 #include <cmath>
 #include <cstdlib>
@@ -244,6 +245,20 @@ void ViewModel::Draw(Camera3D& camera, Shader litShader) {
     // re-authored below.
     Vector3 off = {m_offset.x, m_offset.y + dip, -m_offset.z + kick};
     Vector3 rotDeg = {m_rot.x + rpitch, m_rot.y, m_rot.z + rtilt};
+
+    // Weapon hand: mirror the view-model across the camera's YZ plane for the
+    // left hand. Mirroring a right-handed weapon means offset.x -> -x and the
+    // yaw/roll rotations -> -yaw/-roll (pitch is unaffected).
+    if (g_weaponHand != 0) {
+        off.x = -off.x;
+        rotDeg.y = -rotDeg.y;
+        rotDeg.z = -rotDeg.z;
+    }
+
+    // Head-bob sway: the camera bobs (Core.hpp); the weapon sways on the same
+    // phase so it does not stay rigidly locked to a moving eye.
+    off.y += sinf(m_bobPhase) * m_bobAmount * 0.6f;
+    off.x += cosf(m_bobPhase * 0.5f) * m_bobAmount * 0.4f;
     // Fit normalises wildly different source scales into a usable held size;
     // viewmodel_scale stays a relative tuning multiplier on top of that.
     const float fitScale = m_scale * ComputeFitScale(m_mesh->Bounds());
@@ -301,13 +316,17 @@ bool ViewModel::MuzzleWorldPos(Camera3D camera, Vector3* out) const {
     if (!m_mesh || !m_mesh->Valid() || !out) return false;
     const float fitScale = m_scale * ComputeFitScale(m_mesh->Bounds());
     Matrix camWorld = MatrixInvert(GetCameraMatrix(camera));
+    // Mirror with the same rule as Draw() so the muzzle flash stays at the
+    // barrel when the weapon is in the left hand.
+    const float handSign = (g_weaponHand != 0) ? -1.0f : 1.0f;
     Matrix local = MatrixMultiply(
         MatrixMultiply(
             MatrixTranslate(-m_center.x, -m_center.y, -m_center.z),
-            MatrixRotateXYZ({m_rot.x * DEG2RAD, m_rot.y * DEG2RAD, m_rot.z * DEG2RAD})),
+            MatrixRotateXYZ({m_rot.x * DEG2RAD, handSign * m_rot.y * DEG2RAD,
+                             handSign * m_rot.z * DEG2RAD})),
         MatrixMultiply(
             MatrixScale(fitScale, fitScale, fitScale),
-            MatrixTranslate(m_offset.x, m_offset.y, -m_offset.z)));
+            MatrixTranslate(handSign * m_offset.x, m_offset.y, -m_offset.z)));
     Matrix world = MatrixMultiply(local, camWorld);
 
     // Muzzle = the far end of the weapon along its own length. Which axis is

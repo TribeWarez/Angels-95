@@ -39,6 +39,79 @@ bool InventoryBehaviour::UseBackpackItem(int slot) {
 }
 
 // ---------------------------------------------------------------------------
+// Drop: remove an item/weapon from the player and leave it in the world
+// ---------------------------------------------------------------------------
+void InventoryBehaviour::SpawnDroppedPickup(const char* typeName, const Camera3D& cam) {
+    if (!typeName || !*typeName) return;
+    // In front of the player, at roughly foot height, so the pickup lands on the
+    // ground in view instead of inside the player's own collect box.
+    Vector3 fwd = Vector3Subtract(cam.target, cam.position);
+    fwd.y = 0.0f;
+    float len = sqrtf(fwd.x * fwd.x + fwd.z * fwd.z);
+    if (len > 1e-4f) { fwd.x /= len; fwd.z /= len; }
+    else             { fwd = Vector3{0.0f, 0.0f, 1.0f}; }
+
+    PickupNode pn;
+    pn.position = {cam.position.x + fwd.x * 1.4f,
+                   cam.position.y - 1.2f,
+                   cam.position.z + fwd.z * 1.4f};
+    pn.typeName = typeName;
+    pn.respawnTime = 0.0f;   // a dropped item is gone once picked back up
+    pn.active = true;
+    PawnSystem::Instance().AddPickup(pn);
+}
+
+bool InventoryBehaviour::DropBackpackItem(int slot, const Camera3D& cam) {
+    if (slot < 0 || slot >= BACKPACK_SLOTS) return false;
+    int itemId = gInventory.backpack[slot].itemId;
+    if (itemId < 0 || gInventory.backpack[slot].quantity <= 0) return false;
+    const ItemDBEntry* def = GetItemDef(itemId);
+    const char* typeName = PickupTypeNameForItem(itemId);
+    if (!typeName) {
+        Emit(std::string("Cannot drop ") + (def ? def->name : "item"));
+        return false;
+    }
+    // Remove ONE (a stack is dropped a piece at a time; PickupNode carries no
+    // quantity, so dropping the whole stack would destroy the remainder).
+    gInventory.RemoveFromBackpack(slot);
+    SpawnDroppedPickup(typeName, cam);
+    Emit(std::string("Dropped ") + (def ? def->name : typeName));
+    if (m_feedbackSink) m_feedbackSink();
+    return true;
+}
+
+bool InventoryBehaviour::DropHotbarSlot(int slot, const Camera3D& cam) {
+    auto& lem = LightningEntityManager::Instance();
+    int inst = lem.HotbarAt(slot);
+    if (inst < 0) return false;
+    EntityInstance* e = lem.Get(inst);
+    if (!e || !e->def) return false;
+    const std::string name = e->def->name;
+    lem.HotbarAssign(slot, -1);   // fires on_unequip
+    lem.Despawn(inst);
+    SpawnDroppedPickup(name.c_str(), cam);
+    Emit(std::string("Dropped ") + name);
+    if (m_feedbackSink) m_feedbackSink();
+    // A freed cell is the moment a stashed overflow weapon can finally land.
+    lem.FlushNextStashedWeapon();
+    return true;
+}
+
+bool InventoryBehaviour::DropEquipmentSlot(int slot, const Camera3D& cam) {
+    auto& lem = LightningEntityManager::Instance();
+    int inst = lem.EquipmentAt(slot);
+    if (inst < 0) return false;
+    EntityInstance* e = lem.Get(inst);
+    if (!e || !e->def) return false;
+    const std::string name = e->def->name;
+    lem.EquipmentUnequip(slot);   // fires on_unequip and despawns the instance
+    SpawnDroppedPickup(name.c_str(), cam);
+    Emit(std::string("Dropped ") + name);
+    if (m_feedbackSink) m_feedbackSink();
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // HUD: always-visible player stat bars
 // ---------------------------------------------------------------------------
 void InventoryBehaviour::DrawHud(const Camera3D& cam, int ticker, bool isCrouching, bool isSprinting) {
@@ -122,6 +195,18 @@ void InventoryBehaviour::DrawHud(const Camera3D& cam, int ticker, bool isCrouchi
         }
     }
 
+    // Stashed overflow weapons. When the hotbar is full a collected weapon is
+    // queued rather than lost, so the player needs to know it is pending and
+    // how to free it (drop or consume a hotbar item).
+    {
+        int stashed = LightningEntityManager::Instance().StashedWeaponCount();
+        if (stashed > 0) {
+            DrawText(TextFormat("Stored weapons: %d (free a hotbar slot)", stashed),
+                     x, y, 12, (Color){255, 190, 90, 255});
+            y += 16;
+        }
+    }
+
     // Weapon fire indicator (brief pulse)
     static double lastFireTime = 0;
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -199,7 +284,7 @@ void InventoryBehaviour::DrawHud(const Camera3D& cam, int ticker, bool isCrouchi
 // ---------------------------------------------------------------------------
 // Inventory Overlay (Diablo I style)
 // ---------------------------------------------------------------------------
-void InventoryBehaviour::DrawOverlay() {
+void InventoryBehaviour::DrawOverlay(const Camera3D& cam) {
     const int sw = GetScreenWidth();
     const int sh = GetScreenHeight();
     const int panel_w = 720;
@@ -280,6 +365,11 @@ void InventoryBehaviour::DrawOverlay() {
 
     int ey = py + 50;
 
+    // Hover targets for the Q-to-drop action, resolved by the draw loops below.
+    int hoveredEq = -1;
+    int hoveredBp = -1;
+    int hoveredHotbar = -1;
+
     DrawText("EQUIPMENT", ex, ey - 18, 12, LIGHTGRAY);
 
     // Labels now live in Pawn/EquipSlots.hpp, sized by EQUIP_SLOT_COUNT, so a new
@@ -293,6 +383,7 @@ void InventoryBehaviour::DrawOverlay() {
 
         Rectangle eqRect = {(float)ex, (float)ey, (float)slotW, (float)slotH};
         bool eqHover = CheckCollisionPointRec(GetMousePosition(), eqRect);
+        if (eqHover && owned) hoveredEq = i;
         // Drop target highlight while an equipment drag is in flight.
         bool eqDropTarget = (m_dragKind == DragKind::EQUIPMENT && m_dragSlot >= 0 &&
                              m_dragSlot != i && eqHover);
@@ -343,6 +434,7 @@ void InventoryBehaviour::DrawOverlay() {
 
             Rectangle cellRect = {(float)cx, (float)cy, (float)cellSize, (float)cellSize};
             bool hover = CheckCollisionPointRec(GetMousePosition(), cellRect);
+            if (hover && hasItem) hoveredBp = idx;
 
             // Press on an occupied cell starts a drag (and selects it). The drop
             // resolves in the pre-pass; a press-and-release on the SAME cell is a
@@ -514,7 +606,12 @@ void InventoryBehaviour::DrawOverlay() {
         opt.bottomY         = (float)(hy + 40);
         opt.drawSlotNumbers = true;
         opt.drawSlotName    = false;   // the panel already labels things
-        opt.clickToSelect   = false;   // the panel owns its own clicks
+        // The mini bar is interactive here too: click selects, press-drag-release
+        // reorders. The panel's own drag (backpack/equipment) is a separate state
+        // resolved in the pre-pass above, so the two do not fight - a press can
+        // only land on one kind of cell.
+        opt.clickToSelect   = true;
+        opt.dragToReorder   = true;
 
         int hover = -1;
         if (!DrawSlotBar(opt, hover)) {
@@ -523,6 +620,14 @@ void InventoryBehaviour::DrawOverlay() {
             DrawText("HOTBAR:", hx, hy, 12, DARKGRAY);
             hx += 60;
             for (int i = 0; i < nSlots; i++) {
+                Rectangle cell{(float)hx, (float)hy, 32.0f, 32.0f};
+                if (CheckCollisionPointRec(GetMousePosition(), cell)) {
+                    hover = i;
+                    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                        lem.SelectSlot(i);
+                        lem.HotbarBeginDrag(i);
+                    }
+                }
                 int idx = lem.HotbarAt(i);
                 bool hasItem = (idx >= 0 && lem.Get(idx) && lem.Get(idx)->def);
                 Color c = hasItem ? WHITE : (Color){50, 50, 50, 255};
@@ -535,7 +640,19 @@ void InventoryBehaviour::DrawOverlay() {
                 }
                 hx += 36;
             }
+            if (lem.IsHotbarDragging()) lem.HotbarEndDragOnRelease(hover);
         }
+        hoveredHotbar = hover;
+    }
+
+    // === Drop (Q) ===
+    // Q drops whatever the cursor is over: a backpack item, an equipment piece,
+    // or a hotbar cell. Suppressed while a drag is in flight so a drop cannot
+    // race the drag resolution.
+    if (IsKeyPressed(KEY_Q) && m_dragKind == DragKind::NONE) {
+        if (hoveredBp >= 0)             DropBackpackItem(hoveredBp, cam);
+        else if (hoveredEq >= 0)        DropEquipmentSlot(hoveredEq, cam);
+        else if (hoveredHotbar >= 0)    DropHotbarSlot(hoveredHotbar, cam);
     }
 
     // === Drag ghost ===
@@ -584,7 +701,7 @@ void InventoryBehaviour::DrawOverlay() {
     }
 
     // Controls hint
-    DrawText("TAB: close  |  Drag to reorder / move equipment  |  Right-click use / unequip  |  ENTER use  |  E: pickup  |  K: skills  |  ^: console",
+    DrawText("TAB: close  |  Drag to reorder  |  Right-click use / unequip  |  Q: drop hovered  |  ENTER use  |  E: pickup  |  K: skills  |  ^: console",
              px + 20, py + panel_h - 22, 12, DARKGRAY);
 }
 
@@ -631,8 +748,19 @@ void InventoryBehaviour::OnWeaponCollected(const char* weapon_def_name) {
     }
     int instIdx = lem.Spawn(def->name);
     if (instIdx < 0) return;
-    if (lem.HotbarPlaceFirstFree(instIdx)) Emit(std::string("Picked up weapon: ") + def->name);
-    else { OZ_WARN("Hotbar full — weapon %s lost", def->name.c_str()); lem.Despawn(instIdx); }
+    if (lem.HotbarPlaceFirstFree(instIdx)) {
+        Emit(std::string("Picked up weapon: ") + def->name);
+    } else {
+        // Hotbar full: queue the def so it lands in the first free cell instead
+        // of being despawned and lost. This is the same overflow the single-
+        // player walk-over path uses (PawnSystem::UpdatePickups); the network
+        // grant path was missing it, so a weapon collected over the wire with
+        // every slot occupied vanished with only a warning.
+        lem.Despawn(instIdx);
+        lem.StashWeapon(def->name);
+        Emit(std::string("Hotbar full — ") + def->name + " stored");
+        OZ_WARN("Hotbar full — weapon %s stashed", def->name.c_str());
+    }
 
     if (m_feedbackSink) m_feedbackSink();
 }
