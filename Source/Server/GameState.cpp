@@ -1042,6 +1042,26 @@ void GameState::damage_npc(ServerNPC& npc, int amount, uint32_t killer_id,
     }
 }
 
+bool GameState::respawn_dead_player(ServerPlayer& player) {
+    WorldState* ws = get_world(player.world_index);
+    if (!ws) return false;
+    player.health = (int)player.max_health;
+    player.mana = player.max_mana;
+    player.psychic_energy = player.max_psychic_energy;
+    player.stamina = net::SERVER_MAX_STAMINA;
+    if (ws->has_spawn) {
+        player.position = {ws->spawn_x, ws->spawn_y, ws->spawn_z};
+        player.yaw = 0.0f;
+        player.pitch = 0.0f;
+        player.has_position = true;
+    }
+    player.dead = false;
+    player.respawn_at = 0.0;
+    OZ_INFO("Player %s respawned in world %d", player.name, player.world_index);
+    return true;
+}
+
+// Advance a world objective (COOP). Returns true if progress changed.
 bool GameState::AdvanceObjective(WorldState& ws, const std::string& id, int delta) {
     for (auto& o : ws.objectives) {
         if (o.id != id) continue;
@@ -1066,16 +1086,22 @@ int GameState::AdvanceObjectivesByType(WorldState& ws, const std::string& type, 
 }
 
 void GameState::damage_player(ServerPlayer& player, int amount,
-                              uint32_t attacker_id,
-                              oz::gametype::DamageSource source) {
+                               uint32_t attacker_id,
+                               oz::gametype::DamageSource source) {
     // Armor mitigation is shared with the client via oz::MitigateDamage so both
     // ends resolve damage identically. This used to be a flat 20% cut that
     // ignored the defense stat entirely.
+    if (player.dead) return;   // already dead; ignore further damage
     float mitigated = oz::MitigateDamage((float)amount, (float)player.armor);
     player.health -= (int)mitigated;
     if (player.health < 0) player.health = 0;
-    if (player.health <= 0 && attacker_id != UINT32_MAX && attacker_id != player.id)
-        register_kill(attacker_id, player.id, source);
+    if (player.health <= 0) {
+        player.health = 0;
+        player.dead = true;
+        player.respawn_at = time(nullptr) + 3.0;   // 3 s respawn (configurable later)
+        if (attacker_id != UINT32_MAX && attacker_id != player.id)
+            register_kill(attacker_id, player.id, source);
+    }
 }
 
 void GameState::register_kill(uint32_t killer_id, uint32_t victim_id,
@@ -1201,6 +1227,15 @@ void GameState::tick(float dt) {
         tick_npcs(world, dt);
         tick_pickups(world, dt);
         tick_projectiles(world, dt);
+    }
+
+    // COOP respawn: dead players wait out their timer, then respawn at their
+    // world's spawn (first playerstart) with full health/mana.
+    double now = time(nullptr);
+    for (auto& p : m_players) {
+        if (!p.connected || !p.dead) continue;
+        if (now < p.respawn_at) continue;
+        respawn_dead_player(p);
     }
 
     // Advance the match clock and evaluate win conditions. CheckWinConditions

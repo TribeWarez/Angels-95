@@ -65,6 +65,13 @@ struct ServerPlayer {
     uint32_t last_melee_tick = 0;  // throttle MELEE_HIT (separate: melee is faster)
     float stamina = net::SERVER_MAX_STAMINA;  // server-authoritative swing budget
 
+    // COOP respawn. When health drops to 0 the player is flagged dead and a
+    // countdown begins; when it expires they are reset to their world's spawn
+    // (the first playerstart) with full health/mana. `respawn_at` is the
+    // server time (seconds since epoch) at which the respawn fires.
+    bool  dead = false;
+    double respawn_at = 0.0;
+
     // Team (protocol v2). `team` is the server's own assignment and is the only
     // value gameplay may read. `requested_team` is the UNTRUSTED team the client
     // asked for; it is recorded so a future team system can honour preferences,
@@ -414,6 +421,9 @@ public:
     // source == WORLD is an environmental kill: no team credit by default.
     void register_kill(uint32_t killer_id, uint32_t victim_id,
                        oz::gametype::DamageSource source = oz::gametype::DamageSource::PLAYER);
+
+    // COOP: respawn a dead player in their own world. Returns true when it fired.
+    bool respawn_dead_player(ServerPlayer& player);
 
     // Match state (owned by GameState; advanced once per tick)
     oz::gametype::MatchState m_match;
