@@ -6,6 +6,8 @@
 #include "../Network/Network.hpp"
 #include "../World/OzoneParser.hpp"
 #include "GameState.hpp"
+#include "../Game/GameManager.hpp"
+#include "../Script/LightningEntityRegistry.hpp"
 #include "../Log.hpp"
 #include "../IniConfig.hpp"
 #include "Master/MasterClient.hpp"
@@ -184,6 +186,16 @@ static void send_world_change(net::NetworkPlayer& player, int world_index, bool 
     wcd.spawnX = 0.0f;
     wcd.spawnY = 0.0f;
     wcd.spawnZ = 0.0f;
+    // Authoritative spawn (first playerstart) so the client arrives on the floor
+    // instead of the origin.
+    if (world_index >= 0 && world_index < g_game_state.world_count()) {
+        const auto& ws = g_game_state.worlds()[(size_t)world_index];
+        if (ws.has_spawn) {
+            wcd.spawnX = ws.spawn_x;
+            wcd.spawnY = ws.spawn_y;
+            wcd.spawnZ = ws.spawn_z;
+        }
+    }
 
     net::NetworkMessage msg;
     msg.magic = net::MAGIC;
@@ -1072,7 +1084,11 @@ int main(int argc, char** argv) {
         OZ_WARN("No --master/--master-http configured: server will not appear in internet lists");
     }
 
-    // Initialize game state with worlds
+    // Initialize game state with worlds. The game hierarchy (GameData/Game) is
+    // loaded first so init_worlds can seed each world's COOP objectives from its
+    // `: mission` def.
+    LightningEntityRegistry::Instance().Init();
+    oz::game::GameManager::Instance().Init();
     g_game_state.init_worlds(g_gamedata_dir, g_world_list);
     {
         std::lock_guard<std::mutex> lock(g_print_mutex);
@@ -1106,6 +1122,37 @@ int main(int argc, char** argv) {
         while (acc >= kTickInterval) {
             acc -= kTickInterval;
             g_game_state.tick(static_cast<float>(kTickInterval));
+
+            // Coordinated COOP mission transition: when a world's objectives are
+            // all complete, move every player in that world to the mission's
+            // `next` world (GameManager graph). Fires once per world.
+            {
+                auto& gm = oz::game::GameManager::Instance();
+                if (gm.Loaded()) {
+                    for (auto& ws : g_game_state.worlds()) {
+                        if (ws.mission_transitioned || ws.objectives.empty()) continue;
+                        bool allDone = true;
+                        for (const auto& o : ws.objectives)
+                            if (o.target > 0 && o.progress < o.target) { allDone = false; break; }
+                        if (!allDone) continue;
+                        ws.mission_transitioned = true;
+                        const std::string nextWorld = gm.NextMissionWorld(ws.mission);
+                        if (nextWorld.empty()) continue;
+                        int nextIdx = -1;
+                        for (int i = 0; i < g_game_state.world_count(); i++)
+                            if (g_game_state.worlds()[(size_t)i].name == nextWorld) { nextIdx = i; break; }
+                        if (nextIdx < 0) continue;
+                        for (const auto& np : g_game_server->players()) {
+                            ServerPlayer* sp = g_game_state.get_player(np.id);
+                            if (!sp || sp->world_index != ws.world_index) continue;
+                            sp->world_index = nextIdx;
+                            send_world_change(const_cast<net::NetworkPlayer&>(np), nextIdx, true);
+                        }
+                        OZ_INFO("COOP: world '%s' objectives complete -> advancing to '%s'",
+                                ws.name.c_str(), nextWorld.c_str());
+                    }
+                }
+            }
 
             // Broadcast pickups that just respawned to all clients
             {

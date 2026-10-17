@@ -2,6 +2,8 @@
 #include "../World/OzoneParser.hpp"
 #include "../World/GameType.hpp"
 #include "../World/LevelSettings.hpp"
+#include "../Game/GameManager.hpp"
+#include "../Script/LightningEntityRegistry.hpp"
 #include "../Log.hpp"
 
 // Defined in OzoneParser.cpp (linked into both client and server) and
@@ -211,17 +213,43 @@ void GameState::init_worlds(const std::string& gamedata_dir,
         if (ws.global_npcs.empty() && ws.global_pickups.empty())
             init_global_npcs_and_pickups(ws);
 
-        // COOP / Campaign: a default "clear the area" objective = kill every
-        // seeded NPC. Advanced by damage_npc and broadcast as OBJECTIVE_STATE.
-        if (ws.gameTypeInfo.id == oz::gametype::GameType::COOP ||
-            ws.gameTypeInfo.id == oz::gametype::GameType::COOPERATIVE ||
-            ws.gameTypeInfo.id == oz::gametype::GameType::CAMPAIGN) {
-            WorldState::Objective obj;
-            obj.id = "ClearArea";
-            obj.target = (int)ws.global_npcs.size();
-            if (obj.target > 0) {
-                obj.progress = 0;
-                ws.objectives.push_back(obj);
+        // COOP / Campaign objectives. Prefer the mission def from the game
+        // hierarchy (`: mission` -> `: objective` counts); fall back to a default
+        // "clear the area" when the world is not part of the hierarchy.
+        {
+            const bool coop =
+                ws.gameTypeInfo.id == oz::gametype::GameType::COOP ||
+                ws.gameTypeInfo.id == oz::gametype::GameType::COOPERATIVE ||
+                ws.gameTypeInfo.id == oz::gametype::GameType::CAMPAIGN;
+            auto& gm = oz::game::GameManager::Instance();
+            const oz::game::MissionDef* mission =
+                gm.Loaded() ? gm.FindMissionByWorld(ws.name) : nullptr;
+            if (mission) {
+                ws.mission = mission->name;
+                auto& reg = LightningEntityRegistry::Instance();
+                for (const std::string& objName : mission->objectives) {
+                    int target = 1;
+                    std::string otype = "kill";
+                    const EntityDef* od = reg.Find(objName);
+                    if (od) {
+                        auto it = od->stats.floats.find("count");
+                        if (it != od->stats.floats.end()) target = (int)it->second;
+                        auto tit = od->stats.strings.find("type");
+                        if (tit != od->stats.strings.end() && !tit->second.empty())
+                            otype = tit->second;
+                    }
+                    WorldState::Objective o;
+                    o.id = objName;
+                    o.type = otype;
+                    o.target = target;
+                    ws.objectives.push_back(o);
+                }
+            } else if (coop) {
+                WorldState::Objective obj;
+                obj.id = "ClearArea";
+                obj.type = "kill";
+                obj.target = (int)ws.global_npcs.size();
+                if (obj.target > 0) ws.objectives.push_back(obj);
             }
         }
 
@@ -359,6 +387,17 @@ static void seed_world_entities(WorldState& ws, const std::string& gamedata_dir)
     int nextPickupId = 0;
 
     for (auto& pr : prims) {
+        if (pr.type == OzonePrimitiveType::ENTITY_PLAYERSTART) {
+            // First playerstart is the authoritative spawn (same rule as the
+            // client's GetFirstPlayerStart). Z-up -> Y-up.
+            if (!ws.has_spawn && pr.args.size() >= 3) {
+                ws.spawn_x = pr.args[0];
+                ws.spawn_y = pr.args[2];
+                ws.spawn_z = pr.args[1];
+                ws.has_spawn = true;
+            }
+            continue;
+        }
         if (pr.type == OzonePrimitiveType::ENTITY_NPC) {
             if (pr.args.size() < 3) continue;
             ServerNPC npc;
@@ -940,6 +979,9 @@ bool GameState::collect_pickup(uint32_t player_id, int pickup_id, int world_inde
     // Mark pickup inactive
     pickup->active = false;
     pickup->respawn_timer = 0.0f;
+    // COOP: advance every "collect" objective in the player's world.
+    if (WorldState* cws = get_world(world_index))
+        AdvanceObjectivesByType(*cws, "collect", 1);
     OZ_INFO("Player %s collected pickup %d (type %s) worth %d",
             player->name, pickup_id, pickup_type_str(pickup->type), pickup->value);
     return true;
@@ -985,9 +1027,9 @@ void GameState::damage_npc(ServerNPC& npc, int amount, uint32_t killer_id,
         npc.state = NpcState::DEAD;
         npc.death_timer = 0.0f;
         OZ_INFO("NPC killed at (%.2f, %.2f, %.2f)", npc.position.x, npc.position.y, npc.position.z);
-        // COOP: advance the world's "clear" objective.
+        // COOP: advance every "kill" objective in the world.
         if (world_index >= 0 && world_index < (int)m_worlds.size())
-            AdvanceObjective(m_worlds[(size_t)world_index], "ClearArea", 1);
+            AdvanceObjectivesByType(m_worlds[(size_t)world_index], "kill", 1);
         if (killer_id != UINT32_MAX) {
             add_xp(killer_id, XP_PER_KILL);
             OZ_INFO("Killer %u awarded %d XP for NPC kill", killer_id, XP_PER_KILL);
@@ -1005,6 +1047,18 @@ bool GameState::AdvanceObjective(WorldState& ws, const std::string& id, int delt
         return true;
     }
     return false;
+}
+
+int GameState::AdvanceObjectivesByType(WorldState& ws, const std::string& type, int delta) {
+    int n = 0;
+    for (auto& o : ws.objectives) {
+        if (o.type != type) continue;
+        if (o.target > 0 && o.progress >= o.target) continue;
+        o.progress += delta;
+        if (o.target > 0 && o.progress > o.target) o.progress = o.target;
+        n++;
+    }
+    return n;
 }
 
 void GameState::damage_player(ServerPlayer& player, int amount,

@@ -97,6 +97,7 @@ void GameManager::Init() {
         m.world      = StatStr(d, "world");
         m.mode       = StatStr(d, "mode");
         m.objectives = SplitComma(StatStr(d, "objectives"));
+        m.next       = StatStr(d, "next");
         m.onStart    = StatStr(d, "on_start");
         m.onComplete = StatStr(d, "on_complete");
         m.sourcePath = d->sourcePath;
@@ -121,6 +122,17 @@ const MissionDef* GameManager::FindMission(const std::string& name) const {
     for (const auto& m : m_missions)
         if (m.name == name) return &m;
     return nullptr;
+}
+
+const MissionDef* GameManager::FindMissionByWorld(const std::string& world) const {
+    for (const auto& m : m_missions)
+        if (m.world == world) return &m;
+    return nullptr;
+}
+
+std::string GameManager::NextMissionWorld(const std::string& mission) const {
+    const MissionDef* m = FindMission(mission);
+    return (m && !m->next.empty()) ? MissionWorld(m->next) : std::string();
 }
 
 std::string GameManager::MissionWorld(const std::string& mission) const {

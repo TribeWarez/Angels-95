@@ -300,10 +300,22 @@ struct WorldState {
     // and broadcast to clients as OBJECTIVE_STATE.
     struct Objective {
         std::string id;
+        std::string type;   // kill / collect / reach / survive / ... (from the def)
         int progress = 0;
         int target = 1;
     };
     std::vector<Objective> objectives;
+
+    // Authoritative spawn (first `playerstart`), used by WORLD_CHANGE. Was never
+    // read, so every world change sent the client to (0,0,0).
+    float spawn_x = 0.0f, spawn_y = 0.0f, spawn_z = 0.0f;
+    bool  has_spawn = false;
+    // The mission this world implements (GameManager), for coordinated
+    // transitions. Empty when the world is not part of the hierarchy.
+    std::string mission;
+    // Set once all objectives complete and the mission has advanced, so the
+    // coordinated transition fires exactly once.
+    bool mission_transitioned = false;
 };
 
 // Pickup collect range (world units)
@@ -393,6 +405,9 @@ public:
 
     // Advance a world objective (COOP). Returns true if progress changed.
     bool AdvanceObjective(WorldState& ws, const std::string& id, int delta);
+    // Advance every objective of a given type (kill / collect). Returns the
+    // number advanced.
+    int AdvanceObjectivesByType(WorldState& ws, const std::string& type, int delta);
 
     // Award a kill to the scoring system. killer_id == victim_id is a
     // suicide (applies suicidePenalty). killer_id == UINT32_MAX with

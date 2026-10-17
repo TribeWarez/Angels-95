@@ -230,20 +230,30 @@ hardcoded switch. Game types register from `Source/Game/GameBoxedTypes.cpp`.
     forced one-shot skeletal clip on matching pawns (`PawnSystem::PlayPawnClip`).
 - **Phase 2 — core landed.** `GameManager` loads the hierarchy from the registry
   (`: game`/`: campaign`/`: sector`/`: mission`), resolves sectors/missions, and
-  seeds `ObjectiveSystem` for the active mission. Client: `/campaign [mission]`
-  console command starts a mission; the active mission persists in
-  `GameData/Saves/Campaign.sav`. Test: `tests/GameManager.test.cpp`.
-  **Open:** a full Campaign/Coop title-menu pane (today it is the console +
-  existing world grid) and editor wiring for the new def types.
-- **Phase 3 — SP content.** Real geometry for the 5 sectors / 14 worlds,
-  objectives, portals → mission links.
-- **Phase 4 — COOP (partial).** Per-world rules now live in `WorldState`
-  (fixing the last-world-wins global bug; world 0 mirrors into the global match).
-  COOP/Campaign worlds seed a `ClearArea` objective advanced by NPC kills, and
-  the server broadcasts `OBJECTIVE_STATE` (~1 Hz) which the client mirrors and
-  shows in the HUD. **Open:** party/lobby, coordinated mission transitions,
-  server-side scripted objectives (server has no LightningScript runtime),
-  objective advancement from pickups, and respawn/spawnpoints.
+  seeds `ObjectiveSystem` for the active mission. Client: the **Campaign title-
+  menu pane** lists sectors and their missions (immediate-mode click starts the
+  mission), plus the `/campaign [mission]` console command; the active mission
+  persists in `GameData/Saves/Campaign.sav`. Editor: the Script Manager's "New
+  Script" type list + folder map include the new def types
+  (`Game/Angels95/{Sectors,Missions,Objectives,Triggers,Events}`).
+  Test: `tests/GameManager.test.cpp`.
+  **Open:** a dedicated Coop lobby pane (today Coop uses the Multiplayer pane).
+- **Phase 3 — content (placeholder).** The 14 sub-sector worlds are populated
+  with NPCs and pickups so their missions' objectives are completable; real
+  geometry/art is still open.
+- **Phase 4 — COOP (substantial).** Per-world rules live in `WorldState`
+  (last-world-wins bug fixed; world 0 mirrors into the global match). Server
+  loads the game hierarchy and seeds each world's objectives from its `: mission`
+  def (falling back to a `ClearArea` objective). Objectives are advanced by
+  gameplay — `kill` on NPC death, `collect` on pickup — and broadcast as
+  `OBJECTIVE_STATE` (~1 Hz) which the client mirrors and shows in the HUD. The
+  server reads each world's first `playerstart` and sends it in `WORLD_CHANGE`,
+  and the client loads the world + applies the spawn on a server-driven switch.
+  When a world's objectives all complete, the server **coordinated-transitions**
+  every player in it to the mission's `next` world.
+  **Open:** party/lobby, and server-side *scripted* objectives (the server has no
+  LightningScript runtime — objectives come from the defs, not from script
+  bodies).
 - **Phase 5 — migration.** Move §9 out of the engine; delete the `.cfg` parser.
 
 *Keep this page current: when a phase lands, move its bullet to a "landed"

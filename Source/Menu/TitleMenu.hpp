@@ -6,6 +6,7 @@
 #include "../Client/MasterList.hpp"
 #include "../Audio/SoundManager.hpp"
 #include "../GameplayFlags.hpp"
+#include "../Game/GameManager.hpp"
 #include "../PlayerProfile.hpp"
 #include <string>
 #include <vector>
@@ -610,6 +611,10 @@ private:
             case PANE_CAMPAIGN:
             case PANE_PRACTICE: {
                 bool campaign = (type == PANE_CAMPAIGN);
+                // When the game hierarchy is loaded, the Campaign pane draws the
+                // sector/mission list and handles its own clicks (immediate mode);
+                // the world grid is the fallback.
+                if (campaign && oz::game::GameManager::Instance().Loaded()) break;
                 int cols = std::max(1, (int)((contentRect.width - 24) / (CELL_W + CELL_GAP)));
                 int sx = (int)(contentRect.x + 12);
                 int sy = (int)(contentRect.y + 64);
@@ -908,7 +913,50 @@ private:
             DrawText("No worlds found in GameData/Worlds/", (int)(area.x + 12), (int)(area.y + 64), 14, (Color){180,180,180,200});
     }
 
-    void DrawCampaignPage(Rectangle area) { DrawLevelSelectGrid(area, true); }
+    void DrawCampaignPage(Rectangle area) {
+        // Phase 2: when the game hierarchy is loaded, show the Sefirot sectors and
+        // their missions (from GameManager) instead of the flat world grid.
+        auto& gm = oz::game::GameManager::Instance();
+        if (!gm.Loaded()) { DrawLevelSelectGrid(area, true); return; }
+
+        DrawPageHeader(area, "Campaign");
+        DrawText("Select a mission. Sectors are the Sefirot nodes (1-5).",
+                 (int)(area.x + 12), (int)(area.y + 36), 12, (Color){150,170,200,220});
+
+        int y = (int)(area.y + 62);
+        const int rowH = 22;
+        Vector2 mp = GetMousePosition();
+        for (const auto& sec : gm.Sectors()) {
+            char header[160];
+            snprintf(header, sizeof(header), "%d. %s", sec.numerology, sec.name.c_str());
+            DrawText(header, (int)(area.x + 12), y, 15, (Color){255, 220, 140, 255});
+            if (!sec.role.empty())
+                DrawText(TextFormat("(%s)", sec.role.c_str()),
+                         (int)(area.x + 12 + MeasureText(header, 15) + 8), y + 3, 11,
+                         (Color){140,160,180,200});
+            y += rowH;
+            for (const auto& mn : sec.missions) {
+                const oz::game::MissionDef* m = gm.FindMission(mn);
+                if (!m) continue;
+                Rectangle row = {(float)(area.x + 24), (float)y,
+                                 area.width - 36.0f, (float)(rowH - 3)};
+                bool hover = CheckCollisionPointRec(mp, row);
+                if (hover) DrawRectangleRec(row, (Color){30, 60, 110, 180});
+                DrawText(TextFormat("- %s  [%s]", m->name.c_str(), m->mode.c_str()),
+                         (int)(row.x + 6), y + 3, 13,
+                         hover ? WHITE : (Color){200, 215, 235, 230});
+                if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                    SoundManager::Instance().PlayUIClick();
+                    gm.SetActiveMission(m->name);
+                    m_selectedWorld = m->world;
+                    m_exit = true;
+                    return;
+                }
+                y += rowH;
+            }
+            y += 6;
+        }
+    }
     void DrawPracticeSessionPage(Rectangle area) { DrawLevelSelectGrid(area, false); }
 
     void DrawSeraphicPage(Rectangle area) {

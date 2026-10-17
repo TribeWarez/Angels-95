@@ -335,8 +335,8 @@ OTENGINE: $(RES_95) $(OBJS)
 $(BUILD_DIR)/GameState.o: Source/Server/GameState.cpp Source/Server/GameState.hpp | $(BUILD_DIR)
 	$(SERVER_CXX) $(SERVER_FLAGS) -c Source/Server/GameState.cpp -o $@
 
-AngelServ: $(RES_SRV) $(BUILD_DIR)/Network.o $(BUILD_DIR)/GameState.o $(BUILD_DIR)/GameType.o $(BUILD_DIR)/SurfaceFlags.o $(BUILD_DIR)/Log.o $(BUILD_DIR)/LightningEntityRegistry.o $(BUILD_DIR)/LightningScriptParser.o $(BUILD_DIR)/LightningScriptContext.o $(BUILD_DIR)/EventBus.o $(BUILD_DIR)/ObjectiveSystem.o $(BUILD_DIR)/miniz.o Source/Server/Server.cpp Source/Server/ServerHttp.cpp Source/Server/ServerInternal.hpp Source/Network/Network.hpp Source/World/OzoneParser.hpp Source/World/OzoneParser.cpp Source/Server/Master/MasterClient.hpp Source/Network/MasterProtocol.hpp Source/Network/MasterHttp.hpp
-	$(SERVER_CXX) $(SERVER_FLAGS) $(RES_SRV) $(BUILD_DIR)/Network.o $(BUILD_DIR)/GameState.o $(BUILD_DIR)/GameType.o $(BUILD_DIR)/SurfaceFlags.o $(BUILD_DIR)/Log.o $(BUILD_DIR)/LightningEntityRegistry.o $(BUILD_DIR)/LightningScriptParser.o $(BUILD_DIR)/LightningScriptContext.o $(BUILD_DIR)/EventBus.o $(BUILD_DIR)/ObjectiveSystem.o $(BUILD_DIR)/miniz.o Source/Server/Server.cpp Source/Server/ServerHttp.cpp Source/World/OzoneParser.cpp -o AngelServ$(EXE) $(SERVER_LIBS) $(LDEXTRA)
+AngelServ: $(RES_SRV) $(BUILD_DIR)/Network.o $(BUILD_DIR)/GameState.o $(BUILD_DIR)/GameType.o $(BUILD_DIR)/SurfaceFlags.o $(BUILD_DIR)/Log.o $(BUILD_DIR)/LightningEntityRegistry.o $(BUILD_DIR)/LightningScriptParser.o $(BUILD_DIR)/LightningScriptContext.o $(BUILD_DIR)/EventBus.o $(BUILD_DIR)/ObjectiveSystem.o $(BUILD_DIR)/GameManager.o $(BUILD_DIR)/miniz.o Source/Server/Server.cpp Source/Server/ServerHttp.cpp Source/Server/ServerInternal.hpp Source/Network/Network.hpp Source/World/OzoneParser.hpp Source/World/OzoneParser.cpp Source/Server/Master/MasterClient.hpp Source/Network/MasterProtocol.hpp Source/Network/MasterHttp.hpp
+	$(SERVER_CXX) $(SERVER_FLAGS) $(RES_SRV) $(BUILD_DIR)/Network.o $(BUILD_DIR)/GameState.o $(BUILD_DIR)/GameType.o $(BUILD_DIR)/SurfaceFlags.o $(BUILD_DIR)/Log.o $(BUILD_DIR)/LightningEntityRegistry.o $(BUILD_DIR)/LightningScriptParser.o $(BUILD_DIR)/LightningScriptContext.o $(BUILD_DIR)/EventBus.o $(BUILD_DIR)/ObjectiveSystem.o $(BUILD_DIR)/GameManager.o $(BUILD_DIR)/miniz.o Source/Server/Server.cpp Source/Server/ServerHttp.cpp Source/World/OzoneParser.cpp -o AngelServ$(EXE) $(SERVER_LIBS) $(LDEXTRA)
 
 # 7b. Build AngelMaster (standalone master server, no raylib)
 AngelMaster: $(BUILD_DIR)/Log.o Source/Server/Master/Master.cpp Source/Network/MasterProtocol.hpp Source/Network/MasterHttp.hpp
@@ -474,7 +474,7 @@ test_network: tests/Network.test.cpp Source/Network/Network.cpp Source/Log.cpp
 # Client.cpp + PlayerProfile.cpp are raylib-free (Client.hpp only pulls
 # Network.hpp), so the pickup round-trip cases drive the REAL client handler and
 # the REAL auth handshake over loopback rather than a hand-rolled stub.
-test_game_state: tests/GameState.test.cpp Source/Server/GameState.cpp Source/World/GameType.cpp Source/World/OzoneParser.cpp Source/World/SurfaceFlags.cpp Source/Network/Network.cpp Source/Log.cpp Source/Script/LightningEntityRegistry.cpp Source/Script/LightningScriptParser.cpp Source/Script/LightningScriptContext.cpp Source/Client/Client.cpp Source/PlayerProfile.cpp
+test_game_state: tests/GameState.test.cpp Source/Server/GameState.cpp Source/World/GameType.cpp Source/World/OzoneParser.cpp Source/World/SurfaceFlags.cpp Source/Network/Network.cpp Source/Log.cpp Source/Script/LightningEntityRegistry.cpp Source/Script/LightningScriptParser.cpp Source/Script/LightningScriptContext.cpp Source/Game/GameManager.cpp Source/Events/ObjectiveSystem.cpp Source/Events/EventBus.cpp Source/Client/Client.cpp Source/PlayerProfile.cpp
 	$(SERVER_CXX) $(TEST_FLAGS) -ISource $^ $(BUILD_DIR)/miniz.o -o $@ $(SERVER_LIBS)
 
 test_ozanim: tests/OzAnim.test.cpp Source/Package/Anim/OzAnimFormat.cpp

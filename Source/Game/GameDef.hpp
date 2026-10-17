@@ -38,6 +38,7 @@ struct MissionDef {
     std::string world;           // GameData/Worlds/<world> to load
     std::string mode;            // gametype key: campaign / cooperative / coop
     std::vector<std::string> objectives;   // ObjectiveDef names, in order
+    std::string next;            // next mission name (campaign graph edge)
     std::string onStart;         // event/action name
     std::string onComplete;
     std::string sourcePath;

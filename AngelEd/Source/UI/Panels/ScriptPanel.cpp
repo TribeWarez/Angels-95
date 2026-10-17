@@ -43,6 +43,12 @@ static bool s_scriptNewMode = false;
 static const char* ScriptFolderForType(const std::string& type) {
     if (type == "weapon") return "Tex/Global/Gun";
     if (type == "pawn") return "Pawn/Pawns";
+    if (type == "game" || type == "campaign") return "Game/Angels95";
+    if (type == "sector")    return "Game/Angels95/Sectors";
+    if (type == "mission")   return "Game/Angels95/Missions";
+    if (type == "objective") return "Game/Angels95/Objectives";
+    if (type == "trigger")   return "Game/Angels95/Triggers";
+    if (type == "event")     return "Game/Angels95/Events";
     return "Tex/Global/Items"; // pickup / consumable / upgrade / armor
 }
 
@@ -70,6 +76,35 @@ static std::string ScriptTemplate(const std::string& name, const std::string& ty
         return "entity \"" + name + "\" : consumable {\n"
                "    stats {\n        value = 25\n    }\n"
                "    actions {\n        on_use {\n            playerstat health += 25\n            consume\n        }\n    }\n}\n";
+    // --- Game-hierarchy types (see Wiki/Game-Hierarchy.md) ---
+    if (type == "game")
+        return "entity \"" + name + "\" : game {\n"
+               "    stats {\n        modes = campaign,cooperative\n"
+               "        start_sector = Sefirah_1_TerranPrime\n        save_enabled = 1\n    }\n}\n";
+    if (type == "campaign")
+        return "entity \"" + name + "\" : campaign {\n"
+               "    stats {\n        game = Angels95\n        sectors = \n    }\n}\n";
+    if (type == "sector")
+        return "entity \"" + name + "\" : sector {\n"
+               "    stats {\n        numerology = 1\n        theme = \n        role = \n"
+               "        skybox = GameData/Tex/Global/Sky/sky_day.png\n        missions = \n    }\n}\n";
+    if (type == "mission")
+        return "entity \"" + name + "\" : mission {\n"
+               "    stats {\n        sector = \n        world = \n        mode = campaign\n"
+               "        objectives = \n    }\n"
+               "    actions {\n        on_start { msg \"Mission start\" }\n"
+               "        on_complete { msg \"Mission complete\" }\n    }\n}\n";
+    if (type == "objective")
+        return "entity \"" + name + "\" : objective {\n"
+               "    stats {\n        type = kill\n        target = Walker\n        count = 5\n    }\n"
+               "    actions {\n        on_complete { msg \"Objective complete\" }\n    }\n}\n";
+    if (type == "trigger")
+        return "entity \"" + name + "\" : trigger {\n"
+               "    stats {\n        topic = trigger.enter\n        once = 1\n        team = 0\n    }\n"
+               "    actions {\n        on_enter { msg \"Triggered\" }\n    }\n}\n";
+    if (type == "event")
+        return "entity \"" + name + "\" : event {\n"
+               "    actions {\n        on_emit { msg \"Event\" }\n    }\n}\n";
     return "entity \"" + name + "\" : upgrade {\n    stats {\n    }\n    actions {\n    }\n}\n";
 }
 
@@ -165,7 +200,8 @@ static LRESULT CALLBACK ScriptMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
             HWND hCombo = CreateWindowEx(0, L"COMBOBOX", L"",
                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST,
                 130, 38, 180, 200, hwnd, (HMENU)(INT_PTR)ID_SCRIPT_NEWTYPE, g_hInst, nullptr);
-            const wchar_t* types[] = { L"weapon", L"pickup", L"pawn", L"skyzone", L"consumable", L"upgrade" };
+            const wchar_t* types[] = { L"weapon", L"pickup", L"pawn", L"skyzone", L"consumable", L"upgrade",
+                                       L"game", L"campaign", L"sector", L"mission", L"objective", L"trigger", L"event" };
             for (auto* t : types) SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)t);
             SendMessage(hCombo, CB_SETCURSEL, 0, 0);
             CreateButton(hwnd, L"Create", 320, 10, 90, 26, ID_SCRIPT_NEWCREATE);
@@ -226,8 +262,10 @@ static LRESULT CALLBACK ScriptMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
             char nameA[128] = {0};
             WideCharToMultiByte(CP_UTF8, 0, nameBuf, -1, nameA, 128, nullptr, nullptr);
             int typeSel = (int)SendMessage(GetDlgItem(hwnd, ID_SCRIPT_NEWTYPE), CB_GETCURSEL, 0, 0);
-            static const char* types[] = { "weapon", "pickup", "pawn", "skyzone", "consumable", "upgrade" };
-            std::string type = (typeSel >= 0 && typeSel < 6) ? types[typeSel] : "pickup";
+            static const char* types[] = { "weapon", "pickup", "pawn", "skyzone", "consumable", "upgrade",
+                                           "game", "campaign", "sector", "mission", "objective", "trigger", "event" };
+            const int typeCount = (int)(sizeof(types) / sizeof(types[0]));
+            std::string type = (typeSel >= 0 && typeSel < typeCount) ? types[typeSel] : "pickup";
             std::string name = nameA;
             while (!name.empty() && (name.front() == ' ' || name.front() == '\t')) name.erase(0, 1);
             while (!name.empty() && (name.back() == ' ' || name.back() == '\t')) name.pop_back();

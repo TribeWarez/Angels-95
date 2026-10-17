@@ -248,6 +248,9 @@ public:
     int server_world_index() const;
     // Whether the most recent WORLD_CHANGE granted the request.
     bool world_change_accepted() const;
+    // The authoritative spawn carried by the last WORLD_CHANGE (optional tail).
+    bool has_world_spawn() const;
+    net::NetVec3 world_spawn() const;
 
     // Worlds the server has issued pickups for (world indices only).
     std::vector<int> pickup_worlds() const;

@@ -36,6 +36,10 @@ public:
 
     const SectorDef*  FindSector(const std::string& name) const;
     const MissionDef* FindMission(const std::string& name) const;
+    // The mission bound to a world (server uses this to seed COOP objectives).
+    const MissionDef* FindMissionByWorld(const std::string& world) const;
+    // The `next` mission's world, or "" (mission graph traversal).
+    std::string NextMissionWorld(const std::string& mission) const;
 
     // The world to load for the campaign's starting mission ("" if none).
     std::string FirstMissionWorld() const;

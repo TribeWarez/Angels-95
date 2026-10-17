@@ -629,6 +629,16 @@ bool OmegaClient::world_change_accepted() const {
     return m_worldChangeAccepted;
 }
 
+bool OmegaClient::has_world_spawn() const {
+    const std::lock_guard<std::mutex> l(m_msg_mutex);
+    return m_hasWorldSpawn;
+}
+
+net::NetVec3 OmegaClient::world_spawn() const {
+    const std::lock_guard<std::mutex> l(m_msg_mutex);
+    return m_worldSpawn;
+}
+
 std::vector<int> OmegaClient::pickup_worlds() const {
     const std::lock_guard<std::mutex> l(m_msg_mutex);
     std::vector<int> out;

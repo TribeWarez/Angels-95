@@ -17,3 +17,13 @@ playerstart 0 0 0 0
 light directional 50 50 80 200 205 215 0.3
 
 zone sky -60 -60 -30 60 60 60 1 name=SoulEater_Vaults_sky
+
+# COOP content (scaffold): NPCs + pickups so objectives are completable.
+npc Walker 10 10 0
+npc Walker -10 10 0
+npc Walker 10 -10 0
+npc Walker -10 -10 0
+npc Walker 0 20 0
+pickup pistol_01 5 0 0
+pickup rifle_01 -5 0 0
+pickup etheral_waver 0 -5 0

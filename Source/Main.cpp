@@ -766,6 +766,22 @@ ShowSpellbook = false;
             OZ_INFO("Network: server moved us to world %d (accepted=%d, was %d)",
                     world_index, (int)accepted, g_network_world_index);
             g_network_world_index = world_index;
+            // Load the world the server moved us to (index -> name). A
+            // server-driven COOP mission transition arrives here.
+            if (world_index < (int)g_serverWorldNames.size()) {
+                const std::string& wn = g_serverWorldNames[world_index];
+                if (!wn.empty() && wn != g_world_to_load) {
+                    strncpy(g_world_to_load, wn.c_str(), sizeof(g_world_to_load) - 1);
+                    g_world_to_load[sizeof(g_world_to_load) - 1] = '\0';
+                    // Apply the authoritative spawn if the server sent one.
+                    if (g_client.has_world_spawn()) {
+                        net::NetVec3 sp = g_client.world_spawn();
+                        g_portalSpawnPos = {sp.x, sp.y, sp.z};
+                        g_portalTransitionPending = true;
+                    }
+                    SetSceneFlag = true;
+                }
+            }
         } else if (!accepted) {
             // Refused: we are already where the server thinks we are, so the index is
             // right. Worth logging because the client's own world did NOT change and a
