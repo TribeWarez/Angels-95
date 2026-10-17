@@ -455,6 +455,15 @@ public:
     // objectives or all have transitioned (mission complete).
     int current_mission_world_index() const;
 
+    // --campaign opt-in (Server.cpp sets this BEFORE init_worlds). OFF =
+    // classic co-op: init_worlds seeds no objectives (neither a `: mission`
+    // def nor the ClearArea fallback — both arrived with the campaign arc),
+    // joiners land in world 0, and Server.cpp skips the coordinated mission
+    // transition. The flag lives here rather than in argv so tests can pin
+    // both sides.
+    void set_campaign_enabled(bool on) { m_campaignEnabled = on; }
+    bool campaign_enabled() const { return m_campaignEnabled; }
+
     // Respawned pickups notifier (consumed by server for broadcast)
     struct RespawnedPickupInfo { int world_index; int pickup_id; };
     std::vector<RespawnedPickupInfo> consume_respawned_pickups() {
@@ -482,6 +491,7 @@ private:
     bool m_friendly_fire = false;              // from world levelinfo (friendlyFire)
     oz::gametype::GameTypeInfo m_gameTypeInfo; // resolved per-world from levelinfo + .ozls override
     std::string m_gamedata_dir;                // captured by init_worlds for save/load
+    bool m_campaignEnabled = false;            // --campaign (default OFF = classic co-op)
     uint32_t m_next_player_id = 1;
     uint32_t m_tick_count = 0;
     std::vector<WorldState> m_worlds;

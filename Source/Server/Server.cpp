@@ -53,6 +53,7 @@ std::vector<std::string> g_master_udp;   // --master host[:port]
 std::vector<std::string> g_master_http;  // --master-http http://host:port
 std::string g_public_ip;                 // --public-ip (NAT)
 std::string g_bind_ip;                   // --bind (default = all interfaces)
+bool g_campaign = false;                 // --campaign (mission arc; default OFF)
 
 std::string current_map_name() {
     return g_world_list.empty() ? std::string("unknown") : g_world_list[0];
@@ -997,12 +998,14 @@ int main(int argc, char** argv) {
             g_master_http.push_back(argv[++i]);
         else if (strcmp(argv[i], "--public-ip") == 0 && i + 1 < argc)
             g_public_ip = argv[++i];
+        else if (strcmp(argv[i], "--campaign") == 0)
+            g_campaign = true;
         else if (strcmp(argv[i], "--help") == 0) {
             printf("AngelServ -- OzWorld/OmegaTech dedicated server\n");
             printf("Usage: AngelServ [--port P] [--http-port P] [--dir GameData]"
                    " [--bind IP|HOST] [--auth-token T] [--admin-token T]\n");
             printf("                  [--server-name NAME] [--master host[:port]]"
-                   " [--master-http URL] [--public-ip IP]\n");
+                   " [--master-http URL] [--public-ip IP] [--campaign]\n");
             printf("  --bind         Interface for UDP+HTTP (default 0.0.0.0 = all).\n");
             printf("  --auth-token   Require Bearer auth for the HTTP API (env: OZ_AUTH_TOKEN)\n");
             printf("  --admin-token  Enable admin COMMANDs (list/say/kick; env: OZ_ADMIN_TOKEN)\n");
@@ -1010,6 +1013,9 @@ int main(int argc, char** argv) {
             printf("  --master       Master UDP heartbeat target, repeatable (default port 27900)\n");
             printf("  --master-http  Master HTTP heartbeat URL, repeatable (plain http:// only)\n");
             printf("  --public-ip    Public IP to announce when behind NAT (master can override)\n");
+            printf("  --campaign     Run the campaign arc: seed mission objectives, join at the\n");
+            printf("                 mission frontier, advance worlds when objectives complete\n");
+            printf("                 (default OFF = plain co-op: no objectives, join in world 0)\n");
             printf("  Config file:   System/OzServer.ini ([Server]/[Auth]/[MasterServers]; CLI overrides)\n");
             return 0;
         }
@@ -1039,6 +1045,16 @@ int main(int argc, char** argv) {
         OZ_WARN("HTTP API is OPEN (no --auth-token): /map /worlds /status /players are public");
     if (g_admin_token.empty())
         OZ_WARN("Admin COMMANDs disabled (no --admin-token)");
+
+    // Campaign arc is OPT-IN. Applied BEFORE init_worlds (it gates objective
+    // seeding); current_mission_world_index() and the coordinated transition
+    // read the same flag later. OFF is classic co-op: one world, no objectives.
+    g_game_state.set_campaign_enabled(g_campaign);
+    OZ_INFO("Campaign mode: %s", g_campaign
+                ? "ON (--campaign): mission objectives seeded, joiners start at the "
+                  "mission frontier, worlds advance on completion"
+                : "OFF (default): no objectives, joiners start in world 0; pass "
+                  "--campaign to run the mission arc");
 
     // Scan worlds
     scan_worlds(g_gamedata_dir + "/Worlds");
@@ -1087,8 +1103,9 @@ int main(int argc, char** argv) {
     }
 
     // Initialize game state with worlds. The game hierarchy (GameData/Game) is
-    // loaded first so init_worlds can seed each world's COOP objectives from its
-    // `: mission` def.
+    // loaded first so init_worlds CAN seed each world's COOP objectives from
+    // its `: mission` def — the seeding only runs when --campaign set the flag
+    // above; without it no world carries objectives at all.
     LightningEntityRegistry::Instance().Init();
     oz::game::GameManager::Instance().Init();
     oz::game::RegisterGameBoxedTypes();
@@ -1129,8 +1146,11 @@ int main(int argc, char** argv) {
 
             // Coordinated COOP mission transition: when a world's objectives are
             // all complete, move every player in that world to the mission's
-            // `next` world (GameManager graph). Fires once per world.
-            {
+            // `next` world (GameManager graph). Fires once per world. --campaign
+            // only — with the default OFF no objectives were seeded, so the loop
+            // would never fire anyway; the explicit gate keeps that true even if
+            // another objective source appears later.
+            if (g_game_state.campaign_enabled()) {
                 auto& gm = oz::game::GameManager::Instance();
                 if (gm.Loaded()) {
                     for (auto& ws : g_game_state.worlds()) {

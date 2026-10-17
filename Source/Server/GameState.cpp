@@ -213,10 +213,16 @@ void GameState::init_worlds(const std::string& gamedata_dir,
         if (ws.global_npcs.empty() && ws.global_pickups.empty())
             init_global_npcs_and_pickups(ws);
 
-        // COOP / Campaign objectives. Prefer the mission def from the game
-        // hierarchy (`: mission` -> `: objective` counts); fall back to a default
-        // "clear the area" when the world is not part of the hierarchy.
-        {
+        // COOP / Campaign objectives — ONLY behind --campaign (default OFF).
+        // The ClearArea fallback arrived in the same hierarchy commits as the
+        // mission arc (e0d1519/7c27cdb), so both are campaign content: with
+        // the flag OFF this world keeps zero objectives, nothing goes out as
+        // OBJECTIVE_STATE, and current_mission_world_index() plus Server's
+        // coordinated transition stay inert.
+        if (m_campaignEnabled) {
+            // Prefer the mission def from the game hierarchy (`: mission` ->
+            // `: objective` counts); fall back to a default "clear the area"
+            // when the world is not part of the hierarchy.
             const bool coop =
                 ws.gameTypeInfo.id == oz::gametype::GameType::COOP ||
                 ws.gameTypeInfo.id == oz::gametype::GameType::COOPERATIVE ||
@@ -668,6 +674,11 @@ WorldState* GameState::get_world(int idx) {
 }
 
 int GameState::current_mission_world_index() const {
+    // --campaign OFF: joiners land in world 0. The seed gate already leaves
+    // every objective list empty, so the loop below would fall through to 0
+    // anyway — the explicit early-out states the gate and defends against any
+    // future objective source.
+    if (!m_campaignEnabled) return 0;
     for (const auto& ws : m_worlds) {
         if (!ws.objectives.empty() && !ws.mission_transitioned)
             return ws.world_index;

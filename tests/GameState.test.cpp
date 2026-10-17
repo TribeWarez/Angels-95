@@ -17,6 +17,8 @@
 #include <unordered_map>
 #include <thread>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 
 static int tests_total = 0, tests_passed = 0;
 #define TEST(name) do { tests_total++; fprintf(stdout, "  TEST: %s ... ", name);
@@ -1177,6 +1179,88 @@ static int test_objective_id_fits_wire_field() {
     PASS(); return 0; END_TEST();
 }
 
+// --- Campaign gating (--campaign opt-in, Phase G) ---
+
+static int test_campaign_flag_defaults_off() {
+    TEST("--campaign flag defaults OFF and round-trips");
+    GameState gs;
+    CHECK(!gs.campaign_enabled());          // default OFF = classic co-op
+    gs.set_campaign_enabled(true);
+    CHECK(gs.campaign_enabled());
+    gs.set_campaign_enabled(false);
+    CHECK(!gs.campaign_enabled());
+    PASS(); return 0; END_TEST();
+}
+
+// Join placement reads the same flag: with the campaign OFF a new player lands
+// in world 0 even when a world holds live objectives. The seed gate already
+// leaves every objective list empty in that mode, so this is belt-and-braces —
+// it pins the gate itself against any future objective source (which is the
+// reason the flag lives on GameState instead of buried in argv).
+static int test_campaign_gates_frontier_placement() {
+    TEST("--campaign gates current_mission_world_index (join placement)");
+    GameState gs;
+    WorldState ws = make_test_world(1);
+    WorldState::Objective o;
+    o.id = "GateObj";
+    o.type = "kill";
+    o.target = 5;
+    ws.objectives.push_back(o);
+    gs.worlds().push_back(ws);
+
+    // OFF (default): world 0 regardless of objectives.
+    CHECK_EQ(gs.current_mission_world_index(), 0);
+
+    // ON: the frontier — first world with objectives not yet transitioned.
+    gs.set_campaign_enabled(true);
+    CHECK_EQ(gs.current_mission_world_index(), 1);
+
+    // ON, mission complete (all transitioned): back to world 0.
+    gs.worlds()[0].mission_transitioned = true;
+    CHECK_EQ(gs.current_mission_world_index(), 0);
+
+    gs.set_campaign_enabled(false);
+    PASS(); return 0; END_TEST();
+}
+
+// The seed gate itself: init_worlds seeds nothing when the flag is OFF
+// (default) and the coop ClearArea fallback when ON. The fixture world carries
+// gametype=cooperative because NO shipped world sets gametype= at all — a real
+// world would make the ON half vacuous. With no entities the procedural
+// fallback spawns 10 NPCs, so ClearArea's target is nonzero.
+static int test_campaign_gates_objective_seeding() {
+    TEST("--campaign gates objective seeding in init_worlds");
+    namespace fs = std::filesystem;
+    const fs::path worldDir = fs::path("build_test_gamedata") / "Worlds" / "CampaignGateTest";
+    fs::create_directories(worldDir);
+    {
+        std::ofstream out((worldDir / "World.ozone").string());
+        out << "levelinfo 0 8 5 0 10 50 0 gametype=cooperative\n";
+    }
+
+    {   // OFF (default): no objectives, no mission.
+        GameState gs;
+        gs.init_worlds("build_test_gamedata", {"CampaignGateTest"});
+        CHECK_EQ(gs.world_count(), 1);
+        CHECK(gs.worlds()[0].objectives.empty());
+        CHECK(gs.worlds()[0].mission.empty());
+    }
+    {   // ON: the coop fallback seeds ClearArea against the procedural NPCs.
+        GameState gs;
+        gs.set_campaign_enabled(true);
+        gs.init_worlds("build_test_gamedata", {"CampaignGateTest"});
+        CHECK_EQ(gs.world_count(), 1);
+        CHECK_EQ((int)gs.worlds()[0].objectives.size(), 1);
+        if (!gs.worlds()[0].objectives.empty()) {
+            CHECK(gs.worlds()[0].objectives[0].id == "ClearArea");
+            CHECK(gs.worlds()[0].objectives[0].target > 0);
+        }
+    }
+
+    fs::remove_all(worldDir);
+    PASS(); return 0; END_TEST();
+}
+
 int main() {
     // Unbuffered: when a suite dies without a summary line, a piped stdout keeps
     // the last "TEST:" line in the log, which is what names the culprit (the
@@ -1214,6 +1298,9 @@ int main() {
     failures += test_pickup_state_cleared_on_disconnect();
     failures += test_log_calls_have_no_duplicate_args();
     failures += test_objective_id_fits_wire_field();
+    failures += test_campaign_flag_defaults_off();
+    failures += test_campaign_gates_frontier_placement();
+    failures += test_campaign_gates_objective_seeding();
 
     fprintf(stdout, "===============\n");
     fprintf(stdout, "%d/%d passed, %d failed\n",
