@@ -354,9 +354,14 @@ Key source files:
 | `Source/Renderer/ViewModel.cpp/.hpp` | First-person weapon view-model: attached to the camera, Idle/Fire/Reload clips + procedural recoil kick / reload dip |
 
 Weapon `stats` may set `viewmodel_mesh`, `viewmodel_texture`,
-`viewmodel_offset/rot/scale`, `recoil`, and per-weapon `projectile_mesh` /
+`viewmodel_offset/rot/scale`, `recoil`, `viewmodel_skeletal` (`1` = force
+skeletal playback, `-1` = force static, absent/0 = auto — auto enables it only
+when `oz::BoneIdsFitSkeleton()` confirms every vertex bone index fits the
+model's loaded skeleton, so a `boneIds`-with-no-skeleton mesh stays static),
+and per-weapon `projectile_mesh` /
 `projectile_submesh` / `projectile_scale` / `projectile_color` for drawn
-tracers. FBX art is converted via `tools/convert_fbx.ps1` (FBX2glTF) and
+tracers. `play_clip` also reaches the view-model when the command matches the
+held weapon def. FBX art is converted via `tools/convert_fbx.ps1` (FBX2glTF) and
 `tools/merge_glb_anims.py` folds Fire/Reload/Idle clips into one `.glb`.
 
 Pickup types come from the LightningScript entity registry (`.ozls` definitions).

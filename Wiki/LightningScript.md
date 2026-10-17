@@ -208,7 +208,7 @@ need the camera or world loader are drained by `Core.hpp`.
 | `change_world` | `change_world "Dust_Ravine"` | Request a world load. |
 | `apply_area_damage` | `apply_area_damage <radius> <damage>` | Damage pawns around the player. |
 | `spawn_projectile` | `spawn_projectile <speed> <damage> <life> [count] [spread]` | Fire a projectile from the player. |
-| `play_clip` | `play_clip "Attack"` | Reserved: animation clip (logged no-op until Phase 2). |
+| `play_clip` | `play_clip "Attack"` | Plays a named one-shot skeletal clip and returns to Idle. Two legs: a forced clip on matching pawns (`PawnSystem::PlayPawnClip`), and — when the command matches the held weapon def — the first-person view-model (`ViewModel::PlayClip`). The no-pawn warn fires only when neither leg plays. |
 
 ### Events (subscription)
 

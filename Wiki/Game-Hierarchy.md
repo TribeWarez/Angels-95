@@ -226,14 +226,23 @@ hardcoded switch. Game types register from `Source/Game/GameBoxedTypes.cpp`.
     (engine registers its own types there); zone enter/exit is fully on the bus
     (the direct `TriggerZoneAction` call sites are gone — `zone.enter`/`zone.exit`
     dispatch `on_zone_enter`/`on_zone_exit` or fall back to `on_enter`/`on_exit`,
-    and declarative zone env is applied by the bridge); `play_clip` plays a
-    forced one-shot skeletal clip on matching pawns (`PawnSystem::PlayPawnClip`).
+    and declarative zone env is applied by the bridge); `play_clip` is two-leg —
+    a forced one-shot skeletal clip on matching pawns
+    (`PawnSystem::PlayPawnClip`) plus, when the command matches the held weapon
+    def, the first-person view-model (`ViewModel::PlayClip`, returns to Idle);
+    the no-pawn warn fires only when neither leg plays. The zone bridge is the
+    SINGLE path for enter/exit: exit always emits before enter (an A→B step
+    fires `on_exit`(A) then `on_enter`(B)), duplicate enters are guarded on the
+    def name (`m_activeEnvZoneDef`), and the exit clears it name-matched. Do
+    not add a second emitter.
 - **Phase 2 — core landed.** `GameManager` loads the hierarchy from the registry
   (`: game`/`: campaign`/`: sector`/`: mission`), resolves sectors/missions, and
   seeds `ObjectiveSystem` for the active mission. Client: the **Campaign title-
   menu pane** lists sectors and their missions (immediate-mode click starts the
   mission), plus the `/campaign [mission]` console command; the active mission
-  persists in `GameData/Saves/Campaign.sav`. Editor: the Script Manager's "New
+  persists in `GameData/Saves/Campaign.sav` (v1: a `campaign=`/`mission=`
+  header; legacy v0 files still load, an unknown version is rejected → a
+  fresh start rather than a guess). Editor: the Script Manager's "New
   Script" type list + folder map include the new def types
   (`Game/Angels95/{Sectors,Missions,Objectives,Triggers,Events}`).
   Test: `tests/GameManager.test.cpp`.
@@ -241,10 +250,19 @@ hardcoded switch. Game types register from `Source/Game/GameBoxedTypes.cpp`.
 - **Phase 3 — content (placeholder).** The 14 sub-sector worlds are populated
   with NPCs and pickups so their missions' objectives are completable; real
   geometry/art is still open.
-- **Phase 4 — COOP (substantial).** Per-world rules live in `WorldState`
+- **Phase 4 — COOP (substantial).** **The whole arc is `--campaign` OPT-IN**
+  on the server; the default OFF is classic per-world co-op — no objectives
+  seeded (neither a `: mission` def nor the `ClearArea` fallback, which
+  arrived in the same work and is campaign content too), joiners land in
+  world 0, and the transition below never fires. The flag lives on
+  `GameState` (not argv) so unit tests pin both sides. With the flag ON:
+  per-world rules live in `WorldState`
   (last-world-wins bug fixed; world 0 mirrors into the global match). Server
   loads the game hierarchy and seeds each world's objectives from its `: mission`
-  def (falling back to a `ClearArea` objective). Objectives are advanced by
+  def (falling back to a `ClearArea` objective); objective ids are bounded
+  to the `OBJECTIVE_STATE` wire field (`net::ObjectiveIdFits` /
+  `net::kObjectiveIdMax`, warned once at seed time — a longer id would
+  truncate on the wire with no error anywhere). Objectives are advanced by
   gameplay — `kill` on NPC death, `collect` on pickup — and broadcast as
   `OBJECTIVE_STATE` (~1 Hz) which the client mirrors and shows in the HUD. The
   server reads each world's first `playerstart` and sends it in `WORLD_CHANGE`,
