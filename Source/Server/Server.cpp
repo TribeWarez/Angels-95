@@ -1214,7 +1214,7 @@ int main(int argc, char** argv) {
                 double now = static_cast<double>(time(nullptr));
                 bool matchOver = g_game_state.match_over();
                 if (now - lastScoreBroadcast >= 1.0 || matchOver) {
-                    for (auto& p : g_game_state.players()) {
+                    for (const auto& p : g_game_state.players()) {
                         if (!p.connected) continue;
                         net::ScoreStateData ss{};
                         ss.player_id = p.id;
@@ -1229,7 +1229,12 @@ int main(int argc, char** argv) {
                         msg.sequence = 0;
                         msg.timestamp = static_cast<uint32_t>(now);
                         memcpy(msg.payload, &ss, sizeof(ss));
-                        g_game_server->broadcast_message(msg);
+                        // Look up the wire-level player to send to.
+                        for (const auto& np : g_game_server->players()) {
+                            if (np.id != p.id) continue;
+                            g_game_server->send_message(const_cast<net::NetworkPlayer&>(np), msg);
+                            break;
+                        }
                     }
 
                     // COOP objectives: one message per objective, per world. The
@@ -1249,7 +1254,12 @@ int main(int argc, char** argv) {
                             msg.sequence = 0;
                             msg.timestamp = static_cast<uint32_t>(now);
                             memcpy(msg.payload, &os, sizeof(os));
-                            g_game_server->broadcast_message(msg);
+                            for (const auto& np : g_game_server->players()) {
+                                ServerPlayer* sp = g_game_state.get_player(np.id);
+                                if (sp && sp->world_index != ws.world_index) continue;
+                                net::NetworkPlayer npp = np;
+                                g_game_server->send_message(npp, msg);
+                            }
                         }
                     }
                     if (matchOver) {
@@ -1287,7 +1297,11 @@ int main(int argc, char** argv) {
                         bmsg.sequence = 0;
                         bmsg.timestamp = static_cast<uint32_t>(time(nullptr));
                         memcpy(bmsg.payload, &nsud, sizeof(nsud));
-                        g_game_server->broadcast_message(bmsg);
+                        for (const auto& np : g_game_server->players()) {
+                            ServerPlayer* sp = g_game_state.get_player(np.id);
+                            if (sp && sp->world_index != world.world_index) continue;
+                            g_game_server->send_message(np, bmsg);
+                        }
                     }
                     // Partition NPCs
                     for (const auto& part : world.partitions) {
@@ -1302,7 +1316,11 @@ int main(int argc, char** argv) {
                             bmsg.sequence = 0;
                             bmsg.timestamp = static_cast<uint32_t>(time(nullptr));
                             memcpy(bmsg.payload, &nsud, sizeof(nsud));
-                            g_game_server->broadcast_message(bmsg);
+                            for (const auto& np : g_game_server->players()) {
+                                ServerPlayer* sp = g_game_state.get_player(np.id);
+                                if (sp && sp->world_index != world.world_index) continue;
+                                g_game_server->send_message(np, bmsg);
+                            }
                         }
                     }
                 }

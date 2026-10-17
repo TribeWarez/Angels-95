@@ -677,6 +677,10 @@ void GameState::tick_npcs(WorldState& ws, float dt) {
 
         for (auto& pp : m_players) {
             if (!pp.connected) continue;
+            // COOP: a global NPC (part_idx < 0) must not aggro a player in a
+            // different world — all worlds are authored near the origin, so a
+            // naive distance check would pull NPCs across world boundaries.
+            if (pp.world_index != ws.world_index) continue;
             if (part_idx >= 0) {
                 // Check if the player is in one of the nearby partitions
                 int pp_part = get_partition_index(ws, pp.position.x, pp.position.z);
