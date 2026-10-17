@@ -22,6 +22,8 @@
 #include "Events/EventBus.hpp"
 #include "Events/TriggerSystem.hpp"
 #include "Game/GameManager.hpp"
+#include "Game/GameBoxedTypes.hpp"
+#include "Game/GameOpcodes.hpp"
 
 #include "raymath.h"
 #include "Renderer/rlights/rlights.h"
@@ -651,6 +653,8 @@ void OmegaTechInit()
     // Phase 2: load the Angels95 game hierarchy (: game / : campaign / : sector
     // / : mission) now that the registry has parsed every .ozls def.
     oz::game::GameManager::Instance().Init();
+    oz::game::RegisterGameBoxedTypes();
+    oz::game::RegisterGameOpcodes();
 
     // Initialize engine/item texture mapper (must be before EngineBillboard::Init)
     AssetMapper::Instance().Init();

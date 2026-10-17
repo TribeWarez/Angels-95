@@ -595,77 +595,51 @@ void ParseOzoneEntities(const std::vector<OzonePrimitive>& primitives,
 namespace {
 
 void InjectPlayerStarts(const oz::boxed::BoxedInjectContext& c) {
-    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
-    auto& p = *static_cast<PawnSystem*>(c.pawns);
-    for (const auto& n : e.playerStarts) p.AddPlayerStart(n);
+    for (const auto& n : c.entities->playerStarts) c.pawns->AddPlayerStart(n);
 }
 void InjectPickups(const oz::boxed::BoxedInjectContext& c) {
-    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
-    auto& p = *static_cast<PawnSystem*>(c.pawns);
-    for (const auto& n : e.pickups) p.AddPickup(n);
+    for (const auto& n : c.entities->pickups) c.pawns->AddPickup(n);
 }
 void InjectZones(const oz::boxed::BoxedInjectContext& c) {
-    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
-    auto& z = *static_cast<ZoneManager*>(c.zones);
-    for (const auto& n : e.zones) z.AddZone(n);
+    for (const auto& n : c.entities->zones) c.zones->AddZone(n);
 }
 void InjectSkyZones(const oz::boxed::BoxedInjectContext& c) {
-    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
-    auto& p = *static_cast<PawnSystem*>(c.pawns);
-    for (const auto& n : e.skyZones) p.AddSkyZone(n);
+    for (const auto& n : c.entities->skyZones) c.pawns->AddSkyZone(n);
 }
 void InjectPortals(const oz::boxed::BoxedInjectContext& c) {
-    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
-    auto& z = *static_cast<ZoneManager*>(c.zones);
-    for (const auto& n : e.portals) z.AddPortal(n);
+    for (const auto& n : c.entities->portals) c.zones->AddPortal(n);
 }
 void InjectLights(const oz::boxed::BoxedInjectContext& c) {
-    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
-    auto& p = *static_cast<PawnSystem*>(c.pawns);
-    for (const auto& n : e.lights) p.AddLight(n);
+    for (const auto& n : c.entities->lights) c.pawns->AddLight(n);
 }
 void InjectMeshObjects(const oz::boxed::BoxedInjectContext& c) {
-    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
-    auto& p = *static_cast<PawnSystem*>(c.pawns);
-    for (const auto& n : e.meshObjects) p.AddMeshObject(n);
+    for (const auto& n : c.entities->meshObjects) c.pawns->AddMeshObject(n);
 }
 void InjectPathNodes(const oz::boxed::BoxedInjectContext& c) {
-    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
-    auto& p = *static_cast<PawnSystem*>(c.pawns);
-    for (const auto& n : e.pathNodes) p.AddPathNode(n);
+    for (const auto& n : c.entities->pathNodes) c.pawns->AddPathNode(n);
 }
 void InjectWindZones(const oz::boxed::BoxedInjectContext& c) {
-    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
-    auto& p = *static_cast<PawnSystem*>(c.pawns);
-    for (const auto& n : e.windZones) p.AddWindZone(n);
+    for (const auto& n : c.entities->windZones) c.pawns->AddWindZone(n);
 }
 void InjectParticleEmitters(const oz::boxed::BoxedInjectContext& c) {
-    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
-    auto& p = *static_cast<PawnSystem*>(c.pawns);
-    for (const auto& n : e.particleEmitters) p.AddParticleEmitter(n);
+    for (const auto& n : c.entities->particleEmitters) c.pawns->AddParticleEmitter(n);
 }
 void InjectEmitters(const oz::boxed::BoxedInjectContext& c) {
-    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
-    auto& p = *static_cast<PawnSystem*>(c.pawns);
-    for (const auto& n : e.emitters) p.AddEmitter(n);
+    for (const auto& n : c.entities->emitters) c.pawns->AddEmitter(n);
 }
 void InjectTriggers(const oz::boxed::BoxedInjectContext& c) {
-    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
-    auto& trig = *static_cast<oz::events::TriggerSystem*>(c.triggers);
-    for (const auto& t : e.triggers) {
+    for (const auto& t : c.entities->triggers) {
         oz::events::TriggerVolume v;
         v.defName = t.defName;
         v.minX = t.bounds.min.x; v.minY = t.bounds.min.y; v.minZ = t.bounds.min.z;
         v.maxX = t.bounds.max.x; v.maxY = t.bounds.max.y; v.maxZ = t.bounds.max.z;
         v.once = t.once;
         v.team = t.team;
-        trig.AddTrigger(v);
+        c.triggers->AddTrigger(v);
     }
 }
 void InjectPawnSpawns(const oz::boxed::BoxedInjectContext& c) {
-    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
-    auto& p = *static_cast<PawnSystem*>(c.pawns);
-    for (const auto& req : e.pawnSpawns) p.Spawn(req.position, req.defName.c_str());
+    for (const auto& req : c.entities->pawnSpawns) c.pawns->Spawn(req.position, req.defName.c_str());
 }
 
 void RegisterEngineBoxedTypes() {

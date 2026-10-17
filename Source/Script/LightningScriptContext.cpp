@@ -609,11 +609,29 @@ bool LightningScriptContext::ExecuteNext() {
         m_pc++;
 
     } else {
-        OZ_WARN("LightningScript: unknown opcode '%s' at line %d", opcode.c_str(), m_pc);
-        m_pc++;
+        // Fall back to registered game-specific opcode handlers.
+        auto it = m_opcodeHandlers.find(opcode);
+        if (it != m_opcodeHandlers.end() && it->second) {
+            std::istringstream ls(line);
+            std::string tok;
+            ls >> tok; // skip opcode token
+            if (it->second(ls)) {
+                // Handler consumed the opcode; pc already advanced or not.
+            } else {
+                m_pc++;
+            }
+        } else {
+            OZ_WARN("LightningScript: unknown opcode '%s' at line %d", opcode.c_str(), m_pc);
+            m_pc++;
+        }
     }
 
     return m_pc < (int)m_lines.size();
+}
+
+void LightningScriptContext::RegisterOpcode(const std::string& name, OpcodeHandler handler) {
+    if (!handler) return;
+    m_opcodeHandlers[name] = std::move(handler);
 }
 
 void LightningScriptContext::Reset() {

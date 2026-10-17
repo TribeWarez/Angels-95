@@ -138,7 +138,10 @@ enum class MessageType : uint32_t {
     // Server -> client (COOP): one world objective's progress. Sent periodically
     // for the player's own world (like SCORE_STATE) and on join, so a lost
     // datagram self-heals. Additive; no PROTOCOL_VERSION bump.
-    OBJECTIVE_STATE = 29
+    OBJECTIVE_STATE = 29,
+    // --- Party / lobby (Phase 4 scaffold) ---
+    PARTY_HELLO = 30,   // C->S  request to join/create a party
+    PARTY_STATE = 31,   // S->C  party membership snapshot
 };
 
 // Melee stamina: the server keeps its own pool per player so a swinging client
@@ -348,6 +351,13 @@ struct ObjectiveStateData {
     int  progress;
     int  target;           // <= 0 = binary objective
     char id[32];           // objective id (null-terminated)
+};
+
+// --- Party / lobby (Phase 4 scaffold) ---
+constexpr size_t kMaxName = PLAYER_NAME_MAX;
+struct PartyHelloData {
+    char displayName[kMaxName];   // untrusted; server sanitises
+    int  requested_team;          // untrusted hint
 };
 
 struct XpUpdateData {

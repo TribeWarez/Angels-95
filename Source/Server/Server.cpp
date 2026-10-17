@@ -7,6 +7,8 @@
 #include "../World/OzoneParser.hpp"
 #include "GameState.hpp"
 #include "../Game/GameManager.hpp"
+#include "../Game/GameBoxedTypes.hpp"
+#include "../Game/GameOpcodes.hpp"
 #include "../Script/LightningEntityRegistry.hpp"
 #include "../Log.hpp"
 #include "../IniConfig.hpp"
@@ -1089,6 +1091,8 @@ int main(int argc, char** argv) {
     // `: mission` def.
     LightningEntityRegistry::Instance().Init();
     oz::game::GameManager::Instance().Init();
+    oz::game::RegisterGameBoxedTypes();
+    oz::game::RegisterGameOpcodes();
     g_game_state.init_worlds(g_gamedata_dir, g_world_list);
     {
         std::lock_guard<std::mutex> lock(g_print_mutex);

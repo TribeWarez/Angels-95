@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <cstdint>
 #include <functional>
+#include <sstream>
 
 // LightningScriptContext — per-instance script execution engine
 // Refactored from Source/Parasite/ParasiteScript.hpp
@@ -35,6 +36,13 @@ public:
 
     // Execute one instruction, advance program counter
     bool ExecuteNext();
+
+    // Register an opcode handler (game-specific opcodes plug in here).
+    // The handler receives the current line parsed as an istringstream.
+    // Return true if the opcode was consumed (pc was advanced), false to fall
+    // through to the unknown-opcode warning.
+    using OpcodeHandler = std::function<bool(std::istringstream&)>;
+    void RegisterOpcode(const std::string& name, OpcodeHandler handler);
 
     // Rewind program counter to start
     void Reset();
@@ -168,6 +176,9 @@ private:
     // Jump labels: label_name → line_index
     std::unordered_map<std::string, int> m_jumpLabels;
     std::string m_debugTag;
+
+    // Game-specific opcode handlers (registered via RegisterOpcode)
+    std::unordered_map<std::string, OpcodeHandler> m_opcodeHandlers;
 
     // Internal: evaluate a condition string (e.g. "$x > 5")
     bool EvalCondition(const std::string& cond);
