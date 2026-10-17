@@ -2,6 +2,7 @@
 
 #include "../Script/LightningEntityRegistry.hpp"
 #include "../Events/ObjectiveSystem.hpp"
+#include "../Log.hpp"
 
 #include <sstream>
 
@@ -180,13 +181,44 @@ std::string GameManager::ActiveSector() const {
 
 std::string GameManager::SerializeState() const {
     if (m_activeMission.empty()) return {};
-    return "mission=" + m_activeMission;
+    // campaign=<version> first so a future reader can reject a format it does
+    // not understand instead of misreading it; mission= follows. v1 = this
+    // two-line layout. A file with NO campaign= line is the legacy single-line
+    // format (implicit v0) and still loads.
+    return "campaign=1\nmission=" + m_activeMission;
 }
 
 bool GameManager::DeserializeState(const std::string& data) {
-    const std::string key = "mission=";
-    if (data.rfind(key, 0) != 0) return false;
-    return !SetActiveMission(data.substr(key.size())).empty();
+    // Line-wise parse: the file used to be the single line "mission=<name>"
+    // and Core.hpp read only its first line; it now reads the whole file so
+    // the version line survives. Unknown keys are ignored (the format can
+    // grow); an unknown campaign= version is rejected outright - a future
+    // field could change what mission= means, and guessing is worse than
+    // starting fresh.
+    int version = 0;
+    std::string mission;
+    std::istringstream in(data);
+    std::string line;
+    while (std::getline(in, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        const std::string ckey = "campaign=";
+        if (line.rfind(ckey, 0) == 0) {
+            try      { version = std::stoi(line.substr(ckey.size())); }
+            catch (...) { version = -1; }
+            continue;
+        }
+        const std::string mkey = "mission=";
+        if (line.rfind(mkey, 0) == 0) {
+            mission = line.substr(mkey.size());
+            continue;
+        }
+    }
+    if (version != 0 && version != 1) {
+        OZ_WARN("Campaign.sav: version %d not understood (supported: legacy, 1) - "
+                "starting fresh", version);
+        return false;
+    }
+    return !SetActiveMission(mission).empty();
 }
 
 } // namespace game

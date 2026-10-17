@@ -54,7 +54,10 @@ public:
     const std::string& ActiveMission() const { return m_activeMission; }
     std::string ActiveSector() const;
 
-    // Persistence: "mission=<name>" (the campaign save).
+    // Persistence: the campaign save (GameData/Saves/Campaign.sav).
+    // v1 format: "campaign=1\nmission=<name>". A file with no campaign= line
+    // is the legacy single-line format and still loads; an unknown version is
+    // rejected (returns false) so a future layout is never misread.
     std::string SerializeState() const;
     bool DeserializeState(const std::string& data);
 

@@ -58,9 +58,37 @@ static int test_campaign_state_roundtrip() {
     TEST("campaign state round-trips");
     auto& gm = oz::game::GameManager::Instance();
     std::string blob = gm.SerializeState();
+    // v1 layout: version line first so a future format is detectable.
+    CHECK(blob.rfind("campaign=1\nmission=", 0) == 0);
     gm.SetActiveMission("Sektor_02_MegacityGrid");
     CHECK(gm.DeserializeState(blob));
     CHECK(gm.ActiveMission() == "Sektor_01_SilentPines");
+    PASS(); return 0; END_TEST();
+}
+
+static int test_campaign_save_versioning() {
+    TEST("legacy format loads, unknown version rejected, extra keys ignored");
+    auto& gm = oz::game::GameManager::Instance();
+
+    // Legacy v0: the whole file is one mission= line (pre-versioning saves).
+    CHECK(gm.DeserializeState("mission=Sektor_02_MegacityGrid"));
+    CHECK(gm.ActiveMission() == "Sektor_02_MegacityGrid");
+
+    // CRLF tolerance (a save written/read across platforms).
+    CHECK(gm.DeserializeState("campaign=1\r\nmission=Sektor_03_AegisBaseAlpha\r\n"));
+    CHECK(gm.ActiveMission() == "Sektor_03_AegisBaseAlpha");
+
+    // Unknown version: reject, do not guess, leave state untouched.
+    CHECK(!gm.DeserializeState("campaign=99\nmission=Sektor_01_SilentPines"));
+    CHECK(gm.ActiveMission() == "Sektor_03_AegisBaseAlpha");
+
+    // Future additive keys on a known version are ignored.
+    CHECK(gm.DeserializeState("campaign=1\nfuture_key=42\nmission=Sektor_01_SilentPines"));
+    CHECK(gm.ActiveMission() == "Sektor_01_SilentPines");
+
+    // Garbage / empty: rejected, as before.
+    CHECK(!gm.DeserializeState(""));
+    CHECK(!gm.DeserializeState("not a save file"));
     PASS(); return 0; END_TEST();
 }
 
@@ -74,6 +102,7 @@ int main() {
     failures += test_known_sector_mission();
     failures += test_active_mission();
     failures += test_campaign_state_roundtrip();
+    failures += test_campaign_save_versioning();
     fprintf(stdout, "\n%d/%d tests passed.\n", tests_passed, tests_total);
     return failures;
 }

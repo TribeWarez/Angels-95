@@ -1381,8 +1381,13 @@ void LoadSave()
     {
         std::ifstream cf("GameData/Saves/Campaign.sav");
         if (cf) {
-            std::string s;
-            std::getline(cf, s);
+            // Whole file, not one line: the v1 format is two lines
+            // (campaign=1 / mission=<name>); the legacy format was one.
+            std::string s, line;
+            while (std::getline(cf, line)) {
+                if (!s.empty()) s += '\n';
+                s += line;
+            }
             oz::game::GameManager::Instance().DeserializeState(s);
         }
     }
