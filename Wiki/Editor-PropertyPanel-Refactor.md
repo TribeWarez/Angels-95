@@ -249,6 +249,35 @@ no CI inline-list change, no protocol, no `.ozls` writer, no save format.
 | `LevelMetadata` / `g_levelMeta` / accessors survive P3 | the Map panel owns them | `Win32Dialogs.cpp:2694-2717` |
 | `envOverrides` export gate `applyFog \|\| applyAmbient \|\| reverbMix > 0` | an explicitly-zeroed reverb is intentionally not emitted | `Main.cpp:1533` |
 | Children move to scroll; owned painting scrolls at paint time | two different mechanisms, do not mix | `:4781` vs `:944` |
+| A def gets an editable stat row **only** if a runtime consumer exists | see below | `PropsPanel.cpp` `StatSchemaFor` |
+
+## The schema rule — no editable key without a live consumer
+
+An editable row is a promise: the author types a number and the game behaves
+differently. A row for a key nothing reads is worse than no row, because it
+silently lies about what a level does. The rule, applied throughout the
+game-hierarchy schemas:
+
+1. **A key is editable** only when a shipped code path reads it at runtime —
+   and the schema row cites that consumer in a comment.
+2. **A key with no reader is not offered editable.** It still appears in the
+   read-only dump (so nothing hand-authored is hidden), and the def's type gets
+   a note explaining why there is no editor.
+3. **A dead schema entry is a bug.** If the consumer is removed, the row goes
+   with it in the same commit.
+
+`StatSchemaFor()` returns `nullptr` for `EntityType::TRIGGER` and
+`EntityType::EVENT` on purpose: `TriggerSystem` reads a trigger's **box and def
+name from the OZONE line**, not from the def; and event topics are emitted by
+the engine (`world.load`, `entity.*`, `pickup.collect`, `zone.enter|exit`, ...)
+and consumed by the LightningEntityManager wildcard bridge. Neither def type
+owns a runtime stat today. `FillDefBlock` therefore sets `propDefNote` for them
+— *"No runtime-consumed stats … read-only template"* — rendered under the
+Definition header, and the row dump stands on its own.
+
+Do not "fill in" TRIGGER/EVENT schemas to make the panel look complete. Do it
+when a runtime consumer lands: add the reader, the schema row, and the note
+removal together.
 
 ## Ruled out — do not re-investigate
 

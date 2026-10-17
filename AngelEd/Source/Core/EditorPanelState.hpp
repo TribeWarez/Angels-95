@@ -211,6 +211,10 @@ struct EditorPanelState {
     std::string propDefPath;        // .ozls/.cfg source path ("" = no def / section hidden)
     std::string propDefTitle;       // e.g. "HealthVial  [pickup]"
     std::string propDefSource;      // source file path shown as a row
+    // Explains WHY a def has no editable stat rows (e.g. TRIGGER/EVENT: no
+    // runtime-consumed stats, dump-only). Rendered as a note line under the
+    // Definition header; empty means no note.
+    std::string propDefNote;
     struct DefField { std::string key; std::string value; };
     std::vector<DefField> propDefPawnFields; // PawnDefs/*.cfg values (pawns only)
     std::vector<DefField> propDefFields;     // .ozls stats (floats + strings)

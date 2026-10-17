@@ -881,6 +881,12 @@ static void PopulatePropertiesPanel(HWND hwnd) {
         addDefRow("type", g_editorPanels.propDefTitle);
         if (!g_editorPanels.propDefSource.empty())
             addDefRow("source", g_editorPanels.propDefSource);
+        if (!g_editorPanels.propDefNote.empty()) {
+            CreateLabel(hwnd, std::wstring(g_editorPanels.propDefNote.begin(),
+                                          g_editorPanels.propDefNote.end()).c_str(),
+                        x, y, rc.right - 20, 18, 0);
+            y += 22;
+        }
         if (!g_editorPanels.propDefPawnFields.empty()) {
             addSection("PawnDefs stats");
             for (auto& f : g_editorPanels.propDefPawnFields) addDefRow(f.key, f.value);
@@ -1713,6 +1719,7 @@ static void FillDefBlock(const std::string& defName, const std::string& fallback
     using DefField = EditorPanelState::DefField;
     auto& P = g_editorPanels;
     P.propDefPath.clear(); P.propDefTitle.clear(); P.propDefSource.clear();
+    P.propDefNote.clear();
     P.propDefPawnFields.clear(); P.propDefFields.clear(); P.propDefActions.clear();
     P.propDefEditable.clear(); P.propDefPendingEdits.clear();
     P.propDefPreviewSound.clear();
@@ -1742,6 +1749,21 @@ static void FillDefBlock(const std::string& defName, const std::string& fallback
         P.propDefPath = def->sourcePath;
         P.propDefTitle = def->name + "  [" + EntityTypeName(def->type) + "]";
         P.propDefSource = def->sourcePath;
+
+        // TRIGGER / EVENT have no schema row for a reason: the engine consumes
+        // none of their stats at runtime today (a `trigger` volume's box/flags
+        // are OZONE-side, and EventBus topics are engine-emitted). Offering
+        // editable fields for keys nothing reads would be an editor that lies
+        // about what a level does. Say so instead of showing a bare dump.
+        if (def->type == EntityType::TRIGGER || def->type == EntityType::EVENT) {
+            // Kept to one line: the label is clipped, not wrapped. The full
+            // rationale (why no schema exists, and the rule for adding one) is
+            // in Wiki/Editor-PropertyPanel-Refactor.md.
+            P.propDefNote = (def->type == EntityType::TRIGGER)
+                ? "Read-only: no runtime stats; the OZONE line owns box + def name."
+                : "Read-only: no runtime stats; event topics are engine-emitted.";
+        }
+
         if (!def->mesh.empty())    P.propDefFields.push_back({"mesh", def->mesh});
         if (!def->texture.empty()) P.propDefFields.push_back({"texture", def->texture});
         if (!def->icon.empty())    P.propDefFields.push_back({"icon", def->icon});
@@ -1852,6 +1874,7 @@ void ShowPropertiesPanel(bool show) {
         g_editorPanels.propDefPath.clear();
         g_editorPanels.propDefTitle.clear();
         g_editorPanels.propDefSource.clear();
+        g_editorPanels.propDefNote.clear();
         g_editorPanels.propDefPawnFields.clear();
         g_editorPanels.propDefFields.clear();
         g_editorPanels.propDefActions.clear();
