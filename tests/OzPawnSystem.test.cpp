@@ -10,6 +10,7 @@
 #include "../Source/Script/LightningEntityRegistry.hpp"
 #include "../Source/Script/LightningEntityManager.hpp"
 #include "../Source/Script/LightningEntityDef.hpp"
+#include "../Source/Events/EventBus.hpp"
 #include "../Source/Particle/OzParticleSimulationManager.hpp"
 #include "../Source/Pawn/PickupItems.hpp"
 #include "../Source/Renderer/CombatFX.hpp"
@@ -467,6 +468,70 @@ static int test_skyzone_active() {
     // Player outside
     ps.UpdateSkyZone({20, 0, 0}, playerBounds);
     CHECK(!ps.IsInSkyZone());
+    PASS(); return 0; END_TEST();
+}
+
+// Recorder for the zone.enter/zone.exit emission test below. `user` is the
+// vector itself so Unsubscribe(&vec) cannot collide with any other
+// subscriber's nullptr context (the LEM bus bridge subscribes with nullptr).
+static std::vector<std::pair<std::string, std::string>> g_zoneEmissionLog;
+static void recordZoneEmission(const oz::events::Event& ev, void* user) {
+    auto* log = static_cast<std::vector<std::pair<std::string, std::string>>*>(user);
+    log->push_back({ev.topic, ev.s0});
+}
+
+// Regression: the enter/exit emission was keyed on "was outside" / "is
+// outside", so walking from one sky zone DIRECTLY into an adjacent or
+// overlapping one emitted NOTHING - the new zone's declarative env never
+// applied and the old zone's on_exit restore_* never ran, leaving the first
+// zone's fog/ambient/music stuck on screen. Any active-index change now emits
+// exit(prev) then enter(new); exit comes first so a restore_* in on_exit
+// cannot stomp the env the new zone's on_enter is about to apply (the same
+// order Main.cpp's zone-volume path emits in).
+static int test_skyzone_transition_emits_exit_then_enter() {
+    TEST("UpdateSkyZone A->B emits exit(A) then enter(B)");
+    reset_pawn_system();
+    auto& ps = PawnSystem::Instance();
+    SkyZoneNode a; a.bounds = {{ 0, -10,  0}, {10, 10, 10}}; a.name = "sky_trans_a";
+    SkyZoneNode b; b.bounds = {{20, -10,  0}, {30, 10, 10}}; b.name = "sky_trans_b";
+    ps.AddSkyZone(a);
+    ps.AddSkyZone(b);
+
+    g_zoneEmissionLog.clear();
+    auto& bus = oz::events::EventBus::Instance();
+    bus.Subscribe("zone.enter", &recordZoneEmission, &g_zoneEmissionLog);
+    bus.Subscribe("zone.exit",  &recordZoneEmission, &g_zoneEmissionLog);
+    BoundingBox pb = {{-0.5f, -1, -0.5f}, {0.5f, 1, 0.5f}};
+
+    // outside -> A: exactly one enter(A).
+    ps.UpdateSkyZone({5, 0, 5}, pb);
+    CHECK_EQ((int)g_zoneEmissionLog.size(), 1);
+    CHECK(g_zoneEmissionLog[0].first == "zone.enter");
+    CHECK(g_zoneEmissionLog[0].second == "sky_trans_a");
+
+    // A -> B: exit(A) THEN enter(B) - the transition that used to emit nothing.
+    g_zoneEmissionLog.clear();
+    ps.UpdateSkyZone({25, 0, 5}, pb);
+    CHECK_EQ((int)g_zoneEmissionLog.size(), 2);
+    CHECK(g_zoneEmissionLog[0].first == "zone.exit");
+    CHECK(g_zoneEmissionLog[0].second == "sky_trans_a");
+    CHECK(g_zoneEmissionLog[1].first == "zone.enter");
+    CHECK(g_zoneEmissionLog[1].second == "sky_trans_b");
+
+    // B -> outside: exactly one exit(B).
+    g_zoneEmissionLog.clear();
+    ps.UpdateSkyZone({50, 0, 50}, pb);
+    CHECK_EQ((int)g_zoneEmissionLog.size(), 1);
+    CHECK(g_zoneEmissionLog[0].first == "zone.exit");
+    CHECK(g_zoneEmissionLog[0].second == "sky_trans_b");
+
+    // Staying outside emits nothing: transitions only, no per-frame churn.
+    g_zoneEmissionLog.clear();
+    ps.UpdateSkyZone({50, 0, 50}, pb);
+    CHECK_EQ((int)g_zoneEmissionLog.size(), 0);
+
+    bus.Unsubscribe(&g_zoneEmissionLog);
+    ps.ClearSkyZones();
     PASS(); return 0; END_TEST();
 }
 
@@ -942,6 +1007,7 @@ int main() {
     failures += test_point_region_primary_matches_type();
     failures += test_skyzone_crud();
     failures += test_skyzone_active();
+    failures += test_skyzone_transition_emits_exit_then_enter();
     failures += test_emitter_crud();
     failures += test_light_crud();
     failures += test_particle_burst();

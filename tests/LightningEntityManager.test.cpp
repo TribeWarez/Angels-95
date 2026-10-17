@@ -13,6 +13,7 @@
 #include "../Source/Script/LightningEntityManager.hpp"
 #include "../Source/Script/LightningEntityRegistry.hpp"
 #include "../Source/Script/LightningScriptParser.hpp"
+#include "../Source/Events/EventBus.hpp"
 #include <cstdio>
 #include <cassert>
 
@@ -1235,6 +1236,73 @@ static int test_spell_bar_serialize_roundtrip() {
     PASS(); return 0; END_TEST();
 }
 
+// Regression: m_activeEnvZoneDef was written on apply and read by NOTHING, so
+// there was no duplicate-enter guard at all - a second zone.enter re-pended
+// fog/ambient and restarted the world track - and no exit path cleared it, so
+// "re-enter this zone" and "duplicate enter" were indistinguishable. The guard
+// is now read on enter, cleared by that def's zone.exit (name-matched) and by
+// Init on world load.
+static int test_zone_env_guard_single_application() {
+    TEST("zone.enter applies once; zone.exit clears the guard; re-enter re-applies");
+    auto& reg = LightningEntityRegistry::Instance();
+    EntityDef z;
+    z.name = "ZoneEnvGuardTest";
+    z.type = EntityType::SKYZONE;
+    // vec3s holds a raw float[3]; brace-init into it is not a valid assignment.
+    z.stats.vec3s["fog_color"][0] = 0.2f;
+    z.stats.vec3s["fog_color"][1] = 0.3f;
+    z.stats.vec3s["fog_color"][2] = 0.4f;
+    z.stats.floats["fog_density"] = 0.05f;
+    z.music = "guard_test_track";
+    reg.Register(z);
+
+    auto& em = LightningEntityManager::Instance();
+    em.Init();  // world-load reset: pending flags + applied-zone guard cleared
+    CHECK(em.ActiveEnvZoneDef().empty());
+
+    oz::events::Event ev;
+    ev.topic = "zone.enter";
+    ev.s0 = "ZoneEnvGuardTest";
+
+    // First enter applies.
+    em.DispatchBusEvent(ev);
+    CHECK(em.HasPendingFog());
+    CHECK(em.HasPendingMusic());
+    CHECK_APROX(em.PendingFogDensity(), 0.05f, 0.001f);
+    CHECK(em.ActiveEnvZoneDef() == "ZoneEnvGuardTest");
+
+    // A duplicate enter with no exit in between is swallowed by the guard.
+    em.ClearPendingFog();
+    em.ClearPendingMusic();
+    em.DispatchBusEvent(ev);
+    CHECK(!em.HasPendingFog());
+    CHECK(!em.HasPendingMusic());
+
+    // An exit for a DIFFERENT zone must not clear this zone's guard: whose env
+    // is on screen is decided by name match, not by "an exit happened".
+    oz::events::Event otherExit;
+    otherExit.topic = "zone.exit";
+    otherExit.s0 = "SomeOtherZone";
+    em.DispatchBusEvent(otherExit);
+    CHECK(em.ActiveEnvZoneDef() == "ZoneEnvGuardTest");
+    em.DispatchBusEvent(ev);
+    CHECK(!em.HasPendingFog());  // still guarded
+
+    // This zone's own exit clears it...
+    oz::events::Event ex;
+    ex.topic = "zone.exit";
+    ex.s0 = "ZoneEnvGuardTest";
+    em.DispatchBusEvent(ex);
+    CHECK(em.ActiveEnvZoneDef().empty());
+
+    // ...so re-entering applies again (a guard that never lets go would make
+    // every revisit of a zone keep the previous zone's fog).
+    em.DispatchBusEvent(ev);
+    CHECK(em.HasPendingFog());
+    CHECK(em.ActiveEnvZoneDef() == "ZoneEnvGuardTest");
+    PASS(); return 0; END_TEST();
+}
+
 int main() {
     fprintf(stdout, "LightningEntityManager Tests\n");
     fprintf(stdout, "============================\n");
@@ -1277,6 +1345,9 @@ int main() {
     failures += test_equipment_slot_name();
     failures += test_auto_equip_and_defense();
     failures += test_respec_skills();
+    // Registers a SKYZONE def (no "Player" involvement) - safe before the
+    // ordering-sensitive tail.
+    failures += test_zone_env_guard_single_application();
     // Last: these register a "Player" def that Init() spawns, and the registry
     // is a process-wide singleton, so running them earlier would change the
     // player-instance assumptions of the tests above.

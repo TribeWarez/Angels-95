@@ -1050,13 +1050,13 @@ ShowSpellbook = false;
                 ZoneType zt = activeZone->zoneType;
                 // Skip zones already handled elsewhere
                 if (zt != ZoneType::ZONE_SKY && zt != ZoneType::ZONE_GAMEPLAY_SOUND) {
-                    // Fire zone enter event using zone name (triggers .ozls script hooks)
+                    // Fire zone enter/exit events using the zone name
+                    // (triggers .ozls script hooks). Exit fires BEFORE enter:
+                    // the old zone's on_exit restore_* opcodes must not stomp
+                    // the fog/ambient the new zone's on_enter is about to
+                    // apply (PawnSystem::UpdateSkyZone emits in the same
+                    // order).
                     if (activeZone->name != lastZoneName) {
-                        oz::events::Event ev;
-                        ev.topic = "zone.enter";
-                        ev.s0 = activeZone->name;
-                        ev.x = playerPos.x; ev.y = playerPos.y; ev.z = playerPos.z;
-                        oz::events::EventBus::Instance().Emit(ev);
                         if (!lastZoneName.empty()) {
                             oz::events::Event ev2;
                             ev2.topic = "zone.exit";
@@ -1064,6 +1064,11 @@ ShowSpellbook = false;
                             ev2.x = playerPos.x; ev2.y = playerPos.y; ev2.z = playerPos.z;
                             oz::events::EventBus::Instance().Emit(ev2);
                         }
+                        oz::events::Event ev;
+                        ev.topic = "zone.enter";
+                        ev.s0 = activeZone->name;
+                        ev.x = playerPos.x; ev.y = playerPos.y; ev.z = playerPos.z;
+                        oz::events::EventBus::Instance().Emit(ev);
                         lastZoneName = activeZone->name;
                     }
                 }

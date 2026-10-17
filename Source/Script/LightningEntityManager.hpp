@@ -199,6 +199,12 @@ static constexpr int HOTBAR_SIZE = 8;
     // dedicated TriggerZoneAction call site.
     void ApplyZoneEnvFields(const EntityDef& def);
 
+    // The def whose declarative env is currently applied: set by
+    // ApplyZoneEnvFields, cleared by that def's zone.exit (via
+    // DispatchBusEvent) and by Init on world load. Read-only - it is the
+    // single source of truth for "whose fog/ambient/music is on screen".
+    const std::string& ActiveEnvZoneDef() const { return m_activeEnvZoneDef; }
+
     // --- Generic entity action (not SKYZONE-restricted; used for on_collect) ---
     void TriggerEntityAction(const EntityDef* def, const std::string& actionName);
 

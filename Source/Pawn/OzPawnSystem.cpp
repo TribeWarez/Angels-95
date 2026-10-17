@@ -814,28 +814,36 @@ void PawnSystem::UpdateSkyZone(Vector3 playerPos, BoundingBox playerBounds) {
         }
     }
 
-    bool wasInSky = (prevActive >= 0);
-    bool inSky = (m_activeSkyZoneIndex >= 0);
-
-        if (inSky && !wasInSky) {
-        auto& n = m_skyZones[m_activeSkyZoneIndex];
-        OZ_INFO("SkyZone enter: name=%s def=%s pos=(%.1f,%.1f,%.1f)", n.name.c_str(),
-                n.def ? n.def->name.c_str() : "null",
-                playerPos.x, playerPos.y, playerPos.z);
-        oz::events::Event ev;
-        ev.topic = "zone.enter";
-        ev.s0 = n.def ? n.def->name : (n.name.empty() ? "zone_sky_0" : n.name);
-        ev.x = playerPos.x; ev.y = playerPos.y; ev.z = playerPos.z;
-        oz::events::EventBus::Instance().Emit(ev);
-    } else if (!inSky && wasInSky) {
-        auto& n = m_skyZones[prevActive];
-        OZ_INFO("SkyZone exit: name=%s pos=(%.1f,%.1f,%.1f)", n.name.c_str(),
-                playerPos.x, playerPos.y, playerPos.z);
-        oz::events::Event ev;
-        ev.topic = "zone.exit";
-        ev.s0 = n.def ? n.def->name : (n.name.empty() ? "zone_sky_0" : n.name);
-        ev.x = playerPos.x; ev.y = playerPos.y; ev.z = playerPos.z;
-        oz::events::EventBus::Instance().Emit(ev);
+    // ANY active-zone change emits exit(prev) then enter(new) - including the
+    // A->B transition, which used to emit NOTHING (both branches were keyed on
+    // "was outside" / "is outside"): walking from one sky zone directly into
+    // an adjacent/overlapping one left the first zone's fog/ambient/music
+    // applied and never ran the new zone's enter. Exit comes first so an old
+    // zone's on_exit restore_* opcodes cannot stomp the env the new zone's
+    // enter is about to apply (Main.cpp's zone-volume path emits in the same
+    // order).
+    if (prevActive != m_activeSkyZoneIndex) {
+        if (prevActive >= 0) {
+            auto& n = m_skyZones[prevActive];
+            OZ_INFO("SkyZone exit: name=%s pos=(%.1f,%.1f,%.1f)", n.name.c_str(),
+                    playerPos.x, playerPos.y, playerPos.z);
+            oz::events::Event ev;
+            ev.topic = "zone.exit";
+            ev.s0 = n.def ? n.def->name : (n.name.empty() ? "zone_sky_0" : n.name);
+            ev.x = playerPos.x; ev.y = playerPos.y; ev.z = playerPos.z;
+            oz::events::EventBus::Instance().Emit(ev);
+        }
+        if (m_activeSkyZoneIndex >= 0) {
+            auto& n = m_skyZones[m_activeSkyZoneIndex];
+            OZ_INFO("SkyZone enter: name=%s def=%s pos=(%.1f,%.1f,%.1f)", n.name.c_str(),
+                    n.def ? n.def->name.c_str() : "null",
+                    playerPos.x, playerPos.y, playerPos.z);
+            oz::events::Event ev;
+            ev.topic = "zone.enter";
+            ev.s0 = n.def ? n.def->name : (n.name.empty() ? "zone_sky_0" : n.name);
+            ev.x = playerPos.x; ev.y = playerPos.y; ev.z = playerPos.z;
+            oz::events::EventBus::Instance().Emit(ev);
+        }
     }
 }
 

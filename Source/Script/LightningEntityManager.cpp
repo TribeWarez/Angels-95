@@ -730,6 +730,12 @@ void LightningEntityManager::DispatchBusEvent(const oz::events::Event& ev) {
     // opcodes take over.
     if (ev.topic == "zone.enter" && def->type == EntityType::SKYZONE)
         ApplyZoneEnvFields(*def);
+    // zone.exit clears the applied-zone guard so re-entering re-applies. The
+    // name match matters: an exit for a DIFFERENT zone must not clear whose
+    // env is actually on screen.
+    else if (ev.topic == "zone.exit" && def->type == EntityType::SKYZONE &&
+             m_activeEnvZoneDef == def->name)
+        m_activeEnvZoneDef.clear();
 
     // Prefer the namespaced action (zone.enter -> on_zone_enter); fall back to
     // the last segment (on_enter) so existing zone scripts keep working.
@@ -763,6 +769,10 @@ void LightningEntityManager::Init() {
     m_pendingAmbient = false;
     m_pendingMessage.clear();
     m_playerHurt = false;
+    // The applied-zone guard is world state: a New Game in an existing
+    // process must not treat the first zone.enter of the new world as a
+    // duplicate of the last zone of the previous one.
+    m_activeEnvZoneDef.clear();
     // The spell bar holds def NAMES, not indices, so it is not touched by the
     // index remapping elsewhere in this class - but it must still be reset here
     // or a New Game in an existing process inherits the previous session's
@@ -1540,6 +1550,14 @@ void LightningEntityManager::DrawHotbar() {
 // ApplyZoneEnvFields — declarative skyzone fog/ambient/music (see the bridge).
 // ---------------------------------------------------------------------------
 void LightningEntityManager::ApplyZoneEnvFields(const EntityDef& def) {
+    // Re-applying the SAME zone's env without an exit in between is a no-op.
+    // A duplicate zone.enter (two volumes resolving to one def, a re-emission)
+    // used to re-pend fog/ambient and restart the world track - and because
+    // m_activeEnvZoneDef was written but never read, nothing ever deduped it.
+    // zone.exit clears the guard in DispatchBusEvent; Init clears it on world
+    // load. A def with no name keeps no guard (nothing to name-match on exit).
+    if (!def.name.empty() && m_activeEnvZoneDef == def.name) return;
+
     bool applied = false;
 
     auto vc = def.stats.vec3s.find("fog_color");
