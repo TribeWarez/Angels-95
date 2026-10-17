@@ -129,6 +129,52 @@ static int test_get_all_keys() {
     PASS(); return 0; END_TEST();
 }
 
+// LoadWorldOverrides must classify by TYPE first: game-hierarchy and
+// trigger/event defs are global even when their source path sits inside a
+// world folder. A world-scoped def of another world is still dropped.
+static int test_load_world_overrides_type_classification() {
+    TEST("LoadWorldOverrides: hierarchy def survives, world-scoped def dropped");
+    auto& reg = LightningEntityRegistry::Instance();
+
+    // A mission def "parsed from" ANOTHER world's folder. Type-based
+    // classification makes it global, so it must survive a load of TestWorld.
+    EntityDef mission;
+    mission.name = "testreg_mission";
+    mission.type = EntityType::MISSION;
+    mission.sourcePath = "GameData/Worlds/OtherWorld/Missions/testreg_mission.ozls";
+    reg.Register(mission);
+
+    // Same source path, but a world-scoped type the current world does not
+    // define -> must be dropped.
+    EntityDef zone;
+    zone.name = "testreg_otherworld_zone";
+    zone.type = EntityType::SKYZONE;
+    zone.sourcePath = "GameData/Worlds/OtherWorld/zones/testreg_otherworld_zone.ozls";
+    reg.Register(zone);
+
+    reg.LoadWorldOverrides("GameData/Worlds/TestWorld");
+
+    CHECK_PTR(reg.Find("testreg_mission"));
+    CHECK(reg.Find("testreg_mission")->type == EntityType::MISSION);
+    CHECK_NULL(reg.Find("testreg_otherworld_zone"));
+    PASS(); return 0; END_TEST();
+}
+
+// A trigger def referenced by OZONE `trigger <def> ...` lines from any world
+// is global too, even from a world-folder path.
+static int test_load_world_overrides_trigger_is_global() {
+    TEST("LoadWorldOverrides: trigger def from a world folder survives");
+    auto& reg = LightningEntityRegistry::Instance();
+    EntityDef trig;
+    trig.name = "testreg_trigger";
+    trig.type = EntityType::TRIGGER;
+    trig.sourcePath = "GameData/Worlds/OtherWorld/testreg_trigger.ozls";
+    reg.Register(trig);
+    reg.LoadWorldOverrides("GameData/Worlds/TestWorld");
+    CHECK_PTR(reg.Find("testreg_trigger"));
+    PASS(); return 0; END_TEST();
+}
+
 int main() {
     fprintf(stdout, "LightningEntityRegistry Tests:\n");
     fprintf(stdout, "==============================\n");
@@ -140,6 +186,8 @@ int main() {
     failures += test_count_increases();
     failures += test_parse_and_register();
     failures += test_get_all_keys();
+    failures += test_load_world_overrides_type_classification();
+    failures += test_load_world_overrides_trigger_is_global();
     fprintf(stdout, "==============================\n");
     fprintf(stdout, "%d/%d passed, %d failed\n",
             tests_passed, tests_total, tests_total - tests_passed);

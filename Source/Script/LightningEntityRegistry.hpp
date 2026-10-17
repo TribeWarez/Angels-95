@@ -39,6 +39,11 @@ public:
     // parsed last wins for every world. The result is a level that plays
     // another map's skybox/ambient/fog and prints the wrong script messages.
     //
+    // Classification is TYPE-first: game-hierarchy (`: game/: campaign/
+    // : sector/: mission/: objective`) and `: trigger/: event` defs are global
+    // regardless of source path (IsGlobalDefType). Everything else is
+    // classified by path (WorldNameOfDef).
+    //
     // Only one world is loaded at a time, so re-registering this world's defs —
     // and dropping the other worlds' colliding ones — makes every by-name lookup
     // (zone on_enter/on_exit, entity hooks, FindByType) resolve against the world

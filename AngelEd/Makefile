@@ -274,6 +274,13 @@ $(BUILD_DIR)/AssetScan.o: Source/Resources/AssetScan.cpp Source/Resources/AssetS
 # and reads/writes ObjectiveSystem. All four are raylib-free. A line here MUST
 # have a matching `g++ -c` + link entry in .github/workflows/ci.yml (which
 # compiles the editor by hand); tools/check_editor_objects.sh enforces it.
+#
+# DELIBERATE EXCEPTION: Source/Game/{GameManager,GameDef,GameOpcodes,
+# GameBoxedTypes}.cpp are NOT in the editor build. No AngelEd panel reads them
+# yet (the Entity Properties game schemas are static tables in PropsPanel.cpp,
+# not GameManager lookups), so linking them would be dead weight. If a panel
+# ever needs GameManager, add the objects here AND to ci.yml in the same
+# commit — check_editor_objects.sh will fail loudly on a mismatch either way.
 $(BUILD_DIR)/EventBus.o: ../Source/Events/EventBus.cpp ../Source/Events/EventBus.hpp | $(BUILD_DIR)
 	$(COMP) $(CFLAGS) -c ../Source/Events/EventBus.cpp -o $@
 

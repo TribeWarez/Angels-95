@@ -151,6 +151,30 @@ std::string WorldNameOfDef(const std::string& sourcePath) {
     return (slash == std::string::npos) ? sp : sp.substr(0, slash);
 }
 
+// TRUE when defs of this type are GLOBAL regardless of source path.
+//
+// The game hierarchy (`: game/: campaign/: sector/: mission/: objective`) and
+// the named volume/event templates (`: trigger/: event`) are referenced by
+// name from ANY world, so a source path inside GameData/Worlds/ (or an
+// unexpected package layout) must not make them world-scoped — path-based
+// classification (WorldNameOfDef) would otherwise drop them for every world
+// except the one folder they happen to live in. Type-based classification is
+// the authority here; path-based stays in effect for everything else.
+bool IsGlobalDefType(EntityType t) {
+    switch (t) {
+        case EntityType::GAME:
+        case EntityType::CAMPAIGN:
+        case EntityType::SECTOR:
+        case EntityType::MISSION:
+        case EntityType::OBJECTIVE:
+        case EntityType::TRIGGER:
+        case EntityType::EVENT:
+            return true;
+        default:
+            return false;
+    }
+}
+
 // The world NAME a LoadWorld asset prefix refers to. Handles both
 // "GameData/Worlds/<Name>/" and a direct .ozone path (editor playtest), whose
 // world name is its containing folder.
@@ -180,6 +204,14 @@ void LightningEntityRegistry::LoadWorldOverrides(const std::string& worldDir) {
 
     int promoted = 0, dropped = 0;
     for (auto it = m_defs.begin(); it != m_defs.end(); ) {
+        // Type-based classification first: game-hierarchy and trigger/event
+        // defs are global no matter where they were parsed from (see
+        // IsGlobalDefType). Path-based classification (WorldNameOfDef) applies
+        // to the remaining, world-scoped types.
+        if (IsGlobalDefType(it->second.type)) {
+            ++it;
+            continue;
+        }
         const std::string owner = WorldNameOfDef(it->second.sourcePath);
         if (owner.empty() || owner == want) {   // global def, or already ours
             ++it;
