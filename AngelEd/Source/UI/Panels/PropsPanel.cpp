@@ -381,6 +381,50 @@ const StatSpec kLightStats[] = {
     {"outer_cone",           0, "Outer Cone", "Spot cone"},
 };
 
+// --- Game-hierarchy def types (Script Manager "New Script...") ---------------
+// Each row is a key a consumer actually reads (GameManager::Init, or on the
+// server GameState's mission seeding). Keys the templates AUTHOR but nothing
+// consults are deliberately absent and land in the read-only dump instead:
+//   campaign `game`, sector `skybox`, objective `target`,
+//   trigger `topic`/`once`/`team` (pure scaffold), mission stats-side
+//   `on_start`/`on_complete` (shipped missions author those as ACTIONS, and
+//   MissionDef::onStart has no reader, so a stats-side edit would do nothing).
+// TRIGGER and EVENT therefore have no schema at all; an `event` def carries
+// no stats by shape (actions only).
+const StatSpec kGameStats[] = {
+    {"modes",                1, "Modes", "Hierarchy"},
+    {"start_sector",         1, "Start Sector", "Hierarchy"},
+    {"save_enabled",         0, "Save Enabled", "Hierarchy"},
+};
+
+const StatSpec kCampaignStats[] = {
+    {"sectors",              1, "Sectors", "Hierarchy"},
+};
+
+const StatSpec kSectorStats[] = {
+    {"numerology",           0, "Numerology", "Sefirah"},
+    {"theme",                1, "Theme", "Sefirah"},
+    {"role",                 1, "Role", "Sefirah"},
+    {"missions",             1, "Missions", "Hierarchy"},
+};
+
+const StatSpec kMissionStats[] = {
+    {"sector",               1, "Sector", "Hierarchy"},
+    {"world",                1, "World", "Hierarchy"},
+    {"mode",                 1, "Mode", "Hierarchy"},
+    {"objectives",           1, "Objectives", "Objectives"},
+    {"next",                 1, "Next Mission", "Objectives"},
+};
+
+// `type` drives server-side advancement (GameState::AdvanceObjectivesByType);
+// `count` is the target both GameManager (client seeding) and GameState
+// (server seeding) read. Shipped ids are kill/collect; `target` (the stats
+// key, e.g. "Walker") has no reader on either side.
+const StatSpec kObjectiveStats[] = {
+    {"type",                 1, "Type", "Objective"},
+    {"count",                0, "Count", "Objective"},
+};
+
 // The schema for `type`, or nullptr when nothing is editable for it. Only
 // entity types whose def the panel can actually write get an entry.
 const StatSpec* StatSchemaFor(EntityType type, int* outCount) {
@@ -393,6 +437,13 @@ const StatSpec* StatSchemaFor(EntityType type, int* outCount) {
         case EntityType::UPGRADE: return set(kPlayerStats, (int)(sizeof(kPlayerStats)/sizeof(StatSpec)));
         case EntityType::LIGHT:   return set(kLightStats,  (int)(sizeof(kLightStats)/sizeof(StatSpec)));
         case EntityType::SPELL:   return set(kSpellStats,  (int)(sizeof(kSpellStats)/sizeof(StatSpec)));
+        case EntityType::GAME:      return set(kGameStats,      (int)(sizeof(kGameStats)/sizeof(StatSpec)));
+        case EntityType::CAMPAIGN:  return set(kCampaignStats,  (int)(sizeof(kCampaignStats)/sizeof(StatSpec)));
+        case EntityType::SECTOR:    return set(kSectorStats,    (int)(sizeof(kSectorStats)/sizeof(StatSpec)));
+        case EntityType::MISSION:   return set(kMissionStats,   (int)(sizeof(kMissionStats)/sizeof(StatSpec)));
+        case EntityType::OBJECTIVE: return set(kObjectiveStats, (int)(sizeof(kObjectiveStats)/sizeof(StatSpec)));
+        // TRIGGER / EVENT: no consumed stats (see the table block above) ->
+        // default: no schema, dump-only.
         default: *outCount = 0; return nullptr;
     }
 }
