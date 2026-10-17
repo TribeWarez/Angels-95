@@ -18,7 +18,17 @@ namespace oz {
 //   viewmodel_offset / viewmodel_rot          (vec3, camera space: x right, y up, z forward)
 //   viewmodel_scale / recip                   (floats)
 //   recoil                                     (float, kick amount)
-// Clips are named Idle/Fire/Reload inside the (merged) model GLB.
+//   viewmodel_skeletal                         (float: absent/0 = auto,
+//                                               1 = force skeletal playback,
+//                                               -1 = force static + procedural)
+// Clips are named Idle/Fire/Reload inside the (merged) model GLB; play_clip
+// may request any clip by name (PlayClip, routed from Core.hpp).
+//
+// Skeletal playback is AUTO-ENABLED when the asset carries clips and its
+// skinning data fits the one skeleton raylib loaded (BoneIdsFitSkeleton).
+// The multi-skin FBX2glTF weapon exports fail that scan — raylib keeps only
+// the first skin and animating them can index past the pose array — which is
+// why playback used to be hard-disabled for every weapon.
 //
 // Client-only. Draw() refreshes the weapon from the currently selected entity.
 // ---------------------------------------------------------------------------
@@ -32,6 +42,14 @@ public:
     void TriggerFire();
     void TriggerReload();
     void Clear();
+
+    // Play a named clip on the CURRENT weapon (one-shot; returns to Idle when
+    // it ends; "Idle" itself loops). Driven by the `play_clip` opcode via
+    // Core.hpp — the same opcode reaches world pawns through
+    // PawnSystem::PlayPawnClip, so one script call animates both copies.
+    // Returns false when the held weapon has no skeletal mesh or no clip
+    // matches; the caller decides whether that is worth warning about.
+    bool PlayClip(const std::string& name);
 
     // Head-bob sync. The camera bob is computed in Core.hpp; the view-model
     // reads the same phase/amount so the weapon sways with the walk instead of

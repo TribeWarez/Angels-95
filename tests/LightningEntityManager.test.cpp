@@ -1303,6 +1303,59 @@ static int test_zone_env_guard_single_application() {
     PASS(); return 0; END_TEST();
 }
 
+// Phase F: play_clip has two legs. The world-pawn leg (PlayPawnClip) existed;
+// the first-person view-model leg did not, so a weapon's script could never
+// animate the held copy. When the action runs on the weapon currently held,
+// the "clip" command is also queued into the pending world commands for
+// Core.hpp to route to ViewModel::PlayClip. The def match is made HERE
+// because ScriptCommand carries no def: a "clip" command that reaches Core
+// always means "play on the view-model". Without the match, every other
+// entity's play_clip would animate the held weapon.
+static int test_play_clip_queues_viewmodel_command() {
+    TEST("play_clip on the held weapon queues the view-model command");
+    auto& reg = LightningEntityRegistry::Instance();
+    EntityDef def;
+    def.name = "ClipRouteGun";
+    def.type = EntityType::WEAPON;
+    def.stats.floats["fire_rate"] = 0.05f;
+    EntityAction act;
+    act.name = "on_fire";
+    act.scriptLines.push_back("play_clip \"Reload\"");
+    def.actions.push_back(act);
+    reg.Register(def);
+
+    auto& em = LightningEntityManager::Instance();
+    em.Init();
+    int idx = em.Spawn("ClipRouteGun");
+    CHECK(idx >= 0);
+    em.HotbarAssign(0, idx);
+    em.SelectSlot(0);
+    em.TakePendingWorldCommands();       // flush anything queued by Init/Spawn
+
+    Vector3 origin = {0,0,0}, dir = {0,0,-1};
+    em.FireSelectedWeapon(origin, dir);  // runs on_fire on the held weapon
+    auto cmds = em.TakePendingWorldCommands();
+    CHECK(cmds.size() == 1);
+    CHECK(cmds[0].op == "clip");
+    CHECK(cmds[0].s0 == "Reload");
+
+    // Negative: the same action on a NON-held def must not queue — the
+    // command carries no def, so an unconditional push would animate the
+    // held weapon whenever any other entity played a clip.
+    EntityDef other;
+    other.name = "ClipRouteOther";
+    other.type = EntityType::WEAPON;
+    EntityAction act2;
+    act2.name = "on_fire";
+    act2.scriptLines.push_back("play_clip \"Idle\"");
+    other.actions.push_back(act2);
+    reg.Register(other);
+    em.TriggerEntityAction(&other, "on_fire");   // runs on its own instance
+    auto cmds2 = em.TakePendingWorldCommands();
+    CHECK(cmds2.empty());
+    PASS(); return 0; END_TEST();
+}
+
 int main() {
     fprintf(stdout, "LightningEntityManager Tests\n");
     fprintf(stdout, "============================\n");
@@ -1348,6 +1401,8 @@ int main() {
     // Registers a SKYZONE def (no "Player" involvement) - safe before the
     // ordering-sensitive tail.
     failures += test_zone_env_guard_single_application();
+    // Registers WEAPON defs only - also safe before the tail.
+    failures += test_play_clip_queues_viewmodel_command();
     // Last: these register a "Player" def that Init() spawns, and the registry
     // is a process-wide singleton, so running them earlier would change the
     // player-instance assumptions of the tests above.

@@ -2027,6 +2027,16 @@ if (inSkyZone)
                 pn.ownerId = -1;
                 PawnSystem::Instance().SpawnProjectile(pn);
             }
+            else if (cmd.op == "clip")
+            {
+                // View-model leg of play_clip: LEM queued this because the
+                // action ran on the weapon currently held (it made the def
+                // match there — ScriptCommand carries no def). Play the named
+                // clip on the first-person copy; warn when neither leg could.
+                if (!oz::ViewModel::Instance().PlayClip(cmd.s0))
+                    OZ_WARN("play_clip '%s': no matching clip on the view-model",
+                            cmd.s0.c_str());
+            }
         }
     }
 

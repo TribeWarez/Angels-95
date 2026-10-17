@@ -7,6 +7,7 @@
 //   -o test_pawn_system -lraylib -lopengl32 -lgdi32 -lwinmm -lws2_32 -lm
 
 #include "../Source/Pawn/OzPawnSystem.hpp"
+#include "../Source/Renderer/Mesh/SkeletalMesh.hpp"
 #include "../Source/Script/LightningEntityRegistry.hpp"
 #include "../Source/Script/LightningEntityManager.hpp"
 #include "../Source/Script/LightningEntityDef.hpp"
@@ -986,6 +987,62 @@ static int test_light_crud() {
     PASS(); return 0; END_TEST();
 }
 
+// Phase F: BoneIdsFitSkeleton is the auto-enable gate for view-model skeletal
+// playback. FBX2glTF weapon exports carry MULTIPLE skins (one per mesh part);
+// raylib keeps only the first, so vertex boneIds can reference bones the
+// loaded skeleton does not have — animating such a model indexes past the
+// pose array, which is why playback used to be hard-disabled for every
+// weapon. Free function over a raw Model so it is testable without a GL
+// context; ViewModel::SetWeapon declines skeletal playback when it fails.
+static int test_bone_ids_fit_skeleton() {
+    TEST("BoneIdsFitSkeleton rejects multi-skin boneIds");
+
+    // No meshes at all: nothing loaded, nothing to animate.
+    ::Model empty{};
+    CHECK(!oz::BoneIdsFitSkeleton(empty));
+
+    // Fully unskinned model (no boneIds anywhere): nothing to break.
+    ::Mesh plain{};
+    ::Model unskinned{};
+    unskinned.meshCount = 1;
+    unskinned.meshes = &plain;
+    OZ_MODEL_BONE_COUNT(unskinned) = 0;
+    CHECK(oz::BoneIdsFitSkeleton(unskinned));
+
+    // A single skeleton with every influence in range.
+    unsigned char ids[8] = {0,1,2,3, 3,2,1,0};
+    ::Mesh skinned{};
+    skinned.vertexCount = 2;
+    OZ_MESH_BONE_INDICES(skinned) = ids;
+    ::Model ok{};
+    ok.meshCount = 1;
+    ok.meshes = &skinned;
+    OZ_MODEL_BONE_COUNT(ok) = 4;
+    CHECK(oz::BoneIdsFitSkeleton(ok));
+
+    // One influence past the loaded skeleton (a mesh part bound to a SECOND
+    // skin raylib dropped) rejects the whole model.
+    unsigned char bad[4] = {0,1,2,7};
+    ::Mesh part2{};
+    part2.vertexCount = 1;
+    OZ_MESH_BONE_INDICES(part2) = bad;
+    ::Mesh parts[2] = {skinned, part2};
+    ::Model multi{};
+    multi.meshCount = 2;
+    multi.meshes = parts;
+    OZ_MODEL_BONE_COUNT(multi) = 4;
+    CHECK(!oz::BoneIdsFitSkeleton(multi));
+
+    // boneIds present but no skeleton loaded at all: the dropped-skin shape.
+    ::Model dropped{};
+    dropped.meshCount = 1;
+    dropped.meshes = &skinned;
+    OZ_MODEL_BONE_COUNT(dropped) = 0;
+    CHECK(!oz::BoneIdsFitSkeleton(dropped));
+
+    PASS(); return 0; END_TEST();
+}
+
 int main() {
     // Unbuffered: this binary is the one suite that has ever died without a
     // diagnostic (a segfault on Linux CI printed nothing, because stdout is
@@ -1024,6 +1081,7 @@ int main() {
     failures += test_projectile_expiry();
     failures += test_projectile_pawn_collision();
     failures += test_projectile_miss();
+    failures += test_bone_ids_fit_skeleton();
 
     fprintf(stdout, "==================\n");
     fprintf(stdout, "%d/%d passed, %d failed\n",

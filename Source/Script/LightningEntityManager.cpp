@@ -913,13 +913,27 @@ void LightningEntityManager::ApplyEntityScriptEffects(EntityInstance& inst) {
             if (idx >= 0 && !HotbarPlaceFirstFree(idx))
                 OZ_WARN("grant_item '%s': hotbar full", cmd.s0.c_str());
         } else if (cmd.op == "clip") {
+            // play_clip has TWO legs, one opcode. World-pawn leg: any skeletal
+            // pawn sharing this def (PlayPawnClip). View-model leg: when the
+            // action ran on the weapon currently held, the clip also plays on
+            // the first-person copy — Core.hpp owns the view-model, so the
+            // command is queued there. The def match is made HERE because
+            // ScriptCommand carries no def: a "clip" command that reaches Core
+            // always means "play on the view-model".
+            bool forViewModel = false;
+            EntityInstance* sel = SelectedEntity();
+            if (sel && inst.def && sel->def == inst.def) {
+                m_pendingWorldCommands.push_back(cmd);
+                forViewModel = true;
+            }
 #ifndef OMEGA_TEST_ENV
-            // play_clip plays a skeletal clip on pawns whose def matches this
-            // instance's def (the action ran on that def).
             int n = PawnSystem::Instance().PlayPawnClip(inst.def->name, cmd.s0, 1.0f);
-            if (n == 0)
+            // No world pawn AND no held-weapon copy to play it on: nothing ran.
+            if (n == 0 && !forViewModel)
                 OZ_WARN("play_clip '%s' on '%s': no matching skeletal pawn",
                         cmd.s0.c_str(), inst.def->name.c_str());
+#else
+            (void)forViewModel;   // set but only read by the warn above
 #endif
         } else {
             // teleport / change_world / area_damage / projectile → Core.hpp

@@ -265,6 +265,10 @@ const StatSpec kWeaponStats[] = {
     {"viewmodel_offset",       2, "Viewmodel Pos", "Viewmodel"},
     {"viewmodel_rot",          2, "Viewmodel Rot", "Viewmodel"},
     {"viewmodel_scale",        0, "Viewmodel Scale", "Viewmodel"},
+    // 0/absent = auto (clips + single-skeleton scan), 1 = force skeletal
+    // playback, -1 = force static + procedural. Consumed by
+    // ViewModel::SetWeapon; see the gate comment there.
+    {"viewmodel_skeletal",     0, "Viewmodel Skeletal", "Viewmodel"},
     // Data-driven audio. Volume/pitch default to 1.0 in the runtime, so an
     // omitted row plays the authored sound at unity.
     {"fire_sound",             3, "Fire Sound", "Audio"},

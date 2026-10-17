@@ -78,4 +78,25 @@ void SkeletalMesh::ApplyPose(int clipIndex, float timeSeconds, float fps) const 
     UpdateModelAnimation(m_model, anim, frame);
 }
 
+bool BoneIdsFitSkeleton(const ::Model& model) {
+    // No skeleton loaded: no vertex may legally reference a bone, so any
+    // bone indices at all (the multi-skin case where the skin was dropped)
+    // fails.
+    if (model.meshCount <= 0 || model.meshes == nullptr) return false;
+    if (OZ_MODEL_BONE_COUNT(model) <= 0) {
+        for (int i = 0; i < model.meshCount; i++)
+            if (OZ_MESH_BONE_INDICES(model.meshes[i]) != nullptr) return false;
+        return true;   // fully unskinned model: nothing to animate, nothing to crash
+    }
+    for (int i = 0; i < model.meshCount; i++) {
+        const ::Mesh& rm = model.meshes[i];
+        const unsigned char* indices = OZ_MESH_BONE_INDICES(rm);
+        if (indices == nullptr) continue;   // unskinned submesh: nothing to check
+        const int n = rm.vertexCount * 4;   // four bone influences per vertex
+        for (int j = 0; j < n; j++)
+            if ((int)indices[j] >= OZ_MODEL_BONE_COUNT(model)) return false;
+    }
+    return true;
+}
+
 } // namespace oz

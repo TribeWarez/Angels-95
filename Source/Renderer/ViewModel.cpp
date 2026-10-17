@@ -133,9 +133,22 @@ void ViewModel::SetWeapon(const EntityDef* def, int variantIndex) {
         return;
     }
     std::string baseDir = VmDefDir(def->sourcePath);
-    OZ_INFO("[CHAIN] VM::SetWeapon loading mesh='%s' tex='%s' baseDir='%s'",
-            mesh.c_str(), tex.c_str(), baseDir.c_str());
-    auto m = MeshCache::Instance().GetStatic(mesh, tex, baseDir, true);
+    // Skeletal playback (Idle/Fire/Reload clips + any play_clip request) is
+    // AUTO-ENABLED when the asset carries clips and its skinning data fits the
+    // one skeleton raylib loaded. The FBX2glTF weapon exports contain MULTIPLE
+    // skins (one per mesh part); raylib keeps only the first ("can only load
+    // one skin") and animating such a model can index past the pose array -
+    // the crash this gate exists for, and the reason playback used to be
+    // hard-disabled for every weapon. Stats override:
+    //   viewmodel_skeletal =  1  force skeletal (author asserts the asset is safe)
+    //   viewmodel_skeletal = -1  force static (procedural recoil/reload only)
+    //   absent / 0               auto (clips + single-skeleton scan)
+    const float skelMode = VmStatFloat(def, "viewmodel_skeletal", 0.0f);
+    OZ_INFO("[CHAIN] VM::SetWeapon loading mesh='%s' tex='%s' baseDir='%s' skelMode=%.0f",
+            mesh.c_str(), tex.c_str(), baseDir.c_str(), skelMode);
+    auto m = (skelMode < 0.0f)
+                 ? MeshCache::Instance().GetStatic(mesh, tex, baseDir, true)
+                 : MeshCache::Instance().GetSkeletal(mesh, tex, baseDir, true);
     if (!m || !m->Valid()) {
         OZ_WARN("[CHAIN] VM::SetWeapon could not load '%s'", mesh.c_str());
         return;
@@ -150,14 +163,45 @@ void ViewModel::SetWeapon(const EntityDef* def, int variantIndex) {
             m_mesh->Bounds().min.z, m_mesh->Bounds().max.z,
             m_center.x, m_center.y, m_center.z,
             ComputeFitScale(m_mesh->Bounds()));
-    // Skeletal clip playback is intentionally disabled: the FBX2glTF weapon
-    // exports contain MULTIPLE skins (one per mesh part), which raylib loads
-    // inconsistently ("can only load one skin") and can crash in
-    // UpdateModelAnimation on some builds. The weapon is drawn static with
-    // procedural recoil/reload motion instead.
-    m_skel = nullptr;
-    m_active = -1;
-    OZ_INFO("ViewModel: '%s' mesh=%s (static + procedural anim)", def->name.c_str(), mesh.c_str());
+    auto* sk = dynamic_cast<SkeletalMesh*>(m_mesh.get());
+    const bool hazard = (sk != nullptr) && !BoneIdsFitSkeleton(sk->GetModel());
+    if (sk && (skelMode > 0.0f || !hazard)) {
+        m_skel = sk;
+        m_clipIdle   = sk->FindClip("Idle");
+        m_clipFire   = sk->FindClip("Fire");
+        m_clipReload = sk->FindClip("Reload");
+        // Start on the Idle loop so the held weapon animates from the first
+        // frame; TriggerFire/TriggerReload swap to their clip and Update()
+        // returns to Idle when a one-shot ends.
+        m_active = m_clipIdle;
+        m_loop = true;
+        m_time = 0.0f;
+        OZ_INFO("ViewModel: '%s' skeletal playback ON (clips=%d idle=%d fire=%d reload=%d%s)",
+                def->name.c_str(), sk->ClipCount(), m_clipIdle, m_clipFire,
+                m_clipReload, hazard ? " FORCED past skeleton scan" : "");
+    } else {
+        m_skel = nullptr;
+        m_clipIdle = m_clipFire = m_clipReload = m_active = -1;
+        if (sk && hazard && skelMode <= 0.0f)
+            OZ_INFO("ViewModel: '%s' static + procedural anim (multi-skin/mismatched "
+                    "skeleton; set viewmodel_skeletal=1 to force)",
+                    def->name.c_str());
+        else
+            OZ_INFO("ViewModel: '%s' mesh=%s (static + procedural anim)",
+                    def->name.c_str(), mesh.c_str());
+    }
+}
+
+bool ViewModel::PlayClip(const std::string& name) {
+    if (!m_skel || name.empty()) return false;
+    const int idx = m_skel->FindClip(name);
+    if (idx < 0) return false;
+    m_active = idx;
+    m_time = 0.0f;
+    // An explicit Idle request just keeps looping; every other clip is
+    // one-shot and Update() returns to the Idle loop when it ends.
+    m_loop = (idx == m_clipIdle);
+    return true;
 }
 
 void ViewModel::TriggerFire() {
