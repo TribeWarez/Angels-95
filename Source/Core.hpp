@@ -1056,6 +1056,17 @@ void PlayHomeScreen()
         // Launch dedicated server as a subprocess
         int serverPort = port;
         std::string args = "--port " + std::to_string(serverPort) + " --dir GameData";
+        // Co-op host: pin the campaign arc to the mission picked in the Co-op
+        // pane. The server resolves the name through its own GameManager and
+        // refuses to start on an unknown one, so a stale selection surfaces as a
+        // loud failure instead of dropping the players into the wrong level.
+        // Quoted for the same reason the master URLs below are: the name is
+        // author-supplied and the command line goes through cmd/sh.
+        if (const char* coopMission = menu.GetCoopMission()) {
+            args += " --campaign --mission \"";
+            args += coopMission;
+            args += "\"";
+        }
         // Announce the hosted server to the configured masters.
         for (const auto& m : master::LoadMasterUrls("System/Angels95.ini")) {
             if (m.rfind("http://", 0) == 0)

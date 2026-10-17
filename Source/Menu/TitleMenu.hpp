@@ -146,7 +146,11 @@ enum PaneType : int {
     PANE_SETTINGS,
     PANE_CHARACTER,
     PANE_HELP,
-    PANE_MULTIPLAYER
+    PANE_MULTIPLAYER,
+    // Campaign co-op: host a dedicated server pinned to a `: mission` def, or
+    // jump to the multiplayer join subpage. Appended (not inserted) so the
+    // existing pane ids keep their values.
+    PANE_COOP
 };
 
 struct Pane {
@@ -199,6 +203,13 @@ public:
         Vector2 mp = GetMousePosition();
 
         UpdateLayout();
+
+        // Drains a pane body's deferred open request (see m_pendingOpenPane).
+        if (m_pendingOpenPane >= 0) {
+            OpenPane((PaneType)m_pendingOpenPane);
+            m_pendingOpenPane = -1;
+        }
+
         UpdateInput(mp);
 
         BeginTextureMode(Target);
@@ -233,6 +244,12 @@ public:
     bool ShouldLoadGame() const { return m_loadGame; }
     bool ShouldJoinServer() const { return m_joinServer; }
     bool ShouldStartServer() const { return m_startServer; }
+    // Co-op host only: the `: mission` def the dedicated server must start at
+    // (Core.hpp turns it into `--campaign --mission <name>`). nullptr = a plain
+    // co-op host, which launches the server with no mission pin.
+    const char* GetCoopMission() const {
+        return m_coopMission.empty() ? nullptr : m_coopMission.c_str();
+    }
     // nullptr when nothing is selected: callers use this as a truthiness guard
     // before copying, and std::string::c_str() is never null (an empty string
     // used to look "selected", wiping g_world_to_load on a plain server join).
@@ -283,6 +300,15 @@ private:
     bool m_charNameEditing = false;
     std::string m_selectedServerWorld;
     int m_multiplayerSubPage = 0; // 0=Join, 1=Host
+    // Co-op pane: the mission currently highlighted, and the one actually handed
+    // to Core.hpp for the server launch. Two fields so browsing the list after
+    // clicking Host cannot retarget a launch that is already in flight.
+    std::string m_coopSelectedMission;
+    std::string m_coopMission;
+    // Deferred OpenPane request: a pane body draws inside DrawContent, which
+    // iterates m_panes by reference, so opening a pane from there could reallocate
+    // the vector mid-iteration. Request here, drain in Tick. -1 = none.
+    int m_pendingOpenPane = -1;
 
     // LAN server browser (Join tab)
     net::NetworkDiscovery m_lanDiscovery;
@@ -441,7 +467,8 @@ private:
     int GetDropdownItemCount(int tab) {
         switch (tab) {
             case 0: return 2; case 1: return 3; case 4: return 3;
-            case 2: case 3: case 5: case 6: case 7: return 1;
+            case 7: return 2;
+            case 2: case 3: case 5: case 6: return 1;
             default: return 0;
         }
     }
@@ -455,7 +482,7 @@ private:
             case 4: return item == 0 ? "Video Settings" : (item == 1 ? "Audio Settings" : "Controls");
             case 5: return "Configure Character";
             case 6: return "About Angels95";
-            case 7: return "Multiplayer Lobby";
+            case 7: return item == 0 ? "Multiplayer Lobby" : "Co-op Campaign";
             default: return "";
         }
     }
@@ -470,6 +497,7 @@ private:
             case PANE_CHARACTER: return "Character Configuration";
             case PANE_HELP:      return "About Angels95";
             case PANE_MULTIPLAYER: return "Multiplayer Lobby";
+            case PANE_COOP:      return "Co-op Campaign";
             default:             return "";
         }
     }
@@ -514,6 +542,7 @@ private:
             case PANE_CHARACTER: w = 440; h = 260; break;
             case PANE_HELP:      w = 520; h = 360; break;
             case PANE_MULTIPLAYER: w = 520; h = 440; break;
+            case PANE_COOP:      w = 640; h = 400; break;
             default:             w = 400; h = 300; break;
         }
     }
@@ -707,7 +736,10 @@ private:
             case 4: OpenPane(PANE_SETTINGS); break;
             case 5: OpenPane(PANE_CHARACTER); break;
             case 6: OpenPane(PANE_HELP); break;
-            case 7: OpenPane(PANE_MULTIPLAYER); break;
+            case 7:
+                if (item == 0) OpenPane(PANE_MULTIPLAYER);
+                else OpenPane(PANE_COOP);
+                break;
             default: break;
         }
     }
@@ -878,6 +910,7 @@ private:
             case PANE_CHARACTER: DrawCharacterPage(area); break;
             case PANE_HELP:      DrawHelpPage(area); break;
             case PANE_MULTIPLAYER: DrawMultiplayerPage(area); break;
+            case PANE_COOP:      DrawCoopPage(area); break;
         }
     }
 
@@ -913,17 +946,13 @@ private:
             DrawText("No worlds found in GameData/Worlds/", (int)(area.x + 12), (int)(area.y + 64), 14, (Color){180,180,180,200});
     }
 
-    void DrawCampaignPage(Rectangle area) {
-        // Phase 2: when the game hierarchy is loaded, show the Sefirot sectors and
-        // their missions (from GameManager) instead of the flat world grid.
+    // The Sefirot sector -> mission list, shared by the Campaign and Co-op panes
+    // so the two can never show a different hierarchy. Draws from `y`, highlights
+    // `selected` when non-empty, and on a click returns true with the mission name
+    // in `picked`. The caller owns the action (single-player launch vs co-op host).
+    bool DrawMissionList(Rectangle area, int& y, const std::string& selected,
+                         std::string& picked) {
         auto& gm = oz::game::GameManager::Instance();
-        if (!gm.Loaded()) { DrawLevelSelectGrid(area, true); return; }
-
-        DrawPageHeader(area, "Campaign");
-        DrawText("Select a mission. Sectors are the Sefirot nodes (1-5).",
-                 (int)(area.x + 12), (int)(area.y + 36), 12, (Color){150,170,200,220});
-
-        int y = (int)(area.y + 62);
         const int rowH = 22;
         Vector2 mp = GetMousePosition();
         for (const auto& sec : gm.Sectors()) {
@@ -941,20 +970,99 @@ private:
                 Rectangle row = {(float)(area.x + 24), (float)y,
                                  area.width - 36.0f, (float)(rowH - 3)};
                 bool hover = CheckCollisionPointRec(mp, row);
-                if (hover) DrawRectangleRec(row, (Color){30, 60, 110, 180});
+                bool isSel = (!selected.empty() && selected == m->name);
+                if (isSel)       DrawRectangleRec(row, (Color){24, 48, 92, 200});
+                else if (hover)  DrawRectangleRec(row, (Color){30, 60, 110, 180});
                 DrawText(TextFormat("- %s  [%s]", m->name.c_str(), m->mode.c_str()),
                          (int)(row.x + 6), y + 3, 13,
-                         hover ? WHITE : (Color){200, 215, 235, 230});
+                         (hover || isSel) ? WHITE : (Color){200, 215, 235, 230});
                 if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                    SoundManager::Instance().PlayUIClick();
-                    gm.SetActiveMission(m->name);
-                    m_selectedWorld = m->world;
-                    m_exit = true;
-                    return;
+                    picked = m->name;
+                    return true;
                 }
                 y += rowH;
             }
             y += 6;
+        }
+        return false;
+    }
+
+    void DrawCampaignPage(Rectangle area) {
+        // Phase 2: when the game hierarchy is loaded, show the Sefirot sectors and
+        // their missions (from GameManager) instead of the flat world grid.
+        auto& gm = oz::game::GameManager::Instance();
+        if (!gm.Loaded()) { DrawLevelSelectGrid(area, true); return; }
+
+        DrawPageHeader(area, "Campaign");
+        DrawText("Select a mission. Sectors are the Sefirot nodes (1-5).",
+                 (int)(area.x + 12), (int)(area.y + 36), 12, (Color){150,170,200,220});
+
+        int y = (int)(area.y + 62);
+        std::string picked;
+        if (DrawMissionList(area, y, std::string(), picked)) {
+            SoundManager::Instance().PlayUIClick();
+            gm.SetActiveMission(picked);
+            m_selectedWorld = gm.MissionWorld(picked);
+            m_exit = true;
+        }
+    }
+
+    // Campaign co-op: HOST pins a dedicated server to the chosen `: mission` def
+    // (Core.hpp appends --campaign --mission <name> to the AngelServ command
+    // line), JOIN drops into the multiplayer join subpage. The single-player
+    // Campaign pane above is untouched by either.
+    void DrawCoopPage(Rectangle area) {
+        auto& gm = oz::game::GameManager::Instance();
+        DrawPageHeader(area, "Co-op Campaign");
+        if (!gm.Loaded()) {
+            DrawText("The campaign hierarchy (GameData/Game) did not load, so there are no",
+                     (int)(area.x + 12), (int)(area.y + 46), 13, (Color){220,190,150,230});
+            DrawText("missions to host. Check the install, or start a plain co-op game",
+                     (int)(area.x + 12), (int)(area.y + 64), 13, (Color){220,190,150,230});
+            DrawText("from the Multiplayer Lobby.",
+                     (int)(area.x + 12), (int)(area.y + 82), 13, (Color){220,190,150,230});
+            return;
+        }
+
+        // Default the selection so Host Co-op is usable without clicking first.
+        if (m_coopSelectedMission.empty()) {
+            for (const auto& sec : gm.Sectors())
+                if (!sec.missions.empty()) { m_coopSelectedMission = sec.missions.front(); break; }
+        }
+        bool selected = !m_coopSelectedMission.empty() &&
+                        gm.FindMission(m_coopSelectedMission) != nullptr;
+
+        // Actions on the FIRST row, not the last: the mission list is taller than
+        // the pane and is clipped by the scissor, so a footer would be drawn over
+        // rows the author can still click.
+        if (GuiButton({area.x + 12, area.y + 36, 150, 26}, "Host Co-op")) {
+            if (selected) {
+                SoundManager::Instance().PlayUIClick();
+                m_coopMission = m_coopSelectedMission;
+                m_selectedWorld = gm.MissionWorld(m_coopSelectedMission);
+                m_startServer = true;
+                m_exit = true;
+            }
+        }
+        if (GuiButton({area.x + 172, area.y + 36, 150, 26}, "Join Co-op")) {
+            SoundManager::Instance().PlayUIClick();
+            m_multiplayerSubPage = 0;             // Join tab of the lobby pane
+            // A pane body runs inside DrawContent, which iterates m_panes by
+            // reference - OpenPane here could reallocate the vector mid-iteration
+            // and dangle it. Request instead; Tick drains this before UpdateInput.
+            m_pendingOpenPane = (int)PANE_MULTIPLAYER;
+        }
+        DrawText(selected ? TextFormat("Host: %s", m_coopSelectedMission.c_str())
+                          : "Select a mission below to host",
+                 (int)(area.x + 336), (int)(area.y + 44), 12, (Color){190,210,235,235});
+        DrawText("Joining a co-op game lands you in the host's current mission.",
+                 (int)(area.x + 12), (int)(area.y + 70), 11, (Color){140,160,185,210});
+
+        int y = (int)(area.y + 92);
+        std::string picked;
+        if (DrawMissionList(area, y, m_coopSelectedMission, picked)) {
+            SoundManager::Instance().PlayUIClick();
+            m_coopSelectedMission = picked;
         }
     }
     void DrawPracticeSessionPage(Rectangle area) { DrawLevelSelectGrid(area, false); }
@@ -1440,6 +1548,7 @@ private:
                     case PANE_CHARACTER: return "Customize your character";
                     case PANE_HELP:      return "About Angels95 / OmegaTech Engine";
                     case PANE_MULTIPLAYER: return "Join or host a multiplayer game";
+                    case PANE_COOP: return "Host a campaign mission on a dedicated server, or join a co-op game";
                 }
             }
         }
