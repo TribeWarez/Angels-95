@@ -12,6 +12,7 @@
 #include "Items.hpp"
 #include "../DebugFlags.hpp"
 #include "../GameplayFlags.hpp"
+#include "../Events/EventBus.hpp"
 #include "../Log.hpp"
 #include <rlgl.h>
 #include <cmath>
@@ -651,6 +652,17 @@ void PawnSystem::UpdatePickups(float dt, Vector3 playerPos, BoundingBox playerBo
             // here would double-fire every quest flag and reward.
             LightningEntityManager::Instance().TriggerCollectAction(n.typeName);
 
+            // EventBus: pickup.collect, dispatched by the bridge to the pickup
+            // def's on_pickup_collect. Additive - the direct hook above still
+            // fires, so existing on_collect scripts are unaffected.
+            {
+                oz::events::Event ev;
+                ev.topic = "pickup.collect";
+                ev.s0 = n.typeName;
+                ev.x = n.position.x; ev.y = n.position.y; ev.z = n.position.z;
+                oz::events::EventBus::Instance().Emit(ev);
+            }
+
             OZ_INFO("Pickup collected: %s (itemId=%d)", n.typeName.c_str(), itemId);
             m_pickupFeedback.collected = true;
             m_pickupFeedback.typeName = n.typeName;
@@ -805,25 +817,25 @@ void PawnSystem::UpdateSkyZone(Vector3 playerPos, BoundingBox playerBounds) {
     bool wasInSky = (prevActive >= 0);
     bool inSky = (m_activeSkyZoneIndex >= 0);
 
-    if (inSky && !wasInSky) {
+        if (inSky && !wasInSky) {
         auto& n = m_skyZones[m_activeSkyZoneIndex];
         OZ_INFO("SkyZone enter: name=%s def=%s pos=(%.1f,%.1f,%.1f)", n.name.c_str(),
                 n.def ? n.def->name.c_str() : "null",
                 playerPos.x, playerPos.y, playerPos.z);
-        if (n.def)
-            LightningEntityManager::Instance().TriggerZoneAction(n.def, "on_enter");
-        else
-            LightningEntityManager::Instance().TriggerZoneAction(
-                n.name.empty() ? "zone_sky_0" : n.name.c_str(), "on_enter");
+        oz::events::Event ev;
+        ev.topic = "zone.enter";
+        ev.s0 = n.def ? n.def->name : (n.name.empty() ? "zone_sky_0" : n.name);
+        ev.x = playerPos.x; ev.y = playerPos.y; ev.z = playerPos.z;
+        oz::events::EventBus::Instance().Emit(ev);
     } else if (!inSky && wasInSky) {
         auto& n = m_skyZones[prevActive];
         OZ_INFO("SkyZone exit: name=%s pos=(%.1f,%.1f,%.1f)", n.name.c_str(),
                 playerPos.x, playerPos.y, playerPos.z);
-        if (n.def)
-            LightningEntityManager::Instance().TriggerZoneAction(n.def, "on_exit");
-        else
-            LightningEntityManager::Instance().TriggerZoneAction(
-                n.name.empty() ? "zone_sky_0" : n.name.c_str(), "on_exit");
+        oz::events::Event ev;
+        ev.topic = "zone.exit";
+        ev.s0 = n.def ? n.def->name : (n.name.empty() ? "zone_sky_0" : n.name);
+        ev.x = playerPos.x; ev.y = playerPos.y; ev.z = playerPos.z;
+        oz::events::EventBus::Instance().Emit(ev);
     }
 }
 
@@ -1177,6 +1189,16 @@ void PawnSystem::SyncPawnAnim(Pawn& p, PawnDef* def, float dt) {
     auto* skel = dynamic_cast<oz::SkeletalMesh*>(p.mesh.get());
     if (!skel || skel->ClipCount() <= 0) return;
 
+    // play_clip override: hold a scripted one-shot clip until its timer expires.
+    if (p.forcedClipTimer > 0.0f) {
+        p.forcedClipTimer -= dt;
+        if (p.forcedClip >= 0 && p.forcedClip < skel->ClipCount()) {
+            if (p.forcedClip != p.animClip) { p.animClip = p.forcedClip; p.animTime = 0.0f; }
+            p.animTime += dt * (def->anim_speed > 0.0f ? def->anim_speed : 1.0f);
+            return;
+        }
+    }
+
     const std::string* clipName = nullptr;
     switch (p.state) {
         case PawnState::IDLE:   clipName = &def->anim_idle;   break;
@@ -1192,6 +1214,29 @@ void PawnSystem::SyncPawnAnim(Pawn& p, PawnDef* def, float dt) {
         p.animTime = 0.0f;
     }
     p.animTime += dt * (def->anim_speed > 0.0f ? def->anim_speed : 1.0f);
+}
+
+int PawnSystem::PlayPawnClip(const std::string& defName, const std::string& clipName,
+                             float hold) {
+    if (defName.empty() || clipName.empty()) return 0;
+    int affected = 0;
+    for (auto& p : m_pawns) {
+        if (!p.active || p.defName != defName) continue;
+        if (!p.mesh) {
+            PawnDef* d = FindDef(p.defName.c_str());
+            if (d) p.mesh = EnsurePawnMesh(*d);
+        }
+        auto* skel = p.mesh ? dynamic_cast<oz::SkeletalMesh*>(p.mesh.get()) : nullptr;
+        if (!skel || skel->ClipCount() <= 0) continue;
+        const int idx = skel->FindClip(clipName);
+        if (idx < 0) continue;
+        p.forcedClip = idx;
+        p.forcedClipTimer = (hold > 0.0f ? hold : 1.0f);
+        p.animClip = idx;
+        p.animTime = 0.0f;
+        affected++;
+    }
+    return affected;
 }
 
 // ---------------------------------------------------------------------------
@@ -1560,6 +1605,28 @@ void PawnSystem::TransitionState(Pawn& p, PawnState newState) {
         if (action) {
             auto* inst = LightningEntityManager::Instance().Get(p.scriptInstanceIndex);
             LightningEntityManager::Instance().RunAction(inst, action);
+        }
+    }
+
+    // EventBus: emit a generic entity fact. The bridge maps it to
+    // on_entity_<state> on the pawn's .ozls def, so a script can subscribe
+    // without this call site naming the def. Additive to the direct hooks above.
+    {
+        const char* topic = nullptr;
+        switch (newState) {
+            case PawnState::CHASE:  topic = "entity.chase"; break;
+            case PawnState::PATROL: topic = "entity.patrol"; break;
+            case PawnState::RETURN: topic = "entity.return"; break;
+            case PawnState::DEAD:   topic = "entity.death"; break;
+            default: break;
+        }
+        if (topic) {
+            oz::events::Event ev;
+            ev.topic = topic;
+            ev.s0 = p.defName;
+            ev.actor = p.id;
+            ev.x = p.position.x; ev.y = p.position.y; ev.z = p.position.z;
+            oz::events::EventBus::Instance().Emit(ev);
         }
     }
 #endif

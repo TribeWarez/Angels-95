@@ -627,6 +627,101 @@ static int test_mark_completed() {
     PASS(); return 0; END_TEST();
 }
 
+// ---------------------------------------------------------------------------
+// Phase-1 opcodes + conditions
+// ---------------------------------------------------------------------------
+static int test_emit_event_opcode() {
+    TEST("emit_event queues an event command");
+    LightningScriptContext ctx;
+    CHECK(ctx.Load("emit_event \"zone.enter\" 7"));
+    ctx.ExecuteNext();
+    auto cmds = ctx.PopCommands();
+    CHECK_EQ(cmds.size(), 1);
+    CHECK_STR(cmds[0].op, std::string("event"));
+    CHECK_STR(cmds[0].s0, std::string("zone.enter"));
+    CHECK_EQ(cmds[0].i0, 7);
+    PASS(); return 0; END_TEST();
+}
+
+static int test_objective_opcode() {
+    TEST("objective opcode queues id/op/value");
+    LightningScriptContext ctx;
+    CHECK(ctx.Load("objective relic += 2"));
+    ctx.ExecuteNext();
+    auto cmds = ctx.PopCommands();
+    CHECK_EQ(cmds.size(), 1);
+    CHECK_STR(cmds[0].op, std::string("objective"));
+    CHECK_STR(cmds[0].s0, std::string("relic"));
+    CHECK_EQ(cmds[0].i0, 1);   // +=
+    CHECK_APROX(cmds[0].f0, 2.0f, 0.001f);
+    PASS(); return 0; END_TEST();
+}
+
+static int test_worldflag_opcodes() {
+    TEST("set_worldflag queues, get_worldflag reads via the getter");
+    LightningScriptContext ctx;
+    ctx.SetWorldFlagGetter([](const std::string& n) { return n == "seen" ? 5 : 0; });
+    CHECK(ctx.Load("set_worldflag seen 1\nget_worldflag seen"));
+    ctx.ExecuteNext();
+    auto cmds = ctx.PopCommands();
+    CHECK_EQ(cmds.size(), 1);
+    CHECK_STR(cmds[0].op, std::string("worldflag_set"));
+    CHECK_STR(cmds[0].s0, std::string("seen"));
+    CHECK_EQ(cmds[0].i0, 1);
+    ctx.ExecuteNext();
+    CHECK_EQ(ctx.GetInt("result"), 5);
+    PASS(); return 0; END_TEST();
+}
+
+static int test_teleport_opcode() {
+    TEST("teleport queues a position");
+    LightningScriptContext ctx;
+    CHECK(ctx.Load("teleport 1 2 3"));
+    ctx.ExecuteNext();
+    auto cmds = ctx.PopCommands();
+    CHECK_EQ(cmds.size(), 1);
+    CHECK_STR(cmds[0].op, std::string("teleport"));
+    CHECK_APROX(cmds[0].x, 1.0f, 0.001f);
+    CHECK_APROX(cmds[0].y, 2.0f, 0.001f);
+    CHECK_APROX(cmds[0].z, 3.0f, 0.001f);
+    PASS(); return 0; END_TEST();
+}
+
+static int test_and_or_conditions() {
+    TEST("&& / || / parentheses conditions");
+    LightningScriptContext ctx;
+    ctx.SetDebugTag("test_andor");
+    // Variables are declared inside each script: Load() clears variable memory.
+    const char* kDecl = "var a = 1\nvar b = 2\n";
+
+    ctx.Load(std::string(kDecl) + "if ($a == 1 && $b == 2)\n$r1 = 1\nendif");
+    ctx.ExecuteNext(); ctx.ExecuteNext(); // var a, var b
+    ctx.ExecuteNext(); ctx.ExecuteNext(); // if true, $r1 = 1
+    CHECK_EQ(ctx.GetInt("r1"), 1);
+
+    ctx.Load(std::string(kDecl) + "if ($a == 1 && $b == 9)\n$r2 = 1\nendif");
+    ctx.ExecuteNext(); ctx.ExecuteNext(); // var a, var b
+    ctx.ExecuteNext();                    // if false -> skip to endif/EOF
+    ctx.ExecuteNext();
+    CHECK_EQ(ctx.GetInt("r2"), 0);
+
+    ctx.Load(std::string(kDecl) + "if (($a == 1) && ($b == 2))\n$r3 = 1\nendif");
+    ctx.ExecuteNext(); ctx.ExecuteNext();
+    ctx.ExecuteNext(); ctx.ExecuteNext();
+    CHECK_EQ(ctx.GetInt("r3"), 1);
+
+    ctx.Load(std::string(kDecl) + "if ($a == 9 || $b == 2)\n$r4 = 1\nendif");
+    ctx.ExecuteNext(); ctx.ExecuteNext();
+    ctx.ExecuteNext(); ctx.ExecuteNext();
+    CHECK_EQ(ctx.GetInt("r4"), 1);
+
+    ctx.Load(std::string(kDecl) + "if (($a == 1 || $b == 9) && $b == 2)\n$r5 = 1\nendif");
+    ctx.ExecuteNext(); ctx.ExecuteNext();
+    ctx.ExecuteNext(); ctx.ExecuteNext();
+    CHECK_EQ(ctx.GetInt("r5"), 1);
+    PASS(); return 0; END_TEST();
+}
+
 int main() {
     fprintf(stdout, "LightningScriptContext Tests:\n");
     int failures = 0;
@@ -674,6 +769,11 @@ int main() {
     failures += test_jump_opcode();
     failures += test_acidpool_scenario();
     failures += test_mark_completed();
+    failures += test_emit_event_opcode();
+    failures += test_objective_opcode();
+    failures += test_worldflag_opcodes();
+    failures += test_teleport_opcode();
+    failures += test_and_or_conditions();
     fprintf(stdout, "\n%d/%d tests passed.\n", tests_passed, tests_total);
     return failures;
 }

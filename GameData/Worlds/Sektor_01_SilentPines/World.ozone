@@ -17,3 +17,5 @@ playerstart 0 0 0 0
 light directional 50 50 80 200 205 215 0.3
 
 zone sky -60 -60 -30 60 60 60 1 name=Sektor_01_SilentPines_sky
+
+trigger Trigger_EnterVolume 5 5 0 15 15 8 once

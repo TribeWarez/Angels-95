@@ -6,6 +6,8 @@
 #include "../Renderer/CullState.hpp"
 #include "../Pawn/OzPawnSystem.hpp"
 #include "../Script/LightningEntityRegistry.hpp"
+#include "../Events/TriggerSystem.hpp"
+#include "../Boxed/BoxedTypeRegistry.hpp"
 #include "OzoneParser.hpp"
 #include "../Log.hpp"
 #include "../Package/PackageAssetLoader.hpp"
@@ -331,6 +333,24 @@ static bool ParseOzoneEntity(const OzonePrimitive& prim,
             }
             return true;
         }
+        case OzonePrimitiveType::ENTITY_TRIGGER: {
+            // trigger <def> minX minY minZ maxX maxY maxZ [once] [team=N]
+            // args[0..5] = bounds, args[6] = once, args[7] = team (see OzoneParser).
+            if (prim.args.size() >= 6) {
+                TriggerNode t;
+                t.defName = StripQuotes(prim.entityType);
+                t.bounds.min = {std::min(prim.args[0], prim.args[3]),
+                                std::min(prim.args[2], prim.args[5]),
+                                std::min(prim.args[1], prim.args[4])};
+                t.bounds.max = {std::max(prim.args[0], prim.args[3]),
+                                std::max(prim.args[2], prim.args[5]),
+                                std::max(prim.args[1], prim.args[4])};
+                if (prim.args.size() >= 7) t.once = prim.args[6] != 0.0f;
+                if (prim.args.size() >= 8) t.team = (int)prim.args[7];
+                out.triggers.push_back(t);
+            }
+            return true;
+        }
         case OzonePrimitiveType::ENTITY_PATH_NODE: {
             // PathNode <name> x y z [radius=R] [next=a,b,c] [loop]
             if (prim.args.size() >= 3) {
@@ -566,38 +586,124 @@ void ParseOzoneEntities(const std::vector<OzonePrimitive>& primitives,
         ParseOzoneEntity(prim, zoneCounters, worldDir, out);
 }
 
-void InjectOzoneEntities(const OzoneEntitySet& entities, PawnSystem& pawns) {
-    auto& zones = ZoneManager::Instance();
+// ---------------------------------------------------------------------------
+// Boxed types — one inject hook per engine world-entity type. This TU is the
+// only place that knows the concrete types, so it casts the opaque
+// BoxedInjectContext back. InjectOzoneEntities iterates the registry, so a game
+// type registers itself without editing this file.
+// ---------------------------------------------------------------------------
+namespace {
 
-    for (const auto& n : entities.playerStarts)
-        pawns.AddPlayerStart(n);
-    for (const auto& n : entities.pickups)
-        pawns.AddPickup(n);
-    for (const auto& n : entities.zones)
-        zones.AddZone(n);
-    for (const auto& n : entities.skyZones)
-        pawns.AddSkyZone(n);
-    for (const auto& n : entities.portals)
-        zones.AddPortal(n);
-    for (const auto& n : entities.lights)
-        pawns.AddLight(n);
-    for (const auto& n : entities.meshObjects)
-        pawns.AddMeshObject(n);
-    for (const auto& n : entities.pathNodes)
-        pawns.AddPathNode(n);
-    for (const auto& n : entities.windZones)
-        pawns.AddWindZone(n);
-    for (const auto& n : entities.particleEmitters)
-        pawns.AddParticleEmitter(n);
-    for (const auto& n : entities.emitters)
-        pawns.AddEmitter(n);
-    // NPC spawns resolve PawnDefs, so they must run after the defs are registered.
-    for (const auto& req : entities.pawnSpawns)
-        pawns.Spawn(req.position, req.defName.c_str());
+void InjectPlayerStarts(const oz::boxed::BoxedInjectContext& c) {
+    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
+    auto& p = *static_cast<PawnSystem*>(c.pawns);
+    for (const auto& n : e.playerStarts) p.AddPlayerStart(n);
+}
+void InjectPickups(const oz::boxed::BoxedInjectContext& c) {
+    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
+    auto& p = *static_cast<PawnSystem*>(c.pawns);
+    for (const auto& n : e.pickups) p.AddPickup(n);
+}
+void InjectZones(const oz::boxed::BoxedInjectContext& c) {
+    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
+    auto& z = *static_cast<ZoneManager*>(c.zones);
+    for (const auto& n : e.zones) z.AddZone(n);
+}
+void InjectSkyZones(const oz::boxed::BoxedInjectContext& c) {
+    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
+    auto& p = *static_cast<PawnSystem*>(c.pawns);
+    for (const auto& n : e.skyZones) p.AddSkyZone(n);
+}
+void InjectPortals(const oz::boxed::BoxedInjectContext& c) {
+    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
+    auto& z = *static_cast<ZoneManager*>(c.zones);
+    for (const auto& n : e.portals) z.AddPortal(n);
+}
+void InjectLights(const oz::boxed::BoxedInjectContext& c) {
+    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
+    auto& p = *static_cast<PawnSystem*>(c.pawns);
+    for (const auto& n : e.lights) p.AddLight(n);
+}
+void InjectMeshObjects(const oz::boxed::BoxedInjectContext& c) {
+    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
+    auto& p = *static_cast<PawnSystem*>(c.pawns);
+    for (const auto& n : e.meshObjects) p.AddMeshObject(n);
+}
+void InjectPathNodes(const oz::boxed::BoxedInjectContext& c) {
+    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
+    auto& p = *static_cast<PawnSystem*>(c.pawns);
+    for (const auto& n : e.pathNodes) p.AddPathNode(n);
+}
+void InjectWindZones(const oz::boxed::BoxedInjectContext& c) {
+    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
+    auto& p = *static_cast<PawnSystem*>(c.pawns);
+    for (const auto& n : e.windZones) p.AddWindZone(n);
+}
+void InjectParticleEmitters(const oz::boxed::BoxedInjectContext& c) {
+    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
+    auto& p = *static_cast<PawnSystem*>(c.pawns);
+    for (const auto& n : e.particleEmitters) p.AddParticleEmitter(n);
+}
+void InjectEmitters(const oz::boxed::BoxedInjectContext& c) {
+    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
+    auto& p = *static_cast<PawnSystem*>(c.pawns);
+    for (const auto& n : e.emitters) p.AddEmitter(n);
+}
+void InjectTriggers(const oz::boxed::BoxedInjectContext& c) {
+    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
+    auto& trig = *static_cast<oz::events::TriggerSystem*>(c.triggers);
+    for (const auto& t : e.triggers) {
+        oz::events::TriggerVolume v;
+        v.defName = t.defName;
+        v.minX = t.bounds.min.x; v.minY = t.bounds.min.y; v.minZ = t.bounds.min.z;
+        v.maxX = t.bounds.max.x; v.maxY = t.bounds.max.y; v.maxZ = t.bounds.max.z;
+        v.once = t.once;
+        v.team = t.team;
+        trig.AddTrigger(v);
+    }
+}
+void InjectPawnSpawns(const oz::boxed::BoxedInjectContext& c) {
+    auto& e = *static_cast<const OzoneEntitySet*>(c.entities);
+    auto& p = *static_cast<PawnSystem*>(c.pawns);
+    for (const auto& req : e.pawnSpawns) p.Spawn(req.position, req.defName.c_str());
+}
+
+void RegisterEngineBoxedTypes() {
+    using oz::boxed::BoxedTypeDesc;
+    auto& r = oz::boxed::BoxedTypeRegistry::Instance();
+    r.Register(BoxedTypeDesc{"playerstart",     "engine", &InjectPlayerStarts});
+    r.Register(BoxedTypeDesc{"pickup",          "engine", &InjectPickups});
+    r.Register(BoxedTypeDesc{"zone",            "engine", &InjectZones});
+    r.Register(BoxedTypeDesc{"skyzone",         "engine", &InjectSkyZones});
+    r.Register(BoxedTypeDesc{"portal",          "engine", &InjectPortals});
+    r.Register(BoxedTypeDesc{"light",           "engine", &InjectLights});
+    r.Register(BoxedTypeDesc{"Mesh.Static",     "engine", &InjectMeshObjects});
+    r.Register(BoxedTypeDesc{"Mesh.Skeletal",   "engine", &InjectMeshObjects});
+    r.Register(BoxedTypeDesc{"PathNode",        "engine", &InjectPathNodes});
+    r.Register(BoxedTypeDesc{"WindZone",        "engine", &InjectWindZones});
+    r.Register(BoxedTypeDesc{"ParticleEmitter", "engine", &InjectParticleEmitters});
+    r.Register(BoxedTypeDesc{"emitter",         "engine", &InjectEmitters});
+    r.Register(BoxedTypeDesc{"trigger",         "engine", &InjectTriggers});
+    r.Register(BoxedTypeDesc{"npc",             "engine", &InjectPawnSpawns});
+}
+
+} // namespace
+
+void InjectOzoneEntities(const OzoneEntitySet& entities, PawnSystem& pawns) {
+    static bool s_registered = false;
+    if (!s_registered) { RegisterEngineBoxedTypes(); s_registered = true; }
+
+    oz::boxed::BoxedInjectContext ctx;
+    ctx.entities = &entities;
+    ctx.pawns    = &pawns;
+    ctx.zones    = &ZoneManager::Instance();
+    ctx.triggers = &oz::events::TriggerSystem::Instance();
+    for (const auto& t : oz::boxed::BoxedTypeRegistry::Instance().All()) {
+        if (t.inject) t.inject(ctx);
+    }
 
     // Lights only make sense bound to a volume, and volumes live in ZoneManager.
     pawns.AssignLightZones();
-
     pawns.GetWorldInfo().settings = entities.settings;
 }
 

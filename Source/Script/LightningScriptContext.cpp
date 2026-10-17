@@ -98,6 +98,42 @@ int LightningScriptContext::RunAction(const std::string& actionName, int maxStep
 }
 
 // ---------------------------------------------------------------------------
+// Small text helpers shared by the Phase-1 opcodes + EvalCondition.
+// ---------------------------------------------------------------------------
+static std::string StripQuotes(std::string s) {
+    size_t a = s.find_first_not_of(" \t\"");
+    size_t b = s.find_last_not_of(" \t\"\r\n");
+    if (a == std::string::npos || b == std::string::npos) return {};
+    return s.substr(a, b - a + 1);
+}
+
+// True when s is exactly one balanced (...) group: "(a && b)" yes,
+// "(a) && (b)" no. The naive front/back check used to mangle the latter.
+static bool EnclosesWhole(const std::string& s) {
+    if (s.size() < 2 || s.front() != '(' || s.back() != ')') return false;
+    int depth = 0;
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == '(') depth++;
+        else if (s[i] == ')') {
+            depth--;
+            if (depth == 0 && i != s.size() - 1) return false;
+        }
+    }
+    return depth == 0;
+}
+
+// First index of `tok` at paren depth 0, or npos.
+static size_t FindTopLevel(const std::string& s, const std::string& tok) {
+    int depth = 0;
+    for (size_t i = 0; i + tok.size() <= s.size(); ++i) {
+        if (s[i] == '(') { depth++; continue; }
+        if (s[i] == ')') { depth--; continue; }
+        if (depth == 0 && s.compare(i, tok.size(), tok) == 0) return i;
+    }
+    return std::string::npos;
+}
+
+// ---------------------------------------------------------------------------
 // ExecuteNext — run one instruction at m_pc, advance if not a jump
 // ---------------------------------------------------------------------------
 bool LightningScriptContext::ExecuteNext() {
@@ -214,12 +250,15 @@ bool LightningScriptContext::ExecuteNext() {
         // Trim again after brace strip
         ce = cond.find_last_not_of(" \t\r\n");
         if (ce != std::string::npos) cond = cond.substr(0, ce + 1);
-        // Strip matching parens around the whole condition
-        while (cond.size() >= 2 && cond.front() == '(' && cond.back() == ')')
+        // Strip a balanced (...) group wrapping the whole condition. The old
+        // naive front/back strip mangled "(a) && (b)" into "a) && (b".
+        while (EnclosesWhole(cond)) {
             cond = cond.substr(1, cond.size() - 2);
-        // Trim again after stripping parens
-        cs = cond.find_first_not_of(" \t");
-        if (cs != std::string::npos) cond = cond.substr(cs);
+            size_t s2 = cond.find_first_not_of(" \t");
+            if (s2 != std::string::npos) cond = cond.substr(s2);
+            size_t e2 = cond.find_last_not_of(" \t\r\n");
+            if (e2 != std::string::npos) cond = cond.substr(0, e2 + 1);
+        }
 
         if (!EvalCondition(cond)) {
             // Skip if-body; stop before else or at endif.
@@ -477,6 +516,94 @@ bool LightningScriptContext::ExecuteNext() {
         SetFloat("__pickup_respawn", respawn);
         m_pc++;
 
+    } else if (opcode == "emit_event") {
+        // emit_event "topic" [int]  → EventBus::Emit (host drain)
+        ScriptCommand c; c.op = "event";
+        std::string topic; ls >> topic;
+        c.s0 = StripQuotes(topic);
+        int iv = 0; if (ls >> iv) c.i0 = iv;
+        m_commands.push_back(c);
+        m_pc++;
+
+    } else if (opcode == "objective") {
+        // objective <id> <op> <value>   op: =, +=, -=
+        ScriptCommand c; c.op = "objective";
+        std::string id, o; ls >> id >> o;
+        float v = 0.0f; ls >> v;
+        c.s0 = id;
+        c.i0 = (o == "=") ? 0 : (o == "-=") ? 2 : 1;   // default +=
+        c.f0 = v;
+        m_commands.push_back(c);
+        m_pc++;
+
+    } else if (opcode == "set_worldflag") {
+        // set_worldflag <name> <value>
+        ScriptCommand c; c.op = "worldflag_set";
+        std::string name; float v = 0.0f; ls >> name >> v;
+        c.s0 = name; c.i0 = (int)v;
+        m_commands.push_back(c);
+        m_pc++;
+
+    } else if (opcode == "get_worldflag") {
+        // get_worldflag <name> → $result
+        std::string name; ls >> name;
+        m_intVars["result"] = m_worldFlagGetter ? m_worldFlagGetter(name) : 0;
+        m_pc++;
+
+    } else if (opcode == "give_xp") {
+        // give_xp <amount>
+        ScriptCommand c; c.op = "xp"; float v = 0.0f; ls >> v; c.f0 = v;
+        m_commands.push_back(c);
+        m_pc++;
+
+    } else if (opcode == "teleport") {
+        // teleport <x> <y> <z>  (Y-up engine space)
+        ScriptCommand c; c.op = "teleport"; ls >> c.x >> c.y >> c.z;
+        m_commands.push_back(c);
+        m_pc++;
+
+    } else if (opcode == "change_world") {
+        // change_world "World"
+        ScriptCommand c; c.op = "change_world";
+        std::string w; ls >> w; c.s0 = StripQuotes(w);
+        m_commands.push_back(c);
+        m_pc++;
+
+    } else if (opcode == "grant_item") {
+        // grant_item "Def" [qty]
+        ScriptCommand c; c.op = "grant_item";
+        std::string n; ls >> n; c.s0 = StripQuotes(n);
+        int q = 1; if (ls >> q) c.i0 = q; else c.i0 = 1;
+        m_commands.push_back(c);
+        m_pc++;
+
+    } else if (opcode == "apply_area_damage") {
+        // apply_area_damage <radius> <damage>
+        ScriptCommand c; c.op = "area_damage";
+        float r = 0.0f, d = 0.0f; ls >> r >> d;
+        c.f0 = r; c.f1 = d;
+        m_commands.push_back(c);
+        m_pc++;
+
+    } else if (opcode == "spawn_projectile") {
+        // spawn_projectile <speed> <damage> <lifetime> [count] [spread]
+        ScriptCommand c; c.op = "projectile";
+        float sp = 20.0f, dmg = 10.0f, life = 2.0f, spread = 0.0f;
+        int count = 1;
+        ls >> sp >> dmg >> life;
+        if (!(ls >> count)) count = 1;
+        if (!(ls >> spread)) spread = 0.0f;
+        c.x = sp; c.y = dmg; c.z = life; c.f0 = (float)count; c.f1 = spread;
+        m_commands.push_back(c);
+        m_pc++;
+
+    } else if (opcode == "play_clip") {
+        // play_clip "Clip"
+        ScriptCommand c; c.op = "clip";
+        std::string cl; ls >> cl; c.s0 = StripQuotes(cl);
+        m_commands.push_back(c);
+        m_pc++;
+
     } else if (opcode == "}" || opcode == "{") {
         // Bare block delimiter (brace-style scripts) — no-op
         m_pc++;
@@ -551,11 +678,33 @@ float LightningScriptContext::ResolveVar(const std::string& vn) const {
 }
 
 // ---------------------------------------------------------------------------
-// EvalCondition — simple condition parser
-// Supports: $var == val, $var > val, $var < val, $var >= val, $var <= val, $var != val
+// EvalCondition — boolean condition parser.
+// Supports && / || (left-associative, parentheses), then a single comparison:
+//   $var == val, $var != val, > < >= <=
 // ---------------------------------------------------------------------------
-bool LightningScriptContext::EvalCondition(const std::string& cond) {
-    // Find the operator
+bool LightningScriptContext::EvalCondition(const std::string& rawCond) {
+    std::string cond = rawCond;
+    auto trim = [](std::string& s) {
+        size_t a = s.find_first_not_of(" \t");
+        size_t b = s.find_last_not_of(" \t\r\n");
+        if (a != std::string::npos && b != std::string::npos) s = s.substr(a, b - a + 1);
+    };
+    trim(cond);
+    if (cond.empty()) return false;
+
+    // Strip a balanced (...) group wrapping the whole expression.
+    while (EnclosesWhole(cond)) { cond = cond.substr(1, cond.size() - 2); trim(cond); }
+    if (cond.empty()) return false;
+
+    // Lowest precedence first.
+    size_t p = FindTopLevel(cond, "||");
+    if (p != std::string::npos)
+        return EvalCondition(cond.substr(0, p)) || EvalCondition(cond.substr(p + 2));
+    p = FindTopLevel(cond, "&&");
+    if (p != std::string::npos)
+        return EvalCondition(cond.substr(0, p)) && EvalCondition(cond.substr(p + 2));
+
+    // Single comparison.
     std::string ops[] = {">=", "<=", "!=", "==", ">", "<"};
     std::string op;
     size_t opPos = std::string::npos;
@@ -568,23 +717,10 @@ bool LightningScriptContext::EvalCondition(const std::string& cond) {
     std::string lhs = cond.substr(0, opPos);
     std::string rhs = cond.substr(opPos + op.size());
 
-    // Trim
-    auto trim = [](std::string& s) {
-        size_t a = s.find_first_not_of(" \t");
-        size_t b = s.find_last_not_of(" \t");
-        if (a != std::string::npos && b != std::string::npos) s = s.substr(a, b - a + 1);
-    };
     trim(lhs); trim(rhs);
+    while (EnclosesWhole(lhs)) { lhs = lhs.substr(1, lhs.size() - 2); trim(lhs); }
+    while (EnclosesWhole(rhs)) { rhs = rhs.substr(1, rhs.size() - 2); trim(rhs); }
 
-    // Strip matching parentheses around the whole expression
-    auto stripParens = [&trim](std::string& s) {
-        while (s.size() >= 2 && s.front() == '(' && s.back() == ')')
-            s = s.substr(1, s.size() - 2);
-        trim(s);
-    };
-    stripParens(lhs); stripParens(rhs);
-
-    // Resolve variable references
     auto resolve = [&](const std::string& s) -> float {
         if (s.rfind("$", 0) == 0) return ResolveVar(s.substr(1));
         try { return std::stof(s); } catch (...) { return 0; }
@@ -716,6 +852,12 @@ void LightningScriptContext::ClearConsume() {
 std::vector<LightningScriptContext::PlayerStatOp> LightningScriptContext::PopPlayerStatOps() {
     std::vector<PlayerStatOp> out;
     out.swap(m_pendingStatOps);
+    return out;
+}
+
+std::vector<LightningScriptContext::ScriptCommand> LightningScriptContext::PopCommands() {
+    std::vector<ScriptCommand> out;
+    out.swap(m_commands);
     return out;
 }
 

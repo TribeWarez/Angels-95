@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+#include "EventBus.hpp"
+
 namespace oz {
 namespace events {
 
@@ -44,9 +46,16 @@ public:
     // Append the indices of every trigger whose AABB contains the point.
     void QueryContaining(float x, float y, float z, std::vector<int>& out) const;
 
+    // Advance the player's inside-set for a point and emit trigger.enter /
+    // trigger.exit on the EventBus (Event::s0 = the trigger's def name). A
+    // `once` trigger emits enter at most once and then stays latched. Call once
+    // per simulation step with the player position.
+    void UpdateForPoint(float x, float y, float z);
+
 private:
     TriggerSystem() = default;
     std::vector<TriggerVolume> m_triggers;
+    std::vector<int> m_inside;   // indices the point is currently inside
     uint32_t m_nextId = 1;
 };
 

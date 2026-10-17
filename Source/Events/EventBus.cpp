@@ -27,12 +27,12 @@ void EventBus::Emit(const Event& ev) {
     // Copy the subscription list header out before dispatch: a handler is
     // allowed to Subscribe/Unsubscribe (an entity dying can remove its own
     // handlers), and mutating m_subs mid-iteration would invalidate it.
-    // Phase 0 matches exact topics only; wildcard matching lands with the
-    // LightningScript subscription wiring in Phase 1.
+    // A subscription whose topic is "*" receives every event (the script bridge
+    // in LightningEntityManager uses exactly one of these).
     const size_t n = m_subs.size();
     for (size_t i = 0; i < n && i < m_subs.size(); ++i) {
         const Sub& s = m_subs[i];
-        if (s.fn && s.topic == ev.topic) s.fn(ev, s.user);
+        if (s.fn && (s.topic == ev.topic || s.topic == "*")) s.fn(ev, s.user);
     }
 }
 

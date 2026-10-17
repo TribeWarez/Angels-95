@@ -335,8 +335,8 @@ OTENGINE: $(RES_95) $(OBJS)
 $(BUILD_DIR)/GameState.o: Source/Server/GameState.cpp Source/Server/GameState.hpp | $(BUILD_DIR)
 	$(SERVER_CXX) $(SERVER_FLAGS) -c Source/Server/GameState.cpp -o $@
 
-AngelServ: $(RES_SRV) $(BUILD_DIR)/Network.o $(BUILD_DIR)/GameState.o $(BUILD_DIR)/GameType.o $(BUILD_DIR)/SurfaceFlags.o $(BUILD_DIR)/Log.o $(BUILD_DIR)/LightningEntityRegistry.o $(BUILD_DIR)/LightningScriptParser.o $(BUILD_DIR)/LightningScriptContext.o $(BUILD_DIR)/miniz.o Source/Server/Server.cpp Source/Server/ServerHttp.cpp Source/Server/ServerInternal.hpp Source/Network/Network.hpp Source/World/OzoneParser.hpp Source/World/OzoneParser.cpp Source/Server/Master/MasterClient.hpp Source/Network/MasterProtocol.hpp Source/Network/MasterHttp.hpp
-	$(SERVER_CXX) $(SERVER_FLAGS) $(RES_SRV) $(BUILD_DIR)/Network.o $(BUILD_DIR)/GameState.o $(BUILD_DIR)/GameType.o $(BUILD_DIR)/SurfaceFlags.o $(BUILD_DIR)/Log.o $(BUILD_DIR)/LightningEntityRegistry.o $(BUILD_DIR)/LightningScriptParser.o $(BUILD_DIR)/LightningScriptContext.o $(BUILD_DIR)/miniz.o Source/Server/Server.cpp Source/Server/ServerHttp.cpp Source/World/OzoneParser.cpp -o AngelServ$(EXE) $(SERVER_LIBS) $(LDEXTRA)
+AngelServ: $(RES_SRV) $(BUILD_DIR)/Network.o $(BUILD_DIR)/GameState.o $(BUILD_DIR)/GameType.o $(BUILD_DIR)/SurfaceFlags.o $(BUILD_DIR)/Log.o $(BUILD_DIR)/LightningEntityRegistry.o $(BUILD_DIR)/LightningScriptParser.o $(BUILD_DIR)/LightningScriptContext.o $(BUILD_DIR)/EventBus.o $(BUILD_DIR)/ObjectiveSystem.o $(BUILD_DIR)/miniz.o Source/Server/Server.cpp Source/Server/ServerHttp.cpp Source/Server/ServerInternal.hpp Source/Network/Network.hpp Source/World/OzoneParser.hpp Source/World/OzoneParser.cpp Source/Server/Master/MasterClient.hpp Source/Network/MasterProtocol.hpp Source/Network/MasterHttp.hpp
+	$(SERVER_CXX) $(SERVER_FLAGS) $(RES_SRV) $(BUILD_DIR)/Network.o $(BUILD_DIR)/GameState.o $(BUILD_DIR)/GameType.o $(BUILD_DIR)/SurfaceFlags.o $(BUILD_DIR)/Log.o $(BUILD_DIR)/LightningEntityRegistry.o $(BUILD_DIR)/LightningScriptParser.o $(BUILD_DIR)/LightningScriptContext.o $(BUILD_DIR)/EventBus.o $(BUILD_DIR)/ObjectiveSystem.o $(BUILD_DIR)/miniz.o Source/Server/Server.cpp Source/Server/ServerHttp.cpp Source/World/OzoneParser.cpp -o AngelServ$(EXE) $(SERVER_LIBS) $(LDEXTRA)
 
 # 7b. Build AngelMaster (standalone master server, no raylib)
 AngelMaster: $(BUILD_DIR)/Log.o Source/Server/Master/Master.cpp Source/Network/MasterProtocol.hpp Source/Network/MasterHttp.hpp
@@ -385,13 +385,13 @@ test_parser: tests/LightningScriptParser.test.cpp Source/Script/LightningScriptP
 test_registry: tests/LightningEntityRegistry.test.cpp Source/Script/LightningEntityRegistry.cpp Source/Script/LightningScriptParser.cpp Source/Script/LightningScriptContext.cpp Source/Log.cpp
 	$(SERVER_CXX) $(TEST_FLAGS) $(RAYLIB_INC) -ISource $^ $(BUILD_DIR)/miniz.o -o $@
 
-test_entity_manager: tests/LightningEntityManager.test.cpp Source/Script/LightningEntityManager.cpp Source/Script/LightningEntityRegistry.cpp Source/Script/LightningScriptContext.cpp Source/Script/LightningScriptParser.cpp Source/Audio/SoundManager.cpp Source/World/ZoneManager.cpp Source/Log.cpp
+test_entity_manager: tests/LightningEntityManager.test.cpp Source/Script/LightningEntityManager.cpp Source/Script/LightningEntityRegistry.cpp Source/Script/LightningScriptContext.cpp Source/Script/LightningScriptParser.cpp Source/Audio/SoundManager.cpp Source/World/ZoneManager.cpp Source/Events/EventBus.cpp Source/Events/ObjectiveSystem.cpp Source/Log.cpp
 	$(COMP) $(TEST_FLAGS) $(RAYLIB_INC) -ISource $^ $(BUILD_DIR)/miniz.o -o $@ $(LDFLAGS) $(LDEXTRA)
 
 # OMEGA_PAWNSYSTEM_TEST opts LightningEntityManager.cpp back into the real
 # PawnSystem/raylib melee path (test_pawn_system links raylib + OzPawnSystem.cpp).
 # Without it the file compiles headless and the melee resolution is stubbed out.
-test_pawn_system: tests/OzPawnSystem.test.cpp Source/Pawn/OzPawnSystem.cpp Source/World/ZoneManager.cpp Source/Audio/SoundManager.cpp Source/Physics/OzBsp.cpp Source/Physics/WorldChunk.cpp Source/Physics/PlayerPhysics.cpp Source/Log.cpp Source/Renderer/OzAssetMapper.cpp Source/Script/LightningEntityManager.cpp Source/Script/LightningEntityRegistry.cpp Source/Script/LightningScriptContext.cpp Source/Script/LightningScriptParser.cpp Source/Renderer/Mesh/Mesh.cpp Source/Renderer/Mesh/SkeletalMesh.cpp Source/Renderer/Mesh/MeshCache.cpp Source/Renderer/Mesh/AnimatedMesh.cpp Source/Package/Anim/OzAnimFormat.cpp Source/Particle/OzParticleSimulationManager.cpp Source/Renderer/LitLightning.cpp Source/Renderer/rlights/rlights.cpp
+test_pawn_system: tests/OzPawnSystem.test.cpp Source/Pawn/OzPawnSystem.cpp Source/World/ZoneManager.cpp Source/Audio/SoundManager.cpp Source/Physics/OzBsp.cpp Source/Physics/WorldChunk.cpp Source/Physics/PlayerPhysics.cpp Source/Log.cpp Source/Renderer/OzAssetMapper.cpp Source/Script/LightningEntityManager.cpp Source/Script/LightningEntityRegistry.cpp Source/Script/LightningScriptContext.cpp Source/Script/LightningScriptParser.cpp Source/Events/EventBus.cpp Source/Events/ObjectiveSystem.cpp Source/Renderer/Mesh/Mesh.cpp Source/Renderer/Mesh/SkeletalMesh.cpp Source/Renderer/Mesh/MeshCache.cpp Source/Renderer/Mesh/AnimatedMesh.cpp Source/Package/Anim/OzAnimFormat.cpp Source/Particle/OzParticleSimulationManager.cpp Source/Renderer/LitLightning.cpp Source/Renderer/rlights/rlights.cpp
 	$(COMP) $(TEST_FLAGS) -DOMEGA_PAWNSYSTEM_TEST $(RAYLIB_INC) -ISource $^ $(BUILD_DIR)/miniz.o -o $@ $(LDFLAGS) $(LDEXTRA)
 
 test_ozone_parser: tests/OzoneParser.test.cpp Source/World/OzoneParser.cpp Source/World/SurfaceFlags.cpp Source/Log.cpp
@@ -452,9 +452,19 @@ test_autoconvex: tests/AutoConvex.test.cpp Source/Physics/AutoConvex.cpp
 worldcheck: tools/worldcheck.cpp Source/World/OzoneParser.cpp Source/World/SurfaceFlags.cpp Source/Log.cpp
 	$(SERVER_CXX) $(TEST_FLAGS) -ISource tools/worldcheck.cpp Source/World/OzoneParser.cpp Source/World/SurfaceFlags.cpp Source/Log.cpp $(BUILD_DIR)/miniz.o -o $@
 
+# Phase-1 engine-generic systems: event bus, objectives, triggers. Raylib-free,
+# so the whole suite is headless.
+test_events: tests/Events.test.cpp Source/Events/EventBus.cpp Source/Events/ObjectiveSystem.cpp Source/Events/TriggerSystem.cpp
+	$(SERVER_CXX) $(TEST_FLAGS) -ISource $^ -o $@
+
+# Phase-2 game hierarchy: registry -> GameManager over the real GameData/Game
+# defs. Needs RAYLIB_INC to compile the registry (PackageAssetLoader pulls
+# raylib.h) but links no raylib.
+test_game: tests/GameManager.test.cpp Source/Game/GameManager.cpp Source/Events/ObjectiveSystem.cpp Source/Events/EventBus.cpp Source/Script/LightningEntityRegistry.cpp Source/Script/LightningScriptParser.cpp Source/Script/LightningScriptContext.cpp Source/Log.cpp
+	$(SERVER_CXX) $(TEST_FLAGS) $(RAYLIB_INC) -ISource $^ $(BUILD_DIR)/miniz.o -o $@
+
 test_join_uri: tests/JoinUri.test.cpp Source/Client/JoinUri.hpp
 	$(SERVER_CXX) $(TEST_FLAGS) -ISource tests/JoinUri.test.cpp -o $@
-
 test_master: tests/Master.test.cpp Source/Network/MasterProtocol.hpp
 	$(SERVER_CXX) $(TEST_FLAGS) -ISource tests/Master.test.cpp -o $@
 
@@ -483,7 +493,7 @@ TEST_SUITES := test_parser test_context test_registry test_entity_manager \
                test_pawn_system test_ozone_parser test_join_uri test_master \
                test_network test_game_state test_ozanim test_ozls_writer \
                test_autoconvex test_csg test_brushmesh test_surface test_gametype \
-               test_editorbus test_assetscope
+               test_editorbus test_assetscope test_events test_game
 
 # The editor is built twice from two hand-maintained object lists - AngelEd/Makefile
 # and the inline `g++` list in ci.yml - because CI does not use the Makefile. They
@@ -541,4 +551,4 @@ test: check-editor-objects $(TEST_SUITES) worldcheck
 	@echo "All suites passed."
 
 clean:
-	rm -rf $(BUILD_DIR) *.exe AngelServ Angels95 AngelMaster OzPack *.o AngelEd/*.o AngelEd/Source/*.o test_context test_parser test_registry test_ozone_parser test_join_uri test_master test_network test_game_state test_ozanim test_ozls_writer test_autoconvex test_csg test_brushmesh test_surface test_gametype test_editorbus test_assetscope worldcheck
+	rm -rf $(BUILD_DIR) *.exe AngelServ Angels95 AngelMaster OzPack *.o AngelEd/*.o AngelEd/Source/*.o test_context test_parser test_registry test_ozone_parser test_join_uri test_master test_network test_game_state test_ozanim test_ozls_writer test_autoconvex test_csg test_brushmesh test_surface test_gametype test_editorbus test_assetscope test_events test_game worldcheck

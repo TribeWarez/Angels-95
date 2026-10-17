@@ -2,20 +2,16 @@
 // ---------------------------------------------------------------------------
 // BoxedTypeRegistry — engine-generic world-entity type registry.
 //
-// SCAFFOLD (Phase 0). Implemented but nothing registers or iterates it yet.
-// Phase 1 converts OzOzoneLoader::InjectOzoneEntities' hardcoded switch into an
-// iteration over registered types, and Phase 2 registers Angels95-specific types
-// (faction_terminal, soul_receptacle, guild_node, ...) from Source/Game.
+// The engine registers its own world-entity types here (playerstart, pickup,
+// zone, skyzone, portal, light, mesh, pathnode, windzone, particle emitter,
+// emitter, trigger, npc spawn). InjectOzoneEntities iterates the registry and
+// calls each type's inject hook, instead of a hardcoded switch — so a game can
+// add a type (Source/Game/GameBoxedTypes.cpp) without editing engine code.
 //
-// Why it exists: every world entity type (mesh, light, emitter, pickup, npc,
-// trigger, zone, portal, pathnode, windzone) is currently a branch inside one
-// engine function. A registry lets the engine iterate descriptors and lets the
-// game add types without editing engine code.
-//
-// The hook signatures are deliberately OPAQUE (void*) at scaffold time: the
-// parse/inject hooks touch OZONE types and the draw/update hooks touch raylib,
-// and pinning those signatures before Phase 1 would drag raylib into this
-// header. Phase 1 replaces the void* trampolines with typed function pointers.
+// The inject hook receives an opaque BoxedInjectContext: the concrete pointer
+// types (OzoneEntitySet / PawnSystem / ZoneManager / TriggerSystem) are known
+// only to the engine TU that registers the hook, so this header stays
+// raylib-free and links into headless tests.
 // ---------------------------------------------------------------------------
 
 #include <string>
@@ -24,14 +20,20 @@
 namespace oz {
 namespace boxed {
 
+// Opaque handle bundle for a boxed type's inject hook.
+struct BoxedInjectContext {
+    const void* entities = nullptr;   // const OzoneEntitySet*
+    void*       pawns    = nullptr;   // PawnSystem*
+    void*       zones    = nullptr;   // ZoneManager*
+    void*       triggers = nullptr;   // oz::events::TriggerSystem*
+};
+
+using BoxedInjectFn = void (*)(const BoxedInjectContext& ctx);
+
 struct BoxedTypeDesc {
-    std::string name;            // OZONE token / .ozls type, e.g. "trigger"
-    std::string source;          // "engine" or "game" (provenance for diagnostics)
-    void* parse  = nullptr;      // Phase 1: parse an OZONE line -> node
-    void* inject = nullptr;      // Phase 1: push node into the runtime system
-    void* update = nullptr;      // Phase 1: per-frame update
-    void* draw   = nullptr;      // Phase 1: per-frame draw
-    void* serialize = nullptr;   // Phase 1: persist node state
+    std::string  name;            // OZONE token / .ozls type, e.g. "trigger"
+    std::string  source;          // "engine" or "game" (provenance/diagnostics)
+    BoxedInjectFn inject = nullptr;
 };
 
 class BoxedTypeRegistry {

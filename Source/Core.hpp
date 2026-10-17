@@ -19,6 +19,9 @@
 #include "Pawn/AngelPlayer/PlayerController.hpp"
 #include "Script/LightningEntityRegistry.hpp"
 #include "Script/LightningEntityManager.hpp"
+#include "Events/EventBus.hpp"
+#include "Events/TriggerSystem.hpp"
+#include "Game/GameManager.hpp"
 
 #include "raymath.h"
 #include "Renderer/rlights/rlights.h"
@@ -309,6 +312,7 @@ auto LoadWorld()
         PawnSystem::Instance().ClearPickups();
         ZoneManager::Instance().ClearZones();
         ZoneManager::Instance().ClearPortals();
+        oz::events::TriggerSystem::Instance().Clear();
         PawnSystem::Instance().ClearEmitters();
         PawnSystem::Instance().ClearParticleEmitters();
         PawnSystem::Instance().ClearPathNodes();
@@ -338,6 +342,16 @@ auto LoadWorld()
             // level metadata, and this orchestrator decides what to apply.
             InjectOzoneEntities(OzoneLoader::Instance().GetEntities(),
                                 PawnSystem::Instance());
+
+            // EventBus: world.load. s0 carries the world name for a global game
+            // script to read; the bridge finds no def by that name, so nothing is
+            // dispatched by default.
+            {
+                oz::events::Event ev;
+                ev.topic = "world.load";
+                ev.s0 = g_world_to_load;
+                oz::events::EventBus::Instance().Emit(ev);
+            }
 
             // Re-assert the lit-fog shader on the freshly loaded world geometry.
             // The loader assigns it per-material when building brushes, but if
@@ -634,6 +648,9 @@ void OmegaTechInit()
     // Initialize LightningScript entity system
     LightningEntityRegistry::Instance().Init();
     LightningEntityManager::Instance().Init();
+    // Phase 2: load the Angels95 game hierarchy (: game / : campaign / : sector
+    // / : mission) now that the registry has parsed every .ozls def.
+    oz::game::GameManager::Instance().Init();
 
     // Initialize engine/item texture mapper (must be before EngineBillboard::Init)
     AssetMapper::Instance().Init();
@@ -1080,6 +1097,11 @@ void UpdateEntitiesSim(float dt)
     // Single-pass zone scan for player â€” replaces 4 separate CheckZoneCollision calls
     ZoneManager::Instance().UpdatePlayerRegion(playerPos, g_playerMovement.PlayerBounds);
 
+    // Gameplay trigger volumes -> EventBus trigger.enter/exit (the bridge maps
+    // them to on_trigger_enter/on_trigger_exit on the `: trigger` def). One call
+    // per simulation step so enter/exit fire once per crossing.
+    oz::events::TriggerSystem::Instance().UpdateForPoint(playerPos.x, playerPos.y, playerPos.z);
+
     // Portal trigger — level-to-level transitions (campaign system)
     if (g_portalCooldown > 0.0f)
         g_portalCooldown -= dt;
@@ -1340,10 +1362,27 @@ void SaveGame()
     wofstream Outfile1;
     Outfile1.open("GameData/Saves/POS.sav");
     Outfile1 << Position;
+
+    // Campaign state (active mission). Its own file so the fragile TF.sav colon
+    // format is untouched.
+    {
+        std::ofstream cf("GameData/Saves/Campaign.sav");
+        if (cf) cf << oz::game::GameManager::Instance().SerializeState();
+    }
 }
 
 void LoadSave()
 {
+    // Campaign state (active mission).
+    {
+        std::ifstream cf("GameData/Saves/Campaign.sav");
+        if (cf) {
+            std::string s;
+            std::getline(cf, s);
+            oz::game::GameManager::Instance().DeserializeState(s);
+        }
+    }
+
     wstring TFlags = LoadFile("GameData/Saves/TF.sav");
     size_t tfLen = TFlags.size();
 
@@ -1941,6 +1980,44 @@ if (inSkyZone)
             // authored hurt_sound / death_sound split.
             PlayerController::Instance().PlayHurt(
                 LightningEntityManager::Instance().GetPlayerHealth() <= 0.0f);
+        }
+
+        // Phase-1 script world commands (teleport / change_world /
+        // apply_area_damage / spawn_projectile / play_clip). LEM queues them
+        // because it cannot see the camera or the world-load globals.
+        for (auto& cmd : lem.TakePendingWorldCommands())
+        {
+            if (cmd.op == "teleport")
+            {
+                OmegaTechData.MainCamera.position = {cmd.x, cmd.y, cmd.z};
+                g_playerMovement.LookInit = false;   // re-derive look from the new spot
+            }
+            else if (cmd.op == "change_world")
+            {
+                if (!cmd.s0.empty())
+                {
+                    strncpy(g_world_to_load, cmd.s0.c_str(), sizeof(g_world_to_load) - 1);
+                    g_world_to_load[sizeof(g_world_to_load) - 1] = '\0';
+                    SetSceneFlag = true;   // consumed below -> LoadWorld()
+                }
+            }
+            else if (cmd.op == "area_damage")
+            {
+                lem.ApplyAreaDamage(OmegaTechData.MainCamera.position, cmd.f0, (int)cmd.f1);
+            }
+            else if (cmd.op == "projectile")
+            {
+                Vector3 fwd = Vector3Normalize(Vector3Subtract(OmegaTechData.MainCamera.target,
+                                                               OmegaTechData.MainCamera.position));
+                ProjectileNode pn;
+                pn.position = Vector3Add(OmegaTechData.MainCamera.position, Vector3Scale(fwd, 2.0f));
+                pn.velocity = Vector3Scale(fwd, cmd.x > 0.0f ? cmd.x : 20.0f);
+                pn.damage = cmd.y;
+                pn.lifetime = cmd.z > 0.0f ? cmd.z : 2.0f;
+                pn.speed = cmd.x > 0.0f ? cmd.x : 20.0f;
+                pn.ownerId = -1;
+                PawnSystem::Instance().SpawnProjectile(pn);
+            }
         }
     }
 

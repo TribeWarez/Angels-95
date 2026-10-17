@@ -190,6 +190,52 @@ Hotbar/equipment instance flags are persisted in save games (`flags=` section). 
 | `spawn_pawn` | `spawn_pawn "Walker" x y z` | Spawn an NPC |
 | `spawn_pickup` | `spawn_pickup "Coin" x y z [respawn]` | Spawn a pickup |
 
+### Gameplay / event opcodes (Phase 1)
+
+These queue a deferred `ScriptCommand` the host applies after the action body
+runs. Engine-generic ones are applied by `LightningEntityManager`; the ones that
+need the camera or world loader are drained by `Core.hpp`.
+
+| Opcode | Syntax | Effect |
+|---|---|---|
+| `emit_event` | `emit_event "zone.enter" [int]` | Publish an `EventBus` event (topic, optional int). The bridge runs `on_<topic>` on the def named by the event's `s0`. |
+| `objective` | `objective <id> += 1` | Advance an `ObjectiveSystem` objective (`=`, `+=`, `-=`); emits `objective.progress`/`objective.complete`. |
+| `set_worldflag` | `set_worldflag <name> <value>` | Write a cross-instance world flag (survives across entities, serialised with the world). |
+| `get_worldflag` | `get_worldflag <name>` | Read a world flag into `$result`. |
+| `give_xp` | `give_xp 50` | Add player XP. |
+| `grant_item` | `grant_item "Medkit" [qty]` | Spawn an entity def and place it in the hotbar. |
+| `teleport` | `teleport x y z` | Move the player (engine Y-up space). |
+| `change_world` | `change_world "Dust_Ravine"` | Request a world load. |
+| `apply_area_damage` | `apply_area_damage <radius> <damage>` | Damage pawns around the player. |
+| `spawn_projectile` | `spawn_projectile <speed> <damage> <life> [count] [spread]` | Fire a projectile from the player. |
+| `play_clip` | `play_clip "Attack"` | Reserved: animation clip (logged no-op until Phase 2). |
+
+### Events (subscription)
+
+The engine publishes facts on the `EventBus`; a def subscribes by declaring an
+action named `on_<topic>` with `.` replaced by `_`:
+
+| Topic | Action | Emitted when |
+|---|---|---|
+| `world.load` | `on_world_load` | A world finishes loading |
+| `entity.death` | `on_entity_death` | A pawn's FSM enters DEAD (`s0` = pawn def name) |
+| `entity.chase` / `entity.patrol` / `entity.return` | matching `on_entity_*` | Pawn FSM transitions |
+| `pickup.collect` | `on_pickup_collect` | A pickup is collected (`s0` = pickup def name) |
+| `player.hurt` / `player.death` | `on_player_hurt` / `on_player_death` | Player takes damage / dies |
+| `trigger.enter` / `trigger.exit` | `on_trigger_enter` / `on_trigger_exit` | Player crosses an OZONE `trigger` volume (`s0` = trigger def name) |
+
+### Triggers (OZONE)
+
+A `trigger` line places a volume whose meaning is a `: trigger` def:
+
+```
+trigger Trigger_EnterVolume minX minY minZ maxX maxY maxZ [once] [team=N]
+```
+
+On the player's entry/exit the engine emits `trigger.enter` / `trigger.exit`
+with the def name; `once` latches after the first entry.
+
+
 ## Conditions
 
 Used in `if` statements within action blocks (both styles work):
@@ -207,7 +253,8 @@ if ($result == 0)
 endif
 ```
 
-Supported operators: `==`, `!=`, `>`, `<`, `>=`, `<=`
+Supported operators: `==`, `!=`, `>`, `<`, `>=`, `<=`, plus `&&`, `||` and
+parentheses (e.g. `if (($a == 1 || $b == 2) && $c > 0)`).
 
 ## Example: Ranged Weapon (automag)
 

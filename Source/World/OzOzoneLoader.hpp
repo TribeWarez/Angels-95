@@ -177,6 +177,16 @@ struct PawnSpawnRequest {
     std::string defName;
 };
 
+// A gameplay trigger volume (OZONE `trigger <def> minX..maxZ [once]`). Injected
+// into oz::events::TriggerSystem, which the client queries per frame and turns
+// into EventBus trigger.enter/exit facts dispatched to the `: trigger` def.
+struct TriggerNode {
+    std::string defName;
+    BoundingBox bounds{};
+    bool once = false;
+    int  team = 0;
+};
+
 struct OzoneEntitySet {
     std::vector<PlayerStartNode>     playerStarts;
     std::vector<PickupNode>          pickups;
@@ -189,6 +199,7 @@ struct OzoneEntitySet {
     std::vector<WindZoneNode>        windZones;
     std::vector<ParticleEmitterNode> particleEmitters;
     std::vector<EmitterNode>         emitters;
+    std::vector<TriggerNode>         triggers;
     std::vector<PawnSpawnRequest>    pawnSpawns;
     // `levelinfo` and `particles` metadata (game rules, skybox, weather).
     LevelSettings                    settings;
@@ -198,13 +209,15 @@ struct OzoneEntitySet {
         return playerStarts.empty() && pickups.empty() && zones.empty() &&
                skyZones.empty() && portals.empty() && lights.empty() &&
                meshObjects.empty() && pathNodes.empty() && windZones.empty() &&
-               particleEmitters.empty() && emitters.empty() && pawnSpawns.empty();
+               particleEmitters.empty() && emitters.empty() && triggers.empty() &&
+               pawnSpawns.empty();
     }
     size_t Count() const {
         return playerStarts.size() + pickups.size() + zones.size() +
                skyZones.size() + portals.size() + lights.size() +
                meshObjects.size() + pathNodes.size() + windZones.size() +
-               particleEmitters.size() + emitters.size() + pawnSpawns.size();
+               particleEmitters.size() + emitters.size() + triggers.size() +
+               pawnSpawns.size();
     }
 };
 

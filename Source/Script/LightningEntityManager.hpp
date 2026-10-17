@@ -8,6 +8,9 @@
 #include <vector>
 #include <unordered_map>
 
+// Forward declaration for the EventBus bridge (keeps this header raylib/Event-free).
+namespace oz { namespace events { struct Event; } }
+
 // A runtime instance of an entity definition
 struct EntityInstance {
     const EntityDef* def = nullptr;
@@ -189,16 +192,20 @@ static constexpr int HOTBAR_SIZE = 8;
     bool FlushNextStashedWeapon();
     const std::vector<std::string>& StashedWeapons() const { return m_stashedWeapons; }
 
-    // --- Zone actions (called by PawnSystem on zone enter/exit) ---
-    void TriggerZoneAction(const std::string& zoneName, const std::string& actionName);
-    void TriggerZoneAction(const EntityDef* def, const std::string& actionName);
+    // --- Zone environment ---
     // Applies a skyzone def's declarative fog_color / ambient_light /
-    // fog_density / music. These keys parsed but nothing read them, so authored
-    // values were silently ignored.
+    // fog_density / music. Called by the EventBus bridge on `zone.enter`. Zone
+    // enter/exit hooks now go through the bus (see DispatchBusEvent), not a
+    // dedicated TriggerZoneAction call site.
     void ApplyZoneEnvFields(const EntityDef& def);
 
     // --- Generic entity action (not SKYZONE-restricted; used for on_collect) ---
     void TriggerEntityAction(const EntityDef* def, const std::string& actionName);
+
+    // EventBus bridge entry (the wildcard subscriber calls this): maps an event
+    // topic to `on_<topic>` / `on_<last segment>` on the def in Event::s0, and
+    // applies declarative zone env on zone.enter.
+    void DispatchBusEvent(const oz::events::Event& ev);
 
     // --- Pickup collect hook (called by PawnSystem::UpdatePickups) ---
     void TriggerCollectAction(const std::string& defName);
@@ -311,6 +318,13 @@ static constexpr int HOTBAR_SIZE = 8;
     float ResolveScriptStat(const std::string& name) const;
     void ApplyPlayerStatOps(const std::vector<LightningScriptContext::PlayerStatOp>& ops);
 
+    // Damage every non-network-controlled pawn within `radius` of `centre`;
+    // returns the hit count so a whiff is distinguishable from a connect.
+    // Public because the `apply_area_damage` opcode is drained by Core.hpp,
+    // which owns the camera the centre comes from. One definition so the test
+    // build (compiled without OMEGA_HAVE_PAWNSYSTEM) still links.
+    int  ApplyAreaDamage(const Vector3& centre, float radius, int damage);
+
     // --- Serialization (for save/load) ---
     std::string SerializeState() const;  // compact string of hotbar + equipment state
     bool DeserializeState(const std::string& data);  // restore from SerializeState()
@@ -348,13 +362,19 @@ static constexpr int HOTBAR_SIZE = 8;
     const std::string& PendingMusic() const { return m_pendingMusic; }
     void ClearPendingMusic() { m_pendingMusic.clear(); }
 
+    // --- Phase-1 script commands that need the world/camera host (Core.hpp) ---
+    // teleport / change_world / apply_area_damage / spawn_projectile / play_clip
+    // are queued here because LightningEntityManager cannot see OmegaTechData
+    // (MainCamera / the world-load globals). Core.hpp drains them each frame,
+    // exactly like the fog/skybox/music state above.
+    std::vector<LightningScriptContext::ScriptCommand> TakePendingWorldCommands() {
+        std::vector<LightningScriptContext::ScriptCommand> out;
+        out.swap(m_pendingWorldCommands);
+        return out;
+    }
+
 private:
     LightningEntityManager();
-    // Damage every non-network-controlled pawn within `radius` of `centre`;
-    // returns the hit count so a whiff is distinguishable from a connect.
-    // Declared here rather than inlined into CastSpell so the test build (which
-    // compiles without OMEGA_HAVE_PAWNSYSTEM) still sees one definition.
-    int  ApplyAreaDamage(const Vector3& centre, float radius, int damage);
     std::vector<EntityInstance> m_instances;
     int m_hotbar[HOTBAR_SIZE];
     int m_selectedSlot = 0;
@@ -399,6 +419,8 @@ private:
     bool m_pendingAmbientRestore = false;
     bool m_pendingSkyboxRestore = false;
     std::string m_pendingMusic;
+    // Phase-1 commands needing the world/camera host (Core.hpp drains these).
+    std::vector<LightningScriptContext::ScriptCommand> m_pendingWorldCommands;
     // Name of the zone def whose declarative env fields are currently applied,
     // so a re-trigger of the same zone is idempotent.
     std::string m_activeEnvZoneDef;

@@ -2,6 +2,8 @@
 #include "LightningEntityRegistry.hpp"
 #include "../Package/PackageAssetLoader.hpp"
 #include "../Audio/SoundManager.hpp"
+#include "../Events/EventBus.hpp"
+#include "../Events/ObjectiveSystem.hpp"
 #include "../Log.hpp"
 // OMEGA_TEST_ENV builds this TU without raylib, so most of it is compiled out.
 // OMEGA_PAWNSYSTEM_TEST (set only by test_pawn_system) opts back in to the
@@ -697,7 +699,58 @@ LightningEntityManager::LightningEntityManager() {
     m_playerEntityIndex = -1;
 }
 
+// ---------------------------------------------------------------------------
+// EventBus bridge.
+//
+// One wildcard subscriber turns every emitted event into a script action on the
+// def named by Event::s0: topic "entity.death" -> action "on_entity_death".
+// This is how a script subscribes to an engine fact without a hardcoded C++
+// call site (the Phase-1 goal). It runs the action only if the def declares it
+// (TriggerEntityAction checks), so an unrelated def is a no-op.
+// ---------------------------------------------------------------------------
+namespace {
+bool LEMDeclaresAction(const EntityDef* def, const std::string& name) {
+    if (!def) return false;
+    for (const auto& a : def->actions)
+        if (a.name == name) return true;
+    return false;
+}
+void LEMBusHandler(const oz::events::Event& ev, void* /*user*/) {
+    LightningEntityManager::Instance().DispatchBusEvent(ev);
+}
+} // namespace
+
+void LightningEntityManager::DispatchBusEvent(const oz::events::Event& ev) {
+    if (ev.s0.empty()) return;
+    const EntityDef* def = LightningEntityRegistry::Instance().Find(ev.s0);
+    if (!def) return;
+
+    // Declarative zone environment (fog/ambient/music) is applied on entry, the
+    // same as the old TriggerZoneAction did; on_exit the script's restore_*
+    // opcodes take over.
+    if (ev.topic == "zone.enter" && def->type == EntityType::SKYZONE)
+        ApplyZoneEnvFields(*def);
+
+    // Prefer the namespaced action (zone.enter -> on_zone_enter); fall back to
+    // the last segment (on_enter) so existing zone scripts keep working.
+    std::string full = "on_";
+    for (char c : ev.topic) full += (c == '.') ? '_' : c;
+    if (LEMDeclaresAction(def, full)) { TriggerEntityAction(def, full); return; }
+    const size_t dot = ev.topic.rfind('.');
+    if (dot != std::string::npos) {
+        std::string shortAct = "on_" + ev.topic.substr(dot + 1);
+        if (LEMDeclaresAction(def, shortAct)) TriggerEntityAction(def, shortAct);
+    }
+}
+
 void LightningEntityManager::Init() {
+    // Subscribe the bus bridge exactly once (Init can run again on New Game).
+    static bool s_busSubscribed = false;
+    if (!s_busSubscribed) {
+        oz::events::EventBus::Instance().Subscribe("*", &LEMBusHandler, nullptr);
+        s_busSubscribed = true;
+    }
+
     for (int i = 0; i < HOTBAR_SIZE; i++) m_hotbar[i] = -1;
     for (int i = 0; i < EQUIP_SLOT_COUNT; i++) m_equipment[i] = -1;
     m_selectedSlot = 0;
@@ -825,6 +878,45 @@ void LightningEntityManager::ApplyEntityScriptEffects(EntityInstance& inst) {
     // Scripted damage flash
     if (inst.ctx.PopPendingHurt()) m_playerHurt = true;
 
+    // Phase-1 generic gameplay commands.
+    // Engine-generic ones (event/objective/worldflag/xp/grant_item) are applied
+    // here; world/camera-dependent ones (teleport/change_world/area_damage/
+    // spawn_projectile/play_clip) are queued for Core.hpp, which owns
+    // OmegaTechData and the camera.
+    for (auto& cmd : inst.ctx.PopCommands()) {
+        if (cmd.op == "event") {
+            oz::events::Event ev;
+            ev.topic = cmd.s0;
+            ev.i0 = cmd.i0;
+            oz::events::EventBus::Instance().Emit(ev);
+        } else if (cmd.op == "objective") {
+            auto& objs = oz::events::ObjectiveSystem::Instance();
+            if (cmd.i0 == 0)      objs.Set(cmd.s0, (int)cmd.f0);
+            else if (cmd.i0 == 2) objs.Add(cmd.s0, -(int)cmd.f0);
+            else                  objs.Add(cmd.s0,  (int)cmd.f0);
+        } else if (cmd.op == "worldflag_set") {
+            oz::events::ObjectiveSystem::Instance().SetWorldFlag(cmd.s0, cmd.i0);
+        } else if (cmd.op == "xp") {
+            SetPlayerXP(GetPlayerXP() + (int)cmd.f0);
+        } else if (cmd.op == "grant_item") {
+            int idx = Spawn(cmd.s0);
+            if (idx >= 0 && !HotbarPlaceFirstFree(idx))
+                OZ_WARN("grant_item '%s': hotbar full", cmd.s0.c_str());
+        } else if (cmd.op == "clip") {
+#ifndef OMEGA_TEST_ENV
+            // play_clip plays a skeletal clip on pawns whose def matches this
+            // instance's def (the action ran on that def).
+            int n = PawnSystem::Instance().PlayPawnClip(inst.def->name, cmd.s0, 1.0f);
+            if (n == 0)
+                OZ_WARN("play_clip '%s' on '%s': no matching skeletal pawn",
+                        cmd.s0.c_str(), inst.def->name.c_str());
+#endif
+        } else {
+            // teleport / change_world / area_damage / projectile → Core.hpp
+            m_pendingWorldCommands.push_back(cmd);
+        }
+    }
+
 #ifndef OMEGA_TEST_ENV
     // Process pending pawn spawn from spawn_pawn opcode
     auto pawnReq = inst.ctx.PopPendingPawnSpawn();
@@ -951,6 +1043,11 @@ int LightningEntityManager::Spawn(const EntityDef* def) {
     // Resolve player/selected-weapon stats in this instance's scripts ($health,
     // $ammo, ...) — same resolver the player entity's context gets in Init().
     inst.ctx.SetStatResolver([this](const std::string& name) { return ResolveScriptStat(name); });
+    // get_worldflag reads the cross-instance flag store (ObjectiveSystem), which
+    // is the same store set_worldflag writes through.
+    inst.ctx.SetWorldFlagGetter([](const std::string& name) {
+        return oz::events::ObjectiveSystem::Instance().GetWorldFlag(name, 0);
+    });
     char tag[128];
     snprintf(tag, sizeof(tag), "%s:%d", def->name.c_str(), (int)m_instances.size());
     inst.ctx.SetDebugTag(tag);
@@ -1440,33 +1537,8 @@ void LightningEntityManager::DrawHotbar() {
 }
 
 // ---------------------------------------------------------------------------
-// TriggerZoneAction — called from PawnSystem when player enters/exits a zone
+// ApplyZoneEnvFields — declarative skyzone fog/ambient/music (see the bridge).
 // ---------------------------------------------------------------------------
-void LightningEntityManager::TriggerZoneAction(const std::string& zoneName,
-                                                const std::string& actionName) {
-    const EntityDef* def = LightningEntityRegistry::Instance().Find(zoneName);
-    if (!def) return;
-    TriggerZoneAction(def, actionName);
-}
-
-// TriggerZoneAction — def-based variant (world-scoped defs resolved at zone
-// creation avoid the global registry's cross-world name collisions)
-void LightningEntityManager::TriggerZoneAction(const EntityDef* def,
-                                               const std::string& actionName) {
-    if (!def) return;
-    // Only allow zone-type entities to trigger via TriggerZoneAction
-    if (def->type != EntityType::SKYZONE) return;
-
-    // Declarative zone environment. These four body keys parse into the def but
-    // nothing ever read them, so every skyzone authored fog_color /
-    // ambient_light / fog_density / music and got the engine default instead.
-    // Applied on enter; on_exit the script's restore_fog / restore_ambient /
-    // restore_skybox opcodes take over (and now actually work).
-    if (actionName == "on_enter") ApplyZoneEnvFields(*def);
-
-    TriggerEntityAction(def, actionName);
-}
-
 void LightningEntityManager::ApplyZoneEnvFields(const EntityDef& def) {
     bool applied = false;
 

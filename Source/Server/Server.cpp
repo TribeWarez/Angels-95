@@ -684,7 +684,8 @@ static void on_server_message(const net::NetworkMessage& msg,
             int dmg = ndd.damage;
             if (dmg < 0) dmg = 0;
             if (dmg > net::NPC_MAX_DAMAGE) dmg = net::NPC_MAX_DAMAGE;
-            g_game_state.damage_npc(*npc, dmg, sender.id);
+            g_game_state.damage_npc(*npc, dmg, sender.id,
+                                    oz::gametype::DamageSource::PLAYER, ws->world_index);
             // Broadcast updated NPC state
             net::NpcStateUpdateData nsud = make_npc_state(*ws, ndd.npc_index, ndd.partition_index, *npc);
             net::NetworkMessage relay;
@@ -754,7 +755,8 @@ static void on_server_message(const net::NetworkMessage& msg,
             int dmg = mhd.damage;
             if (dmg < 0) dmg = 0;
             if (dmg > net::MELEE_MAX_DAMAGE) dmg = net::MELEE_MAX_DAMAGE;
-            g_game_state.damage_npc(*npc, dmg, sender.id);
+            g_game_state.damage_npc(*npc, dmg, sender.id,
+                                    oz::gametype::DamageSource::PLAYER, ws->world_index);
 
             net::NpcStateUpdateData nsud = make_npc_state(*ws, mhd.npc_index, mhd.partition_index, *npc);
             net::NetworkMessage relay;
@@ -1181,6 +1183,27 @@ int main(int argc, char** argv) {
                         msg.timestamp = static_cast<uint32_t>(now);
                         memcpy(msg.payload, &ss, sizeof(ss));
                         g_game_server->broadcast_message(msg);
+                    }
+
+                    // COOP objectives: one message per objective, per world. The
+                    // client filters by world_index; periodic send self-heals a
+                    // lost datagram (same reasoning as SCORE_STATE).
+                    for (const auto& ws : g_game_state.worlds()) {
+                        for (const auto& o : ws.objectives) {
+                            net::ObjectiveStateData os{};
+                            os.world_index = ws.world_index;
+                            os.progress = o.progress;
+                            os.target = o.target;
+                            strncpy(os.id, o.id.c_str(), sizeof(os.id) - 1);
+                            net::NetworkMessage msg{};
+                            msg.magic = net::MAGIC;
+                            msg.type = static_cast<uint32_t>(net::MessageType::OBJECTIVE_STATE);
+                            msg.size = sizeof(os);
+                            msg.sequence = 0;
+                            msg.timestamp = static_cast<uint32_t>(now);
+                            memcpy(msg.payload, &os, sizeof(os));
+                            g_game_server->broadcast_message(msg);
+                        }
                     }
                     if (matchOver) {
                         std::string text = g_game_state.winning_team() >= 0

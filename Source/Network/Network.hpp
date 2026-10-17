@@ -134,7 +134,11 @@ enum class MessageType : uint32_t {
     // the client learns the server's decision rather than assuming its request
     // succeeded. `accepted == 0` means the request was refused; `world_index` is
     // then the world the player remains in.
-    WORLD_CHANGE = 28
+    WORLD_CHANGE = 28,
+    // Server -> client (COOP): one world objective's progress. Sent periodically
+    // for the player's own world (like SCORE_STATE) and on join, so a lost
+    // datagram self-heals. Additive; no PROTOCOL_VERSION bump.
+    OBJECTIVE_STATE = 29
 };
 
 // Melee stamina: the server keeps its own pool per player so a swinging client
@@ -334,6 +338,16 @@ struct WorldChangeData {
 // client drop every message from a server predating the field, which is the same
 // trap as PickupRespawnData::typeName.
 constexpr uint32_t kWorldChangeSizeBase = offsetof(WorldChangeData, spawnX);
+
+// Server -> client COOP objective progress. One objective per message; the
+// server sends the player's own world's objectives periodically, so a lost
+// datagram self-heals. See OBJECTIVE_STATE in MessageType.
+struct ObjectiveStateData {
+    int  world_index;      // which world the objective belongs to
+    int  progress;
+    int  target;           // <= 0 = binary objective
+    char id[32];           // objective id (null-terminated)
+};
 
 struct XpUpdateData {
     uint32_t player_id;

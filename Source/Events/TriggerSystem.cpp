@@ -24,6 +24,7 @@ void TriggerSystem::RemoveTrigger(int id) {
 
 void TriggerSystem::Clear() {
     m_triggers.clear();
+    m_inside.clear();
     m_nextId = 1;
 }
 
@@ -37,6 +38,35 @@ void TriggerSystem::QueryContaining(float x, float y, float z, std::vector<int>&
             out.push_back((int)i);
         }
     }
+}
+
+void TriggerSystem::UpdateForPoint(float x, float y, float z) {
+    std::vector<int> now;
+    QueryContaining(x, y, z, now);
+    auto contains = [](const std::vector<int>& v, int i) {
+        return std::find(v.begin(), v.end(), i) != v.end();
+    };
+    for (int i : now) {
+        if (contains(m_inside, i)) continue;
+        TriggerVolume& t = m_triggers[(size_t)i];
+        if (t.once && t.fired) continue;
+        t.fired = true;
+        Event ev;
+        ev.topic = "trigger.enter";
+        ev.s0 = t.defName;
+        ev.x = x; ev.y = y; ev.z = z;
+        EventBus::Instance().Emit(ev);
+    }
+    for (int i : m_inside) {
+        if (contains(now, i)) continue;
+        const TriggerVolume& t = m_triggers[(size_t)i];
+        Event ev;
+        ev.topic = "trigger.exit";
+        ev.s0 = t.defName;
+        ev.x = x; ev.y = y; ev.z = z;
+        EventBus::Instance().Emit(ev);
+    }
+    m_inside.swap(now);
 }
 
 } // namespace events

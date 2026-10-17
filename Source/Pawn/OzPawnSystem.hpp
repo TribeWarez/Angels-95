@@ -118,6 +118,11 @@ struct Pawn {
     std::shared_ptr<oz::Mesh> mesh;
     int animClip = -1;
     float animTime = 0.0f;
+    // Forced one-shot clip (play_clip opcode): while forcedClipTimer > 0 the FSM
+    // clip is overridden, so a scripted "Attack"/"Roar" plays to completion
+    // before the state animation resumes.
+    int   forcedClip = -1;
+    float forcedClipTimer = 0.0f;
 };
 
 // Placed map-object mesh (GameEngine.Mesh.Static / GameEngine.Mesh.Skeletal).
@@ -344,6 +349,12 @@ public:
     // Apply damage to a pawn and transition to DEAD (with on_death script
     // hook) when its health drops to 0. Used by projectile hits and melee.
     void ApplyPawnDamage(Pawn& p, int damage);
+
+    // play_clip opcode: force a named skeletal clip on every active pawn whose
+    // def matches `defName`, for `hold` seconds (the FSM clip resumes after).
+    // Returns the number of pawns affected (0 = no matching skeletal pawn).
+    int PlayPawnClip(const std::string& defName, const std::string& clipName,
+                     float hold = 1.0f);
 
     // Which pawn a melee swing hits: the NEAREST live pawn inside the forward
     // arc (projection in [0, reach]) and within a 2u radius of the swing line.

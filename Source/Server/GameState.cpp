@@ -166,19 +166,28 @@ void GameState::init_worlds(const std::string& gamedata_dir,
                                StripQuotes(pr.entityType),
                                StripQuotes(pr.entitySubType),
                                StripQuotes(pr.gametypeKey));
-                m_gameTypeInfo = oz::gametype::ResolveGameTypeInfo(
+                ws.gameTypeInfo = oz::gametype::ResolveGameTypeInfo(
                     oz::gametype::GameTypeFromId(ls.gameType), ls, "");
-                m_max_players = (ls.maxPlayers > 0) ? (uint32_t)ls.maxPlayers : net::MAX_PLAYERS;
-                m_friendly_fire = m_gameTypeInfo.friendlyFire || ls.friendlyFire;
-                m_match.type = m_gameTypeInfo.id;
+                ws.max_players = (ls.maxPlayers > 0) ? (uint32_t)ls.maxPlayers : net::MAX_PLAYERS;
+                ws.friendly_fire = ws.gameTypeInfo.friendlyFire || ls.friendlyFire;
                 OZ_INFO("World %s rules: mode=%s maxPlayers=%u friendlyFire=%d scoreLimit=%d%s",
                         world_list[i].c_str(),
-                        oz::gametype::GameTypeKey(m_gameTypeInfo.id),
-                        m_max_players, (int)m_friendly_fire,
-                        m_gameTypeInfo.scoreLimitEnabled ? m_gameTypeInfo.scoreLimit : 0,
-                        m_gameTypeInfo.scoreLimitEnabled ? "" : " (off)");
+                        oz::gametype::GameTypeKey(ws.gameTypeInfo.id),
+                        ws.max_players, (int)ws.friendly_fire,
+                        ws.gameTypeInfo.scoreLimitEnabled ? ws.gameTypeInfo.scoreLimit : 0,
+                        ws.gameTypeInfo.scoreLimitEnabled ? "" : " (off)");
                 break; // first levelinfo wins
             }
+        }
+
+        // World 0 is the server's primary map (current_map_name()), so its rules
+        // drive the single global match. Other worlds keep their own rules in ws;
+        // they no longer overwrite the globals (the old last-world-wins bug).
+        if (i == 0) {
+            m_gameTypeInfo = ws.gameTypeInfo;
+            m_max_players = ws.max_players;
+            m_friendly_fire = ws.friendly_fire;
+            m_match.type = ws.gameTypeInfo.id;
         }
 
         // Create partitions
@@ -201,6 +210,20 @@ void GameState::init_worlds(const std::string& gamedata_dir,
         seed_world_entities(ws, gamedata_dir);
         if (ws.global_npcs.empty() && ws.global_pickups.empty())
             init_global_npcs_and_pickups(ws);
+
+        // COOP / Campaign: a default "clear the area" objective = kill every
+        // seeded NPC. Advanced by damage_npc and broadcast as OBJECTIVE_STATE.
+        if (ws.gameTypeInfo.id == oz::gametype::GameType::COOP ||
+            ws.gameTypeInfo.id == oz::gametype::GameType::COOPERATIVE ||
+            ws.gameTypeInfo.id == oz::gametype::GameType::CAMPAIGN) {
+            WorldState::Objective obj;
+            obj.id = "ClearArea";
+            obj.target = (int)ws.global_npcs.size();
+            if (obj.target > 0) {
+                obj.progress = 0;
+                ws.objectives.push_back(obj);
+            }
+        }
 
         // Attempt to load saved state
         load_world_state(ws, gamedata_dir);
@@ -953,7 +976,7 @@ void GameState::add_xp(uint32_t player_id, int amount) {
 // Damage system
 // ---------------------------------------------------------------------------
 void GameState::damage_npc(ServerNPC& npc, int amount, uint32_t killer_id,
-                           oz::gametype::DamageSource source) {
+                           oz::gametype::DamageSource source, int world_index) {
     if (npc.state == NpcState::DEAD) return; // dead NPCs can't be re-killed
     npc.health -= amount;
     if (npc.health <= 0) {
@@ -962,12 +985,26 @@ void GameState::damage_npc(ServerNPC& npc, int amount, uint32_t killer_id,
         npc.state = NpcState::DEAD;
         npc.death_timer = 0.0f;
         OZ_INFO("NPC killed at (%.2f, %.2f, %.2f)", npc.position.x, npc.position.y, npc.position.z);
+        // COOP: advance the world's "clear" objective.
+        if (world_index >= 0 && world_index < (int)m_worlds.size())
+            AdvanceObjective(m_worlds[(size_t)world_index], "ClearArea", 1);
         if (killer_id != UINT32_MAX) {
             add_xp(killer_id, XP_PER_KILL);
             OZ_INFO("Killer %u awarded %d XP for NPC kill", killer_id, XP_PER_KILL);
             register_kill(killer_id, UINT32_MAX, source);
         }
     }
+}
+
+bool GameState::AdvanceObjective(WorldState& ws, const std::string& id, int delta) {
+    for (auto& o : ws.objectives) {
+        if (o.id != id) continue;
+        if (o.target > 0 && o.progress >= o.target) return false; // already complete
+        o.progress += delta;
+        if (o.target > 0 && o.progress > o.target) o.progress = o.target;
+        return true;
+    }
+    return false;
 }
 
 void GameState::damage_player(ServerPlayer& player, int amount,
@@ -1049,7 +1086,7 @@ void GameState::tick_projectiles(WorldState& ws, float dt) {
             float dist = sqrtf(dx*dx + dy*dy + dz*dz);
             if (dist < HIT_RADIUS) {
                 p.active = false;
-                damage_npc(npc, (int)p.damage, p.owner_id);
+                damage_npc(npc, (int)p.damage, p.owner_id, oz::gametype::DamageSource::WORLD, ws.world_index);
                 break;
             }
         }
@@ -1064,7 +1101,7 @@ void GameState::tick_projectiles(WorldState& ws, float dt) {
                 float dist = sqrtf(dx*dx + dy*dy + dz*dz);
                 if (dist < HIT_RADIUS) {
                     p.active = false;
-                    damage_npc(npc, (int)p.damage, p.owner_id);
+                    damage_npc(npc, (int)p.damage, p.owner_id, oz::gametype::DamageSource::WORLD, ws.world_index);
                     break;
                 }
             }

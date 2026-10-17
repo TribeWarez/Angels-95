@@ -517,6 +517,27 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
                 try { prim.args.push_back(std::stof(s)); }
                 catch (...) { break; }
             }
+        } else if (type_name == "trigger") {
+            prim.type = OzonePrimitiveType::ENTITY_TRIGGER;
+            // trigger <def> minX minY minZ maxX maxY maxZ [once] [team=N]
+            // args[0..5] = bounds, args[6] = once (0/1), args[7] = team.
+            if (ls >> prim.entityType) {
+                std::string s;
+                float once = 0.0f, team = 0.0f;
+                while (ls >> s) {
+                    if (s == "once") { once = 1.0f; continue; }
+                    if (s.rfind("team=", 0) == 0) {
+                        float tv;
+                        if (TryFloat(s.substr(5), tv)) team = tv;
+                        continue;
+                    }
+                    float v;
+                    if (TryFloat(s, v)) prim.args.push_back(v);
+                    else break;
+                }
+                prim.args.push_back(once);
+                prim.args.push_back(team);
+            }
         } else if (type_name == "ParticleEmitter") {
             prim.type = OzonePrimitiveType::ENTITY_PARTICLE_EMITTER;
             // ParticleEmitter <type> x y z [rate life speed spread sizeStart sizeEnd

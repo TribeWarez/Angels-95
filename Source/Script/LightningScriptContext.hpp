@@ -94,6 +94,30 @@ public:
         bool valid = false;
     };
 
+    // Generic deferred gameplay command, emitted by the Phase-1 opcodes
+    // (emit_event / objective / set_worldflag / give_xp / teleport /
+    // change_world / grant_item / apply_area_damage / spawn_projectile /
+    // play_clip). ONE queue so the host has one drain point and a new opcode
+    // never needs a new accessor. Field usage is per-op and documented in
+    // ExecuteNext.
+    struct ScriptCommand {
+        std::string op;              // "event","objective","worldflag_set","xp",
+                                     // "teleport","change_world","grant_item",
+                                     // "area_damage","projectile","clip"
+        std::string s0;              // name / id / topic / clip / world
+        float x = 0, y = 0, z = 0;   // generic floats
+        float f0 = 0, f1 = 0, f2 = 0;
+        int   i0 = 0, i1 = 0;
+    };
+    std::vector<ScriptCommand> PopCommands();
+
+    // World-scope flag read provider (host binds ObjectiveSystem). `get_worldflag`
+    // reads through this; `set_worldflag` is queued as a ScriptCommand so the
+    // write reaches the same store.
+    void SetWorldFlagGetter(const std::function<int(const std::string&)>& getter) {
+        m_worldFlagGetter = getter;
+    }
+
     // Pop pending side-effects (called by host after script execution)
     std::string PopPendingSound();              // returns __last_sound and clears it
     bool PopPendingFog(float& r, float& g, float& b, float& density);
@@ -136,6 +160,10 @@ private:
 
     // Deferred side-effect queues
     std::vector<PlayerStatOp> m_pendingStatOps;
+    std::vector<ScriptCommand> m_commands;
+
+    // World-scope flag read provider (see SetWorldFlagGetter).
+    std::function<int(const std::string&)> m_worldFlagGetter;
 
     // Jump labels: label_name → line_index
     std::unordered_map<std::string, int> m_jumpLabels;

@@ -33,6 +33,7 @@ enum class OzonePrimitiveType : uint8_t {
     ENTITY_PARTICLE_EMITTER, // GameEngine.ParticleEmitter (local 3D particles)
     ENTITY_PATH_NODE,    // GameEngine.PathNode (NPC waypoint)
     ENTITY_WIND_ZONE,    // WindZone (foliage wind region)
+    ENTITY_TRIGGER,      // GameEngine.Trigger (volume -> EventBus trigger.enter/exit)
     SKYBOX,             // skybox (projected inner faces, render-only)
     HEIGHTMAP,           // Terrain heightmap (grayscale image)
     UNKNOWN

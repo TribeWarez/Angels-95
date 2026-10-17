@@ -199,17 +199,51 @@ hardcoded switch. Game types register from `Source/Game/GameBoxedTypes.cpp`.
 
 ## 12. Roadmap
 
-- **Phase 0 — this pass.** Spec (this page), content scaffold, code stubs +
+- **Phase 0 — landed.** Spec (this page), content scaffold, code stubs +
   build wiring, `game.ozpak`. No behaviour change.
-- **Phase 1 — engine generic.** EventBus/TriggerSystem/ObjectiveSystem/
-  BoxedTypeRegistry + the new opcodes/def types; migrate zone/pawn/pickup hooks
-  onto the bus.
-- **Phase 2 — game layer.** `GameManager` loads the hierarchy; client menu
-  (Campaign/Coop) + campaign save; global-def classification; editor wiring.
+- **Phase 1 — landed (engine generic).**
+  - `EventBus` has wildcard (`"*"`) dispatch; `LightningEntityManager` subscribes
+    one bridge that turns every emitted event into `on_<topic>` (dots →
+    underscores) on the def named by `Event::s0`.
+  - Engine emits at: zone-independent `world.load`, pawn FSM
+    (`entity.chase/patrol/return/death`), `pickup.collect`, `player.hurt/death`,
+    and `trigger.enter/exit`.
+  - `ObjectiveSystem` gained cross-instance world flags (`set_worldflag` /
+    `get_worldflag`).
+  - New opcodes in `LightningScriptContext`: `emit_event`, `objective`,
+    `set_worldflag`/`get_worldflag`, `give_xp`, `teleport`, `change_world`,
+    `grant_item`, `apply_area_damage`, `spawn_projectile`, `play_clip`. Drained
+    by `LightningEntityManager` (engine-generic + pawn) and by `Core.hpp`
+    (camera/world-dependent: `teleport`/`change_world`/`apply_area_damage`/
+    `spawn_projectile`).
+  - Conditions gained `&&`, `||` and balanced parentheses.
+  - `TriggerSystem` wired end-to-end: OZONE `trigger <def> minX..maxZ [once]`
+    line → `TriggerNode` → `TriggerSystem`, queried per sim step by `Core.hpp`
+    (`UpdateForPoint`) → `trigger.enter/exit` on the bus.
+  - Tests: `tests/Events.test.cpp` (bus/objectives/triggers) + new
+    `LightningScriptContext` cases.
+  - **Follow-up landed:** `InjectOzoneEntities` now iterates `BoxedTypeRegistry`
+    (engine registers its own types there); zone enter/exit is fully on the bus
+    (the direct `TriggerZoneAction` call sites are gone — `zone.enter`/`zone.exit`
+    dispatch `on_zone_enter`/`on_zone_exit` or fall back to `on_enter`/`on_exit`,
+    and declarative zone env is applied by the bridge); `play_clip` plays a
+    forced one-shot skeletal clip on matching pawns (`PawnSystem::PlayPawnClip`).
+- **Phase 2 — core landed.** `GameManager` loads the hierarchy from the registry
+  (`: game`/`: campaign`/`: sector`/`: mission`), resolves sectors/missions, and
+  seeds `ObjectiveSystem` for the active mission. Client: `/campaign [mission]`
+  console command starts a mission; the active mission persists in
+  `GameData/Saves/Campaign.sav`. Test: `tests/GameManager.test.cpp`.
+  **Open:** a full Campaign/Coop title-menu pane (today it is the console +
+  existing world grid) and editor wiring for the new def types.
 - **Phase 3 — SP content.** Real geometry for the 5 sectors / 14 worlds,
   objectives, portals → mission links.
-- **Phase 4 — server COOP.** Session/mission/objective state, replication,
-  party, respawn.
+- **Phase 4 — COOP (partial).** Per-world rules now live in `WorldState`
+  (fixing the last-world-wins global bug; world 0 mirrors into the global match).
+  COOP/Campaign worlds seed a `ClearArea` objective advanced by NPC kills, and
+  the server broadcasts `OBJECTIVE_STATE` (~1 Hz) which the client mirrors and
+  shows in the HUD. **Open:** party/lobby, coordinated mission transitions,
+  server-side scripted objectives (server has no LightningScript runtime),
+  objective advancement from pickups, and respawn/spawnpoints.
 - **Phase 5 — migration.** Move §9 out of the engine; delete the `.cfg` parser.
 
 *Keep this page current: when a phase lands, move its bullet to a "landed"

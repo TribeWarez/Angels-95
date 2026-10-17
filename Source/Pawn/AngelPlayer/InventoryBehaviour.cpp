@@ -242,6 +242,24 @@ void InventoryBehaviour::DrawHud(const Camera3D& cam, int ticker, bool isCrouchi
         }
     }
 
+    // COOP objectives (top-left, below the stat columns).
+    {
+        if (!m_client) return;
+        auto objs = m_client->objectives(m_client->server_world_index());
+        if (!objs.empty()) {
+            int ox = 16, oy = 300;
+            DrawText("OBJECTIVES", ox, oy, 14, (Color){255, 220, 140, 255});
+            oy += 20;
+            for (const auto& o : objs) {
+                const bool done = o.target > 0 && o.progress >= o.target;
+                DrawText(TextFormat("%s  %d/%d", o.id.c_str(), o.progress, o.target),
+                         ox, oy, 13, done ? (Color){120, 220, 120, 255}
+                                          : (Color){220, 220, 220, 255});
+                oy += 16;
+            }
+        }
+    }
+
     // Match-over banner with fade (1.0s in, hold, 3.0s out)
     {
         if (!m_client) return;

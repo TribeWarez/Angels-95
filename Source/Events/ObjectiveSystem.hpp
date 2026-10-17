@@ -53,10 +53,21 @@ public:
     const ObjectiveState* Get(const std::string& id) const;
     const std::unordered_map<std::string, ObjectiveState>& All() const { return m_objectives; }
 
+    // --- World/session flags ------------------------------------------------
+    // Cross-instance named counters (the `set_worldflag` / `get_worldflag`
+    // opcodes). Distinct from the per-instance LightningScriptContext flags,
+    // which die with the entity; these live with the world/mission and are
+    // serialised alongside the objectives.
+    void SetWorldFlag(const std::string& name, int value);
+    int  GetWorldFlag(const std::string& name, int def = 0) const;
+    const std::unordered_map<std::string, int>& WorldFlags() const { return m_flags; }
+
     // World unload / new mission.
     void Reset();
 
-    // Persistence (mission/world save) — "id=progress/state" lines.
+    // Persistence (mission/world save). Line format:
+    //   obj  <id>=<progress>,<target>,<complete>,<failed>
+    //   flag <name>=<value>
     std::string Serialize() const;
     void Deserialize(const std::string& text);
 
@@ -65,6 +76,7 @@ private:
     ObjectiveState& Ensure(const std::string& id);
 
     std::unordered_map<std::string, ObjectiveState> m_objectives;
+    std::unordered_map<std::string, int> m_flags;
 };
 
 } // namespace events

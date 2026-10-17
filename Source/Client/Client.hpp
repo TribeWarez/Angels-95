@@ -49,6 +49,14 @@ struct ClientPickup {
     char typeName[64] = {0};
 };
 
+// Server-owned COOP objective (OBJECTIVE_STATE). Mirrored per world.
+struct ClientObjective {
+    int world_index = -1;
+    std::string id;
+    int progress = 0;
+    int target = 1;
+};
+
 // Remote player representation (other players connected)
 struct RemotePlayer {
     uint32_t player_id;
@@ -154,6 +162,15 @@ public:
     // iterate while push_back reallocated (iterator-invalidation data race).
     std::vector<ClientNPC> npcs() const { std::lock_guard<std::mutex> l(m_msg_mutex); return m_npcs; }
     std::vector<ClientPickup> pickups() const { std::lock_guard<std::mutex> l(m_msg_mutex); return m_pickups; }
+
+    // COOP objectives for a world (copy under the lock).
+    std::vector<ClientObjective> objectives(int world_index) const {
+        std::lock_guard<std::mutex> l(m_msg_mutex);
+        std::vector<ClientObjective> out;
+        for (const auto& o : m_objectives)
+            if (o.world_index == world_index) out.push_back(o);
+        return out;
+    }
     const std::vector<RemotePlayer>& remote_players() const { return m_remote_players; }
     const std::vector<ClientProjectile>& projectiles() const { return m_projectiles; }
     int get_xp() const { return m_xp; }
@@ -244,6 +261,7 @@ private:
 
     std::vector<ClientNPC> m_npcs;
     std::vector<ClientPickup> m_pickups;
+    std::vector<ClientObjective> m_objectives;
     std::vector<RemotePlayer> m_remote_players;
     std::vector<ClientProjectile> m_projectiles;
     int m_xp = 0;

@@ -286,6 +286,24 @@ struct WorldState {
     std::vector<ServerPathNode> path_nodes;   // GameEngine.PathNode waypoint graph
     std::vector<ServerProjectile> projectiles;
     uint32_t next_projectile_id = 1;
+
+    // Per-world rules resolved from this world's levelinfo. Previously a single
+    // GameState member was overwritten on every world in init_worlds, so the
+    // server's mode/maxPlayers/friendlyFire were whichever world loaded LAST -
+    // while current_map_name() reports world 0. Rules now live with the world;
+    // world 0 additionally mirrors into the global match.
+    oz::gametype::GameTypeInfo gameTypeInfo{};
+    uint32_t max_players = 8;
+    bool friendly_fire = false;
+
+    // COOP objective state (Phase 4). Advanced by gameplay (NPC kills, pickups)
+    // and broadcast to clients as OBJECTIVE_STATE.
+    struct Objective {
+        std::string id;
+        int progress = 0;
+        int target = 1;
+    };
+    std::vector<Objective> objectives;
 };
 
 // Pickup collect range (world units)
@@ -367,10 +385,14 @@ public:
     // future LavaZone/AcidZone/fire call sites pass their own source so a
     // kill can be attributed (or not) by the mode's rules.
     void damage_npc(ServerNPC& npc, int amount, uint32_t killer_id = UINT32_MAX,
-                    oz::gametype::DamageSource source = oz::gametype::DamageSource::WORLD);
+                    oz::gametype::DamageSource source = oz::gametype::DamageSource::WORLD,
+                    int world_index = -1);
     void damage_player(ServerPlayer& player, int amount,
                        uint32_t attacker_id = UINT32_MAX,
                        oz::gametype::DamageSource source = oz::gametype::DamageSource::WORLD);
+
+    // Advance a world objective (COOP). Returns true if progress changed.
+    bool AdvanceObjective(WorldState& ws, const std::string& id, int delta);
 
     // Award a kill to the scoring system. killer_id == victim_id is a
     // suicide (applies suicidePenalty). killer_id == UINT32_MAX with

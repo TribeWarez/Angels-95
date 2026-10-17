@@ -1,5 +1,6 @@
 #include "Core.hpp"
 #include "Log.hpp"
+#include "Events/EventBus.hpp"
 #include "Menu/SettingsMenu.hpp"
 #include "ClientSettings.hpp"
 #include "Client/JoinUri.hpp"
@@ -330,6 +331,34 @@ static void ExecuteConsoleCommand(const char* cmd) {
             }
             if (!found)
                 OZ_INFO("No match for /summon '%s'", arg);
+        }
+    } else if (strncmp(cmd, "/campaign", 9) == 0) {
+        // Start the SP campaign (or a named mission) via the game hierarchy.
+        auto& gm = oz::game::GameManager::Instance();
+        if (!gm.Loaded()) {
+            OZ_WARN("No game hierarchy loaded (GameData/Game)");
+        } else {
+            const char* arg = cmd + 9;
+            while (*arg == ' ') arg++;
+            std::string mission = (*arg) ? arg : std::string();
+            std::string world;
+            if (mission.empty()) {
+                world = gm.FirstMissionWorld();
+                const oz::game::SectorDef* sec = gm.FindSector(gm.Game().startSector);
+                if (sec && !sec->missions.empty()) mission = sec->missions.front();
+            } else {
+                world = gm.MissionWorld(mission);
+            }
+            if (world.empty()) {
+                OZ_WARN("Campaign mission '%s' not found", mission.c_str());
+            } else {
+                gm.SetActiveMission(mission);
+                strncpy(g_world_to_load, world.c_str(), sizeof(g_world_to_load) - 1);
+                g_world_to_load[sizeof(g_world_to_load) - 1] = '\0';
+                SetSceneFlag = true;
+                OZ_INFO("Campaign: starting mission '%s' in world '%s'",
+                        mission.c_str(), world.c_str());
+            }
         }
     } else if (strncmp(cmd, "/world ", 7) == 0) {
         const char* name = cmd + 7;
@@ -674,6 +703,13 @@ ShowSpellbook = false;
         // it shares the .ozls hurt_sound / death_sound resolution and the
         // single-frame dedupe with the script `damage` opcode path.
         PlayerController::Instance().PlayHurt(remaining_health <= 0.0f);
+        // EventBus: player.hurt / player.death, dispatched to the Player def as
+        // on_player_hurt / on_player_death (script subscription point).
+        oz::events::Event ev;
+        ev.topic = (remaining_health <= 0.0f) ? "player.death" : "player.hurt";
+        ev.s0 = "Player";
+        ev.f0 = (float)damage;
+        oz::events::EventBus::Instance().Emit(ev);
     });
 
     // Weapon pickup granted by the server (item_id 15) — add to hotbar.
@@ -1000,9 +1036,18 @@ ShowSpellbook = false;
                 if (zt != ZoneType::ZONE_SKY && zt != ZoneType::ZONE_GAMEPLAY_SOUND) {
                     // Fire zone enter event using zone name (triggers .ozls script hooks)
                     if (activeZone->name != lastZoneName) {
-                        LightningEntityManager::Instance().TriggerZoneAction(activeZone->name, "on_enter");
-                        if (!lastZoneName.empty())
-                            LightningEntityManager::Instance().TriggerZoneAction(lastZoneName, "on_exit");
+                        oz::events::Event ev;
+                        ev.topic = "zone.enter";
+                        ev.s0 = activeZone->name;
+                        ev.x = playerPos.x; ev.y = playerPos.y; ev.z = playerPos.z;
+                        oz::events::EventBus::Instance().Emit(ev);
+                        if (!lastZoneName.empty()) {
+                            oz::events::Event ev2;
+                            ev2.topic = "zone.exit";
+                            ev2.s0 = lastZoneName;
+                            ev2.x = playerPos.x; ev2.y = playerPos.y; ev2.z = playerPos.z;
+                            oz::events::EventBus::Instance().Emit(ev2);
+                        }
                         lastZoneName = activeZone->name;
                     }
                 }
@@ -1030,7 +1075,11 @@ ShowSpellbook = false;
                         break;
                 }
             } else if (!lastZoneName.empty()) {
-                LightningEntityManager::Instance().TriggerZoneAction(lastZoneName, "on_exit");
+                oz::events::Event ev;
+                ev.topic = "zone.exit";
+                ev.s0 = lastZoneName;
+                ev.x = playerPos.x; ev.y = playerPos.y; ev.z = playerPos.z;
+                oz::events::EventBus::Instance().Emit(ev);
                 lastZoneName.clear();
             }
         }

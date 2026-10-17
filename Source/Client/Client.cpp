@@ -472,6 +472,32 @@ void OmegaClient::handle_message(const net::NetworkMessage& msg) {
             if (m_on_world_changed) m_on_world_changed(wcd.world_index, wcd.accepted != 0);
             break;
         }
+        case net::MessageType::OBJECTIVE_STATE: {
+            if (msg.size < sizeof(net::ObjectiveStateData)) break;
+            const std::lock_guard<std::mutex> lock(m_msg_mutex);
+            net::ObjectiveStateData os;
+            memcpy(&os, msg.payload, sizeof(os));
+            os.id[sizeof(os.id) - 1] = '\0';
+            // Upsert by (world_index, id): the server re-sends periodically.
+            bool found = false;
+            for (auto& o : m_objectives) {
+                if (o.world_index == os.world_index && o.id == os.id) {
+                    o.progress = os.progress;
+                    o.target = os.target;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                ClientObjective o;
+                o.world_index = os.world_index;
+                o.id = os.id;
+                o.progress = os.progress;
+                o.target = os.target;
+                m_objectives.push_back(o);
+            }
+            break;
+        }
         case net::MessageType::PLAYER_UPDATE: {
             // Relayed player update from another player
             if (msg.size < sizeof(net::PlayerUpdateData)) return;
@@ -636,6 +662,7 @@ void OmegaClient::on_disconnected() {
     m_pickups.clear();
     m_pending_collects.clear();
     m_scores.clear();
+    m_objectives.clear();   // per-session server state
     // The world assignment is per-session server state too: -1 is "the new server has
     // not told us yet", which is exactly the state a stale 0 would masquerade as.
     m_serverWorldIndex = -1;
