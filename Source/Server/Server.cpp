@@ -1135,13 +1135,23 @@ int main(int argc, char** argv) {
                         for (const auto& o : ws.objectives)
                             if (o.target > 0 && o.progress < o.target) { allDone = false; break; }
                         if (!allDone) continue;
-                        ws.mission_transitioned = true;
+                        // Resolve the next world BEFORE marking transitioned so a
+                        // missing/unknown `next` cannot soft-lock the mission.
                         const std::string nextWorld = gm.NextMissionWorld(ws.mission);
-                        if (nextWorld.empty()) continue;
+                        if (nextWorld.empty()) {
+                            OZ_WARN("COOP: world '%s' mission '%s' has no next world — mission stalled",
+                                    ws.name.c_str(), ws.mission.c_str());
+                            continue;
+                        }
                         int nextIdx = -1;
                         for (int i = 0; i < g_game_state.world_count(); i++)
                             if (g_game_state.worlds()[(size_t)i].name == nextWorld) { nextIdx = i; break; }
-                        if (nextIdx < 0) continue;
+                        if (nextIdx < 0) {
+                            OZ_WARN("COOP: world '%s' next world '%s' not loaded — mission stalled",
+                                    ws.name.c_str(), nextWorld.c_str());
+                            continue;
+                        }
+                        ws.mission_transitioned = true;
                         for (const auto& np : g_game_server->players()) {
                             ServerPlayer* sp = g_game_state.get_player(np.id);
                             if (!sp || sp->world_index != ws.world_index) continue;

@@ -79,6 +79,10 @@ struct ServerPlayer {
     int team = 0;
     int requested_team = 0;
 
+    // Party/lobby (Phase 4 scaffold). 0 = no party. The server assigns a party
+    // when a player joins a coop world; solo players stay ungrouped.
+    int party_id = 0;
+
 // Weapon registry: one entry per hotbar slot, holding the weapon def name.
     // SERVER_WEAPON_SLOTS matches the client's HOTBAR_SIZE; both sides iterate
     // this many, so the literal 8s in Server.cpp's weapon-registry loop and
@@ -445,6 +449,11 @@ public:
     // Access to worlds
     std::vector<WorldState>& worlds() { return m_worlds; }
     WorldState* get_world(int idx);
+
+    // The world a NEW player should spawn in: the first world with objectives
+    // that has not yet transitioned. Falls back to world 0 when no world has
+    // objectives or all have transitioned (mission complete).
+    int current_mission_world_index() const;
 
     // Respawned pickups notifier (consumed by server for broadcast)
     struct RespawnedPickupInfo { int world_index; int pickup_id; };

@@ -156,6 +156,7 @@ struct ServerProfile {
     std::string voiceSet;
     int         team = 0;          // server-assigned; 0 until teams exist
     int         requestedTeam = 0; // UNTRUSTED client hint, clamped on receipt
+    int         party_id = 0;      // server-assigned party; 0 = ungrouped
 };
 
 struct NetworkPlayer {

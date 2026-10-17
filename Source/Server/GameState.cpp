@@ -524,7 +524,7 @@ uint32_t GameState::add_player(uint32_t id, const char* name, int team, int requ
     player.xp_to_next = xp_needed_for_level(1);
     player.connected = true;
     player.last_seen = time(nullptr);
-    player.world_index = 0;
+    player.world_index = current_mission_world_index();
     memset(player.inventory, 0, sizeof(player.inventory));
 
     // Server-owned team assignment. `requested_team` is a HINT ONLY (clamped
@@ -656,6 +656,14 @@ void GameState::get_partitions_in_range(const WorldState& ws, int center_idx,
 WorldState* GameState::get_world(int idx) {
     if (idx < 0 || idx >= (int)m_worlds.size()) return nullptr;
     return &m_worlds[idx];
+}
+
+int GameState::current_mission_world_index() const {
+    for (const auto& ws : m_worlds) {
+        if (!ws.objectives.empty() && !ws.mission_transitioned)
+            return ws.world_index;
+    }
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
