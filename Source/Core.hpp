@@ -1013,7 +1013,8 @@ void LaunchHostedServer(int serverPort, const char* missionOrNull)
 #ifdef _WIN32
     // `start /B` runs the child without a new window; the >> / 2>&1 are parsed
     // by the cmd that std::system invokes and the child inherits those handles.
-    std::string cmd = "start /B \"\" System\\AngelServ.exe " + args +
+    const std::string exePath = "System\\AngelServ.exe";
+    std::string cmd = "start /B \"\" " + exePath + " " + args +
                       " >> System\\HostedServer.log 2>&1";
     const char* exeName = "AngelServ.exe";
 #else
@@ -1022,9 +1023,25 @@ void LaunchHostedServer(int serverPort, const char* missionOrNull)
     // reported a failed launch on every POSIX host. Detach explicitly instead: nohup
     // plus & backgrounds it with the child's stdout redirected, so the server does not
     // inherit our terminal and does not die with it.
-    std::string cmd = "nohup ./AngelServ " + args + " >> System/HostedServer.log 2>&1 &";
+    const std::string exePath = "./AngelServ";
+    std::string cmd = "nohup " + exePath + " " + args +
+                      " >> System/HostedServer.log 2>&1 &";
     const char* exeName = "AngelServ";
 #endif
+    // A MISSING binary does not fail — it HANGS. cmd's
+    // `start /B "" <missing exe> >> log` never returns (measured: the cmd
+    // child was still alive 15 minutes later and std::system had blocked the
+    // whole time), which would freeze the client right here with no menu
+    // (g_skipMenu), no join, and no error line — the `Failed to launch`
+    // below is unreachable for this case on Windows. The existence check
+    // turns the hang into a loud, findable error. The non-throwing overload:
+    // this path exists to report failures and must not raise one.
+    std::error_code exeStatError;
+    if (!std::filesystem::exists(exePath, exeStatError)) {
+        OZ_ERROR("Failed to launch %s: '%s' not found (run the build, or start "
+                 "from the directory the run scripts use)", exeName, exePath.c_str());
+        return;
+    }
     if (std::system(cmd.c_str()) == 0)
         OZ_INFO("Launched %s on port %d (child output appends to System/HostedServer.log)",
                 exeName, serverPort);
