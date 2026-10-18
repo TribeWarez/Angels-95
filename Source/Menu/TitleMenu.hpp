@@ -100,7 +100,8 @@ static std::vector<WorldEntry> ScanWorlds() {
             std::string oz  = entry.path().string() + "/World.ozone";
             if (fs::exists(oz) && dirName != "." && dirName != "..") {
                 bool dup = false;
-                for (auto& w : worlds) if (w.dirName == dirName) { dup = true; break; }
+                for (auto& existingWorld : worlds)
+                    if (existingWorld.dirName == dirName) { dup = true; break; }
                 if (!dup) worlds.push_back({dirName, dirName, std::string(), std::string()});
             }
         }
@@ -119,7 +120,8 @@ static std::vector<WorldEntry> ScanWorlds() {
                     size_t dot = dirName.rfind(".ozone");
                     if (dot != std::string::npos) dirName = dirName.substr(0, dot);
                     bool dup = false;
-                    for (auto& w : worlds) if (w.dirName == dirName) { dup = true; break; }
+                    for (auto& existingWorld : worlds)
+                        if (existingWorld.dirName == dirName) { dup = true; break; }
                     if (!dup) worlds.push_back({dirName, dirName, std::string(), std::string()});
                 }
             }
@@ -148,16 +150,18 @@ static std::vector<WorldEntry> ScanWorlds() {
     // Enrich with campaign hierarchy metadata (mode/sector) when GameManager is
     // loaded. ScanWorlds is the CLIENT title-menu picker, NOT AngelEd's.
     {
-        auto& gm = oz::game::GameManager::Instance();
-        if (gm.Loaded()) {
-            for (auto& w : worlds) {
-                if (const oz::game::MissionDef* m = gm.FindMissionByWorld(w.dirName)) {
+        auto& manager = oz::game::GameManager::Instance();
+        if (manager.Loaded()) {
+            for (auto& worldEntry : worlds) {
+                const oz::game::MissionDef* missionDef =
+                    manager.FindMissionByWorld(worldEntry.dirName);
+                if (missionDef) {
                     // Mission names equal their world name in the shipped campaign,
                     // but keep the display name as the mission/world name; the mode
                     // and sector are the useful bits here.
-                    w.name = m->name;
-                    w.mode = m->mode;
-                    w.sector = m->sector;
+                    worldEntry.name = missionDef->name;
+                    worldEntry.mode = missionDef->mode;
+                    worldEntry.sector = missionDef->sector;
                 }
             }
         }
@@ -955,11 +959,12 @@ private:
         Rectangle filterRect = {fx, (float)(area.y + 36), 120, 20};
         GuiDropdownBox(filterRect, "All Types;Campaign;Deathmatch;CTF", &m_gameTypeFilter, false);
 
-        int cols = std::max(1, (int)((area.width - 24) / (CELL_W + CELL_GAP)));
-        int sx = (int)(area.x + 12), sy = (int)(area.y + 64);
-        Vector2 mp = GetMousePosition();
+        int columnCount = std::max(1, (int)((area.width - 24) / (CELL_W + CELL_GAP)));
+        int gridOriginX = (int)(area.x + 12), gridOriginY = (int)(area.y + 64);
+        Vector2 mousePos = GetMousePosition();
 
-        for (size_t i = 0; i < m_worlds.size(); i++) {
+        for (size_t worldIndex = 0; worldIndex < m_worlds.size(); worldIndex++) {
+            const WorldEntry& worldEntry = m_worlds[worldIndex];
             // Honour the game-type filter: 0=All, 1=Campaign, 2=Deathmatch, 3=CTF.
             // m_gameTypeFilter is the dropdown index set by GuiDropdownBox. Only
             // filter when a mission mode is known; worlds with no mode (practice/
@@ -967,29 +972,35 @@ private:
             // types - this is intentional so the Practice grid continues to show
             // non-campaign worlds.
             if (m_gameTypeFilter == 1) {
-                // Campaign only
-                if (!m_worlds[i].mode.empty() && m_worlds[i].mode != "campaign") continue;
+                if (!worldEntry.mode.empty() && worldEntry.mode != "campaign") continue;
             } else if (m_gameTypeFilter == 2) {
-                if (m_worlds[i].mode != "deathmatch") continue;
+                if (worldEntry.mode != "deathmatch") continue;
             } else if (m_gameTypeFilter == 3) {
-                if (m_worlds[i].mode != "ctf") continue;
+                if (worldEntry.mode != "ctf") continue;
             }
-            int r = (int)(i / cols), c = (int)(i % cols);
-            Rectangle cell = {(float)(sx + c * (CELL_W + CELL_GAP)), (float)(sy + r * (CELL_H + CELL_GAP)), (float)CELL_W, (float)CELL_H};
-            bool hover = CheckCollisionPointRec(mp, cell);
+            int gridRow = (int)(worldIndex / columnCount);
+            int gridCol = (int)(worldIndex % columnCount);
+            Rectangle cell = {(float)(gridOriginX + gridCol * (CELL_W + CELL_GAP)),
+                              (float)(gridOriginY + gridRow * (CELL_H + CELL_GAP)),
+                              (float)CELL_W, (float)CELL_H};
+            bool hover = CheckCollisionPointRec(mousePos, cell);
             DrawRectangleRounded(cell, 0.15f, 8, hover ? (Color){40,80,140,180} : (Color){12,24,50,200});
             DrawRectangleRoundedLinesEx(cell, 0.15f, 8, 1.0f, hover ? (Color){100,160,220,200} : (Color){40,60,100,150});
-            const char* wn = m_worlds[i].name.c_str();
-            int fs = 13;
+            const char* worldName = worldEntry.name.c_str();
+            int fontSize = 13;
             // Show a mode tag when the world is known to belong to the campaign
             // hierarchy (via FindMissionByWorld). Keep the text small so it
             // doesn't overflow the 48px-tall cell.
-            DrawText(wn, (int)(cell.x + (cell.width - MeasureText(wn, fs))/2), (int)(cell.y + (cell.height - fs)/2 - 6), fs, hover ? WHITE : (Color){180,200,230,255});
-            if (!m_worlds[i].mode.empty()) {
-                const char* mt = m_worlds[i].mode.c_str();
-                int mfs = 10;
-                int mw = MeasureText(mt, mfs);
-                DrawText(mt, (int)(cell.x + (cell.width - mw)/2), (int)(cell.y + (cell.height - mfs)/2 + 8), mfs, hover ? (Color){200,220,240,255} : (Color){150,170,200,220});
+            DrawText(worldName, (int)(cell.x + (cell.width - MeasureText(worldName, fontSize))/2),
+                     (int)(cell.y + (cell.height - fontSize)/2 - 6), fontSize,
+                     hover ? WHITE : (Color){180,200,230,255});
+            if (!worldEntry.mode.empty()) {
+                const char* modeTag = worldEntry.mode.c_str();
+                int modeFontSize = 10;
+                int modeWidth = MeasureText(modeTag, modeFontSize);
+                DrawText(modeTag, (int)(cell.x + (cell.width - modeWidth)/2),
+                         (int)(cell.y + (cell.height - modeFontSize)/2 + 8), modeFontSize,
+                         hover ? (Color){200,220,240,255} : (Color){150,170,200,220});
             }
         }
         if (m_worlds.empty())
@@ -997,42 +1008,43 @@ private:
     }
 
     // The Sefirot sector -> mission list, shared by the Campaign and Co-op panes
-    // so the two can never show a different hierarchy. Draws from `y`, highlights
-    // `selected` when non-empty, and on a click returns true with the mission name
-    // in `picked`. The caller owns the action (single-player launch vs co-op host).
-    bool DrawMissionList(Rectangle area, int& y, const std::string& selected,
+    // so the two can never show a different hierarchy. Draws from `cursorY`,
+    // highlights `selected` when non-empty, and on a click returns true with the
+    // mission name in `picked`. The caller owns the action (single-player launch
+    // vs co-op host).
+    bool DrawMissionList(Rectangle area, int& cursorY, const std::string& selected,
                          std::string& picked) {
-        auto& gm = oz::game::GameManager::Instance();
-        const int rowH = 22;
-        Vector2 mp = GetMousePosition();
-        for (const auto& sec : gm.Sectors()) {
+        auto& manager = oz::game::GameManager::Instance();
+        const int rowHeight = 22;
+        Vector2 mousePos = GetMousePosition();
+        for (const auto& sector : manager.Sectors()) {
             char header[160];
-            snprintf(header, sizeof(header), "%d. %s", sec.numerology, sec.name.c_str());
-            DrawText(header, (int)(area.x + 12), y, 15, (Color){255, 220, 140, 255});
-            if (!sec.role.empty())
-                DrawText(TextFormat("(%s)", sec.role.c_str()),
-                         (int)(area.x + 12 + MeasureText(header, 15) + 8), y + 3, 11,
+            snprintf(header, sizeof(header), "%d. %s", sector.numerology, sector.name.c_str());
+            DrawText(header, (int)(area.x + 12), cursorY, 15, (Color){255, 220, 140, 255});
+            if (!sector.role.empty())
+                DrawText(TextFormat("(%s)", sector.role.c_str()),
+                         (int)(area.x + 12 + MeasureText(header, 15) + 8), cursorY + 3, 11,
                          (Color){140,160,180,200});
-            y += rowH;
-            for (const auto& mn : sec.missions) {
-                const oz::game::MissionDef* m = gm.FindMission(mn);
-                if (!m) continue;
-                Rectangle row = {(float)(area.x + 24), (float)y,
-                                 area.width - 36.0f, (float)(rowH - 3)};
-                bool hover = CheckCollisionPointRec(mp, row);
-                bool isSel = (!selected.empty() && selected == m->name);
-                if (isSel)       DrawRectangleRec(row, (Color){24, 48, 92, 200});
-                else if (hover)  DrawRectangleRec(row, (Color){30, 60, 110, 180});
-                DrawText(TextFormat("- %s  [%s]", m->name.c_str(), m->mode.c_str()),
-                         (int)(row.x + 6), y + 3, 13,
-                         (hover || isSel) ? WHITE : (Color){200, 215, 235, 230});
+            cursorY += rowHeight;
+            for (const auto& missionName : sector.missions) {
+                const oz::game::MissionDef* missionDef = manager.FindMission(missionName);
+                if (!missionDef) continue;
+                Rectangle row = {(float)(area.x + 24), (float)cursorY,
+                                 area.width - 36.0f, (float)(rowHeight - 3)};
+                bool hover = CheckCollisionPointRec(mousePos, row);
+                bool isSelected = (!selected.empty() && selected == missionDef->name);
+                if (isSelected)   DrawRectangleRec(row, (Color){24, 48, 92, 200});
+                else if (hover)   DrawRectangleRec(row, (Color){30, 60, 110, 180});
+                DrawText(TextFormat("- %s  [%s]", missionDef->name.c_str(), missionDef->mode.c_str()),
+                         (int)(row.x + 6), cursorY + 3, 13,
+                         (hover || isSelected) ? WHITE : (Color){200, 215, 235, 230});
                 if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                    picked = m->name;
+                    picked = missionDef->name;
                     return true;
                 }
-                y += rowH;
+                cursorY += rowHeight;
             }
-            y += 6;
+            cursorY += 6;
         }
         return false;
     }
@@ -1047,9 +1059,9 @@ private:
         DrawText("Select a mission. Sectors are the Sefirot nodes (1-5).",
                  (int)(area.x + 12), (int)(area.y + 36), 12, (Color){150,170,200,220});
 
-        int y = (int)(area.y + 62);
+        int cursorY = (int)(area.y + 62);
         std::string picked;
-        if (DrawMissionList(area, y, std::string(), picked)) {
+        if (DrawMissionList(area, cursorY, std::string(), picked)) {
             SoundManager::Instance().PlayUIClick();
             gm.SetActiveMission(picked);
             m_selectedWorld = gm.MissionWorld(picked);
@@ -1108,9 +1120,9 @@ private:
         DrawText("Joining a co-op game lands you in the host's current mission.",
                  (int)(area.x + 12), (int)(area.y + 70), 11, (Color){140,160,185,210});
 
-        int y = (int)(area.y + 92);
+        int cursorY = (int)(area.y + 92);
         std::string picked;
-        if (DrawMissionList(area, y, m_coopSelectedMission, picked)) {
+        if (DrawMissionList(area, cursorY, m_coopSelectedMission, picked)) {
             SoundManager::Instance().PlayUIClick();
             m_coopSelectedMission = picked;
         }
