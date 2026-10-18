@@ -1286,6 +1286,53 @@ static int test_starting_mission_unknown_is_inert() {
     PASS(); return 0; END_TEST();
 }
 
+// Join placement must scan MISSION-GRAPH order, not world-list order. Under
+// --campaign every unplayed mission world IsFrontier simultaneously (all are
+// seeded upfront), so the old first-frontier-in-list-order scan returned
+// whichever mission world sorted first in the directory scan — on a real
+// server that is Aethelgard_Ruins (world 0, a LATER-sector mission), and a
+// pinned --mission start was overwritten at the next join. Both halves fail
+// on the old code (it returned worlds()[0] in each).
+// Reads the real GameData hierarchy (like test_starting_mission_skips_
+// earlier_worlds), so it runs after every test that reads the registry.
+static int test_frontier_placement_walks_mission_graph() {
+    TEST("join placement follows the mission graph, not world-list order");
+    LightningEntityRegistry::Instance().Init();
+    auto& gm = oz::game::GameManager::Instance();
+    gm.Init();
+    CHECK(gm.Loaded());
+    CHECK_STR(gm.FirstMissionWorld(), "Sektor_01_SilentPines");
+
+    {   // Plain --campaign: the arc's FIRST mission is the frontier, even
+        // though Aethelgard_Ruins (later sector) sorts before it in the list.
+        GameState gs;
+        gs.set_campaign_enabled(true);
+        gs.init_worlds("GameData", {"Aethelgard_Ruins",
+                                    "Sektor_01_SilentPines",
+                                    "Sektor_02_MegacityGrid"});
+        CHECK_EQ(gs.world_count(), 3);
+        CHECK(!gs.worlds()[0].objectives.empty());      // later missions run too —
+        CHECK_EQ(gs.current_mission_world_index(), 1);  // …the arc start still wins
+    }
+
+    {   // --mission Sektor_02: the pinned start wins over both the arc start
+        // (mission_skipped by the pin) and the later mission world that sorts
+        // first. Aethelgard_Ruins is NOT skipped — it comes after in the graph.
+        GameState gs;
+        gs.set_campaign_enabled(true);
+        gs.set_starting_mission("Sektor_02_MegacityGrid");
+        gs.init_worlds("GameData", {"Aethelgard_Ruins",
+                                    "Sektor_01_SilentPines",
+                                    "Sektor_02_MegacityGrid"});
+        CHECK_EQ(gs.world_count(), 3);
+        CHECK(!gs.worlds()[0].mission_skipped);         // later in the graph
+        CHECK(gs.worlds()[1].mission_skipped);          // behind the pinned start
+        CHECK(!gs.worlds()[2].mission_skipped);         // the pinned start
+        CHECK_EQ(gs.current_mission_world_index(), 2);
+    }
+    PASS(); return 0; END_TEST();
+}
+
 // --- Campaign gating (--campaign opt-in, Phase G) ---
 
 static int test_campaign_flag_defaults_off() {
@@ -1416,6 +1463,7 @@ int main() {
     // genuinely loaded.
     failures += test_starting_mission_skips_earlier_worlds();
     failures += test_starting_mission_unknown_is_inert();
+    failures += test_frontier_placement_walks_mission_graph();
 
     fprintf(stdout, "===============\n");
     fprintf(stdout, "%d/%d passed, %d failed\n",

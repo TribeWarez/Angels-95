@@ -744,10 +744,37 @@ WorldState* GameState::get_world(int idx) {
 
 int GameState::current_mission_world_index() const {
     // --campaign OFF: joiners land in world 0. The seed gate already leaves
-    // every objective list empty, so the loop below would fall through to 0
+    // every objective list empty, so both loops below would fall through to 0
     // anyway — the explicit early-out states the gate and defends against any
     // future objective source.
     if (!m_campaignEnabled) return 0;
+
+    // Join placement scans the MISSION GRAPH (FirstMissionWorld -> next), not
+    // world-list order. Every unplayed mission world IsFrontier at the same
+    // time — all of them are seeded upfront — so a first-frontier-in-list-order
+    // scan returned whichever mission world sorted first in the DIRECTORY scan
+    // (Aethelgard_Ruins is world 0 on a real server and lives in a later
+    // sector), overwriting a pinned --mission start at the next join.
+    auto& gm = oz::game::GameManager::Instance();
+    if (gm.Loaded()) {
+        std::string graphWorld = gm.FirstMissionWorld();
+        int guard = 0;
+        while (!graphWorld.empty() && guard++ < 512) {
+            for (const auto& ws : m_worlds) {
+                if (ws.name == graphWorld && IsFrontier(ws)) return ws.world_index;
+            }
+            // Either the arc moved past this world (skipped/transitioned) or
+            // the server never loaded it. Keep walking: a mission world missing
+            // from the world list must not pin joiners to whatever sorts first.
+            const oz::game::MissionDef* mission = gm.FindMissionByWorld(graphWorld);
+            if (!mission) break;
+            graphWorld = gm.NextMissionWorld(mission->name);
+        }
+    }
+
+    // Fallback for what the graph cannot express: worlds outside the hierarchy
+    // (coop ClearArea objectives) and servers whose hierarchy did not load keep
+    // the old first-frontier-in-list-order scan.
     for (const auto& ws : m_worlds) {
         if (IsFrontier(ws)) return ws.world_index;
     }

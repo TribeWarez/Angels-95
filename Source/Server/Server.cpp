@@ -141,10 +141,21 @@ static void send_pickup_snapshot(const net::NetworkPlayer& player, int world_ind
 
 // World-list JSON for a joining player, clamped to the network payload size so
 // a long world list can never overflow the fixed-size message buffer.
-// Includes the server's active world (world 0) so the client can switch to it.
-static void send_join_world_list(const net::NetworkPlayer& player) {
+// `player_world` is the world the joiner was PLACED in (add_player ->
+// current_mission_world_index()); naming it active_world keeps the client's
+// scene handshake and the WORLD_CHANGE sent right after this message in
+// agreement — they used to disagree under --campaign (active_world was
+// hardcoded to world 0), and UDP has no ordering guarantee, so whichever
+// arrived last decided which world the client rendered.
+static void send_join_world_list(const net::NetworkPlayer& player, int player_world) {
     constexpr size_t kMaxPayload = net::MAX_MESSAGE_SIZE;
-    std::string active_world = g_world_list.empty() ? std::string() : g_world_list[0];
+    std::string active_world;
+    if (!g_world_list.empty()) {
+        const size_t worldSlot = (player_world >= 0 &&
+                                  player_world < (int)g_world_list.size())
+                                     ? (size_t)player_world : 0;
+        active_world = g_world_list[worldSlot];
+    }
     // json_escape() already emits the surrounding JSON quotes, so do NOT add
     // another pair here (that produced "active_world":""Name"" and broke the
     // client's scene parse, leaving it on its default world).
@@ -232,13 +243,17 @@ static void on_player_join(net::NetworkPlayer& player) {
     if (g_discovery)
         g_discovery->set_player_count((uint32_t)g_game_state.player_count(), net::MAX_PLAYERS);
 
-    send_join_world_list(player);
+    // Placement already happened in add_player; both messages below must name
+    // THAT world — the scene handshake's active_world drives the client's
+    // first LoadWorld, WORLD_CHANGE is its authoritative view.
+    ServerPlayer* sp = g_game_state.get_player(player.id);
+    const int wi = sp ? sp->world_index : 0;
+
+    send_join_world_list(player, wi);
 
     // Sync active pickups. One world per player (the one they are in) rather
     // than every loaded world — see send_pickup_snapshot for why, and the
     // periodic re-sync in the main loop for the lost-datagram case.
-    ServerPlayer* sp = g_game_state.get_player(player.id);
-    const int wi = sp ? sp->world_index : 0;
 
     // Tell the client its authoritative world assignment before the pickup snapshot
     // that is scoped to it. Order matters: the client derives its own world index
