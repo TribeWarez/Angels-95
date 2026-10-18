@@ -979,6 +979,59 @@ inline void HandleBorderlessWindowDrag() {
     }
 }
 
+// Spawn a dedicated AngelServ subprocess. Shared by the Co-op pane (the
+// ShouldStartServer path in PlayHomeScreen) and the CLI --host /
+// --host-mission flags (Main.cpp), so the port/mission/master argument
+// assembly exists exactly once and cannot drift between the two.
+//
+// The child's stdout/stderr APPEND to System/HostedServer.log. Mission
+// validation is server-authoritative — AngelServ resolves --mission through
+// its own GameManager and refuses an unknown name by name (exit 1) — and a
+// refusal is only useful if it can be found: the old POSIX branch redirected
+// the child to /dev/null, and a `start /B` child of a Windows GUI parent has
+// no console to inherit.
+void LaunchHostedServer(int serverPort, const char* missionOrNull)
+{
+    std::string args = "--port " + std::to_string(serverPort) + " --dir GameData";
+    // Co-op host: pin the campaign arc to the mission picked in the Co-op pane
+    // or named on the CLI. Quoted because the name is author-supplied and the
+    // command line goes through cmd/sh.
+    if (missionOrNull && missionOrNull[0]) {
+        args += " --campaign --mission \"";
+        args += missionOrNull;
+        args += "\"";
+    }
+    // Announce the hosted server to the configured masters.
+    for (const auto& masterUrl : master::LoadMasterUrls("System/Angels95.ini")) {
+        if (masterUrl.rfind("http://", 0) == 0)
+            args += " --master-http \"" + masterUrl + "\"";
+        else if (masterUrl.rfind("https://", 0) == 0)
+            OZ_WARN("Host: ignoring https master '%s' (plain http only)", masterUrl.c_str());
+        else
+            args += " --master " + masterUrl;
+    }
+#ifdef _WIN32
+    // `start /B` runs the child without a new window; the >> / 2>&1 are parsed
+    // by the cmd that std::system invokes and the child inherits those handles.
+    std::string cmd = "start /B \"\" System\\AngelServ.exe " + args +
+                      " >> System\\HostedServer.log 2>&1";
+    const char* exeName = "AngelServ.exe";
+#else
+    // `start` is a cmd.exe builtin, so the old string reached /bin/sh as the command
+    // `start /B "" System\AngelServ.exe ...`, which fails with "start: not found" and
+    // reported a failed launch on every POSIX host. Detach explicitly instead: nohup
+    // plus & backgrounds it with the child's stdout redirected, so the server does not
+    // inherit our terminal and does not die with it.
+    std::string cmd = "nohup ./AngelServ " + args + " >> System/HostedServer.log 2>&1 &";
+    const char* exeName = "AngelServ";
+#endif
+    if (std::system(cmd.c_str()) == 0)
+        OZ_INFO("Launched %s on port %d (child output appends to System/HostedServer.log)",
+                exeName, serverPort);
+    else
+        OZ_ERROR("Failed to launch %s (see System/HostedServer.log)", exeName);
+}
+
 void PlayHomeScreen()
 {
     // Re-open the title video if a previous menu visit released it.
@@ -1053,53 +1106,13 @@ void PlayHomeScreen()
         SetServerJoinIP = "127.0.0.1";
         SetServerJoinPort = port;
         SetServerJoinFlag = true;
-        // Launch dedicated server as a subprocess
-        int serverPort = port;
-        std::string args = "--port " + std::to_string(serverPort) + " --dir GameData";
         // Co-op host: pin the campaign arc to the mission picked in the Co-op
         // pane. The server resolves the name through its own GameManager and
-        // refuses to start on an unknown one, so a stale selection surfaces as a
-        // loud failure instead of dropping the players into the wrong level.
-        // Quoted for the same reason the master URLs below are: the name is
-        // author-supplied and the command line goes through cmd/sh.
-        if (const char* coopMission = menu.GetCoopMission()) {
-            args += " --campaign --mission \"";
-            args += coopMission;
-            args += "\"";
-        }
-        // Announce the hosted server to the configured masters.
-        for (const auto& m : master::LoadMasterUrls("System/Angels95.ini")) {
-            if (m.rfind("http://", 0) == 0)
-                args += " --master-http \"" + m + "\"";
-            else if (m.rfind("https://", 0) == 0)
-                OZ_WARN("Host: ignoring https master '%s' (plain http only)", m.c_str());
-            else
-                args += " --master " + m;
-        }
-#ifdef _WIN32
-        std::string cmd = "start /B \"\" System\\AngelServ.exe " + args;
-#else
-        // `start` is a cmd.exe builtin, so the old string reached /bin/sh as the command
-        // `start /B "" System\AngelServ.exe ...`, which fails with "start: not found" and
-        // reported a failed launch on every POSIX host. Detach explicitly instead: nohup
-        // plus & backgrounds it with the child's stdout redirected, so the server does not
-        // inherit our terminal and does not die with it.
-        std::string cmd = "nohup ./AngelServ " + args + " >/dev/null 2>&1 &";
-#endif
-        int result = std::system(cmd.c_str());
-        if (result == 0) {
-#ifdef _WIN32
-            OZ_INFO("Launched AngelServ.exe on port %d", serverPort);
-#else
-            OZ_INFO("Launched AngelServ on port %d", serverPort);
-#endif
-        } else {
-#ifdef _WIN32
-            OZ_ERROR("Failed to launch AngelServ.exe");
-#else
-            OZ_ERROR("Failed to launch AngelServ");
-#endif
-        }
+        // refuses to start on an unknown one, so a stale selection surfaces as
+        // a loud failure (see System/HostedServer.log) instead of dropping the
+        // players into the wrong level. LaunchHostedServer is the single
+        // spawn path — the CLI --host / --host-mission flags share it.
+        LaunchHostedServer(port, menu.GetCoopMission());
     }
 
     OmegaTechData.Deaths = 1;

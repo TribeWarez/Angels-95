@@ -127,6 +127,12 @@ static bool ShowSpellbook = false;
 // after parsing, so the host string must live for the whole process.
 static std::string g_cliJoinHost;
 
+// --host / --host-mission request, collected during arg parsing and resolved
+// right after the loop (a --host anywhere on the line beats a --join
+// anywhere else, regardless of order).
+static bool g_cliHost = false;
+static std::string g_cliHostMission;   // empty = plain --host, no campaign pin
+
 static bool ApplyJoinTarget(const char* value)
 {
     std::string host;
@@ -560,10 +566,37 @@ int main(int argc, char** argv){
             const char* value = arg + ((arg[2] == 'j') ? 7 : 10);
             if (!ApplyJoinTarget(value))
                 OZ_WARN("Invalid --join target: %s", value);
+        } else if (strcmp(arg, "--host") == 0) {
+            g_cliHost = true;
+        } else if (strcmp(arg, "--host-mission") == 0 && i + 1 < argc) {
+            g_cliHost = true;
+            g_cliHostMission = argv[++i];
+        } else if (strncmp(arg, "--host-mission=", 15) == 0) {
+            g_cliHost = true;
+            g_cliHostMission = arg + 15;
         } else if (argLower.rfind("angels95://", 0) == 0) {
             if (!ApplyJoinTarget(arg))
                 OZ_WARN("Unrecognized join URI: %s", arg);
         }
+    }
+
+    // --host / --host-mission: spawn a local dedicated server, then
+    // self-join it. Resolved after the whole loop so --host anywhere on the
+    // line beats a --join / deep link anywhere else, regardless of order.
+    if (g_cliHost) {
+        if (SetServerJoinFlag) {
+            OZ_WARN("--host: ignoring --join target '%s' (hosting wins)", SetServerJoinIP);
+            SetServerJoinFlag = false;
+        }
+        // No client-side mission check: the server resolves the name through
+        // its own GameManager and refuses to start on an unknown one. A
+        // refusal is loud in System/HostedServer.log and this client's
+        // self-join then fails visibly rather than silently joining nothing.
+        LaunchHostedServer(27015, g_cliHostMission.empty() ? nullptr : g_cliHostMission.c_str());
+        SetServerJoinIP = "127.0.0.1";
+        SetServerJoinPort = 27015;
+        SetServerJoinFlag = true;
+        g_skipMenu = true;   // same auto-skip route --join / deep links take
     }
 
     // A --shot run without an explicit --world falls back to the compiled-in
