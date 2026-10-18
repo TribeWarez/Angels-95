@@ -323,6 +323,25 @@ void ExportToOzone(std::ostream& output) {
                << (portal.bidirectional ? " bidir" : "") << "\n";
     }
 
+    // Gameplay trigger volumes. The editor has no trigger UI, so these are
+    // re-emitted from the entity set the loader parsed (fresh per load: both
+    // LoadFile and LoadString call Unload() -> OzoneEntitySet::Clear() first).
+    // This leg is REQUIRED, not cosmetic: ExportToOzone is also the History
+    // snapshot format, so without it every undo restore - and every save -
+    // silently deleted each `trigger` line in the world (the same
+    // authored-vocabulary-loss class as ExportToOzone dropping `flags=`).
+    for (const auto& triggerVolume : loader.GetEntities().triggers) {
+        Vector3 tn = zup(triggerVolume.bounds.min);
+        Vector3 tm = zup(triggerVolume.bounds.max);
+        output << "trigger " << triggerVolume.defName
+               << " " << std::min(tn.x, tm.x) << " " << std::min(tn.y, tm.y) << " " << std::min(tn.z, tm.z)
+               << " " << std::max(tn.x, tm.x) << " " << std::max(tn.y, tm.y) << " " << std::max(tn.z, tm.z)
+               << (triggerVolume.once ? " once" : "");
+        if (triggerVolume.team != 0)
+            output << " team=" << triggerVolume.team;
+        output << "\n";
+    }
+
     // Emitters
     for (auto& emitter : pawns.GetEmitters()) {
         const char* et = (emitter.type == EmitterType::SOUND) ? "sound" : "music";

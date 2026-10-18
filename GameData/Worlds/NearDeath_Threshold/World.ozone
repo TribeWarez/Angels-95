@@ -29,6 +29,6 @@ pickup rifle_01 -5 0 0
 pickup etheral_waver 0 -5 0
 
 # trigger scaffold
-trigger Trigger_EnterVolume 0 0 0 10 10 8 once
+trigger Trigger_EnterVolume 8 -5 0 18 5 8 once
 # portal scaffold to next mission world (box X 20-26, Y -4..4, Z 0-8; spawn 0 0 0 in the target)
 portal Esoteric_Altar_Chambers 20 -4 0 26 4 8 0 0 0 bidir
