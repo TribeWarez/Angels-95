@@ -470,6 +470,17 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
                     try { prim.args.push_back(std::stof(s)); }
                     catch (...) { break; }
                 }
+                // A portal is a BOX, not a point. Both consumers (OzOzoneLoader
+                // and the server's HTTP serialiser) gate on a full 6-number
+                // bounds tuple and drop anything shorter WITHOUT A WORD, so
+                // `portal Foo 0 0 0` parses happily, logs nothing, never becomes
+                // a portal - and the next editor save drops the line entirely,
+                // because a line that never reached ZoneManager has nothing to
+                // export. Report it here, where the line number is known.
+                if (prim.args.size() < 6)
+                    OZ_WARN("OZONE line %d: portal '%s' needs 6 box numbers "
+                            "(minX minY minZ maxX maxY maxZ), got %d; the portal is dropped",
+                            lineNo, prim.entityType.c_str(), (int)prim.args.size());
             }
         } else if (type_name == "emitter") {
             prim.type = OzonePrimitiveType::ENTITY_EMITTER;
@@ -535,8 +546,18 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
                     if (TryFloat(s, v)) prim.args.push_back(v);
                     else break;
                 }
+                const size_t boundsCount = prim.args.size();
                 prim.args.push_back(once);
                 prim.args.push_back(team);
+                // Same silent-drop class as `portal`: the loader gates on a full
+                // 6-number box, and the two flags appended just above would push
+                // a SHORT tuple past that check - 4 bounds + once + team = 6
+                // numbers, which reads as a valid box built out of garbage. Count
+                // the bounds BEFORE appending so the report is honest.
+                if (boundsCount < 6)
+                    OZ_WARN("OZONE line %d: trigger '%s' needs 6 box numbers "
+                            "(minX minY minZ maxX maxY maxZ), got %d; the trigger is dropped",
+                            lineNo, prim.entityType.c_str(), (int)boundsCount);
             }
         } else if (type_name == "ParticleEmitter") {
             prim.type = OzonePrimitiveType::ENTITY_PARTICLE_EMITTER;

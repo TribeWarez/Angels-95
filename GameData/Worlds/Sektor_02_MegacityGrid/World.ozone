@@ -30,5 +30,5 @@ pickup etheral_waver 0 -5 0
 
 # trigger scaffold
 trigger Trigger_EnterVolume 0 0 0 10 10 8 once
-# portal scaffold to next mission world
-portal Sektor_03_AegisBaseAlpha 0 0 0
+# portal scaffold to next mission world (box X 20-26, Y -4..4, Z 0-8; spawn 0 0 0 in the target)
+portal Sektor_03_AegisBaseAlpha 20 -4 0 26 4 8 0 0 0 bidir

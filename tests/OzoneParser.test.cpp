@@ -34,6 +34,53 @@ static void test_portal_minimal() {
     else printf("FAIL: size=%zu args=%zu\n", e.size(), e.size() ? e[0].args.size() : 0);
 }
 
+static void test_portal_short_box_is_not_padded() {
+    // A portal is a BOX; both consumers (OzOzoneLoader, the server's HTTP
+    // serialiser) gate on 6 numbers and drop anything shorter silently. The
+    // parser now WARNS on that shape (the report lives in OzoneParser.cpp), but
+    // it must not paper over it by padding the tuple - a short line has to stay
+    // short so the loaders keep rejecting it. This exact shape was authored
+    // into 13 shipped worlds before the warning existed.
+    test_count++;
+    printf("  TEST portal with 3 numbers keeps the target, stays short... ");
+    auto e = OzoneParser::parse_string("portal SomeNextWorld 0 0 0\n");
+    bool ok = e.size() == 1 && e[0].type == OzonePrimitiveType::ENTITY_PORTAL
+        && e[0].entityType == "SomeNextWorld"   // still nameable in the warning
+        && e[0].args.size() < 6;                // the exact drop predicate
+    if (ok) { pass_count++; printf("PASS\n"); }
+    else printf("FAIL: size=%zu args=%zu world=%s\n",
+                e.size(), e.size() ? e[0].args.size() : 0,
+                e.size() ? e[0].entityType.c_str() : "");
+}
+
+static void test_trigger_arity() {
+    // trigger <def> min(3) max(3) [once] [team] -> the two flags are appended
+    // AFTER the bounds, so the loader's >=6 gate reads bounds + flags. A full
+    // line therefore yields 8 numbers; a short line must stay under 6 BOUNDS
+    // (counted before the flags) or the gate would accept garbage bounds - the
+    // warning in OzoneParser.cpp counts the same way.
+    test_count++;
+    printf("  TEST trigger arity (full=8 args, short stays under the gate)... ");
+    auto full = OzoneParser::parse_string(
+        "trigger Trigger_EnterVolume 5 5 0 15 15 8 once\n");
+    auto shortLine = OzoneParser::parse_string("trigger Trigger_EnterVolume 5 5 0\n");
+    bool ok = full.size() == 1
+        && full[0].type == OzonePrimitiveType::ENTITY_TRIGGER
+        && full[0].args.size() == 8
+        && full[0].args[6] == 1.0f                 // once
+        && shortLine.size() == 1
+        && shortLine[0].type == OzonePrimitiveType::ENTITY_TRIGGER
+        && shortLine[0].entityType == "Trigger_EnterVolume"
+        // 3 bounds + once + team = 5 total: below the loader's 6-number box
+        // check, so the line is dropped rather than mis-read.
+        && shortLine[0].args.size() == 5
+        && shortLine[0].args.size() - 2 < 6;       // bounds before the flags
+    if (ok) { pass_count++; printf("PASS\n"); }
+    else printf("FAIL: full=%zu/%zu short=%zu/%zu\n",
+                full.size(), full.size() ? full[0].args.size() : 0,
+                shortLine.size(), shortLine.size() ? shortLine[0].args.size() : 0);
+}
+
 static void test_levelinfo() {
     test_count++;
     printf("  TEST levelinfo entity... ");
@@ -577,6 +624,8 @@ int main() {
     printf("OzoneParser tests:\n");
     test_portal();
     test_portal_minimal();
+    test_portal_short_box_is_not_padded();
+    test_trigger_arity();
     test_levelinfo();
     test_levelinfo_gametype_kwarg();
     test_particles();
