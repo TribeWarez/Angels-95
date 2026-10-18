@@ -244,8 +244,9 @@ dir /b "%OUT_DIR%\Data\*.oz*" 2>nul | findstr /r "." >nul
 if errorlevel 1 (
     echo WARNING: No .oz* packages found in System/Data
 ) else (
-    dir /b "%OUT_DIR%\Data\*.oz*" 2>nul | find /c /v "" | >nul
-    echo Packages found in System/Data.
+    set PACKAGE_COUNT=0
+    for /f %%f in ('dir /b "%OUT_DIR%\Data\*.oz*" 2^>nul') do set /a PACKAGE_COUNT+=1
+    echo Packages found in System/Data: !PACKAGE_COUNT!.
 )
 
 echo.
