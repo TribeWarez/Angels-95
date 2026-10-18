@@ -175,8 +175,17 @@ hardcoded switch. Game types register from `Source/Game/GameBoxedTypes.cpp`.
   with a joinable `std::thread` aborts `0xC000001D`).
   `apply_starting_mission()` walks the mission `next=` graph and marks every
   earlier world's `mission_skipped`; `GameState::IsFrontier(ws)` is the one
-  frontier predicate. The client's Co-op pane (§12) drives it via
-  `AngelServ --campaign --mission "<name>"`.
+  frontier predicate. Join placement (`current_mission_world_index()`) also
+  walks the MISSION GRAPH, not world-list order: every unplayed mission world
+  `IsFrontier`s simultaneously (all are seeded upfront), so a list-order scan
+  returned the alphabetically-first mission world (a LATER-sector one) and
+  overwrote the pin at the next join — the old scan survives only as the
+  fallback for non-hierarchy worlds and an unloaded hierarchy. The scene
+  handshake's `active_world` names the same placed world as `WORLD_CHANGE` —
+  the two must agree, because UDP has no ordering guarantee and whichever
+  arrived last used to win. The client's Co-op pane (§12) and the CLI
+  `--host`/`--host-mission` flags drive it via the shared
+  `LaunchHostedServer()` → `AngelServ --campaign --mission "<name>"`.
 - **World scoping.** Fix global NPCs aggroing players in another world
   (`GameState::tick_npcs`, `part_idx == -1` path).
 
@@ -273,7 +282,12 @@ hardcoded switch. Game types register from `Source/Game/GameBoxedTypes.cpp`.
   Test: `tests/GameManager.test.cpp`.
   **Landed:** the dedicated **Co-op pane** (Multiplayer dropdown) — Host
   Co-op pins the server via `TitleMenu::GetCoopMission()` →
-  `AngelServ --campaign --mission "<name>"` (the `--mission` flag is §8),
+  `AngelServ --campaign --mission "<name>"` (the `--mission` flag is §8), and
+  the client's CLI flags `--host` / `--host-mission <name>` do the same from
+  the command line (spawn + self-join 127.0.0.1:27015, skip the menu, child
+  output appends to `System/HostedServer.log`; `--host` beats `--join` with a
+  warning) — both paths share `LaunchHostedServer(port, missionOrNull)` in
+  `Core.hpp`, so the argument assembly exists once.
   Join Co-op is the ordinary join path; and the level picker enriches each
   world with `mode`/`sector` (via `GameManager::FindMissionByWorld`) plus a
   Game Type filter that hides mode-less worlds for a specific type.
