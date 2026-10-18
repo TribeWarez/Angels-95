@@ -27,3 +27,8 @@ npc Walker 0 20 0
 pickup pistol_01 5 0 0
 pickup rifle_01 -5 0 0
 pickup etheral_waver 0 -5 0
+
+# trigger scaffold
+trigger Trigger_EnterVolume 0 0 0 10 10 8 once
+# portal scaffold to next mission world
+portal AlShaddai_Metropolis 0 0 0
