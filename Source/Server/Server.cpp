@@ -1057,6 +1057,13 @@ int main(int argc, char** argv) {
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
+    // Written ONCE, here, before any thread exists: the HTTP listener thread
+    // reads it on every /status request (`now() - g_server_start_time`). It
+    // used to be declared and never assigned, so the default-constructed
+    // epoch was subtracted and /status reported uptime as seconds-since-1970
+    // (~56 years). Do not move this write after the thread spawns.
+    g_server_start_time = std::chrono::steady_clock::now();
+
     OZ_INFO("AngelServ build b58 starting");
     OZ_INFO("Game port: UDP %d",  game_port);
     OZ_INFO("HTTP port: %d",     http_port);
