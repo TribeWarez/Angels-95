@@ -315,6 +315,13 @@ because otherwise the panel could only ever edit what already exists.
 - **Packaged defs are read-only.** A def resolved from a `.oz*` package has no
   source file to write, so the section says so instead of accepting edits that
   cannot be saved. Edit the `GameData` source and repack.
+- **`trigger` / `event` defs are read-only dumps by design.** Neither type has
+  a runtime-consumed stat schema (`trigger` volumes carry their box, `once` and
+  `team` on the OZONE `trigger` **line**; the def only holds hook actions), so
+  their def section is a labelled read-only dump rather than an *Edit stats*
+  block. The rule is deliberate: an editable schema row requires a **verified
+  runtime consumer** — an offered-but-ignored field is worse than a missing
+  one.
 
 **Reaching a def with no world instance:** a def with no placed instance cannot
 be reached from a selection. Use the Script Manager's **Properties** button
@@ -399,6 +406,15 @@ animation for `Mesh.Skeletal` entities — the text `.ozanim` format
 ## World Saving
 
 Worlds are saved in OZONE text format. OZONE export includes CSG brush primitives, heightmap, and all entity types (player starts, pickups, NPCs, zones, emitters) with per-zone environment overrides.
+
+**`portal` and `trigger` lines round-trip.** Portals are exported from
+`ZoneManager` (target world, bounds, spawn, `bidir`); trigger volumes are
+re-emitted from the parsed entity set — the editor has no trigger-placement UI,
+so author `trigger <def> minX..maxZ [once] [team=N]` lines as text, and they
+survive open/save and History snapshots. Both kinds need a full **6-number box**
+(min/max in OZONE Z-up): the parser warns about shorter lines and the runtime
+drops them. A trigger box that contains `playerstart` #1 fires its `on_enter`
+on the first simulation step, so `once` volumes should be placed off the spawn.
 
 ## History (Undo / Redo)
 

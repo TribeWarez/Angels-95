@@ -130,6 +130,15 @@ New OZONE line `trigger <def> minX minY minZ maxX maxY maxZ [once] [team=]` →
 `TriggerVolume`; the `: trigger` def declares the topic + filters. The engine
 queries volumes per frame and emits `trigger.enter/exit`.
 
+Authoring notes (landed with the content/editor-gaps pass): the line is a
+**6-number box** — the parser warns about shorter lines and the runtime drops
+them silently; `once`/`team` are appended after the bounds. "Inside on the
+first sample" counts as an **enter** (`m_inside` starts empty), so a `once`
+volume that contains `playerstart` #1 fires at load and can never fire as a
+walk-in — place volumes off the spawn. AngelEd re-emits `trigger` lines from
+the parsed entity set on save and History snapshots (there is no
+trigger-placement UI — author the lines as text and they round-trip).
+
 ### 7.3 ObjectiveSystem — `Source/Events/ObjectiveSystem.*`
 Keyed per-world/session state (`id`, `progress`, `target`, `complete`, `failed`)
 with `Define/Add/Set/Complete/Fail`, `Serialize/Deserialize`. Persisted with the
@@ -160,6 +169,14 @@ hardcoded switch. Game types register from `Source/Game/GameBoxedTypes.cpp`.
   forward-compatible tail pattern (gate on a `...SizeBase` constant).
 - **Spawn/respawn.** Server-side `playerstart` resolution and player respawn
   (today `spawn_world_change` always sends `(0,0,0)`).
+- **Pinned starting mission — landed.** `AngelServ --mission <name>` resolves
+  the `: mission` def by name, **implies** `--campaign`, and an unknown name is
+  a startup `return 1` before any network thread is joinable (an early `return`
+  with a joinable `std::thread` aborts `0xC000001D`).
+  `apply_starting_mission()` walks the mission `next=` graph and marks every
+  earlier world's `mission_skipped`; `GameState::IsFrontier(ws)` is the one
+  frontier predicate. The client's Co-op pane (§12) drives it via
+  `AngelServ --campaign --mission "<name>"`.
 - **World scoping.** Fix global NPCs aggroing players in another world
   (`GameState::tick_npcs`, `part_idx == -1` path).
 
@@ -180,13 +197,21 @@ hardcoded switch. Game types register from `Source/Game/GameBoxedTypes.cpp`.
 
 - New `.cpp` files are raylib-free and wired into the root `Makefile`
   (`OBJS` + a compile rule each). They are **not** in `AngelEd/Makefile` or
-  `ci.yml` yet because the editor does not use them; add them in Phase 2 if it
-  does (the three-place rule).
-- `build-data.ps1` packs `GameData/Game` → `System/Data/game.ozpak` (OZPK).
-- Phase 2 must classify `: game`/`: campaign`/`: sector`/`: mission` as **global**
-  defs (not world-scoped) in `LightningEntityRegistry::LoadWorldOverrides`.
-- Phase 2 must wire the new types into AngelEd's `ScriptPanel` type→folder map
-  (`Tex/Global/Gun` for weapons, etc.) and any `PropsPanel` schemas.
+  `ci.yml` because the editor still does not use them (it consumes the
+  schemas and type lists, not the TUs) — the three-place rule applies the
+  day that changes.
+- `build-data.ps1` packs **per game**: `GameData/Game/<Game>/` →
+  `System/Data/game_<Game>.ozpak` (OZPK). The single `game.ozpak` layout is
+  gone; a loose `.ozls` under `Game/` is warned about at repack time.
+- `: game`/`: campaign`/`: sector`/`: mission`/`: objective`/`: trigger`/
+  `: event` are classified **global** (not world-scoped) in
+  `LightningEntityRegistry::LoadWorldOverrides` via `IsGlobalDefType` —
+  type-driven, not `sourcePath`-driven. **Landed.**
+- The new types are wired into AngelEd's `ScriptPanel` type→folder map and
+  `PropsPanel` schemas (`kGameStats`/`kCampaignStats`/`kSectorStats`/
+  `kMissionStats`/`kObjectiveStats`; keys with verified runtime consumers
+  only — `: trigger`/`: event` have none and render as read-only dumps).
+  **Landed.**
 
 ## 11. Invariants
 
@@ -246,10 +271,21 @@ hardcoded switch. Game types register from `Source/Game/GameBoxedTypes.cpp`.
   Script" type list + folder map include the new def types
   (`Game/Angels95/{Sectors,Missions,Objectives,Triggers,Events}`).
   Test: `tests/GameManager.test.cpp`.
-  **Open:** a dedicated Coop lobby pane (today Coop uses the Multiplayer pane).
+  **Landed:** the dedicated **Co-op pane** (Multiplayer dropdown) — Host
+  Co-op pins the server via `TitleMenu::GetCoopMission()` →
+  `AngelServ --campaign --mission "<name>"` (the `--mission` flag is §8),
+  Join Co-op is the ordinary join path; and the level picker enriches each
+  world with `mode`/`sector` (via `GameManager::FindMissionByWorld`) plus a
+  Game Type filter that hides mode-less worlds for a specific type.
 - **Phase 3 — content (placeholder).** The 14 sub-sector worlds are populated
   with NPCs and pickups so their missions' objectives are completable; real
-  geometry/art is still open.
+  geometry/art is still open. Since the content/editor-gaps pass each world
+  also carries **structural scaffolding**: a `portal` to its `next` mission
+  world (6-number box + explicit target spawn + `bidir`, placed ~20u east of
+  the origin spawn) and a `Trigger_EnterVolume` box on the walk between them,
+  so a fresh spawn walks east into the trigger and then the portal and the
+  whole arc is crossable end to end. The leaf world
+  `Esoteric_Altar_Chambers` has no portal (§7.2 for the authoring traps).
 - **Phase 4 — COOP (substantial).** **The whole arc is `--campaign` OPT-IN**
   on the server; the default OFF is classic per-world co-op — no objectives
   seeded (neither a `: mission` def nor the `ClearArea` fallback, which
