@@ -13,12 +13,10 @@
 static const int ID_TEX_LIST       = 101;
 static const int ID_TEX_REFRESH    = 102;
 static const int ID_TEX_CLOSE      = 103;
-static const int ID_TEX_TARGET     = 104;
 static const int ID_TEX_APPLY      = 105;
 static const int ID_TEX_PREVIEW    = 106;
 static const int ID_TEX_DIMS_LABEL = 107;
 static const int ID_TEX_SRC_LABEL  = 108;
-static const int ID_TEX_APPLY_ALL  = 109;
 static const int ID_TEX_ADDPKG     = 110;
 static const int ID_TEX_IMPORT     = 111;
 static const int ID_TEX_SCOPE      = 112;   // scope tree
@@ -150,12 +148,6 @@ void ScanTextureBrowserFiles() {
 
 void UpdateTextureManagerList() {
     ScanTextureBrowserFiles();
-}
-
-void SetTextureTargetNames(const std::vector<std::string>& names) {
-    g_textureTargetNames = names;
-    if (g_editorPanels.hTextureMgr)
-        SendMessage((HWND)g_editorPanels.hTextureMgr, WM_USER + 51, 0, 0);
 }
 
 // ---------------------------------------------------------------------
@@ -525,7 +517,7 @@ static void FillTextureScopeTree(HWND hwnd, HWND hTree, HWND hGrid) {
 }
 
 static LRESULT CALLBACK TextureMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
-    static HWND hGrid = nullptr, hTarget = nullptr, hPreview = nullptr, hDims = nullptr, hSrc = nullptr;
+    static HWND hGrid = nullptr, hPreview = nullptr, hDims = nullptr, hSrc = nullptr;
     static HWND hScope = nullptr;
     switch (msg) {
     case WM_CREATE: {
@@ -565,28 +557,11 @@ static LRESULT CALLBACK TextureMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) 
             x + 140, y, 220, 120, hwnd, (HMENU)(INT_PTR)ID_TEX_PREVIEW, g_hInst, nullptr);
         y += 126;
 
-        // Target combo
-        CreateLabel(hwnd, L"Target:", x, y, 55, 20, 20);
-        hTarget = CreateWindowEx(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST,
-                                 x + 55, y, 180, 200, hwnd, (HMENU)(INT_PTR)ID_TEX_TARGET, g_hInst, nullptr);
-        if (g_textureTargetNames.empty()) {
-            for (int model = 1; model <= 20; model++) {
-                wchar_t label[32];
-                swprintf(label, 32, L"Model %d", model);
-                SendMessage(hTarget, CB_ADDSTRING, 0, (LPARAM)label);
-            }
-        } else {
-            for (const auto& name : g_textureTargetNames) {
-                std::wstring wname(name.begin(), name.end());
-                SendMessage(hTarget, CB_ADDSTRING, 0, (LPARAM)wname.c_str());
-            }
-        }
-        SendMessage(hTarget, CB_SETCURSEL, 0, 0);
+        // Apply target is the viewport selection. The old "Target: Model 1..20"
+        // combo fed the legacy WDLModels path, which could never resolve a CSG
+        // brush - clicking Apply silently did nothing for every brush.
+        CreateLabel(hwnd, L"Applies to the selected brush or model", x, y, 320, 20, 20);
         y += 30;
-
-        // Apply to all checkbox
-        CreateCtrl(hwnd, L"BUTTON", L"Apply to All", x, y, 120, 22, ID_TEX_APPLY_ALL, BS_AUTOCHECKBOX);
-        y += 28;
 
         CreateButton(hwnd, L"Apply", x, y, 80, 26, ID_TEX_APPLY);
 
@@ -637,14 +612,8 @@ static LRESULT CALLBACK TextureMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) 
         iy += prevH + 6;
 
         // Target combo + buttons
-        int comboW = bw - 65;
-        if (comboW > 180) comboW = 180;
-        if (comboW < 60) comboW = 60;
-        SetWindowPos(GetDlgItem(hwnd, 20), NULL, x, iy, 55, 20, SWP_NOZORDER);
-        if (hTarget) SetWindowPos(hTarget, NULL, x + 55, iy, comboW, 200, SWP_NOZORDER);
+        SetWindowPos(GetDlgItem(hwnd, 20), NULL, x, iy, 320, 20, SWP_NOZORDER);
         iy += 26;
-        SetWindowPos(GetDlgItem(hwnd, ID_TEX_APPLY_ALL), NULL, x, iy, 120, 22, SWP_NOZORDER);
-        iy += 28;
         SetWindowPos(GetDlgItem(hwnd, ID_TEX_APPLY), NULL, x, iy, 80, 26, SWP_NOZORDER);
         break;
     }
@@ -657,26 +626,6 @@ static LRESULT CALLBACK TextureMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) 
         }
         // Refresh grid
         FillTextureScopeTree(hwnd, hScope, hGrid);
-        break;
-    }
-    case WM_USER + 51: {
-        HWND hTarg = GetDlgItem(hwnd, ID_TEX_TARGET);
-        if (hTarg) {
-            SendMessage(hTarg, CB_RESETCONTENT, 0, 0);
-            if (g_textureTargetNames.empty()) {
-                for (int model = 1; model <= 20; model++) {
-                    wchar_t label[32];
-                    swprintf(label, 32, L"Model %d", model);
-                    SendMessage(hTarg, CB_ADDSTRING, 0, (LPARAM)label);
-                }
-            } else {
-                for (const auto& name : g_textureTargetNames) {
-                    std::wstring wname(name.begin(), name.end());
-                    SendMessage(hTarg, CB_ADDSTRING, 0, (LPARAM)wname.c_str());
-                }
-            }
-            SendMessage(hTarg, CB_SETCURSEL, 0, 0);
-        }
         break;
     }
     case WM_COMMAND: {
@@ -754,20 +703,24 @@ static LRESULT CALLBACK TextureMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) 
                 }
             }
         } else if (id == ID_TEX_APPLY || (id == ID_TEX_LIST && notify == 2)) {
-            // Apply selected texture to target model
+            // Apply the grid's selected texture to the CURRENT VIEWPORT
+            // SELECTION. The old path posted Ev::ApplyTextureToModel with a
+            // "Model 1..20" dropdown index, which resolved through WDLModels
+            // and was a guaranteed silent no-op for every CSG brush. The
+            // selection is captured into the event: this window is modeless,
+            // so the modal-writer argument that keeps actionApplyTextureToSel
+            // honest does not apply here.
             int sel = -1;
             if (hGrid) {
                 auto* gs = (TextureGridState*)GetWindowLongPtr(hGrid, GWLP_USERDATA);
                 sel = TexEntryAt(gs ? gs->selectedIdx : -1);
             }
             if (sel >= 0 && sel < (int)g_textureFiles.size()) {
-                int target = (int)SendMessage(hTarget, CB_GETCURSEL, 0, 0);
-                if (target >= 0) {
-                    ed::TextureApply ta;
-                    ta.target = target + 1;
-                    ta.path   = g_textureFiles[sel].path;
-                    ed::EventBus::instance().post(ed::Ev::ApplyTextureToModel, ta);
-                }
+                ed::TextureSelectionApply apply;
+                apply.path   = g_textureFiles[sel].path;
+                apply.target = ed::SelRef{ ToBusKind((SelType)EdSel_CurrentType()),
+                                           EdSel_CurrentIndex() };
+                ed::EventBus::instance().post(ed::Ev::ApplyTextureToSelection, apply);
             }
         }
         break;

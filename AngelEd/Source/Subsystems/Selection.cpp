@@ -12,6 +12,13 @@
 // which is how a 420-line state header came to contain 250 lines of picking logic.
 // EditorRaycastAt below is their only caller, which is why they moved down to it.
 
+// Read-only selection accessors for the UI TU. g_sel is an inline global in
+// Core/EditorState.hpp, which UI/ cannot include because that header pulls
+// Editor.hpp (a Main-TU header). Declared extern in UI/UiCommon.hpp - same
+// pattern as the WorldGraph_GetModel* accessors.
+int EdSel_CurrentType()  { return (int)g_sel.type; }
+int EdSel_CurrentIndex() { return g_sel.index; }
+
 // RaycastTestBrushes REMOVED (R8). It picked from GetCollisionVolumes() - the CSG
 // output, whose entries are merged AABBs - and returned that index as
 // SelType::BRUSH, the same type RaycastTestOzPrimitives used for a RENDERABLE index.

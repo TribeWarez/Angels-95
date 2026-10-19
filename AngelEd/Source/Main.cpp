@@ -154,12 +154,6 @@ int main(int argc, char **argv){
 
     // Load editor world
     Init();
-    {
-        std::vector<std::string> names;
-        for (int i = 0; i < WDLModels.GetModelCount(); i++)
-            if (WDLModels.GetModelName(i)) names.push_back(WDLModels.GetModelName(i));
-        SetTextureTargetNames(names);
-    }
 
     // Load pawn definitions from config files (data-driven)
     {

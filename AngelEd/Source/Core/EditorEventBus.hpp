@@ -90,10 +90,15 @@ struct PlacementRequest {
     std::string key;      // pickup def name; node type name for Kind::Node
 };
 
-// Apply a texture to a model by index.
-struct TextureApply {
-    int target = -1;
-    std::string path;
+// Apply the browser's selected texture to the viewport selection. The SelRef is
+// captured BY VALUE at post time, the same reasoning SelRef itself documents:
+// the Texture Manager is a MODELESS window, so the modal-writer argument that
+// keeps actionApplyTextureToSel honest does not apply here — a queued viewport
+// click between the Apply button and the frame drain must not redirect the
+// apply onto a different brush than the one the user had selected.
+struct TextureSelectionApply {
+    std::string path;   // asset path (loose file or package key)
+    SelRef      target; // captured selection; invalid -> handler skips it
 };
 
 // A heightmap build request. Six separate action* fields used to carry this, and
@@ -250,8 +255,7 @@ enum class Ev : uint8_t {
     ApplySurface, ResetSurface,
 
     // Assets.
-    ApplyTextureToSelection,   // Payload: std::string (asset path)
-    ApplyTextureToModel,       // Payload: TextureApply (target index + path)
+    ApplyTextureToSelection,   // Payload: TextureSelectionApply (path + captured SelRef)
     ReloadMesh,                // Payload: SelRef
     ConvertToAnimated,         // Payload: SelRef
     PlaySound,                 // Payload: std::string (path)
@@ -295,7 +299,7 @@ using Payload = std::variant<std::monostate,
                              SurfaceEdit,
                              AnimIntent,
                              PlacementRequest,
-                             TextureApply,
+                             TextureSelectionApply,
                              HeightmapDesc,
                              CsgIntent,
                              SpawnDesc,
@@ -318,7 +322,7 @@ struct Event {
     const SurfaceEdit& surface() const;
     const AnimIntent& anim() const;
     const PlacementRequest& placement() const;
-    const TextureApply& textureApply() const;
+    const TextureSelectionApply& textureSelectionApply() const;
     const HeightmapDesc& heightmap() const;
     const CsgIntent&   csg() const;
     const Transform& xform() const;

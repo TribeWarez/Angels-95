@@ -143,11 +143,27 @@ static void DispatchFrameEvents(const std::vector<ed::Event>& events) {
             case ed::Ev::StopSoundPreview:
                 StopSoundPreview();
                 break;
-            case ed::Ev::ApplyTextureToModel: {
-                const ed::TextureApply& ta = ev.textureApply();
-                if (ta.target <= 0 || ta.path.empty()) break;
+            case ed::Ev::ApplyTextureToSelection: {
+                // From the Texture Manager's Apply button and grid double-click.
+                // The selection was CAPTURED into the event at post time; the old
+                // path (Ev::ApplyTextureToModel + a "Model 1..20" dropdown index)
+                // resolved through WDLModels and was a guaranteed silent no-op
+                // for every CSG brush.
+                const ed::TextureSelectionApply& apply = ev.textureSelectionApply();
+                if (apply.path.empty() || !apply.target.valid()) break;
                 HistoryPush();
-                ApplyTextureToModel(ta.target, ta.path.c_str());
+                if (apply.target.kind == ed::SelKind::Brush) {
+                    const bool applied = OzoneLoader::Instance().ApplyRenderableTexture(
+                        apply.target.index, apply.path.c_str());
+                    EditorLog("Applied texture to brush renderable idx=%d: %s",
+                              apply.target.index, applied ? "ok" : "FAILED");
+                } else if (apply.target.kind == ed::SelKind::Model &&
+                           apply.target.index >= 0 && apply.target.index < CachedModelCounter) {
+                    const int modelId = CachedModels[apply.target.index].ModelId;
+                    if (ApplyTextureToModel(modelId, apply.path.c_str()))
+                        EditorLog("Applied texture to model %d: %s", modelId,
+                                  apply.path.c_str());
+                }
                 break;
             }
             case ed::Ev::RefreshModelBrowser:

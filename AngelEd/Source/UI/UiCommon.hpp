@@ -38,6 +38,13 @@ namespace fs = std::filesystem;
 extern int WorldGraph_GetModelCount();
 extern void WorldGraph_GetModelData(int index, float& outX, float& outY, float& outZ, float& outR, float& outS);
 extern const char* WorldGraph_GetModelName(int index);
+
+// Read-only selection capture for selection-scoped posts from this (modeless)
+// layer. g_sel lives in Core/EditorState.hpp, which this TU cannot include
+// because that header pulls Editor.hpp (a Main-TU header); these are defined
+// in Subsystems/Selection.cpp, beside the picker that maintains g_sel.
+extern int EdSel_CurrentType();   // SelType as int
+extern int EdSel_CurrentIndex();
 // Selection accessors
 extern int Editor_GetSelectedType();
 extern int Editor_GetSelectedIndex();
@@ -105,9 +112,6 @@ static int TexEntryAt(int pos) {
     if (pos < 0 || pos >= (int)g_textureVisible.size()) return -1;
     return g_textureVisible[pos];
 }
-
-// Texture target model names (set from Main.cpp after model loading)
-static std::vector<std::string> g_textureTargetNames;
 
 // Pawn defs managed by PawnSystem (shared with runtime)
 

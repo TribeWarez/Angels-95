@@ -21,7 +21,7 @@ const Selection kEmptySeln{};
 const SurfaceEdit kEmptySurf{};
 const AnimIntent  kEmptyAnim{};
 const PlacementRequest kEmptyPlace{};
-const TextureApply    kEmptyTex{};
+const TextureSelectionApply kEmptyTexSel{};
 const HeightmapDesc   kEmptyHm{};
 const CsgIntent   kEmptyCsg{};
 const Transform kEmptyXform{};
@@ -66,10 +66,10 @@ const PlacementRequest& Event::placement() const {
     return kEmptyPlace;
 }
 
-const TextureApply& Event::textureApply() const {
-    if (const auto* v = std::get_if<TextureApply>(&data)) return *v;
-    mismatch("textureApply", kind);
-    return kEmptyTex;
+const TextureSelectionApply& Event::textureSelectionApply() const {
+    if (const auto* v = std::get_if<TextureSelectionApply>(&data)) return *v;
+    mismatch("textureSelectionApply", kind);
+    return kEmptyTexSel;
 }
 
 const HeightmapDesc& Event::heightmap() const {

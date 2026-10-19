@@ -230,7 +230,6 @@ static void test_event_coverage() {
         {Ev::AnimSelectAll, "AnimSelectAll"},
         {Ev::AnimClearSelection, "AnimClearSelection"},
         {Ev::BeginPlacement, "BeginPlacement"},
-        {Ev::ApplyTextureToModel, "ApplyTextureToModel"},
         {Ev::RefreshModelBrowser, "RefreshModelBrowser"},
     };
     // AnimSave and AnimRefresh are deliberately NOT events - they are intra-frame

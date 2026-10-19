@@ -99,7 +99,6 @@ void RefreshLevelList();
 void RefreshWorldGraph();
 void UpdateModelPreview(void* hBmp, int w, int h);
 void ScanModelBrowserFiles();
-void SetTextureTargetNames(const std::vector<std::string>& names);
 bool ChooseOpenWorldFile(std::string& outPath);
 bool ChooseSaveWorldFile(std::string& outPath);
 void UpdateStatsSidebar(float posX, float posY, float posZ,
@@ -132,7 +131,6 @@ inline void RefreshLevelList() {}
 inline void RefreshWorldGraph() {}
 inline void UpdateModelPreview(void*, int, int) {}
 inline void ScanModelBrowserFiles() {}
-inline void SetTextureTargetNames(const std::vector<std::string>&) {}
 inline bool ChooseOpenWorldFile(std::string&) { return false; }
 inline bool ChooseSaveWorldFile(std::string&) { return false; }
 inline void UpdateStatsSidebar(float, float, float, float, float, float, float, float, int, int, const char*, float, float, float) {}
