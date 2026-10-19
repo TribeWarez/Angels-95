@@ -611,7 +611,7 @@ static LRESULT CALLBACK TextureMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) 
         if (hPreview) SetWindowPos(hPreview, NULL, prevX, iy, prevW, prevH, SWP_NOZORDER);
         iy += prevH + 6;
 
-        // Target combo + buttons
+        // Apply hint + button
         SetWindowPos(GetDlgItem(hwnd, 20), NULL, x, iy, 320, 20, SWP_NOZORDER);
         iy += 26;
         SetWindowPos(GetDlgItem(hwnd, ID_TEX_APPLY), NULL, x, iy, 80, 26, SWP_NOZORDER);

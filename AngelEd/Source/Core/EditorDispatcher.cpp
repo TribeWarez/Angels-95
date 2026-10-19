@@ -157,6 +157,7 @@ static void DispatchFrameEvents(const std::vector<ed::Event>& events) {
                         apply.target.index, apply.path.c_str());
                     EditorLog("Applied texture to brush renderable idx=%d: %s",
                               apply.target.index, applied ? "ok" : "FAILED");
+                    if (applied) g_editorPanels.textureProbeRenderable = apply.target.index;
                 } else if (apply.target.kind == ed::SelKind::Model &&
                            apply.target.index >= 0 && apply.target.index < CachedModelCounter) {
                     const int modelId = CachedModels[apply.target.index].ModelId;

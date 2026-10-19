@@ -901,6 +901,50 @@ int main(int argc, char **argv){
         // OZONE world geometry
         OzoneLoader::Instance().Draw(OTEditor.MainCamera);
 
+        // One-shot texture-apply probe (armed by the apply drains), logged after
+        // the world pass so the lazy face-mesh build has run for this frame.
+        // Distinguishes "state not written" from "state written but not rendered"
+        // from "view mode Wireframe" in a user's session log.
+        if (g_editorPanels.textureProbeRenderable >= 0) {
+            const int probeIndex = g_editorPanels.textureProbeRenderable;
+            g_editorPanels.textureProbeRenderable = -1;
+            OzoneRenderable* probeRenderable = OzoneLoader::Instance().Get(probeIndex);
+            if (probeRenderable) {
+                const char* modeName = "LIT";
+                switch (OTEditor.ViewMode) {
+                    case LightingMode::UNLIT:     modeName = "UNLIT"; break;
+                    case LightingMode::WIREFRAME: modeName = "WIREFRAME"; break;
+                    case LightingMode::DYNAMIC:   modeName = "DYNAMIC"; break;
+                    default: break;
+                }
+                int builtFaceCount = 0;
+                char faceTexIds[96] = {0};
+                int textWritten = 0;
+                for (int faceIndex = 0; faceIndex < oz::surface::FACE_COUNT; faceIndex++) {
+                    if (probeRenderable->faceMesh[faceIndex].vaoId > 0) builtFaceCount++;
+                    const Texture2D faceTexture = OzoneLoader::Instance().ResolveFaceTextureHandle(
+                        probeRenderable->surface.Resolve((oz::surface::SurfaceFace)faceIndex));
+                    const int written = snprintf(faceTexIds + textWritten,
+                                                 sizeof(faceTexIds) - textWritten,
+                                                 "%s%u", faceIndex ? "," : "", faceTexture.id);
+                    if (written < 0) break;
+                    textWritten += written;
+                    if (textWritten >= (int)sizeof(faceTexIds) - 1) break;
+                }
+                EditorLog("Texture probe idx=%d mode=%s surfaceShader=%d perFace=%d built=%d "
+                          "faces=%d/%d faceTex=[%s] diffuse=%u custom=%u path='%s' mirror='%s'",
+                          probeIndex, modeName,
+                          oz::SurfaceMaterial::Instance().Ready() ? 1 : 0,
+                          probeRenderable->surface.NeedsPerFaceDraw() ? 1 : 0,
+                          probeRenderable->faceMeshesBuilt ? 1 : 0,
+                          builtFaceCount, oz::surface::FACE_COUNT, faceTexIds,
+                          probeRenderable->model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture.id,
+                          probeRenderable->customTex.id,
+                          probeRenderable->surface.def.texPath.c_str(),
+                          probeRenderable->texPath.c_str());
+            }
+        }
+
         // Sky zone rendering in editor
         {
             PawnSystem::Instance().UpdateSkyZone(
@@ -2062,12 +2106,18 @@ OmegaTechEditor.DrawModel = false;
                         rIdx, g_editorPanels.activeTexturePath.c_str());
                     EditorLog("Applied texture to brush renderable idx=%d (sel=%d): %s",
                               rIdx, g_sel.index, applied ? "ok" : "FAILED");
+                    if (applied) g_editorPanels.textureProbeRenderable = rIdx;
                 } else if (g_sel.type == SelType::MODEL && g_sel.index >= 0 && g_sel.index < CachedModelCounter) {
                     int mid = CachedModels[g_sel.index].ModelId;
                     if (ApplyTextureToModel(mid, g_editorPanels.activeTexturePath.c_str()))
                         EditorLog("Applied texture to model %d: %s", mid,
                                   g_editorPanels.activeTexturePath.c_str());
                 }
+            } else {
+                // A silent no-op is indistinguishable from "the texture did not
+                // render" in a user's session log; name the actual reason.
+                EditorLog("Apply texture: nothing to apply to (selection=%d, texture='%s')",
+                          (int)g_sel.type, g_editorPanels.activeTexturePath.c_str());
             }
             g_editorPanels.actionApplyTextureToSel = false;
         }

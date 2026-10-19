@@ -146,6 +146,11 @@ struct EditorPanelState {
     // depends on g_sel.pos to disambiguate a renderable index from a collision-volume
     // index) for no behavioural gain.
     bool actionApplyTextureToSel = false;  // apply activeTexturePath to selected entity
+    // One-shot diagnostic armed by the texture-apply drains: the frame pass logs
+    // this renderable's draw-path state once (view mode, per-face meshes, bound
+    // texture handles) so an "it applied but nothing shows" report carries the
+    // answer in AngelEd.log instead of a guess. -1 = nothing pending.
+    int textureProbeRenderable = -1;
 
     // WorldGraph Explorer
     bool showWorldGraph = false;
