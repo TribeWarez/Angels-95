@@ -37,19 +37,23 @@ static RayCollision RaycastTestOzPrimitives(Ray ray, EditorSelection& out) {
         if (!IsEditorPickableSurface(*r))
             continue;
         BoundingBox mb = GetMeshBoundingBox(r->model.meshes[0]);
-        // Apply mesh-local AABB transformed by position + scale (handles non-centered meshes)
-        Vector3 wMin = {r->position.x + mb.min.x * r->scale,
-                        r->position.y + mb.min.y * r->scale,
-                        r->position.z + mb.min.z * r->scale};
-        Vector3 wMax = {r->position.x + mb.max.x * r->scale,
-                        r->position.y + mb.max.y * r->scale,
-                        r->position.z + mb.max.z * r->scale};
-        BoundingBox box = {wMin, wMax};
+        // Rotation-aware pick box, using the SAME composition the renderer and
+        // collision use (scale, then yaw about the brush origin, then translate).
+        // The old code applied position + scale only, so a rotated brush was
+        // picked from its unrotated footprint: clicks in empty space selected
+        // it, and clicks on its visible ends missed.
+        const AabbBox local{mb.min.x, mb.min.y, mb.min.z,
+                            mb.max.x, mb.max.y, mb.max.z};
+        const AabbBox w = RotatedAabbY(local, r->rotation,
+                                       r->position.x, r->position.y,
+                                       r->position.z, r->scale);
+        BoundingBox box = {{w.minX, w.minY, w.minZ}, {w.maxX, w.maxY, w.maxZ}};
         RayCollision hit = GetRayCollisionBox(ray, box);
         if (hit.hit && hit.distance < best.distance) {
             best = hit;
             // Store ACTUAL mesh center as selection position, not r->position
-            Vector3 center = {(wMin.x + wMax.x) * 0.5f, (wMin.y + wMax.y) * 0.5f, (wMin.z + wMax.z) * 0.5f};
+            Vector3 center = {(w.minX + w.maxX) * 0.5f, (w.minY + w.maxY) * 0.5f,
+                              (w.minZ + w.maxZ) * 0.5f};
             out = { SelType::BRUSH, i, TextFormat("OzPrimitive %d", i),
                     center, r->scale, r->rotation * RAD2DEG, true }; // UI works in degrees
         }
@@ -194,15 +198,19 @@ static RayCollision RaycastTestMeshObjects(Ray ray, EditorSelection& out) {
         Vector3 center = n.position;
         if (n.mesh && n.mesh->Valid()) {
             const BoundingBox& mb = n.mesh->Bounds();
-            box.min = {n.position.x + mb.min.x * n.scale,
-                       n.position.y + mb.min.y * n.scale,
-                       n.position.z + mb.min.z * n.scale};
-            box.max = {n.position.x + mb.max.x * n.scale,
-                       n.position.y + mb.max.y * n.scale,
-                       n.position.z + mb.max.z * n.scale};
-            center = {(box.min.x + box.max.x) * 0.5f,
-                      (box.min.y + box.max.y) * 0.5f,
-                      (box.min.z + box.max.z) * 0.5f};
+            // Mesh::Draw composes scale * RotateY(yaw) * translate, so the pick
+            // volume must too. It used to ignore yaw, which made a rotated prop
+            // pick from its unrotated footprint.
+            const AabbBox local{mb.min.x, mb.min.y, mb.min.z,
+                                mb.max.x, mb.max.y, mb.max.z};
+            const AabbBox w = RotatedAabbY(local, n.yaw * DEG2RAD,
+                                           n.position.x, n.position.y,
+                                           n.position.z, n.scale);
+            box.min = {w.minX, w.minY, w.minZ};
+            box.max = {w.maxX, w.maxY, w.maxZ};
+            center = {(w.minX + w.maxX) * 0.5f,
+                      (w.minY + w.maxY) * 0.5f,
+                      (w.minZ + w.maxZ) * 0.5f};
         } else {
             box.min = {n.position.x - 1.0f, n.position.y - 1.0f, n.position.z - 1.0f};
             box.max = {n.position.x + 1.0f, n.position.y + 1.0f, n.position.z + 1.0f};
@@ -398,6 +406,16 @@ static SurfaceFacePick PickSurfaceFace(Vector2 mousePos) {
             const float* vs[3] = { m.vertices + (size_t)i0 * 3,
                                    m.vertices + (size_t)i1 * 3,
                                    m.vertices + (size_t)i2 * 3 };
+            // Bucket the face from the LOCAL triangle normal, not the world one.
+            // BuildFaceMeshes splits a brush's mesh by the dominant axis of each
+            // triangle's LOCAL normal, while this picker used to map the world
+            // normal. On a yawed brush those disagree, so right-clicking the
+            // visible +X face applied the edit to a different face's bucket.
+            const float e1x = vs[1][0] - vs[0][0], e1y = vs[1][1] - vs[0][1], e1z = vs[1][2] - vs[0][2];
+            const float e2x = vs[2][0] - vs[0][0], e2y = vs[2][1] - vs[0][1], e2z = vs[2][2] - vs[0][2];
+            const float lnx = e1y * e2z - e1z * e2y;
+            const float lny = e1z * e2x - e1x * e2z;
+            const float lnz = e1x * e2y - e1y * e2x;
             Vector3 out[3];
             for (int k = 0; k < 3; k++) {
                 float lx = vs[k][0] * r->scale;
@@ -416,9 +434,9 @@ static SurfaceFacePick PickSurfaceFace(Vector2 mousePos) {
             best.distance = dist;
             best.normal = n;
             best.point = Vector3Add(ray.position, Vector3Scale(ray.direction, dist));
-            // The triangle normal is in world space and the buckets are engine
-            // Y-up, so no axis swap here.
-            best.face = oz::surface::FaceFromNormal(n.x, n.y, n.z);
+            // Faces are named in the mesh's own (engine Y-up) space, matching
+            // BuildFaceMeshes. The LOCAL cross product is what the renderer uses.
+            best.face = oz::surface::FaceFromNormal(lnx, lny, lnz);
         }
     }
     return best;
@@ -457,7 +475,7 @@ PlayerStartNode* FindPlayerStartById(int id) {
     return nullptr;
 }
 
-static void SnapGizmoToSelection(const EditorSelection& sel) {
+void SnapGizmoToSelection(const EditorSelection& sel) {
     OmegaTechEditor.X = sel.pos.x;
     OmegaTechEditor.Y = sel.pos.y;
     OmegaTechEditor.Z = sel.pos.z;
@@ -472,9 +490,26 @@ static void SnapGizmoToSelection(const EditorSelection& sel) {
         OzoneRenderable* r = OzoneLoader::Instance().Get(sel.index);
         if (r && r->loaded && r->model.meshCount > 0) {
             BoundingBox mb = GetMeshBoundingBox(r->model.meshes[0]);
-            OmegaTechEditor.W = (mb.max.x - mb.min.x) * r->scale;
-            OmegaTechEditor.H = (mb.max.y - mb.min.y) * r->scale;
-            OmegaTechEditor.L = (mb.max.z - mb.min.z) * r->scale;
+            const AabbBox local{mb.min.x, mb.min.y, mb.min.z,
+                                mb.max.x, mb.max.y, mb.max.z};
+            // The drawn gizmo is axis-aligned, so report the rotated brush's
+            // enclosing extents (same rotation-aware box the picker/collision use).
+            const AabbBox w = RotatedAabbY(local, r->rotation,
+                                           r->position.x, r->position.y,
+                                           r->position.z, r->scale);
+            OmegaTechEditor.W = w.maxX - w.minX;
+            OmegaTechEditor.H = w.maxY - w.minY;
+            OmegaTechEditor.L = w.maxZ - w.minZ;
+        }
+    } else if (sel.type == SelType::WINDZONE) {
+        auto& zones = PawnSystem::Instance().GetWindZones();
+        for (auto& z : zones) {
+            if ((int)z.id == sel.index) {
+                OmegaTechEditor.W = z.bounds.max.x - z.bounds.min.x;
+                OmegaTechEditor.H = z.bounds.max.y - z.bounds.min.y;
+                OmegaTechEditor.L = z.bounds.max.z - z.bounds.min.z;
+                break;
+            }
         }
     } else if (sel.type == SelType::ZONE) {
         auto& zones = ZoneManager::Instance().GetZones();
@@ -629,12 +664,22 @@ static void DuplicateSelectedEntity() {
         OzoneRenderable* r = OzoneLoader::Instance().Get(g_sel.index);
         if (!r || !r->loaded || r->model.meshCount == 0) return;
         BoundingBox mb = GetMeshBoundingBox(r->model.meshes[0]);
-        Vector3 size = { (mb.max.x - mb.min.x) * r->scale,
-                         (mb.max.y - mb.min.y) * r->scale,
-                         (mb.max.z - mb.min.z) * r->scale };
-        Vector3 pos = { r->position.x + offset.x, r->position.y, r->position.z + offset.z };
+        // AddBrushRenderable takes UNSCALED size plus the scale; multiplying the
+        // bbox by r->scale here as well applied the scale twice.
+        Vector3 size = { mb.max.x - mb.min.x,
+                         mb.max.y - mb.min.y,
+                         mb.max.z - mb.min.z };
+        // ...and `pos` is the world CENTRE, not the stored renderable position
+        // (cylinder/pyramid store their TOP).
+        Vector3 pos = {
+            r->position.x + (mb.min.x + mb.max.x) * 0.5f * r->scale + offset.x,
+            r->position.y + (mb.min.y + mb.max.y) * 0.5f * r->scale,
+            r->position.z + (mb.min.z + mb.max.z) * 0.5f * r->scale + offset.z };
+        // AddBrushRenderable takes rotation in DEGREES (its other caller is the
+        // editor ghost, whose field is degrees); r->rotation is radians.
         int idx = OzoneLoader::Instance().AddBrushRenderable(
-            r->typeId, pos, size, r->rotation, r->scale, r->csgOp, r->surfaceFlags);
+            r->typeId, pos, size, r->rotation * RAD2DEG, r->scale, r->csgOp,
+            r->surfaceFlags, r->cylRTop, r->cylRBot, r->cylSlices);
         if (idx >= 0) {
             // AddBrushRenderable regenerates a default surface, so carry the source
             // brush's texture slot and UV transform across by hand.
@@ -645,6 +690,9 @@ static void DuplicateSelectedEntity() {
                 dup->texOffsetU = r->texOffsetU;
                 dup->texOffsetV = r->texOffsetV;
                 dup->surface    = r->surface;
+                // surface.def is the owner of the flags/UV/texture mirrors; the
+                // copy above changed it without re-deriving them.
+                DeriveLegacyRenderable(*dup);
                 OzoneLoader::Instance().RebuildSurfaceMeshes(idx);
             }
             OzoneLoader::Instance().RebuildCollisionVolumes();

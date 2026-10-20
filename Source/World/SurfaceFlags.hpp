@@ -176,8 +176,8 @@ struct SurfaceProps {
     float glowR = 0.0f, glowG = 0.0f, glowB = 0.0f;
     float glowScale = 1.0f;
 
-    bool Has(uint32_t bit) const { return (flags & bit) != 0; }
-    void Set(uint32_t bit, bool on) {
+    constexpr bool Has(uint32_t bit) const { return (flags & bit) != 0; }
+    constexpr void Set(uint32_t bit, bool on) {
         if (on) flags |= bit; else flags &= ~bit;
     }
     // True when this face needs anything the default DrawModel path cannot do.

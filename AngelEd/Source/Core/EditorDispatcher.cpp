@@ -15,7 +15,7 @@
 // ============================================================================
 
 static void DispatchFrameEvents(const std::vector<ed::Event>& events) {
-    for (const ed::Event& ev : g_editorFrameEvents) {
+    for (const ed::Event& ev : events) {
       switch (ev.kind) {
             case ed::Ev::SelectEntity:
                 AdoptSelection(ev.selection());
@@ -164,6 +164,18 @@ static void DispatchFrameEvents(const std::vector<ed::Event>& events) {
                     if (ApplyTextureToModel(modelId, apply.path.c_str()))
                         EditorLog("Applied texture to model %d: %s", modelId,
                                   apply.path.c_str());
+                } else if (apply.target.kind == ed::SelKind::Mesh) {
+                    // A placed GameEngine.Mesh.* prop is NOT a legacy WDL model.
+                    // Without this branch the Texture Manager's "selected brush
+                    // or model" Apply silently did nothing for every Mesh entity.
+                    if (MeshObjectNode* m =
+                            PawnSystem::Instance().GetMeshObject(apply.target.index)) {
+                        m->texturePath = apply.path;
+                        m->mesh.reset();   // re-resolve with the new texture
+                        EditorLog("Applied texture to mesh '%s' idx=%d: %s",
+                                  m->meshPath.c_str(), apply.target.index,
+                                  apply.path.c_str());
+                    }
                 }
                 break;
             }

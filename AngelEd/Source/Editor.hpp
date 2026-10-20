@@ -219,9 +219,15 @@ inline void Init(){
 
     Target = LoadRenderTexture(320 , 200);
 
-    // Initialize lit fog shader for editor
-    // Use OTEditor.Path prefix so shaders resolve from ../GameData/ when cwd=System/
-    std::string shaderBase = std::string(OTEditor.Path) + "Shaders/Lights/";
+    // Initialize lit fog shader for editor.
+    //
+    // Use the PROJECT shader directory, not OTEditor.Path: that field is the
+    // current WORLD directory (SetWorldDirectory writes it), so the old
+    // `OTEditor.Path + "Shaders/Lights/"` resolved to
+    // GameData/Worlds/<World>/Shaders/Lights/ and only worked by accident when
+    // the package loader matched the file's basename. EnsureProjectRoot() has
+    // already fixed the cwd to the repo root, so this is the stable path.
+    std::string shaderBase = "GameData/Shaders/Lights/";
     OTEditor.LitFogShader = LoadShaderWithFallback(
         (shaderBase + "Lighting.vs").c_str(),
         (shaderBase + "LitFog.fs").c_str()
@@ -284,17 +290,19 @@ inline void Init(){
     // Initialize engine billboard system
     EngineBillboard::Init();
 
-    // Per-face surface shader. The editor resolves shaders through OTEditor.Path
-    // (which is the GameData parent when cwd=System/), so reuse it rather than
-    // hardcoding a path that only works from the repo root.
+    // Per-face surface shader and the shared sky shader. These are PROJECT
+    // assets, not world-local ones: OTEditor.Path is the current WORLD folder
+    // (SetWorldDirectory writes it), so using it here looked for
+    // GameData/Worlds/<World>/Shaders/* and the editor logged
+    // "Failed to open text file ... World/Shaders/Sky.vs" for every world.
+    // EnsureProjectRoot() has already fixed the cwd, so this path is stable.
     //
-    // SkyMaterial needs the same treatment and the same directory. oz::Skybox -
-    // which the client and the editor now share - silently falls back to
-    // raylib's default material when the sky shader is missing, so an editor that
-    // forgot this would show an unfogged sky with no diagnostic anywhere, which is
-    // precisely the drift the shared Skybox exists to remove.
+    // SkyMaterial needs the same directory as the client. oz::Skybox - shared by
+    // both - silently falls back to raylib's default material when the sky
+    // shader is missing, so an editor that forgot this would show an unfogged
+    // sky with no diagnostic anywhere.
     {
-        std::string sdir = std::string(OTEditor.Path) + "Shaders/";
+        std::string sdir = "GameData/Shaders/";
         oz::SurfaceMaterial::Instance().Init(sdir.c_str());
         oz::SkyMaterial::Instance().Init(sdir.c_str());
     }

@@ -81,8 +81,12 @@ void ExportToOzone(std::ostream& output) {
             // The radii and slice count come from the renderable, not from the
             // mesh bounding box: the bbox only knows max(rTop, rBot), so writing
             // it back as "rad rad" silently flattened every taper the author made.
-            const float rTop = (r->cylRTop > 0.0f) ? r->cylRTop : ((w > d) ? w : d) * 0.5f;
-            const float rBot = (r->cylRBot > 0.0f) ? r->cylRBot : rTop;
+            // The stored radii are in UNSCALED mesh space (h above is already
+            // world-space). A Scale-tool drag leaves r->scale != 1, so writing
+            // the raw radii would save a thinner cylinder than was on screen.
+            const float rTop = ((r->cylRTop > 0.0f) ? r->cylRTop * sc
+                                                     : ((w > d) ? w : d) * 0.5f);
+            const float rBot = (r->cylRBot > 0.0f) ? r->cylRBot * sc : rTop;
             const int slices = (r->cylSlices > 0) ? r->cylSlices : 16;
             output << " " << rTop << " " << rBot << " " << h << " " << slices
                    << " " << rotDeg;
@@ -103,7 +107,7 @@ void ExportToOzone(std::ostream& output) {
             float plen = sqrtf(pnx*pnx + pny*pny + pnz*pnz);
             if (plen < 1e-6f) { pnx = 0.0f; pny = 0.0f; pnz = 1.0f; plen = 1.0f; }
             output << " " << (pnx/plen) << " " << (pny/plen) << " " << (pnz/plen)
-                   << " " << r->planeDist;
+                   << " " << (r->planeDist * sc);
         }
 
         // Material kwargs (consumed by the OZONE brush parser).

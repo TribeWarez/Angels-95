@@ -21,4 +21,10 @@ PlayerStartNode* FindPlayerStartById(int id);
 // so a row cannot write an out-of-range value by whatever route it was typed.
 int ClampPropInt(int v, int lo, int hi);
 
+// Publish `sel` as the gizmo's current transform. The frame loop syncs the gizmo
+// back into the live selection every frame, so a subsystem that edits an entity
+// directly (PropsApply) MUST call this afterwards or the next frame overwrites
+// the edit with the pre-edit transform.
+void SnapGizmoToSelection(const EditorSelection& sel);
+
 #endif // ANGEL_ED_SUBSYSTEMS_SELECTION_HPP

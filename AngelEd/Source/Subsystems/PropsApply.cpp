@@ -103,6 +103,23 @@ void ApplyPanelProperties(const std::vector<ed::Event>& events) {
             if (rIdx >= 0) {
                 OzoneLoader::Instance().UpdateBrushRenderable(
                     rIdx, (Vector3){px, py, pz}, newSize, prot);
+                // The panel's Pos row is the visual MESH CENTRE (that is what the
+                // raycast stores and what the gizmo uses), but a cylinder/pyramid's
+                // renderable position is its TOP. Translate by the actual centre
+                // error so editing size or rotation does not shift the brush.
+                if (OzoneRenderable* r = OzoneLoader::Instance().Get(rIdx)) {
+                    if (r->loaded && r->model.meshCount > 0) {
+                        const BoundingBox mb = GetMeshBoundingBox(r->model.meshes[0]);
+                        const float sc = (r->scale > 0.0001f) ? r->scale : 1.0f;
+                        const Vector3 center = {
+                            r->position.x + (mb.min.x + mb.max.x) * 0.5f * sc,
+                            r->position.y + (mb.min.y + mb.max.y) * 0.5f * sc,
+                            r->position.z + (mb.min.z + mb.max.z) * 0.5f * sc};
+                        r->position.x += px - center.x;
+                        r->position.y += py - center.y;
+                        r->position.z += pz - center.z;
+                    }
+                }
                 OzoneLoader::Instance().ApplyRenderableUV(
                     rIdx,
                     g_editorPanels.propTexScaleU,
@@ -240,9 +257,22 @@ void ApplyPanelProperties(const std::vector<ed::Event>& events) {
         } else if (tgtType == SelType::MESH) {
             MeshObjectNode* m = PawnSystem::Instance().GetMeshObject(tgtIdx);
             if (m) {
-                m->position = {px, py, pz};
                 if (g_editorPanels.propsTargetHasRotation) m->yaw = prot;
                 if (g_editorPanels.propScale > 0.001f) m->scale = g_editorPanels.propScale;
+                // Panel Pos is the model's world CENTRE; m->position is its
+                // origin (usually the feet). Assigning one to the other moved the
+                // prop by its local offset on every Apply.
+                Vector3 offset = {0, 0, 0};
+                if (m->mesh && m->mesh->Valid()) {
+                    const BoundingBox& mb = m->mesh->Bounds();
+                    const float lx = (mb.min.x + mb.max.x) * 0.5f * m->scale;
+                    const float ly = (mb.min.y + mb.max.y) * 0.5f * m->scale;
+                    const float lz = (mb.min.z + mb.max.z) * 0.5f * m->scale;
+                    const float c = cosf(m->yaw * DEG2RAD);
+                    const float s = sinf(m->yaw * DEG2RAD);
+                    offset = { lx * c + lz * s, ly, -lx * s + lz * c };
+                }
+                m->position = {px - offset.x, py - offset.y, pz - offset.z};
                 bool pathChanged = (g_editorPanels.propMeshPath != m->meshPath) ||
                                    (g_editorPanels.propMeshTex != m->texturePath);
                 if (!g_editorPanels.propMeshPath.empty())
@@ -337,6 +367,41 @@ void ApplyPanelProperties(const std::vector<ed::Event>& events) {
                     z->frequency = g_editorPanels.propWindFrequency;
             }
         }
+
+        // Publish the applied transform back to the gizmo.
+        //
+        // The frame loop has a "sync gizmo position back to selected entity" pass
+        // that writes OmegaTechEditor into the live selection every frame. When
+        // the Properties panel changed that same entity, the next frame restored
+        // the PRE-EDIT position/rotation, so a Pos or Rot edit appeared to do
+        // nothing. Only do this when the event really targeted the live
+        // selection; otherwise the panel edited something else and the gizmo must
+        // not jump to it.
+        if (g_sel.type == tgtType && g_sel.index == tgtIdx) {
+            if (tgtType == SelType::BRUSH) {
+                if (OzoneRenderable* r = OzoneLoader::Instance().Get(tgtIdx)) {
+                    if (r->loaded && r->model.meshCount > 0) {
+                        const BoundingBox mb = GetMeshBoundingBox(r->model.meshes[0]);
+                        const float sc = (r->scale > 0.0001f) ? r->scale : 1.0f;
+                        g_sel.pos = {
+                            r->position.x + (mb.min.x + mb.max.x) * 0.5f * sc,
+                            r->position.y + (mb.min.y + mb.max.y) * 0.5f * sc,
+                            r->position.z + (mb.min.z + mb.max.z) * 0.5f * sc};
+                        g_sel.rotation = r->rotation * RAD2DEG;
+                        g_sel.scale = r->scale;
+                    }
+                }
+            } else {
+                // Zones/portals/wind zones were written around (px,py,pz) as the
+                // centre; every other type stores the position directly.
+                g_sel.pos = {px, py, pz};
+                if (g_editorPanels.propsTargetHasRotation) g_sel.rotation = prot;
+                if (tgtType == SelType::MESH && g_editorPanels.propScale > 0.001f)
+                    g_sel.scale = g_editorPanels.propScale;
+            }
+            SnapGizmoToSelection(g_sel);
+        }
+
         EditorLog("Applied properties to %s idx=%d", g_sel.name.c_str(), tgtIdx);
         }    }
 }

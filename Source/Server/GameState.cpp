@@ -101,7 +101,7 @@ static void load_server_pawn_defs(const std::string& gamedata_dir) {
             loaded++;
         }
     }
-    OZ_INFO("Server: loaded %d pawn defs from %s", loaded, defsDir);
+    OZ_INFO("Server: loaded %d pawn defs from %s", loaded, defsDir.c_str());
     g_serverPawnDefsLoaded = true;
 }
 

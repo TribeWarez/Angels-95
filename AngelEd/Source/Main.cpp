@@ -1063,10 +1063,13 @@ if (g_editorPanels.showCollisionBounds) {
                 if (EMID >= 200) {
                     // OZONE primitive ghost
                     int primType = EMID - 200;
-                    Vector3 size = {OmegaTechEditor.W, OmegaTechEditor.H, OmegaTechEditor.L};
+                    Vector3 size = {OmegaTechEditor.W * ps, OmegaTechEditor.H * ps, OmegaTechEditor.L * ps};
                     Vector3 center = {px, py, pz};
                     DrawBoundingBox((BoundingBox){{px - size.x*0.5f, py - size.y*0.5f, pz - size.z*0.5f},
                                                   {px + size.x*0.5f, py + size.y*0.5f, pz + size.z*0.5f}}, ORANGE);
+                    // Apply S to the OZONE ghost too. AddBrushRenderable bakes
+                    // the size and stores S as r->scale, so drawing the unscaled
+                    // ghost showed a brush smaller than the one that got placed.
                     if (primType == 0) { // Box
                         DrawCubeWires(center, size.x, size.y, size.z, (Color){255,165,0,180});
                     } else if (primType == 1) { // Cylinder
@@ -1328,6 +1331,73 @@ if (g_editorPanels.showCollisionBounds) {
                         p.bounds.min.x += delta.x; p.bounds.min.y += delta.y; p.bounds.min.z += delta.z;
                         p.bounds.max.x += delta.x; p.bounds.max.y += delta.y; p.bounds.max.z += delta.z;
                     }
+                } else if (g_sel.type == SelType::ZONE) {
+                    // Bounds-centred, like PORTAL. This branch was missing, so the
+                    // Move tool changed the gizmo and then wrote nothing: a zone
+                    // could only be moved through the Properties panel.
+                    auto& zones = ZoneManager::Instance().GetZones();
+                    for (auto& z : zones) {
+                        if ((int)z.id != idx) continue;
+                        Vector3 center = {(z.bounds.min.x + z.bounds.max.x) * 0.5f,
+                                          (z.bounds.min.y + z.bounds.max.y) * 0.5f,
+                                          (z.bounds.min.z + z.bounds.max.z) * 0.5f};
+                        Vector3 delta = {newPos.x - center.x, newPos.y - center.y, newPos.z - center.z};
+                        z.bounds.min.x += delta.x; z.bounds.min.y += delta.y; z.bounds.min.z += delta.z;
+                        z.bounds.max.x += delta.x; z.bounds.max.y += delta.y; z.bounds.max.z += delta.z;
+                        break;
+                    }
+                } else if (g_sel.type == SelType::MESH) {
+                    if (MeshObjectNode* m = PawnSystem::Instance().GetMeshObject(idx)) {
+                        m->yaw = OmegaTechEditor.R;   // UI works in degrees
+                        if (g_editorPanels.currentToolMode == 2 && OmegaTechEditor.S > 0.01f)
+                            m->scale = OmegaTechEditor.S;
+                        // The gizmo / raycast store the model's world CENTRE, but
+                        // m->position is the model's ORIGIN (often the feet). Writing
+                        // the centre straight into position shifted every model by
+                        // its own local offset the moment it was selected.
+                        if (m->mesh && m->mesh->Valid()) {
+                            const BoundingBox& mb = m->mesh->Bounds();
+                            const float lx = (mb.min.x + mb.max.x) * 0.5f * m->scale;
+                            const float ly = (mb.min.y + mb.max.y) * 0.5f * m->scale;
+                            const float lz = (mb.min.z + mb.max.z) * 0.5f * m->scale;
+                            const float c = cosf(m->yaw * DEG2RAD);
+                            const float s = sinf(m->yaw * DEG2RAD);
+                            const Vector3 offset = { lx * c + lz * s, ly, -lx * s + lz * c };
+                            m->position = {newPos.x - offset.x, newPos.y - offset.y,
+                                           newPos.z - offset.z};
+                        } else if (g_gizmoDrag) {
+                            // Unknown local offset (mesh still resolving): only
+                            // an explicit drag may write the centre. Doing it on
+                            // every frame made a texture reload shift the prop.
+                            m->position = newPos;
+                        }
+                    }
+                } else if (g_sel.type == SelType::PARTICLE) {
+                    if (ParticleEmitterNode* e = PawnSystem::Instance().GetParticleEmitter(idx)) {
+                        e->position = newPos;
+                        e->yaw = OmegaTechEditor.R;
+                    }
+                } else if (g_sel.type == SelType::PATHNODE) {
+                    if (PathNode* pn = PawnSystem::Instance().GetPathNode(idx))
+                        pn->position = newPos;
+                } else if (g_sel.type == SelType::WINDZONE) {
+                    if (WindZoneNode* z = PawnSystem::Instance().GetWindZone(idx)) {
+                        Vector3 center = {(z->bounds.min.x + z->bounds.max.x) * 0.5f,
+                                          (z->bounds.min.y + z->bounds.max.y) * 0.5f,
+                                          (z->bounds.min.z + z->bounds.max.z) * 0.5f};
+                        Vector3 delta = {newPos.x - center.x, newPos.y - center.y, newPos.z - center.z};
+                        z->bounds.min.x += delta.x; z->bounds.min.y += delta.y; z->bounds.min.z += delta.z;
+                        z->bounds.max.x += delta.x; z->bounds.max.y += delta.y; z->bounds.max.z += delta.z;
+                    }
+                } else if (g_sel.type == SelType::MODEL) {
+                    if (idx >= 0 && idx < CachedModelCounter) {
+                        CachedModels[idx].X = newPos.x;
+                        CachedModels[idx].Y = newPos.y;
+                        CachedModels[idx].Z = newPos.z;
+                        CachedModels[idx].R = OmegaTechEditor.R;
+                        if (g_editorPanels.currentToolMode == 2 && OmegaTechEditor.S > 0.01f)
+                            CachedModels[idx].S = OmegaTechEditor.S;
+                    }
                 }
                 // Update selection stored position
                 g_sel.pos = newPos;
@@ -1568,12 +1638,12 @@ OmegaTechEditor.DrawModel = false;
                 if (n) {
                     if (n->mesh && n->mesh->Valid()) {
                         const BoundingBox& mb = n->mesh->Bounds();
-                        return {{n->position.x + mb.min.x * n->scale,
-                                 n->position.y + mb.min.y * n->scale,
-                                 n->position.z + mb.min.z * n->scale},
-                                {n->position.x + mb.max.x * n->scale,
-                                 n->position.y + mb.max.y * n->scale,
-                                 n->position.z + mb.max.z * n->scale}};
+                        const AabbBox local{mb.min.x, mb.min.y, mb.min.z,
+                                            mb.max.x, mb.max.y, mb.max.z};
+                        const AabbBox w = RotatedAabbY(local, n->yaw * DEG2RAD,
+                                                       n->position.x, n->position.y,
+                                                       n->position.z, n->scale);
+                        return {{w.minX, w.minY, w.minZ}, {w.maxX, w.maxY, w.maxZ}};
                     }
                     return {{n->position.x - 1, n->position.y - 1, n->position.z - 1},
                             {n->position.x + 1, n->position.y + 1, n->position.z + 1}};
@@ -2101,12 +2171,51 @@ OmegaTechEditor.DrawModel = false;
                     // could end up applying the texture to a DIFFERENT brush than the
                     // one selected, because a collision index below the renderable
                     // count passed the first branch.
+                    //
+                    // The context menu is opened from a PER-FACE pick and is called
+                    // "Apply Texture to Surface", so apply to the picked faces when
+                    // there are any. It used to ignore them and texture the whole
+                    // brush, which is not what the menu says and not what the
+                    // right-click selected.
                     const int rIdx = g_sel.index;
-                    bool applied = OzoneLoader::Instance().ApplyRenderableTexture(
-                        rIdx, g_editorPanels.activeTexturePath.c_str());
-                    EditorLog("Applied texture to brush renderable idx=%d (sel=%d): %s",
-                              rIdx, g_sel.index, applied ? "ok" : "FAILED");
-                    if (applied) g_editorPanels.textureProbeRenderable = rIdx;
+                    OzoneRenderable* brush = OzoneLoader::Instance().Get(rIdx);
+                    uint32_t faceMask = 0;
+                    for (const auto& sp : g_selectedSurfaces) {
+                        if (sp.renderable != rIdx) continue;
+                        if (sp.face < 0 || sp.face >= oz::surface::FACE_COUNT) continue;
+                        faceMask |= (1u << (int)sp.face);
+                    }
+
+                    if (brush && faceMask != 0) {
+                        int appliedFaces = 0;
+                        for (int f = 0; f < oz::surface::FACE_COUNT; f++) {
+                            if (!(faceMask & (1u << f))) continue;
+                            // Keep this face's flags/UV/alpha/glow; substitute only
+                            // the texture. Overwriting the whole SurfaceProps here
+                            // would silently reset every other property.
+                            oz::surface::SurfaceProps p =
+                                brush->surface.Resolve((oz::surface::SurfaceFace)f);
+                            p.texPath = g_editorPanels.activeTexturePath;
+                            OzoneLoader::Instance().SetRenderableFace(
+                                rIdx, (oz::surface::SurfaceFace)f, p);
+                            appliedFaces++;
+                        }
+                        EditorLog("Applied texture to %d face(s) of renderable idx=%d: %s",
+                                  appliedFaces, rIdx,
+                                  g_editorPanels.activeTexturePath.c_str());
+                        if (g_editorPanels.hSurfaceProps)
+                            SurfacePropsRefresh((HWND)g_editorPanels.hSurfaceProps);
+                        g_editorPanels.textureProbeRenderable = rIdx;
+                    } else {
+                        // No face pick for this brush (e.g. the menu came from a
+                        // model row or a stale surface selection): fall back to the
+                        // brush-wide default.
+                        bool applied = OzoneLoader::Instance().ApplyRenderableTexture(
+                            rIdx, g_editorPanels.activeTexturePath.c_str());
+                        EditorLog("Applied texture to brush renderable idx=%d (sel=%d): %s",
+                                  rIdx, g_sel.index, applied ? "ok" : "FAILED");
+                        if (applied) g_editorPanels.textureProbeRenderable = rIdx;
+                    }
                 } else if (g_sel.type == SelType::MODEL && g_sel.index >= 0 && g_sel.index < CachedModelCounter) {
                     int mid = CachedModels[g_sel.index].ModelId;
                     if (ApplyTextureToModel(mid, g_editorPanels.activeTexturePath.c_str()))

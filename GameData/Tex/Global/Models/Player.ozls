@@ -8,15 +8,18 @@ entity "Player" : upgrade {
     // Anim panel) and set anim_idle / anim_chase here to switch it to skeletal.
     mesh = "GameData/Pawn/Player/Plague_Arcanist.glb"
     mesh_type = "static"
-    // Rendered height in engine units for remote-player bodies. The character
-    // GLBs are authored in metres while the collision box (PlayerMovement::
-    // Height) is 3.0, so without this every online player drew at roughly half
-    // the size of their own silhouette. Any positive value re-normalises to it;
-    // a NEGATIVE value means "draw at the authored scale, do not normalise".
-    model_height = 3.0
     // Base walk-speed multiplier (sprint/crouch scale this at runtime).
     movement_speed = 1.4
     stats {
+        // Rendered height in engine units for remote-player bodies. The character
+        // GLBs are authored in metres while the collision box (PlayerMovement::
+        // Height) is 3.0, so without this every online player drew at roughly half
+        // the size of their own silhouette. Any positive value re-normalises to it;
+        // a NEGATIVE value means "draw at the authored scale, do not normalise".
+        //
+        // MUST stay inside stats { }: PlayerModel reads stats.floats, and a
+        // top-level key here is dropped by the parser (with a warning).
+        model_height = 3.0
         health = 100
         max_health = 100
         mana = 0

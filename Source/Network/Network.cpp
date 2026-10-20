@@ -568,6 +568,14 @@ void NetworkServer::update() {
                     send_message(*player, pong);
                     break;
                 }
+                case MessageType::PONG:
+                    // A client answers the server's heartbeat PING with PONG.
+                    // The server does not measure per-client RTT, so this is an
+                    // expected protocol message - not an unhandled one. Without
+                    // this case it fell through to on_message_received and
+                    // Server.cpp warned "Unhandled message type PONG" every
+                    // heartbeat, which looked like a broken handshake.
+                    break;
                 case MessageType::PLAYER_JOIN:
                     // Already connected — ignore rebroadcasts.
                     break;

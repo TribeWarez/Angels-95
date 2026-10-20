@@ -2082,9 +2082,14 @@ if (!z.name.empty()) FillDefBlock(z.name, "");
                 OzoneRenderable* r = OzoneLoader::Instance().Get(idx);
                 if (r && r->loaded) {
                     BoundingBox mb = GetMeshBoundingBox(r->model.meshes[0]);
-                    g_editorPanels.propSizeX = mb.max.x - mb.min.x;
-                    g_editorPanels.propSizeY = mb.max.y - mb.min.y;
-                    g_editorPanels.propSizeZ = mb.max.z - mb.min.z;
+                    // The panel edits WORLD size. Mesh bounds are unscaled, and a
+                    // brush may carry r->scale != 1 after a Scale-tool drag, so
+                    // showing the raw bounds made the number disagree with what
+                    // was on screen (and an Apply then rebuilt at the wrong size).
+                    const float sc = (r->scale > 0.0001f) ? r->scale : 1.0f;
+                    g_editorPanels.propSizeX = (mb.max.x - mb.min.x) * sc;
+                    g_editorPanels.propSizeY = (mb.max.y - mb.min.y) * sc;
+                    g_editorPanels.propSizeZ = (mb.max.z - mb.min.z) * sc;
                     g_editorPanels.propTexScaleU = r->texScaleU;
                     g_editorPanels.propTexScaleV = r->texScaleV;
                     g_editorPanels.propTexOffsetU = r->texOffsetU;

@@ -260,4 +260,7 @@ echo   OzPack.exe     - Asset packer
 echo   Data/*.oz*     - Packaged assets
 echo   Cache/         - Temporary runtime cache
 
-endlocal
+REM Success must be exit 0: an unchecked helper command earlier (xcopy, dir,
+REM findstr, for /f) can leave errorlevel=1 even when every executable and
+REM package was produced, which made callers treat a good build as failed.
+endlocal & exit /b 0

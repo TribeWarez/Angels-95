@@ -1422,6 +1422,81 @@ static void test_level_metadata_parse_is_shared() {
               "LevelState.hpp declares it for History.cpp/WorldIO.cpp");
 }
 
+// The editor's basic transform + per-face wiring, asserted at source level
+// because the Win32 panel and the GL viewport cannot be linked here.
+//
+// Four independent regressions made "basic things that used to work" fail:
+//   * Surface Properties read its controls with GetDlgItem(dialog, id), but they
+//     are children of TAB PAGES, so every Apply re-sent the values loaded when
+//     the dialog opened - every edit did nothing.
+//   * The per-frame gizmo sync overwrote a Properties-panel position/rotation on
+//     the next frame because the gizmo still held the pre-edit transform.
+//   * The Move tool had no branch for MESH/PARTICLE/PATHNODE/WINDZONE/ZONE, so
+//     those could not be dragged at all.
+//   * Cylinder/sphere Properties applies passed a DIAMETER where the builders
+//     expect a RADIUS (and cylinder height where a radius belonged).
+static void test_editor_transform_and_surface_wiring() {
+    const std::string panel = ReadFile("AngelEd/Source/UI/Panels/SurfacePropsPanel.cpp");
+    const std::string sel   = ReadFile("AngelEd/Source/Subsystems/Selection.cpp");
+    const std::string props = ReadFile("AngelEd/Source/Subsystems/PropsApply.cpp");
+    const std::string main  = ReadFile("AngelEd/Source/Main.cpp");
+    const std::string loader = ReadFile("Source/World/OzOzoneLoader.cpp");
+    if (panel.empty() || sel.empty() || props.empty() || main.empty() || loader.empty()) {
+        printf("  SKIP  editor transform/surface wiring (sources not found)\n");
+        return;
+    }
+
+    // --- Surface Properties reads the controls that actually exist -----------
+    check(panel.find("SpfFindControl") != std::string::npos,
+          "Surface Properties resolves controls through its tab pages");
+    {
+        const size_t rp = panel.find("static void SpfReadControls");
+        const size_t re = (rp == std::string::npos) ? std::string::npos
+                                                    : panel.find("\nstatic ", rp + 10);
+        const std::string readBody =
+            (rp != std::string::npos && re != std::string::npos)
+                ? panel.substr(rp, re - rp) : std::string();
+        check(!readBody.empty() && readBody.find("GetDlgItem") == std::string::npos &&
+              readBody.find("SpfFindControl") != std::string::npos,
+              "SpfReadControls reads through the page-aware lookup, never GetDlgItem");
+    }
+
+    // --- Per-face pick uses the SAME (local) normal as BuildFaceMeshes --------
+    check(sel.find("FaceFromNormal(lnx, lny, lnz)") != std::string::npos,
+          "surface picking buckets the face from the LOCAL triangle normal");
+    check(sel.find("RotatedAabbY(local, r->rotation") != std::string::npos,
+          "brush picking uses the rotation-aware AABB");
+
+    // --- The Properties apply publishes its result to the gizmo --------------
+    check(props.find("SnapGizmoToSelection(g_sel)") != std::string::npos,
+          "Properties apply snaps the gizmo to the applied transform");
+    check(props.find("r->position.x += px - center.x") != std::string::npos,
+          "brush Properties apply converts mesh-centre Pos / top-position");
+
+    // --- Move tool knows every movable selection type ------------------------
+    check(main.find("g_sel.type == SelType::MESH") != std::string::npos,
+          "Move tool translates Mesh.* entities");
+    check(main.find("g_sel.type == SelType::WINDZONE") != std::string::npos,
+          "Move tool translates WindZone bounds");
+    check(main.find("g_sel.type == SelType::PATHNODE") != std::string::npos,
+          "Move tool translates PathNodes");
+
+    // --- Cylinder/sphere resizing uses radii, not diameters ------------------
+    check(loader.find("BuildCylinder(size.x, size.y, size.z, 16)") == std::string::npos,
+          "cylinder resize no longer passes full dimensions as radii");
+    check(loader.find("BuildSphere(size.x, 16)") == std::string::npos,
+          "sphere resize no longer passes a diameter as a radius");
+    check(loader.find("BuildCylinder(newCylRTop, newCylRBot, size.y, newCylSlices)")
+              != std::string::npos,
+          "cylinder resize rebuilds with taper radii + height + slices");
+    check(loader.find("BuildSphere(diameter * 0.5f, 16)") != std::string::npos,
+          "sphere resize builds with radius = diameter / 2");
+
+    // --- The surface fallback keeps a rotated brush's yaw --------------------
+    check(loader.find("DrawModel(r.model, r.position, r.scale, WHITE)") == std::string::npos,
+          "surface draw fallback no longer drops brush rotation");
+}
+
 int main() {
     printf("Surface tests:\n");
     test_legacy_bits_stable();
@@ -1454,6 +1529,7 @@ int main() {
     test_face_texture_resolution();
     test_uv_transform();
     test_cylinder_top_convention();
+    test_editor_transform_and_surface_wiring();
     test_level_metadata_parse_is_shared();
     printf("\nResults: %d/%d passed\n", pass_count, test_count);
     return (pass_count == test_count) ? 0 : 1;

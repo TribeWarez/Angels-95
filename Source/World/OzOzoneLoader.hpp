@@ -262,9 +262,16 @@ public:
     int LastCsgOverflowCount() const { return m_lastCsgOverflow; }
 
     // Editor: add a brush renderable so it becomes visible in the viewport
+    // `pos` is the desired WORLD CENTRE of the mesh (what the editor's placement
+    // ghost and the selection gizmo use). The stored renderable position is
+    // derived from it, so cylinder/pyramid keep their top-based convention.
+    // Optional taper values let Duplicate preserve a cone instead of flattening
+    // it to a uniform tube.
     int AddBrushRenderable(int primType, const Vector3& pos, const Vector3& size,
                            float rot, float scale, int csgOp,
-                           int surfaceFlags = 0);
+                           int surfaceFlags = 0,
+                           float cylRTop = -1.0f, float cylRBot = -1.0f,
+                           int cylSlices = 0);
 
     // Editor: voxelise a triangle soup into convex collision boxes and append
     // each one as a SURF_COLLISION_PROXY brush, then rebuild the collision

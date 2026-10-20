@@ -287,16 +287,36 @@ static void SpfShowPage(int page) {
     s_spfTab = page;
 }
 
+// Find a control that lives on one of the three tab PAGES.
+//
+// The tab pages are STATIC child windows of the dialog and every checkbox, edit
+// and combo is a child of a PAGE, not of the dialog. GetDlgItem(hwnd, id) only
+// searches IMMEDIATE children, so reading controls through the dialog handle
+// found nothing at all: Apply then re-posted the values loaded when the dialog
+// opened, which made every Flags/Alignment/Stats edit silently do nothing.
+//
+// (Buttons and the tab control ARE direct children of the dialog, so the layout
+// code may keep using GetDlgItem on it.)
+static HWND SpfFindControl(HWND dialog, int id) {
+    if (!dialog) return nullptr;
+    if (HWND direct = GetDlgItem(dialog, id)) return direct;
+    for (int i = 0; i < 3; i++) {
+        if (!g_spfPages[i]) continue;
+        if (HWND c = GetDlgItem(g_spfPages[i], id)) return c;
+    }
+    return nullptr;
+}
+
 // Read every control back into the working copy.
 static void SpfReadControls(HWND hwnd) {
     for (int i = 0; i < kSurfaceFlagCount; i++) {
-        HWND c = GetDlgItem(hwnd, ID_SPF_FLAG_BASE + i);
+        HWND c = SpfFindControl(hwnd, ID_SPF_FLAG_BASE + i);
         if (!c) continue;
         s_spfEdit.Set(kSurfaceFlagRows[i].bit,
                       SendMessage(c, BM_GETCHECK, 0, 0) == BST_CHECKED);
     }
     for (int i = 0; i < SPF_FIELD_COUNT; i++) {
-        HWND c = GetDlgItem(hwnd, ID_SPF_F_BASE + i);
+        HWND c = SpfFindControl(hwnd, ID_SPF_F_BASE + i);
         if (!c) continue;
         wchar_t buf[64];
         GetWindowTextW(c, buf, 64);
@@ -307,11 +327,11 @@ static void SpfReadControls(HWND hwnd) {
         if (end == buf) continue;
         SpfSetField((SpfField)i, (float)v);
     }
-    if (HWND c = GetDlgItem(hwnd, ID_SPF_SLOTSEL)) {
+    if (HWND c = SpfFindControl(hwnd, ID_SPF_SLOTSEL)) {
         const int s = (int)SendMessage(c, CB_GETCURSEL, 0, 0);
         s_spfEdit.texSlot = (s > 0) ? s : 0;
     }
-    if (HWND c = GetDlgItem(hwnd, ID_SPF_TEXPATH)) {
+    if (HWND c = SpfFindControl(hwnd, ID_SPF_TEXPATH)) {
         wchar_t buf[512];
         GetWindowTextW(c, buf, 512);
         char out[512] = {0};
@@ -321,7 +341,7 @@ static void SpfReadControls(HWND hwnd) {
     // The Scope combo lives on the Flags page, so it is read here too - otherwise
     // switching to the Stats tab and pressing Apply would silently discard it,
     // exactly like the texPath field used to.
-    if (HWND c = GetDlgItem(hwnd, ID_SPF_SCOPESEL)) {
+    if (HWND c = SpfFindControl(hwnd, ID_SPF_SCOPESEL)) {
         g_editorPanels.surfaceBrushWide =
             (SendMessage(c, CB_GETCURSEL, 0, 0) == SPF_SCOPE_BRUSH);
     }

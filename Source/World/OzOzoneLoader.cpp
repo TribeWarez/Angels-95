@@ -1513,8 +1513,12 @@ void OzoneLoader::DrawSurface(OzoneRenderable& r, SurfacePass pass) {
     using namespace oz::surface;
     auto& sm = oz::SurfaceMaterial::Instance();
     if (!sm.Ready() || r.model.meshCount == 0) {
-        // Shader missing: fall back to the plain path so the brush still draws.
-        DrawModel(r.model, r.position, r.scale, WHITE);
+        // Shader missing: fall back to the plain path so the brush still draws -
+        // with the SAME transform the surface path would have used. Plain
+        // DrawModel has no rotation term, so a rotated brush snapped back to
+        // axis-aligned exactly when the shader was unavailable.
+        DrawModelEx(r.model, r.position, {0.0f, 1.0f, 0.0f}, r.rotation * RAD2DEG,
+                    {r.scale, r.scale, r.scale}, WHITE);
         return;
     }
     if (!r.faceMeshesBuilt) BuildFaceMeshes(r);
@@ -1913,13 +1917,36 @@ void OzoneLoader::RebuildCollisionVolumes() {
 // ---------------------------------------------------------------------------
 int OzoneLoader::AddBrushRenderable(int primType, const Vector3& pos,
                                     const Vector3& size, float rot,
-                                    float scale, int csgOp, int surfaceFlags) {
+                                    float scale, int csgOp, int surfaceFlags,
+                                    float cylRTop, float cylRBot, int cylSlices) {
     Model mdl = {0};
+    float builtCylRTop = 0.0f, builtCylRBot = 0.0f;
+    int   builtCylSlices = 0;
+    // Bake the ghost scale into the geometry and store scale = 1. The exporter
+    // writes a box's size from the mesh bbox * r->scale, but a cylinder's
+    // authored radii straight from cylRTop/RBot - so a non-baked scale made a
+    // placed cylinder thinner after save/reload than it was in the editor.
+    const float fit = (scale > 0.0001f) ? scale : 1.0f;
     switch (primType) {
-        case 0: mdl = BuildBox(size.x, size.y, size.z); break;
-        case 1: mdl = BuildCylinder(size.x, size.y, size.z, 16); break;
-        case 2: mdl = BuildSphere(size.x, 16); break;
-        case 3: mdl = BuildPyramid(size.x, size.z, size.y); break;
+        case 0: mdl = BuildBox(size.x * fit, size.y * fit, size.z * fit); break;
+        case 1: {
+            // size is a DIAMETER x height x depth; BuildCylinder wants RADII.
+            // Passing the raw size made a placed cylinder twice the ghost's
+            // width, with its height used as a radius.
+            const float diameter = fmaxf(size.x, size.z) * fit;
+            builtCylRTop = (cylRTop > 0.0f) ? cylRTop * fit : diameter * 0.5f;
+            builtCylRBot = (cylRBot > 0.0f) ? cylRBot * fit : builtCylRTop;
+            builtCylSlices = (cylSlices > 0) ? cylSlices : 16;
+            mdl = BuildCylinder(builtCylRTop, builtCylRBot, size.y * fit, builtCylSlices);
+            break;
+        }
+        case 2: {
+            // size is a DIAMETER; BuildSphere wants a RADIUS.
+            const float diameter = fmaxf(size.x, fmaxf(size.y, size.z)) * fit;
+            mdl = BuildSphere(diameter * 0.5f, 16);
+            break;
+        }
+        case 3: mdl = BuildPyramid(size.x * fit, size.z * fit, size.y * fit); break;
         case 4: mdl = BuildPlane(0, 1, 0, 0); break;
         case 5: {
             // Flat platform heightmap (no file paths needed for editor preview)
@@ -1938,12 +1965,32 @@ int OzoneLoader::AddBrushRenderable(int primType, const Vector3& pos,
 
     OzoneRenderable r;
     r.typeId = primType;
-    r.position = pos;
-    r.scale = scale;
+    r.scale = 1.0f;   // `fit` is already baked into the geometry above
     // Store rotation in radians (matches file-loaded renderables); the editor
     // passes degrees from its UI fields.
     r.rotation = rot * DEG2RAD;
-    r.model = mdl;
+
+    // `pos` is the desired WORLD CENTRE. Cylinder/pyramid meshes span [-h, 0],
+    // so assigning pos directly put them half a height below the ghost they
+    // were placed from. Derive the renderable position from the mesh's own
+    // local centre (rotated into world space) instead.
+    {
+        r.model = mdl;
+        const BoundingBox mb = GetMeshBoundingBox(mdl.meshes[0]);
+        const float lcx = (mb.min.x + mb.max.x) * 0.5f * r.scale;
+        const float lcy = (mb.min.y + mb.max.y) * 0.5f * r.scale;
+        const float lcz = (mb.min.z + mb.max.z) * 0.5f * r.scale;
+        const float c = cosf(r.rotation), s = sinf(r.rotation);
+        r.position = { pos.x - (lcx * c + lcz * s),
+                       pos.y - lcy,
+                       pos.z - (-lcx * s + lcz * c) };
+    }
+
+    if (primType == 1) {
+        r.cylRTop = builtCylRTop;
+        r.cylRBot = builtCylRBot;
+        r.cylSlices = builtCylSlices;
+    }
     r.loaded = true;
     r.csgOp = csgOp;
     // Write the OWNER, then derive the legacy mirror from it. Assigning
@@ -2259,9 +2306,9 @@ void OzoneLoader::SetRenderableFace(int idx, oz::surface::SurfaceFace face,
     DeriveLegacyRenderable(*r);
     // Brush-wide U/V scale and offset live in surface.def but the MESH texcoords
     // are what actually get sampled, so a brush-wide UV edit has to be pushed into
-    // the mesh too. Per-face UV cannot be: all six face sub-meshes alias one
-    // texcoord array (BuildFaceMeshes), which is why uvScale/uvOffset are
-    // brush-wide in practice.
+    // the mesh too. Per-face UV is handled by RebuildSurfaceMeshes: each face
+    // sub-mesh owns its own texcoord array and BuildFaceMeshes applies that face's
+    // resolved uvScale/uvOffset to it.
     if (face == oz::surface::FACE_NONE) {
         const oz::surface::SurfaceProps& d = r->surface.def;
         ApplyRenderableUV(idx, d.uvScaleU, d.uvScaleV, d.uvOffsetU, d.uvOffsetV);
@@ -2322,6 +2369,7 @@ void OzoneLoader::UpdateBrushRenderable(int idx, const Vector3& pos, const Vecto
     OzoneRenderable* r = Get(idx);
     if (!r || !r->loaded) return;
     if (r->typeId < 0 || r->typeId > 4) return; // only primitive types 0..4
+    if (r->model.meshCount <= 0) return;
 
     // Save texture state to re-apply on the new mesh
     int oldTexSlot = r->texSlot;
@@ -2331,16 +2379,63 @@ void OzoneLoader::UpdateBrushRenderable(int idx, const Vector3& pos, const Vecto
     float oldOu = r->texOffsetU;
     float oldOv = r->texOffsetV;
 
-    // Build new model with the requested size
+    // `size` is in WORLD units (the Properties panel shows mesh bounds * scale).
+    // Keep the old world diameter before the model is replaced, so a tapered
+    // cylinder can be resized without losing its taper.
+    BoundingBox oldMb = GetMeshBoundingBox(r->model.meshes[0]);
+    const float oldScale = (r->scale > 0.0001f) ? r->scale : 1.0f;
+    const float oldDiameter = fmaxf(oldMb.max.x - oldMb.min.x,
+                                    oldMb.max.z - oldMb.min.z) * oldScale;
+
     Model newModel = {0};
+    float newCylRTop = r->cylRTop;
+    float newCylRBot = r->cylRBot;
+    int   newCylSlices = r->cylSlices;
     switch (r->typeId) {
         case 0: newModel = BuildBox(size.x, size.y, size.z); break;
-        case 1: newModel = BuildCylinder(size.x, size.y, size.z, 16); break;
-        case 2: newModel = BuildSphere(size.x, 16); break;
+        case 1: {
+            // BuildCylinder takes RADII; the panel edits DIAMETERS. Passing the
+            // raw size made radius = diameter and height = diameter, so any
+            // Properties Apply on a cylinder exploded/sheared it. Scale the
+            // stored taper uniformly from the old world diameter instead of
+            // flattening it to one radius.
+            const float newDiameter = fmaxf(size.x, size.z);
+            const float ratio = (oldDiameter > 1e-4f) ? (newDiameter / oldDiameter) : 1.0f;
+            // Stored radii are LOCAL; the rebuilt mesh is baked at scale 1, so
+            // convert them to world radii first or a previously scaled brush
+            // comes back smaller by that factor.
+            const float oldWorldTop = (r->cylRTop > 1e-4f)
+                                          ? r->cylRTop * oldScale
+                                          : oldDiameter * 0.5f;
+            const float oldWorldBot = (r->cylRBot > 1e-4f)
+                                          ? r->cylRBot * oldScale
+                                          : oldWorldTop;
+            newCylRTop = oldWorldTop * ratio;
+            newCylRBot = oldWorldBot * ratio;
+            newCylSlices = (r->cylSlices > 0) ? r->cylSlices : 16;
+            newModel = BuildCylinder(newCylRTop, newCylRBot, size.y, newCylSlices);
+            break;
+        }
+        case 2: {
+            // BuildSphere takes a RADIUS; the panel edits a DIAMETER.
+            const float diameter = fmaxf(size.x, fmaxf(size.y, size.z));
+            newModel = BuildSphere(diameter * 0.5f, 16);
+            break;
+        }
         case 3: newModel = BuildPyramid(size.x, size.z, size.y); break;
         case 4: newModel = BuildPlane(r->planeNX, r->planeNY, r->planeNZ, r->planeDist); break;
     }
     if (newModel.meshCount == 0) return;
+
+    // The rebuilt geometry already encodes the requested world size; a leftover
+    // r->scale would apply it a second time. The plane ignores `size` (its shape
+    // is normal + distance), so it keeps whatever scale it had.
+    if (r->typeId != 4) r->scale = 1.0f;
+    if (r->typeId == 1) {
+        r->cylRTop = newCylRTop;
+        r->cylRBot = newCylRBot;
+        r->cylSlices = newCylSlices;
+    }
 
     // Re-apply tileset texture (only if no custom texture overrides it)
     if (oldCustomTex.id > 0) {
@@ -2488,7 +2583,10 @@ if (!any) return;
                 if (p.Has(SURF_FAKEBACKDROP) && !p.Has(SURF_INVISIBLE)) { backdrop = true; break; }
             }
             if (!backdrop) continue;
-            DrawModel(r.model, r.position, r.scale, WHITE);
+            // Same transform as the surface path: plain DrawModel has no yaw, so
+            // a rotated backdrop snapped axis-aligned without the shader.
+            DrawModelEx(r.model, r.position, {0.0f, 1.0f, 0.0f}, r.rotation * RAD2DEG,
+                        {r.scale, r.scale, r.scale}, WHITE);
         }
         return;
     }
