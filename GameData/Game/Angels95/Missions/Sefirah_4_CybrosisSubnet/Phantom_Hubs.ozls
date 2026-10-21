@@ -1,0 +1,15 @@
+// Phantom_Hubs — Sefirah 4 (Cybrosis Subnet). Corrupted agent sanctuaries.
+// SCAFFOLD (Phase 0): EntityType::MISSION, no runtime consumer yet.
+entity "Phantom_Hubs" : mission {
+    stats {
+        sector = Sefirah_4_CybrosisSubnet
+        world = Phantom_Hubs
+        mode = cooperative
+        objectives = Objective_ClearArea
+        next = SoulEater_Vaults
+    }
+    actions {
+        on_start    { msg "Phantom_Hubs: mission start (scaffold)" }
+        on_complete { msg "Phantom_Hubs: mission complete (scaffold)" }
+    }
+}

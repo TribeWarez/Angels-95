@@ -1,0 +1,15 @@
+// Sektor_01_SilentPines — Sefirah 1 (Terran Prime). Safe hub / soul reception.
+// SCAFFOLD (Phase 0): EntityType::MISSION, no runtime consumer yet.
+entity "Sektor_01_SilentPines" : mission {
+    stats {
+        sector = Sefirah_1_TerranPrime
+        world = Sektor_01_SilentPines
+        mode = campaign
+        objectives = Objective_ClearArea
+        next = Sektor_02_MegacityGrid
+    }
+    actions {
+        on_start    { msg "SilentPines: mission start (scaffold)" }
+        on_complete { msg "SilentPines: mission complete (scaffold)" }
+    }
+}

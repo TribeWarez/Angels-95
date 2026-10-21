@@ -1,0 +1,8 @@
+// Event_ShowMessage — example custom event template.
+// SCAFFOLD (Phase 0): EntityType::EVENT, no runtime consumer yet. Phase 1 adds
+// the `emit_event "name"` opcode + EventBus dispatch.
+entity "Event_ShowMessage" : event {
+    actions {
+        on_emit { msg "The veil thins." }
+    }
+}

@@ -1,0 +1,15 @@
+// Sektor_03_AegisBaseAlpha — Sefirah 1 (Terran Prime). Rogue portal research.
+// SCAFFOLD (Phase 0): EntityType::MISSION, no runtime consumer yet.
+entity "Sektor_03_AegisBaseAlpha" : mission {
+    stats {
+        sector = Sefirah_1_TerranPrime
+        world = Sektor_03_AegisBaseAlpha
+        mode = campaign
+        objectives = Objective_ClearArea
+        next = KryoArchipel_Severny
+    }
+    actions {
+        on_start    { msg "AegisBaseAlpha: mission start (scaffold)" }
+        on_complete { msg "AegisBaseAlpha: mission complete (scaffold)" }
+    }
+}

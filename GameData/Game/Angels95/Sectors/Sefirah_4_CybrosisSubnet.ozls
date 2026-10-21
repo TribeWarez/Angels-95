@@ -1,0 +1,13 @@
+// Sefirah 4 — Cybrosis Subnet (Hades.sys)
+// Numerology node 4: Structure / the digital nether / soul cage.
+// Role: high-risk full-loot hazard zones, open-world dungeons, soul harvesting.
+// SCAFFOLD (Phase 0): EntityType::SECTOR, no runtime consumer yet.
+entity "Sefirah_4_CybrosisSubnet" : sector {
+    stats {
+        numerology = 4
+        theme = cybrosis_subnet
+        role = dungeon
+        skybox = GameData/Tex/Global/Sky/sky_darknight.png
+        missions = Digital_Purgatory,Phantom_Hubs,SoulEater_Vaults
+    }
+}

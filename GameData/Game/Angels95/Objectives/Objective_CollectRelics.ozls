@@ -1,0 +1,12 @@
+// Objective_CollectRelics — example objective template.
+// SCAFFOLD (Phase 0): EntityType::OBJECTIVE, no runtime consumer yet.
+entity "Objective_CollectRelics" : objective {
+    stats {
+        type = collect
+        target = relic
+        count = 3
+    }
+    actions {
+        on_complete { msg "Relics recovered." }
+    }
+}

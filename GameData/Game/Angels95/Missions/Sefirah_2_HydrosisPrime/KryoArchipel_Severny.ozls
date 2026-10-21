@@ -1,0 +1,15 @@
+// KryoArchipel_Severny — Sefirah 2 (Hydrosis Prime). Glaciated radar islands.
+// SCAFFOLD (Phase 0): EntityType::MISSION, no runtime consumer yet.
+entity "KryoArchipel_Severny" : mission {
+    stats {
+        sector = Sefirah_2_HydrosisPrime
+        world = KryoArchipel_Severny
+        mode = campaign
+        objectives = Objective_CollectRelics
+        next = Refinery_Complex_02B
+    }
+    actions {
+        on_start    { msg "KryoArchipel_Severny: mission start (scaffold)" }
+        on_complete { msg "KryoArchipel_Severny: mission complete (scaffold)" }
+    }
+}

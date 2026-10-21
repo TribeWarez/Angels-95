@@ -1,0 +1,15 @@
+// AlShaddai_Metropolis — Sefirah 3 (Oasis 333). Fortified desert trade sanctuary.
+// SCAFFOLD (Phase 0): EntityType::MISSION, no runtime consumer yet.
+entity "AlShaddai_Metropolis" : mission {
+    stats {
+        sector = Sefirah_3_Oasis333
+        world = AlShaddai_Metropolis
+        mode = campaign
+        objectives = Objective_ClearArea
+        next = Chasm_ForgottenMemories
+    }
+    actions {
+        on_start    { msg "AlShaddai_Metropolis: mission start (scaffold)" }
+        on_complete { msg "AlShaddai_Metropolis: mission complete (scaffold)" }
+    }
+}

@@ -1,0 +1,13 @@
+// Sefirah 2 — Hydrosis Prime (Kryo-Gorsk 95)
+// Numerology node 2: Dualism / mirroring / thermal balance.
+// Role: world coolant maintenance, soul-essence refining, crafting materials.
+// SCAFFOLD (Phase 0): EntityType::SECTOR, no runtime consumer yet.
+entity "Sefirah_2_HydrosisPrime" : sector {
+    stats {
+        numerology = 2
+        theme = hydrosis_prime
+        role = resource
+        skybox = GameData/Tex/Global/Sky/sky_darknoon.png
+        missions = KryoArchipel_Severny,Refinery_Complex_02B
+    }
+}

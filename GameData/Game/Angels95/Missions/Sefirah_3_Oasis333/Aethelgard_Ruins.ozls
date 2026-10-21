@@ -1,0 +1,15 @@
+// Aethelgard_Ruins — Sefirah 3 (Oasis 333). Buried analog signal relays.
+// SCAFFOLD (Phase 0): EntityType::MISSION, no runtime consumer yet.
+entity "Aethelgard_Ruins" : mission {
+    stats {
+        sector = Sefirah_3_Oasis333
+        world = Aethelgard_Ruins
+        mode = campaign
+        objectives = Objective_CollectRelics
+        next = AlShaddai_Metropolis
+    }
+    actions {
+        on_start    { msg "Aethelgard_Ruins: mission start (scaffold)" }
+        on_complete { msg "Aethelgard_Ruins: mission complete (scaffold)" }
+    }
+}

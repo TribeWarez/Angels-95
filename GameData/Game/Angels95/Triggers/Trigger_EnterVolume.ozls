@@ -1,0 +1,13 @@
+// Trigger_EnterVolume — example trigger template.
+// SCAFFOLD (Phase 0): EntityType::TRIGGER, no runtime consumer yet. Phase 1 adds
+// the OZONE `trigger <def> minX..maxZ` line + TriggerSystem dispatch.
+entity "Trigger_EnterVolume" : trigger {
+    stats {
+        topic = trigger.enter
+        once = 1
+        team = 0
+    }
+    actions {
+        on_enter { msg "You feel a shift in the signal..." }
+    }
+}

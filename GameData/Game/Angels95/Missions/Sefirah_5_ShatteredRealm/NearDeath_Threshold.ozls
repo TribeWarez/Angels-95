@@ -1,0 +1,15 @@
+// NearDeath_Threshold — Sefirah 5 (Shattered Realm). Geometry-warping dungeons.
+// SCAFFOLD (Phase 0): EntityType::MISSION, no runtime consumer yet.
+entity "NearDeath_Threshold" : mission {
+    stats {
+        sector = Sefirah_5_ShatteredRealm
+        world = NearDeath_Threshold
+        mode = cooperative
+        objectives = Objective_ClearArea
+        next = Esoteric_Altar_Chambers
+    }
+    actions {
+        on_start    { msg "NearDeath_Threshold: mission start (scaffold)" }
+        on_complete { msg "NearDeath_Threshold: mission complete (scaffold)" }
+    }
+}

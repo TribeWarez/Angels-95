@@ -1,0 +1,13 @@
+// Sefirah 5 — Shattered Realm (DMT-33)
+// Numerology node 5: Transformation / chaos / astral geometry.
+// Role: endgame raids, real-time spatial shifting, ultimate ascension crafting.
+// SCAFFOLD (Phase 0): EntityType::SECTOR, no runtime consumer yet.
+entity "Sefirah_5_ShatteredRealm" : sector {
+    stats {
+        numerology = 5
+        theme = dmt33
+        role = raid
+        skybox = GameData/Tex/Global/Sky/sky_pilgrimage_01.png
+        missions = Citadel_AstralMind,NearDeath_Threshold,Esoteric_Altar_Chambers
+    }
+}

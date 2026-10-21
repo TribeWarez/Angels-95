@@ -1,0 +1,14 @@
+// Esoteric_Altar_Chambers — Sefirah 5 (Shattered Realm). Ascension forging altars.
+// SCAFFOLD (Phase 0): EntityType::MISSION, no runtime consumer yet.
+entity "Esoteric_Altar_Chambers" : mission {
+    stats {
+        sector = Sefirah_5_ShatteredRealm
+        world = Esoteric_Altar_Chambers
+        mode = cooperative
+        objectives = Objective_ClearArea
+    }
+    actions {
+        on_start    { msg "Esoteric_Altar_Chambers: mission start (scaffold)" }
+        on_complete { msg "Esoteric_Altar_Chambers: mission complete (scaffold)" }
+    }
+}

@@ -1,0 +1,20 @@
+// Angels95 — top-level game definition.
+//
+// SCAFFOLD (Phase 0): parsed and registered as EntityType::GAME, but nothing
+// consumes it yet. Phase 2 loads this via GameManager to pick the mode, the
+// starting sector, and the save policy. See Wiki/Game-Hierarchy.md.
+//
+// All custom fields live in `stats { }` because the .ozls body parser only
+// knows a fixed set of top-level keys; unknown top-level keys warn.
+// stats string values must be quote-free and space-free (the parser stops at
+// the first space), so comma-separated lists carry no spaces.
+entity "Angels95" : game {
+    stats {
+        modes = campaign,cooperative
+        start_sector = Sefirah_1_TerranPrime
+        save_enabled = 1
+        // Difficulty / pacing knobs (consumed in Phase 2).
+        coop_max_players = 8
+        checkpoint_policy = mission
+    }
+}

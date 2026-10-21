@@ -1,0 +1,15 @@
+// Citadel_AstralMind — Sefirah 5 (Shattered Realm). Ever-shifting fractal raid.
+// SCAFFOLD (Phase 0): EntityType::MISSION, no runtime consumer yet.
+entity "Citadel_AstralMind" : mission {
+    stats {
+        sector = Sefirah_5_ShatteredRealm
+        world = Citadel_AstralMind
+        mode = cooperative
+        objectives = Objective_ClearArea
+        next = NearDeath_Threshold
+    }
+    actions {
+        on_start    { msg "Citadel_AstralMind: mission start (scaffold)" }
+        on_complete { msg "Citadel_AstralMind: mission complete (scaffold)" }
+    }
+}

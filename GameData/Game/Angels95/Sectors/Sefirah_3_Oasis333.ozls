@@ -1,0 +1,13 @@
+// Sefirah 3 — Oasis 333 (Zeroth Desert / Sands of Samsara)
+// Numerology node 3: Trinity / decay & preserved memory.
+// Role: relic hunting, sandstorm world events, guild node control.
+// SCAFFOLD (Phase 0): EntityType::SECTOR, no runtime consumer yet.
+entity "Sefirah_3_Oasis333" : sector {
+    stats {
+        numerology = 3
+        theme = zeroth_desert
+        role = open_world
+        skybox = GameData/Tex/Global/Sky/sky_noon.png
+        missions = Aethelgard_Ruins,AlShaddai_Metropolis,Chasm_ForgottenMemories
+    }
+}

@@ -1,0 +1,13 @@
+// Objective_ClearArea — example objective template.
+// SCAFFOLD (Phase 0): EntityType::OBJECTIVE, no runtime consumer yet. Phase 1
+// wires `objective` opcodes + ObjectiveSystem to this shape.
+entity "Objective_ClearArea" : objective {
+    stats {
+        type = kill
+        target = Walker
+        count = 5
+    }
+    actions {
+        on_complete { msg "Area cleared." }
+    }
+}

@@ -1,0 +1,15 @@
+// Angels95 Campaign — the ordered Sefirot graph.
+//
+// SCAFFOLD (Phase 0): EntityType::CAMPAIGN, no runtime consumer yet. Phase 2
+// GameManager resolves `sectors` in order and the per-sector `missions` lists
+// into a traversable campaign graph, replacing the ad-hoc portal globals.
+//
+// The campaign is a linear spine here; branch/unlock rules are authored on the
+// `: mission` defs (see Missions/) so a later pass can turn the spine into a
+// graph without changing this file's shape.
+entity "Angels95Campaign" : campaign {
+    stats {
+        game = Angels95
+        sectors = Sefirah_1_TerranPrime,Sefirah_2_HydrosisPrime,Sefirah_3_Oasis333,Sefirah_4_CybrosisSubnet,Sefirah_5_ShatteredRealm
+    }
+}

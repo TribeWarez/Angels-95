@@ -5,10 +5,16 @@
 # in build/ (already ignored); the rules that compile-and-link in one step
 # (AngelServ / AngelMaster / ozpack) emit them next to the EXE, i.e. the repo root.
 *.d
-Angels95
-AngelServ
-AngelMaster
-OzPack
+# The client binary is built at the repo ROOT. Anchor it: a bare `Angels95`
+# also ignores GameData/Game/Angels95/ and silently kept the ENTIRE game
+# hierarchy (game/campaign/sector/mission/objective defs) out of every commit
+# and tag. A fresh checkout then failed test_game/test_game_state with
+# gm.Loaded() == false and released b95/b96 never produced assets. Same trap
+# as AngelEd/AngelEd below - never use a bare name for a directory-shaped word.
+/Angels95
+/AngelServ
+/AngelMaster
+/OzPack
 # The editor binary lives INSIDE AngelEd/ (Makefile target `AngelEd`), so this has
 # to be the path, not the bare name. A bare `AngelEd` excludes the whole source
 # directory, and git will not descend into an excluded directory - so every NEW file

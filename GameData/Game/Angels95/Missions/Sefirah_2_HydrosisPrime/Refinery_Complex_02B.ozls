@@ -1,0 +1,15 @@
+// Refinery_Complex_02B — Sefirah 2 (Hydrosis Prime). Heavy-water coolant plant.
+// SCAFFOLD (Phase 0): EntityType::MISSION, no runtime consumer yet.
+entity "Refinery_Complex_02B" : mission {
+    stats {
+        sector = Sefirah_2_HydrosisPrime
+        world = Refinery_Complex_02B
+        mode = campaign
+        objectives = Objective_ClearArea
+        next = Aethelgard_Ruins
+    }
+    actions {
+        on_start    { msg "Refinery_Complex_02B: mission start (scaffold)" }
+        on_complete { msg "Refinery_Complex_02B: mission complete (scaffold)" }
+    }
+}

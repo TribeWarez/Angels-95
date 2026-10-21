@@ -1,0 +1,15 @@
+// Digital_Purgatory — Sefirah 4 (Cybrosis Subnet). Rogue-AI / displaced-soul slums.
+// SCAFFOLD (Phase 0): EntityType::MISSION, no runtime consumer yet.
+entity "Digital_Purgatory" : mission {
+    stats {
+        sector = Sefirah_4_CybrosisSubnet
+        world = Digital_Purgatory
+        mode = cooperative
+        objectives = Objective_ClearArea
+        next = Phantom_Hubs
+    }
+    actions {
+        on_start    { msg "Digital_Purgatory: mission start (scaffold)" }
+        on_complete { msg "Digital_Purgatory: mission complete (scaffold)" }
+    }
+}

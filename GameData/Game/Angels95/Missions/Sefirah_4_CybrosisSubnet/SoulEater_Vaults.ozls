@@ -1,0 +1,15 @@
+// SoulEater_Vaults — Sefirah 4 (Cybrosis Subnet). Demonic soul containment.
+// SCAFFOLD (Phase 0): EntityType::MISSION, no runtime consumer yet.
+entity "SoulEater_Vaults" : mission {
+    stats {
+        sector = Sefirah_4_CybrosisSubnet
+        world = SoulEater_Vaults
+        mode = cooperative
+        objectives = Objective_CollectRelics
+        next = Citadel_AstralMind
+    }
+    actions {
+        on_start    { msg "SoulEater_Vaults: mission start (scaffold)" }
+        on_complete { msg "SoulEater_Vaults: mission complete (scaffold)" }
+    }
+}

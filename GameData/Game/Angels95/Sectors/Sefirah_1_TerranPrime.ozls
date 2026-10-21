@@ -1,0 +1,13 @@
+// Sefirah 1 — Terran Prime (Materia 1.0)
+// Numerology node 1: the Origin / physical anchor.
+// Role: safe hub, beginner questing, guild creation, trade.
+// SCAFFOLD (Phase 0): EntityType::SECTOR, no runtime consumer yet.
+entity "Sefirah_1_TerranPrime" : sector {
+    stats {
+        numerology = 1
+        theme = terran_prime
+        role = hub
+        skybox = GameData/Tex/Global/Sky/sky_day.png
+        missions = Sektor_01_SilentPines,Sektor_02_MegacityGrid,Sektor_03_AegisBaseAlpha
+    }
+}
