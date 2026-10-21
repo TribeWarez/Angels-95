@@ -100,7 +100,7 @@ DEPFLAGS := -MMD -MP
 # Build identity: the release tag, not a hand-edited literal. CI passes
 # BUILD_VERSION=${GITHUB_REF_NAME}; a local build says "dev" so it can never be
 # mistaken for a release. The quoted define is deliberately escaped: the shell
-# must hand g++ `-DOZ_BUILD_VERSION="b97"` (a string literal), not `b97`.
+# must hand g++ `-DOZ_BUILD_VERSION="b98"` (a string literal), not `b98`.
 BUILD_VERSION ?= dev
 BUILD_VERSION_DEFINE := -DOZ_BUILD_VERSION=\"$(BUILD_VERSION)\"
 
