@@ -1,4 +1,5 @@
 #include "PlayerController.hpp"
+#include "../../Input/Keybinds.hpp"
 #include "../../Physics/PlayerPhysics.hpp"
 #include "../PlayerMovement.hpp"
 #include "../../Audio/SoundManager.hpp"
@@ -15,8 +16,8 @@ namespace pphys = oz::physics;
 // ---------------------------------------------------------------------------
 void PlayerController::HandleKeyToggles(bool& showInventory, bool& showSkillTree, bool consoleOpen,
                                         bool* showSpellbook) {
-    // K key toggles the ethereal (angelic) skill tree
-    if (IsKeyPressed(KEY_K)) {
+    // Skills action (K by default; rebindable).
+    if (Keybinds::Pressed(GameAction::Skills)) {
         if (!consoleOpen) {
             showSkillTree = !showSkillTree;
             if (showSkillTree) {
@@ -31,8 +32,8 @@ void PlayerController::HandleKeyToggles(bool& showInventory, bool& showSkillTree
         }
     }
 
-    // Q key toggles the spellbook (spell bar bindings)
-    if (showSpellbook && IsKeyPressed(KEY_Q)) {
+    // Spellbook action (Q by default; rebindable).
+    if (showSpellbook && Keybinds::Pressed(GameAction::Spellbook)) {
         if (!consoleOpen) {
             *showSpellbook = !*showSpellbook;
             if (*showSpellbook) {
@@ -47,8 +48,8 @@ void PlayerController::HandleKeyToggles(bool& showInventory, bool& showSkillTree
         }
     }
 
-    // Tab key toggles inventory
-    if (IsKeyPressed(KEY_TAB)) {
+    // Inventory action (Tab by default; rebindable).
+    if (Keybinds::Pressed(GameAction::Inventory)) {
         if (!consoleOpen) {
             showInventory = !showInventory;
             if (showInventory) {

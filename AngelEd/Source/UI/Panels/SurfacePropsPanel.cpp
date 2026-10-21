@@ -542,7 +542,7 @@ void ShowSurfacePropsScoped(bool show, int renderable, uint32_t faceMask,
 
     RECT rc; GetClientRect(hwnd, &rc);
     s_hSpfTab = CreateCtrl(hwnd, WC_TABCONTROLW, L"", 4, 4, rc.right - 8, 30,
-                           ID_SPF_TAB, TCS_TABS);
+                           ID_SPF_TAB, TCS_TABS | WS_TABSTOP);
     {
         static const wchar_t* tabs[3] = {L"Flags", L"Alignment", L"Stats"};
         for (int i = 0; i < 3; i++) {

@@ -490,6 +490,7 @@ static bool SaveWorldDocument(const fs::path& path) {
         if (!output.is_open()) return false;
         ExportToOzone(output);
         g_documentPath = path;
+        g_documentDirty = false;
         SetWorldDirectory(path.parent_path());
         return true;
     }
@@ -497,11 +498,67 @@ static bool SaveWorldDocument(const fs::path& path) {
     return false;
 }
 
+// Save / discard / cancel guard for New, Open and window close. Returns false when
+// the operation must be aborted (the user cancelled, or a save failed).
+static void FileSaveAs();
+
+static bool ConfirmDiscardDocument(const char* action) {
+    if (!g_documentDirty) return true;
+
+    std::string text = "Save changes before " + std::string(action) + "?";
+    const int r = MessageBoxA(GetActiveWindow(), text.c_str(), "AngelEd",
+                              MB_YESNOCANCEL | MB_ICONWARNING);
+    if (r == IDCANCEL) return false;
+    if (r == IDNO) return true;
+
+    if (g_documentPath.empty()) {
+        FileSaveAs();
+        return !g_documentPath.empty() && !g_documentDirty;
+    }
+    return SaveWorldDocument(g_documentPath);
+}
+
+// One implementation of "compile the document and launch it". The toolbar Play
+// button and File -> Play Test used to be two copies with different validation
+// (the toolbar omitted the executable check), so one path could launch nothing
+// and report success.
+static void PlayTestCurrentWorld() {
+    if (g_documentPath.empty()) {
+        FileSaveAs();
+        if (g_documentPath.empty()) return;   // user cancelled
+    }
+    if (!SaveWorldDocument(g_documentPath)) {
+        EditorLog("ERROR: could not save '%s' for playtest", g_documentPath.string().c_str());
+        return;
+    }
+
+    std::string worldDir = g_documentPath.parent_path().filename().string();
+    std::string ext = g_documentPath.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    if (ext != ".ozone") return;
+
+    if (!IsPathFile("System/Angels95.exe")) {
+        MessageBoxA(GetActiveWindow(),
+                    "System\\Angels95.exe was not found.\nBuild the client first "
+                    "(build.cmd fast).",
+                    "Play Test", MB_OK | MB_ICONERROR);
+        EditorLog("ERROR: System/Angels95.exe not found");
+        return;
+    }
+
+    std::string cmd = "start \"\" System\\Angels95.exe --world \"" +
+                      g_documentPath.string() + "\" --world-dir " + worldDir;
+    EditorLog("Launching: %s", cmd.c_str());
+    system(cmd.c_str());
+}
+
 static void FileNew() {
+    if (!ConfirmDiscardDocument("creating a new world")) return;
     g_pendingNew = true;
 }
 
 static void FileOpen() {
+    if (!ConfirmDiscardDocument("opening another world")) return;
     std::string path;
     if (ChooseOpenWorldFile(path)) g_pendingOpenPath = fs::path(path);
 }

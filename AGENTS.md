@@ -398,6 +398,21 @@ World/
 - **Editor shaders are PROJECT assets, not world-local.** `OTEditor.Path` is the current WORLD directory (`SetWorldDirectory`), so `OTEditor.Path + "Shaders/"` resolved to `GameData/Worlds/<World>/Shaders/` and logged "Failed to open text file ... Sky.vs" for every world. `Editor.hpp` must use `GameData/Shaders/` (and `GameData/Shaders/Lights/`), the same path the client uses.
 - **A top-level `.ozls` key the parser does not recognise is DROPPED with a warning.** `Player.ozls` had `model_height = 3.0` outside `stats { }` while `PlayerModel` reads `stats.floats["model_height"]`, so the authored height never took effect. Put runtime stats inside `stats { }`; only the parser's known body keys (`mesh`, `texture`, `mesh_type`, `anim_*`, `movement_speed`, `stats`, `actions`, `variants`, fog fields) may sit at top level.
 
+- **Panel keyboard input is centralised in `EditorUi_HandleMessage`** (`UI/UiShell.cpp`, called from `Main.cpp`'s message pump BEFORE `TranslateMessage`/`DispatchMessage`). It owns what modeless windows do not get for free: Tab/Shift+Tab walk every visible `WS_TABSTOP` descendant (including the Surface Properties tab-PAGE children — `IsDialogMessage` does not traverse pages, which is why it is not used), Ctrl+A / Ctrl+Backspace work in `EDIT`, Enter moves to the next field, Escape leaves a field then closes the panel. `CreateButton`/`CreateListBox` set `WS_TABSTOP`; a control added without it is skipped by the ring. `EditorUi_ViewportHasFocus()` gates every viewport shortcut in `Main.cpp`, so typing in a panel can never switch modes, delete the selection or toggle the heightmap.
+- **The World Hierarchy is a grouped TreeView** (`WorldGraphPanel.cpp`), not the old flat ListView: groups are `Map / Brushes / Models / Meshes / NPCs / Pickups / Lights / Zones / Portals / Player Starts / Emitters / Particles / Path Nodes / Wind Zones`, built from the same live containers the viewport draws. It includes placed `Mesh.*` props, particle emitters, path nodes and wind zones, which the flat list silently omitted. Sound/music emitters are listed as `(info)` because they have no `SelType` — labelled rather than a dead selectable row. It has a filter box, **Reveal** (viewport selection → tree row; does NOT steal focus, or F3 would stop working) and **Frame Selection** (tree → camera, via the `g_editorPanels.focusSelection` one-shot). Group expansion and selection survive a rebuild; row indices are revalidated against the live container before acting.
+- **Panel geometry persists** in `System/AngelEd.ini [Layout]` (saved from `DestroyAllEditorWindows`, loaded before `CreateWindowEx` so a panel never flashes at its default rect, clamped to the work area). `View → Reset Panel Layout` restores the captured defaults and maximizes the main window. The fixed-control panels (Sound/Script/Pickup/Node/Heightmap/Anim/LevelList/World Graph) now reflow on `WM_SIZE` and refuse to shrink below their content (`EnforceMinTrackSize`; the ones with real reflow handle `WM_SIZE` themselves). `View → Maximize Window` is the windowed-full-size mode.
+- **The viewport draws directly to the window.** A 320×200 `Target` render texture was created and stretched over the viewport in `Main.cpp` while nothing ever rendered into it; it survived because an uninitialised texture usually has alpha 0, making the editor's output driver-dependent. `Target`, the orphan `EndTextureMode()` and that `DrawTexturePro` are gone.
+- **Menu accelerators are real.** The menu advertised bare `N/O/S/P/Q` for years with no handler; they are now `Ctrl+N/O/S/P/Q` and implemented in the frame loop. The toolbar **Play** button and `File → Play Test` share `PlayTestCurrentWorld()`, so the toolbar can no longer launch a missing executable without the check the menu had.
+- **Editor shortcuts are one table** (`AngelEd/Source/EditorKeys.hpp`, `[Keys]` in `System/AngelEd.ini`, edited from **Help → Keyboard Shortcuts**). Modifiers are fixed per action (Save is always Ctrl+S), capture uses `GetAsyncKeyState` because a focused Win32 panel is invisible to raylib's `IsKeyPressed`, and the menu hints are generated from the same table. Camera/numpad keys and Escape stay fixed. Conflicts swap so no action is left unbound.
+- **Unsaved-document tracking:** `g_documentDirty` (inline in `Core/EditorState.hpp`, because `Subsystems/History.cpp` is a real TU) is set by `HistoryPush()` and cleared by Save/Load. The title bar shows `*`, and New/Open/`WM_CLOSE` prompt through `ConfirmDiscardDocument()` (Save / Discard / Cancel). `WM_CLOSE` is intercepted in the raylib window subclass, so cancelling leaves GLFW's close flag untouched.
+
+## Input & keybinds (game client)
+
+- **`Source/Input/Keybinds.hpp` is the ONE action→key table.** Actions are movement/jump/sprint/crouch, interact, inventory, spellbook, skills, drop, console, pause, reload, fire/alt-fire and hotbar 1–8. Mouse bindings use `1000 + MOUSE_BUTTON_*`; `Keybinds::Down/Pressed` dispatch both. Persisted in `System/Angels95.ini` `[Keybinds]`; loaded in `LoadClientSettings` (before `InitWindow`, which is safe because only constants are touched) and saved on exit.
+- **Drop is `G`, not `Q`.** Q is the spellbook toggle, and the inventory's drop handler used Q too: pressing Q with the inventory open dropped the hovered item AND switched to the spellbook, closing the overlay. The inventory help line now reads the live binding instead of hardcoding keys.
+- **Rebinding lives in Settings → Controls** (title menu): click a row, press a key, Escape cancels. A conflicting binding **swaps** with the other action rather than unbinding it. The same page owns mouse sensitivity and invert-Y (`g_mouseSensitivity`/`g_invertY` in `GameplayFlags.hpp`, because `Settings.hpp`'s globals are per-TU).
+- **UI navigation stays fixed on purpose:** arrow keys/Enter inside the inventory and console are control navigation, not gameplay actions. `Fire`/`AltFire` are rebindable; raw mouse clicks inside the inventory overlay remain UI input.
+
 ## CSG + AutoConvex collision
 - **The collision world is AABB-only.** `CsgProcessor` (`Source/Physics/OzBsp.hpp`) consumes nothing else, which is why a placed `Mesh.*` prop has no collision and a concave brush over-blocks. `RebuildCollisionVolumes` turns a renderable's mesh AABB into a `CsgBrush`, rotated Y-aware via `RotatedAabbY` (conservative: contains the rotated shape, never under-covers).
 - `Source/Physics/AutoConvex.{hpp,cpp}` is the raylib-free voxeliser: world-space float vertex soup → AABB → grid → keep cells a triangle passes through → `ConvexBox` list. Covered by `tests/AutoConvex.test.cpp` (`make test_autoconvex`).
@@ -468,6 +483,46 @@ World/
 - **`skybox <tex> cx cy cz size`** is a render-only primitive: six inward-facing quads with direction-projected UVs, forced `UNLIT + TWO_SIDED + NO_FOG + NO_BSP_CUTS`, and **filtered out of the CSG collision pass** — feeding it to CSG would put an invisible wall around the player and let a `sub` erase the sky.
 - `ApplyRenderableUV` recomputes from `OzoneRenderable::uvBase` (the pristine generated UVs). The old scheme divided by `texScaleU` to "undo" the last edit, but that field was seeded with the baked tiling for `BOX` only, so cyl/sph/pyr compounded on every edit and a box round-tripped to 256x.
 - **A read-only properties-panel row MUST have no control ID.** `Apply`'s stat-edit scan reads each editable row by `controlId` via `readStatRowText()`, which returns `""` for a missing control - so an ID-less row would compare unequal to its authored value and be queued as an **erase**. This is why `FillDefBlock` filling `propDefEditable` for a *packaged* def also required gating the Apply scan on `propDefWritable`; otherwise the first Apply strips the def's own stats. The same trap applies to any new row type added to the panel.
+
+## Title menu / pause menu
+
+- **One active page, one shell.** `Source/Menu/TitleMenu.hpp` is a single-page
+  menu (Home / Play / Multiplayer / Character / Settings), not the old floating
+  pane desktop. Pages draw into `MenuMetrics::PageBody()` and return actions;
+  `PlayHomeScreen` is the only place that calls `LoadWorld`, `LoadSave`,
+  `LaunchHostedServer` or sets `g_quitRequested`. Do not reintroduce a pane
+  z-order or process input for a page that is not active.
+- **Every rectangle comes from `Source/Menu/MenuMetrics.hpp`.** It is raylib-free
+  and covered by `tests/Menu.test.cpp`. The menu draws directly to the screen
+  (not into `Target`) so a resize cannot leave it stretched. `UiScale` is the
+  persisted user multiplier on the automatic DPI/resolution scale.
+- **A menu entry is either functional or hidden.** No “coming soon” pages, no
+  dead load buttons, no filter options for game modes that are not implemented.
+  Continue is hidden unless a save resolves to a real world.
+- **`PlayerProfile.modelPath` stores a character roster id**, not an asset path.
+  The roster is `GameData/Pawn/Player/characters.cfg` (packed by `player.ozpak`),
+  parsed by raylib-free `CharacterRoster`. Legacy paths map through
+  `FindByMesh()`; unknown ids fall back to the `Player` def.
+  `CharacterPreview` renders real portraits from `MeshCache`, not placeholder
+  art. The server treats the id as untrusted and applies
+  `net::SanitizeCharacterId` before the `PLAYER_PROFILE` broadcast.
+- **`POS.sav` appended a world field (`x:y:z:level:world:`).** A missing field is
+  legacy. `LoadSave` sets `g_savedWorldName`; campaign continue uses the mission
+  world and only trusts the saved camera position when the world matches.
+- **`AngelServ --world <name>`** pins the plain-co-op spawn world. It is ignored
+  (with a warning) under `--campaign`, where the mission frontier owns join
+  placement. Unknown world = startup error, never a silent fallback to world 0.
+- **LAN discovery has an optional tail** (`;http=;map=;pw=`) appended to
+  `OZRESPONSE`; old clients ignore it and old servers omit it. `PLAYER_PROFILE`
+  is a new `MessageType` (32), so no `PROTOCOL_VERSION` bump.
+- **Quit goes through `g_quitRequested`.** The pause menu, title Quit and native
+  menu all set it; the single `CloseWindow()` at the end of `main()` remains the
+  only close. Never call `CloseWindow()` from inside a frame or menu callback.
+- **Pause settings keep the game paused.** `Escape` closes Settings first; the
+  pause menu uses the same metrics/style and draws the frozen `Target` frame.
+- **`--menu-shot`** is the headless visual check (`Wiki/Menu-System.md`). Pure
+  rules live in `tests/Menu.test.cpp`; LAN/profile wire rules in
+  `tests/Network.test.cpp`.
 
 ## CI (.github/workflows/ci.yml)
 - Runs on every push/PR; tags matching `b*` also create a GitHub Release. Release assets: `System-<tag>.zip` (full Windows bundle) plus per-binary downloads `AngelServ`/`AngelMaster`/`OzPack`/`Angels95` (`*-<tag>-{linux-x86_64,windows-x86_64.exe}`) and `AngelEd-<tag>-windows-x86_64.exe` (editor is Windows-only). `AngelServ`/`AngelMaster`/`OzPack` are self-contained; `Angels95`/`AngelEd` need the zip's DLLs+GameData.

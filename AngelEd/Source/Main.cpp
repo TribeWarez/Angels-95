@@ -47,6 +47,7 @@
 // Explicit rather than transitive: Core/EditorShell.hpp is a preamble shared with Subsystems/,
 // and the Subsystems do not need (or want) any of this.
 #include "UI/UiPanels.hpp"
+#include "EditorKeys.hpp"
 
 // DO NOT REORDER THESE. Fragments carry no forward declarations of their own, so
 // several statics and functions are declared in the fragment ABOVE their user.
@@ -82,6 +83,7 @@
 //                                    surface passes are NOT cases here - each is
 //                                    drained and applied by its own subsystem.
 #include "Subsystems/Selection.cpp"
+#include "Subsystems/Gizmo.cpp"
 #include "Subsystems/EntityOps.cpp"
 #include "Core/EditorLog.cpp"
 #include "Core/EditorShell.cpp"
@@ -101,6 +103,10 @@ int main(int argc, char **argv){
     // wave of silent failures instead of one clear error. See EnsureProjectRoot() in
     // Core/EditorShell.cpp.
     EnsureProjectRoot();
+
+    // Shortcut overrides must be loaded before the menu is built, because the menu
+    // labels are generated from this table.
+    EdKeys::Load();
 
     EditorLog("=== AngelEd starting ===");
     SetConfigFlags(FLAG_VSYNC_HINT);
@@ -318,6 +324,10 @@ int main(int argc, char **argv){
         // Process Win32 messages for child panels
         MSG msg;
         while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+            // Panel keyboard plumbing (Tab ring, Ctrl+A, Enter/Escape) runs before
+            // dispatch; when it consumes a message, do not also Translate/ Dispatch
+            // it into the EDIT control.
+            if (EditorUi_HandleMessage(&msg)) continue;
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
@@ -326,11 +336,29 @@ int main(int argc, char **argv){
             ClearScene();
             HistoryClear();
             g_documentPath.clear();
+            g_documentDirty = false;
             g_pendingNew = false;
         }
         if (!g_pendingOpenPath.empty()) {
             LoadWorldDocument(g_pendingOpenPath);
             g_pendingOpenPath.clear();
+        }
+
+        // Window title = document + unsaved marker. Updated only on change, so it
+        // does not spam SetWindowText once per frame.
+        {
+            static std::string lastTitle;
+            std::string title = "AngelEd";
+            if (!g_documentPath.empty()) {
+                title += " - " + g_documentPath.filename().string();
+                if (g_documentDirty) title += " *";
+            } else if (g_documentDirty) {
+                title += " - untitled *";
+            }
+            if (title != lastTitle) {
+                lastTitle = title;
+                SetWindowTextA((HWND)GetWindowHandle(), title.c_str());
+            }
         }
         // Live volume + optional loop for the sound preview (Sound has no loop
         // flag, so looping is a replay poll). This is LIVE STATE, not a message:
@@ -363,7 +391,13 @@ int main(int argc, char **argv){
             }
         }
 
+        // Gizmo hover: recomputed every frame (cheap) so the handle under the
+        // cursor highlights before the click. Outside the viewport nothing is hot.
+        Gizmo_UpdateHover(_inViewport ? _mp : Vector2{-10000.0f, -10000.0f},
+                          OTEditor.MainCamera, g_editorPanels.currentToolMode);
+
         // Vertex-edit picking (Phase C): click nearest vertex, Shift adds.
+
         if (g_editorPanels.animEditVerts && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             Vector2 mp = GetMousePosition();
             if (mp.x >= (float)GetStatsSidebarWidth() && mp.y >= 28.0f) {
@@ -406,9 +440,21 @@ int main(int argc, char **argv){
                 !g_editorPanels.animEditVerts) {
                 Vector2 mp = GetMousePosition();
                 if (mp.x >= (float)GetStatsSidebarWidth() && mp.y >= 28.0f) {
-                    if (g_editorPanels.currentToolMode == 1) {
+                    // Handles win over the generic "press on the object" drag: if a
+                    // handle was hit, the drag is constrained to that axis/plane.
+                    if (Gizmo_BeginDrag(mp, OTEditor.MainCamera,
+                                        g_editorPanels.currentToolMode)) {
                         g_gizmoDrag = true;
-                    } else {
+                        if (!g_gizmoHistPushed) {
+                            HistoryPush();
+                            g_gizmoHistPushed = true;
+                        }
+                    } else if (g_editorPanels.currentToolMode == 1) {
+                        g_gizmoDrag = true;
+                    } else if (g_editorPanels.currentToolMode == 0) {
+                        // Cam mode keeps the old convenience: a press that lands on
+                        // the selected object drags it. Scale/Rotate mode must NOT
+                        // fall back to an unconstrained move.
                         EditorSelection probe;
                         if (EditorRaycastAt(mp, probe) &&
                             probe.type == g_sel.type && probe.index == g_sel.index)
@@ -436,6 +482,7 @@ int main(int argc, char **argv){
             // a transform was actually pushed to history - without it every plain CLICK
             // refreshed the list, since a pick is also a release.
             const bool didTransform = g_gizmoHistPushed;
+            Gizmo_EndDrag();
             g_gizmoDrag = false;
             g_gizmoHistPushed = false;
             g_suppressViewportDrag = false;
@@ -1196,6 +1243,7 @@ if (g_editorPanels.showCollisionBounds) {
             // Movement controls
             // Keyboard nudge/rotate/scale of a selection is an undoable edit.
             if (g_sel.type != SelType::NONE && !g_editorPanels.animEditVerts &&
+                EditorUi_ViewportHasFocus() &&
                 (IsKeyPressed(KEY_U) || IsKeyPressed(KEY_J) || IsKeyPressed(KEY_H) ||
                  IsKeyPressed(KEY_K) || IsKeyPressed(KEY_Y) || IsKeyPressed(KEY_I) ||
                  IsKeyPressed(KEY_O) || IsKeyPressed(KEY_L) ||
@@ -1544,12 +1592,11 @@ OmegaTechEditor.DrawModel = false;
 
             }
 
-            // Tool modes (toolbar Cam/Move/Scale/Rotate) while placing:
-            //   Cam (0)    â€” wheel shifts ghost depth (default, below)
-            //   Move (1)   â€” LMB drag moves the ghost (same as Cam)
-            //   Scale (2)  â€” wheel scales the ghost
-            //   Rotate (3) â€” wheel rotates the ghost in 15 degree steps
-            if (g_editorPanels.currentToolMode == 2) {
+            // Gizmo drag has priority over every wheel/ghost shortcut.
+            if (Gizmo_IsDragging()) {
+                Gizmo_UpdateDrag(GetMousePosition(), OTEditor.MainCamera,
+                                 g_editorPanels.currentToolMode);
+            } else if (g_editorPanels.currentToolMode == 2) {
                 float wheel = GetMouseWheelMove();
                 if (wheel != 0) OmegaTechEditor.S += wheel * 0.25f;
             } else if (g_editorPanels.currentToolMode == 3) {
@@ -1566,9 +1613,27 @@ OmegaTechEditor.DrawModel = false;
                         HistoryPush();
                         g_gizmoHistPushed = true;
                     }
-                    OmegaTechEditor.X += GetMouseDelta().x / 8;
-                    OmegaTechEditor.Y += GetMouseDelta().y / 8;
-                    OmegaTechEditor.Z -= (GetMouseWheelMove() * 2);
+                    // Camera-relative fallback for a free drag (ghost or Cam-mode
+                    // object drag). The old X += dx/8 was screen-space and did not
+                    // follow the cursor; this moves along the camera's right/up
+                    // vectors, scaled by distance so it stays 1:1 on screen.
+                    if (g_sel.type == SelType::NONE) {
+                        OmegaTechEditor.X += GetMouseDelta().x / 8;
+                        OmegaTechEditor.Y += GetMouseDelta().y / 8;
+                        OmegaTechEditor.Z -= (GetMouseWheelMove() * 2);
+                    } else {
+                        Vector3 fwd = Vector3Normalize(Vector3Subtract(
+                            OTEditor.MainCamera.target, OTEditor.MainCamera.position));
+                        Vector3 right = Vector3Normalize(Vector3CrossProduct(fwd, {0, 1, 0}));
+                        Vector3 up = Vector3Normalize(Vector3CrossProduct(right, fwd));
+                        const float dist = Vector3Distance(OTEditor.MainCamera.position,
+                                                           {OmegaTechEditor.X, OmegaTechEditor.Y, OmegaTechEditor.Z});
+                        const float k = dist * 0.0016f;
+                        const Vector2 d = GetMouseDelta();
+                        OmegaTechEditor.X += (right.x * d.x - up.x * d.y) * k;
+                        OmegaTechEditor.Y += (right.y * d.x - up.y * d.y) * k;
+                        OmegaTechEditor.Z += (right.z * d.x - up.z * d.y) * k;
+                    }
                 }
             }
             if (IsMouseButtonDown(1) && !g_suppressViewportDrag) {
@@ -1682,6 +1747,10 @@ OmegaTechEditor.DrawModel = false;
             }
         }
 
+        // Transform gizmo for the current selection. Drawn AFTER the highlight so
+        // the handles are never hidden by the selection box.
+        DrawTransformGizmo(OTEditor.MainCamera, g_editorPanels.currentToolMode);
+
         // Terrain-following camera
         {
             float gy = SampleHeightmapGroundY(OTEditor.MainCamera.position.x, OTEditor.MainCamera.position.z);
@@ -1696,8 +1765,6 @@ OmegaTechEditor.DrawModel = false;
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         glEnable(GL_CULL_FACE);
 
-        EndTextureMode();
-
         BeginDrawing();
         // Top toolbar with icons
         {
@@ -1709,14 +1776,16 @@ OmegaTechEditor.DrawModel = false;
             auto& ico = EditorIcons::Instance();
             int bx = 4, iy = 4, is = 20;
 
-            auto tBtn = [&](const char* icon, const char* label, int cmd) {
+            auto tBtn = [&](const char* icon, const char* label, int cmd, bool active = false) {
                 int lw = (label ? (int)strlen(label) * 7 + 4 : 0);
                 int bw = (icon ? 24 : 0) + lw + 4;
                 Rectangle r = {(float)bx, 2, (float)bw, (float)tbH - 4};
                 bool hover = CheckCollisionPointRec(GetMousePosition(), r);
-                DrawRectangleRec(r, hover ? (Color){55,55,65,255} : (Color){45,45,50,255});
+                DrawRectangleRec(r, active ? (Color){70,90,120,255}
+                                           : hover ? (Color){55,55,65,255}
+                                                   : (Color){45,45,50,255});
                 if (icon && ico.Has(icon)) ico.Draw(icon, bx+2, iy, is, WHITE);
-                if (label) DrawText(label, bx+(icon?26:4), 7, 12, LIGHTGRAY);
+                if (label) DrawText(label, bx+(icon?26:4), 7, 12, active ? WHITE : LIGHTGRAY);
                 if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                     if (cmd==0) ToggleModelBrowser(); else if(cmd==1) ToggleSoundMgr();
                     else if(cmd==2) ToggleTextureMgr(); else if(cmd==3) TogglePawnMgr();
@@ -1728,6 +1797,7 @@ OmegaTechEditor.DrawModel = false;
                     else if(cmd==8) ToggleHeightmapEditor(); else if(cmd==9) ToggleAnimPanel();
                     else if(cmd==10) { FileNew(); } else if(cmd==11) { FileOpen(); }
                     else if(cmd==12) { FileSaveAs(); }
+                    else if(cmd==13) { ToggleWorldGraph(); }
                 }
                 bx += bw + 2;
             };
@@ -1743,26 +1813,7 @@ OmegaTechEditor.DrawModel = false;
                 DrawRectangleRec(r, hover ? (Color){50,100,50,255} : (Color){35,80,35,255});
                 DrawText(lbl, bx + 4, 7, 12, WHITE);
                 if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                    // Compile the current document first (never load a stale file)
-                    if (g_documentPath.empty()) {
-                        FileSaveAs();
-                    }
-                    if (!g_documentPath.empty() && SaveWorldDocument(g_documentPath)) {
-                        std::string worldDir = g_documentPath.parent_path().filename().string();
-                        std::string ext = g_documentPath.extension().string();
-                        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                        std::string worldArg;
-                        if (ext == ".ozone") {
-                            worldArg = g_documentPath.string();
-                        }
-                        if (!worldArg.empty()) {
-                            std::string cmd = "start \"\" System\\Angels95.exe --world \"" + worldArg + "\" --world-dir " + worldDir;
-                            system(cmd.c_str());
-                            EditorLog("Launched: %s", cmd.c_str());
-                        }
-                    } else if (!g_documentPath.empty()) {
-                        EditorLog("ERROR: could not save '%s' for playtest", g_documentPath.string().c_str());
-                    }
+                    PlayTestCurrentWorld();
                 }
                 bx += bw + 2;
             }
@@ -1813,6 +1864,9 @@ OmegaTechEditor.DrawModel = false;
             bx+=6;
             tBtn("AddVolume","Zone",5); tBtn("ModeCamera","Node",7);
             tBtn("PolyTexInfo","Pickup",6);
+            // Scene graph / World Hierarchy. It used to be reachable only from the
+            // View menu, which is why it read as a hidden window rather than a tool.
+            tBtn("AddMover","Hier",13, g_editorPanels.showWorldGraph);
             bx += 6;
             // Terrain editing buttons
             bool terrainMode = (g_placeMode == PlaceMode::TERRAIN);
@@ -1860,6 +1914,31 @@ OmegaTechEditor.DrawModel = false;
                 }
             }
             bx += stW + 2;
+
+            // Gizmo snap. Discoverable here rather than hidden behind a modifier:
+            // clicking cycles Off / 0.25 / 0.5 / 1 / 2. Ctrl still forces 1.0 and
+            // Shift forces 0.1 while dragging.
+            {
+                const float steps[] = {0.0f, 0.25f, 0.5f, 1.0f, 2.0f};
+                char snapTxt[32];
+                if (g_editorPanels.gizmoSnap <= 0.0f)
+                    snprintf(snapTxt, sizeof(snapTxt), "Snap:Off");
+                else
+                    snprintf(snapTxt, sizeof(snapTxt), "Snap:%.2g", g_editorPanels.gizmoSnap);
+                int sw = (int)strlen(snapTxt) * 7 + 10;
+                bool on = g_editorPanels.gizmoSnap > 0.0f;
+                DrawRectangle(bx, 2, sw, tbH - 4, on ? (Color){70,90,120,255} : (Color){45,45,50,255});
+                DrawText(snapTxt, bx + 4, 7, 12, on ? WHITE : LIGHTGRAY);
+                if (CheckCollisionPointRec(GetMousePosition(),
+                                           {(float)bx, 2, (float)sw, (float)tbH - 4}) &&
+                    IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                    int cur = 0;
+                    for (int i = 0; i < 5; i++)
+                        if (fabsf(steps[i] - g_editorPanels.gizmoSnap) < 0.001f) cur = i;
+                    g_editorPanels.gizmoSnap = steps[(cur + 1) % 5];
+                }
+                bx += sw + 2;
+            }
         }
 
         // Draw the 3D viewport render target (offset by native stats sidebar)
@@ -1882,8 +1961,6 @@ OmegaTechEditor.DrawModel = false;
                 OTEditor.MainCamera.position.y,
                 OTEditor.MainCamera.position.z);
         }
-        DrawTexturePro(Target.texture, (Rectangle){0, 0, (float)Target.texture.width, -(float)Target.texture.height},
-                       (Rectangle){(float)sbW, (float)tbH, (float)(GetScreenWidth() - sbW), (float)(GetScreenHeight() - tbH)}, (Vector2){0,0}, 0, WHITE);
         DrawFPS(GetScreenWidth() - 60, 36);
 
         // --- Event bus drain + dispatch ---------------------------------------
@@ -2118,6 +2195,14 @@ OmegaTechEditor.DrawModel = false;
             EditorLog("WorldGraph refreshed");
         }
 
+        // "Frame Selection" from the World Hierarchy. Consumed once, after the
+        // selection drains, so it centres on the entity that was just selected
+        // rather than on whatever was selected when the menu item was clicked.
+        if (g_editorPanels.focusSelection) {
+            g_editorPanels.focusSelection = false;
+            FocusSelectionInViewport();
+        }
+
         // Save the clip file back to disk. Deliberately AFTER ApplyAnimIntents:
         // a NewClip/DeleteKey posted this frame sets actionAnimSave from inside the
         // handler, and the write must still happen in the same frame.
@@ -2145,7 +2230,7 @@ OmegaTechEditor.DrawModel = false;
         // Ctrl+Z / Ctrl+Y while the anim tool is active. Posts the SAME events the
         // toolbar posts, so a keyboard undo is not a second code path with its own
         // staleness behaviour.
-        if (g_editorPanels.animEditVerts &&
+        if (g_editorPanels.animEditVerts && EditorUi_ViewportHasFocus() &&
             (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))) {
             ed::AnimIntent ai;
             ai.meshId   = g_editorPanels.animTargetMesh;
@@ -2363,12 +2448,31 @@ OmegaTechEditor.DrawModel = false;
 
         // LevelList / Campaign actions
 
+        // Every shortcut below belongs to the VIEWPORT. When a native panel field
+        // has keyboard focus the pump consumes Tab/Ctrl+A/Enter/Escape, and this
+        // gate makes sure stray raylib key state can never also trigger a mode
+        // change, a panel toggle or a delete while the user is typing.
+        if (EditorUi_ViewportHasFocus()) {
+
+        // File commands, from the remappable EdKeys table. The menu advertises
+        // the same table, so the hint and the handler cannot disagree.
+        if (EdKeys::Pressed(EdAction::SaveAs)) FileSaveAs();
+        else if (EdKeys::Pressed(EdAction::Save)) {
+            if (!g_documentPath.empty()) SaveWorldDocument(g_documentPath);
+            else FileSaveAs();
+        }
+        if (EdKeys::Pressed(EdAction::New)) FileNew();
+        if (EdKeys::Pressed(EdAction::Open)) FileOpen();
+        if (EdKeys::Pressed(EdAction::Play)) PlayTestCurrentWorld();
+        if (EdKeys::Pressed(EdAction::Exit))
+            PostMessageA((HWND)GetWindowHandle(), WM_CLOSE, 0, 0);
+
         // Mode switching
-        if (IsKeyPressed(KEY_ONE))   g_placeMode = PlaceMode::MODEL;
-        if (IsKeyPressed(KEY_TWO))   g_placeMode = PlaceMode::PICKUP;
-        if (IsKeyPressed(KEY_THREE)) g_placeMode = PlaceMode::NODE;
-        if (IsKeyPressed(KEY_FOUR))  ToggleZonePlacement();
-        if (IsKeyPressed(KEY_FIVE) && g_placeMode != PlaceMode::MODEL)
+        if (EdKeys::Pressed(EdAction::ModeModel))  g_placeMode = PlaceMode::MODEL;
+        if (EdKeys::Pressed(EdAction::ModePickup)) g_placeMode = PlaceMode::PICKUP;
+        if (EdKeys::Pressed(EdAction::ModeNode))   g_placeMode = PlaceMode::NODE;
+        if (EdKeys::Pressed(EdAction::ModeZone))   ToggleZonePlacement();
+        if (EdKeys::Pressed(EdAction::ModeTerrain) && g_placeMode != PlaceMode::MODEL)
             g_placeMode = PlaceMode::TERRAIN;
 
         // Primitive type cycling (1-5 for box/cyl/sph/pyr/pln, only in MODEL mode)
@@ -2376,28 +2480,32 @@ OmegaTechEditor.DrawModel = false;
         // one-shot (that would reset the ghost's size every frame).
         if (g_placeMode == PlaceMode::MODEL) {
             int prim = (EMID >= 200 && EMID <= 204) ? EMID - 200 : 0;
-            if (IsKeyPressed(KEY_FIVE)) {
+            // Uses the same remappable key as the terrain mode (5 by default):
+            // inside MODEL mode it cycles primitives, otherwise it selects terrain.
+            if (IsKeyPressed(EdKeys::Key(EdAction::ModeTerrain))) {
                 prim = (prim + 1) % 5;
                 EMID = 200 + prim;
                 EditorLog("Primitive: %s", prim == 0 ? "box" : prim == 1 ? "cylinder" : prim == 2 ? "sphere" : prim == 3 ? "pyramid" : "plane");
             }
         }
 
-        // CSG operation cycling (G key)
-        if (IsKeyPressed(KEY_G) && g_placeMode == PlaceMode::MODEL) {
+        // CSG operation cycling
+        if (EdKeys::Pressed(EdAction::CsgCycle) && g_placeMode == PlaceMode::MODEL) {
             OmegaTechEditor.CSGOperation = (OmegaTechEditor.CSGOperation + 1) % 5;
         }
 
-        // Heightmap editor toggle (H key) â€” suppressed in vertex-edit mode (H moves verts)
-        if (IsKeyPressed(KEY_H) && !g_editorPanels.animEditVerts) ToggleHeightmapEditor();
+        // Heightmap editor toggle — suppressed in vertex-edit mode (its key moves verts)
+        if (EdKeys::Pressed(EdAction::Heightmap) && !g_editorPanels.animEditVerts)
+            ToggleHeightmapEditor();
 
-        // Panel keyboard shortcuts (F5-F12 replace old top menu bar)
-        if (IsKeyPressed(KEY_F5))  ToggleModelBrowser();
-        if (IsKeyPressed(KEY_F6))  ToggleSoundMgr();
-        if (IsKeyPressed(KEY_F7))  ToggleTextureMgr();
-        if (IsKeyPressed(KEY_F8))  TogglePawnMgr();
-        if (IsKeyPressed(KEY_F9))  ToggleScriptMgr();
-        if (IsKeyPressed(KEY_F10)) TogglePickupPanel();
+        // Panel shortcuts (remappable; F3-F10 by default)
+        if (EdKeys::Pressed(EdAction::Hierarchy))      ToggleWorldGraph();
+        if (EdKeys::Pressed(EdAction::ModelBrowser))   ToggleModelBrowser();
+        if (EdKeys::Pressed(EdAction::SoundManager))  ToggleSoundMgr();
+        if (EdKeys::Pressed(EdAction::TextureManager)) ToggleTextureMgr();
+        if (EdKeys::Pressed(EdAction::PawnManager))    TogglePawnMgr();
+        if (EdKeys::Pressed(EdAction::ScriptManager))  ToggleScriptMgr();
+        if (EdKeys::Pressed(EdAction::PickupPanel))    TogglePickupPanel();
         if (IsKeyPressed(KEY_F11)) ToggleFullscreen();  // supersedes old F11 handling
         // F12 is unbound. It used to open Zone Properties; zone and light editing
         // is now the Entity Properties panel (right-click the entity).
@@ -2405,7 +2513,13 @@ OmegaTechEditor.DrawModel = false;
         // Selection shortcuts. Escape must also cancel an active placement ghost
         // (DrawModel true with nothing selected), otherwise there is no keyboard
         // way out of placement mode.
-        if (IsKeyPressed(KEY_ESCAPE) &&
+        // Escape cancels an active gizmo drag first (restoring the pre-drag
+        // transform), and only then clears the selection.
+        if (IsKeyPressed(KEY_ESCAPE) && Gizmo_IsDragging()) {
+            Gizmo_CancelDrag();
+            g_gizmoDrag = false;
+            g_gizmoHistPushed = false;
+        } else if (IsKeyPressed(KEY_ESCAPE) &&
             (g_sel.type != SelType::NONE || OmegaTechEditor.DrawModel)) {
             g_sel = { SelType::NONE, -1, "", {0,0,0} };
             g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
@@ -2417,19 +2531,22 @@ OmegaTechEditor.DrawModel = false;
         // stray undo snapshot behind.
         const bool selIsPlaceable = g_sel.type != SelType::NONE &&
                                     g_sel.type != SelType::MAP;
-        if (IsKeyPressed(KEY_DELETE) && selIsPlaceable) {
+        if (EdKeys::Pressed(EdAction::Delete) && selIsPlaceable) {
             DeleteSelectedEntity();
         }
-        if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_D) && selIsPlaceable) {
+        if (EdKeys::Pressed(EdAction::Duplicate) && selIsPlaceable) {
             DuplicateSelectedEntity();
         }
         // Undo / redo (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z). Deferred to the anim tool
         // while vertex-editing, which owns its own undo stack.
-        if (!g_editorPanels.animEditVerts &&
-            (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))) {
-            bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-            if (IsKeyPressed(KEY_Z)) { if (shift) HistoryRedo(); else HistoryUndo(); }
-            if (IsKeyPressed(KEY_Y)) HistoryRedo();
+        if (!g_editorPanels.animEditVerts) {
+            if (EdKeys::Pressed(EdAction::Undo)) HistoryUndo();
+            if (EdKeys::Pressed(EdAction::Redo)) HistoryRedo();
+            // Ctrl+Shift+Z is a second, hard-wired redo binding (not in the table:
+            // it is the same key as Undo with Shift, and the table has one key per
+            // action).
+            if (EdKeys::CtrlDown() && EdKeys::ShiftDown() && IsKeyPressed(KEY_Z))
+                HistoryRedo();
         }
 
         // Camera shortcuts
@@ -2462,6 +2579,8 @@ OmegaTechEditor.DrawModel = false;
             // Perspective / back to default
             SetViewPerspective();
         }
+
+        }  // EditorUi_ViewportHasFocus()
 
     }
 

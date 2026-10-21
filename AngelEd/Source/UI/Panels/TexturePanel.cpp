@@ -538,7 +538,7 @@ static LRESULT CALLBACK TextureMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) 
         // Scope tree (left) + thumbnail grid (right)
         hScope = CreateWindowEx(WS_EX_CLIENTEDGE, WC_TREEVIEWW, L"",
             WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_HSCROLL | TVS_HASBUTTONS |
-            TVS_HASLINES | TVS_LINESATROOT | TVS_SHOWSELALWAYS,
+            TVS_HASLINES | TVS_LINESATROOT | TVS_SHOWSELALWAYS | WS_TABSTOP,
             x, y, 150, 200, hwnd, (HMENU)(INT_PTR)ID_TEX_SCOPE, g_hInst, nullptr);
         hGrid = CreateWindowEx(WS_EX_CLIENTEDGE, CLASS_TEXTURE_GRID, L"",
             WS_CHILD | WS_VISIBLE | WS_VSCROLL,

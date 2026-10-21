@@ -128,6 +128,9 @@ static LRESULT CALLBACK HmEditorProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
         }
         break;
     }
+    case WM_GETMINMAXINFO:
+        EnforceMinTrackSize(l, 460, 300);
+        break;
     case WM_CLOSE:
         ShowHeightmapEditor(false);
         break;

@@ -49,8 +49,33 @@ static void SoundMgrPopulateList(HWND hList) {
         SendMessageA(hList, LB_ADDSTRING, 0, (LPARAM)snd.name.c_str());
 }
 
+static HWND hList = nullptr, hLoopBtn = nullptr, hVolTrack = nullptr, hSrcLabel = nullptr;
+
+static void SoundMgrLayout(HWND hwnd) {
+    RECT rc;
+    GetClientRect(hwnd, &rc);
+    const int m = 10;
+    if (HWND h = GetDlgItem(hwnd, ID_SOUND_CAT_SFX)) MoveWindow(h, m, 10, 80, 24, TRUE);
+    if (HWND h = GetDlgItem(hwnd, ID_SOUND_CAT_MUS)) MoveWindow(h, m + 84, 10, 80, 24, TRUE);
+    if (HWND h = GetDlgItem(hwnd, ID_SOUND_CAT_AMB)) MoveWindow(h, m + 168, 10, 90, 24, TRUE);
+    if (hSrcLabel) MoveWindow(hSrcLabel, m, 40, rc.right - 2 * m, 16, TRUE);
+
+    const int btnY  = rc.bottom - m - 26;
+    const int loopY = btnY - 30;
+    const int volY  = loopY - 32;
+    if (hList) MoveWindow(hList, m, 62, rc.right - 2 * m,
+                          (volY - 70 > 40 ? volY - 70 : 40), TRUE);
+    if (HWND h = GetDlgItem(hwnd, 20)) MoveWindow(h, m, volY, 50, 20, TRUE);
+    if (hVolTrack) MoveWindow(hVolTrack, m + 55, volY,
+                              (rc.right - 2 * m - 55 > 60 ? rc.right - 2 * m - 55 : 60), 24, TRUE);
+    if (hLoopBtn) MoveWindow(hLoopBtn, m, loopY, 100, 22, TRUE);
+    if (HWND h = GetDlgItem(hwnd, ID_SOUND_PLAY))    MoveWindow(h, m, btnY, 70, 26, TRUE);
+    if (HWND h = GetDlgItem(hwnd, ID_SOUND_STOP))    MoveWindow(h, m + 76, btnY, 70, 26, TRUE);
+    if (HWND h = GetDlgItem(hwnd, ID_SOUND_REFRESH)) MoveWindow(h, m + 152, btnY, 70, 26, TRUE);
+    if (HWND h = GetDlgItem(hwnd, ID_SOUND_CLOSE))   MoveWindow(h, rc.right - m - 90, btnY, 90, 26, TRUE);
+}
+
 static LRESULT CALLBACK SoundMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
-    static HWND hList, hLoopBtn, hVolTrack, hSrcLabel;
     switch (msg) {
     case WM_CREATE: {
         int x = 10, y = 10, bw = 80;
@@ -71,7 +96,7 @@ static LRESULT CALLBACK SoundMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
 
         // Volume slider
         CreateLabel(hwnd, L"Volume:", x, y, 50, 20, 20);
-        hVolTrack = CreateWindowEx(0, TRACKBAR_CLASS, L"", WS_CHILD | WS_VISIBLE | TBS_HORZ,
+        hVolTrack = CreateWindowEx(0, TRACKBAR_CLASS, L"", WS_CHILD | WS_VISIBLE | TBS_HORZ | WS_TABSTOP,
                                    x + 55, y, 180, 24, hwnd, (HMENU)ID_SOUND_VOLUME, g_hInst, nullptr);
         SendMessage(hVolTrack, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
         SendMessage(hVolTrack, TBM_SETPOS, TRUE, 80);
@@ -88,6 +113,7 @@ static LRESULT CALLBACK SoundMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
         CreateButton(hwnd, L"Close",   x + 300, y, 90, 26, ID_SOUND_CLOSE);
 
         ScanSoundBrowserFiles();
+        SoundMgrLayout(hwnd);
         break;
     }
     case WM_USER + 50: {
@@ -138,6 +164,12 @@ static LRESULT CALLBACK SoundMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
         }
         break;
     }
+    case WM_SIZE:
+        SoundMgrLayout(hwnd);
+        break;
+    case WM_GETMINMAXINFO:
+        EnforceMinTrackSize(l, 420, 340);
+        break;
     case WM_CLOSE:
         ed::EventBus::instance().post(ed::Ev::StopSoundPreview);
         ShowSoundManager(false);

@@ -33,6 +33,7 @@ void HistoryClear() {
 
 // Call BEFORE a mutation: snapshots current state and invalidates redo.
 void HistoryPush() {
+    g_documentDirty = true;
     g_histRedo.clear();
     g_histUndo.push_back(HistoryCapture());
     if (g_histUndo.size() > kHistMax) g_histUndo.erase(g_histUndo.begin());

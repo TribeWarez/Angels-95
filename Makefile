@@ -441,6 +441,25 @@ test_assetscope: tests/AssetScope.test.cpp AngelEd/Source/Resources/AssetScope.c
 test_autoconvex: tests/AutoConvex.test.cpp Source/Physics/AutoConvex.cpp
 	$(SERVER_CXX) $(TEST_FLAGS) -ISource $^ -o $@
 
+# Editor gizmo geometry (ray/axis, ray/plane, snapping). Header-only and
+# raylib-free, so it builds headless. The gizmo itself is Win32/raylib code and
+# has no harness; this pins the parts that are easy to get subtly wrong.
+test_gizmomath: tests/GizmoMath.test.cpp AngelEd/Source/Subsystems/GizmoMath.hpp
+	$(SERVER_CXX) $(TEST_FLAGS) -I. tests/GizmoMath.test.cpp -o $@
+
+# Gameplay keybinds: defaults, INI round-trip, conflict swap. Links raylib for
+# the KEY_* constants, like test_entity_manager, but opens no window.
+test_keybinds: tests/Keybinds.test.cpp Source/Input/Keybinds.hpp Source/IniConfig.hpp
+	$(COMP) $(TEST_FLAGS) $(RAYLIB_INC) -ISource tests/Keybinds.test.cpp -o $@ $(LDFLAGS) $(LDEXTRA)
+
+# Menu layout + character roster + server browser data. Raylib-free by design:
+# the UI itself needs a GL context, but every rule that decides whether a menu
+# entry exists, how it is laid out, and which servers are visible is testable.
+test_menu: tests/Menu.test.cpp Source/Menu/MenuMetrics.hpp \
+           Source/Menu/CharacterRoster.hpp Source/Menu/ServerBrowserModel.hpp \
+           Source/IniConfig.hpp
+	$(SERVER_CXX) $(TEST_FLAGS) -ISource tests/Menu.test.cpp -o $@
+
 # Static auditor for .ozone worlds: it links OzoneParser from the exact
 # single-source-of-truth source, then checks geometry bounds, lighting, mesh
 # scale, asset references, playerstart sanity and zone naming. Pass a world
@@ -493,7 +512,8 @@ TEST_SUITES := test_parser test_context test_registry test_entity_manager \
                test_pawn_system test_ozone_parser test_join_uri test_master \
                test_network test_game_state test_ozanim test_ozls_writer \
                test_autoconvex test_csg test_brushmesh test_surface test_gametype \
-               test_editorbus test_assetscope test_events test_game
+               test_editorbus test_assetscope test_events test_game test_gizmomath \
+               test_keybinds test_menu
 
 # The editor is built twice from two hand-maintained object lists - AngelEd/Makefile
 # and the inline `g++` list in ci.yml - because CI does not use the Makefile. They
@@ -551,4 +571,4 @@ test: check-editor-objects $(TEST_SUITES) worldcheck
 	@echo "All suites passed."
 
 clean:
-	rm -rf $(BUILD_DIR) *.exe AngelServ Angels95 AngelMaster OzPack *.o AngelEd/*.o AngelEd/Source/*.o test_context test_parser test_registry test_ozone_parser test_join_uri test_master test_network test_game_state test_ozanim test_ozls_writer test_autoconvex test_csg test_brushmesh test_surface test_gametype test_editorbus test_assetscope test_events test_game worldcheck
+	rm -rf $(BUILD_DIR) *.exe AngelServ Angels95 AngelMaster OzPack *.o AngelEd/*.o AngelEd/Source/*.o test_context test_parser test_registry test_ozone_parser test_join_uri test_master test_network test_game_state test_ozanim test_ozls_writer test_autoconvex test_csg test_brushmesh test_surface test_gametype test_editorbus test_assetscope test_events test_game test_gizmomath test_keybinds test_menu worldcheck

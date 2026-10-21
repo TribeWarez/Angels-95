@@ -142,6 +142,12 @@ enum class MessageType : uint32_t {
     // --- Party / lobby (Phase 4 scaffold) ---
     PARTY_HELLO = 30,   // C->S  request to join/create a party
     PARTY_STATE = 31,   // S->C  party membership snapshot
+    // S->C: a player's cosmetic character + colour. Sent on join for every
+    // player already present and broadcast when a new player joins. The id is
+    // a strict roster token (no path separators); clients resolve it against
+    // characters.cfg and fall back to the default model. A new MessageType is
+    // forward/backward compatible by definition, so no PROTOCOL_VERSION bump.
+    PLAYER_PROFILE = 32,
 };
 
 // Melee stamina: the server keeps its own pool per player so a swinging client
@@ -240,6 +246,12 @@ std::string SanitizeDisplayName(const std::string& raw, size_t max_len);
 // containing a ".." segment and drops characters outside printable ASCII.
 // Never resolves or opens the result.
 std::string SanitizeAssetRef(const std::string& raw, size_t max_len);
+
+// Character roster id: ASCII alphanumerics, '_' and '-', 1..31 chars. Unlike an
+// asset ref this contains no path separators at all, because the id is
+// rebroadcast to every client and must never become a path a peer can ask
+// another peer to load.
+std::string SanitizeCharacterId(const std::string& raw, size_t max_len = 31);
 
 // Clamp a client-claimed team into 0..MAX_TEAMS. Out-of-range becomes 0
 // ("no preference") rather than clamping to an arbitrary team, so a hostile
@@ -367,6 +379,17 @@ struct PartyHelloData {
     char displayName[kMaxName];   // untrusted; server sanitises
     int  requested_team;          // untrusted hint
 };
+
+// S->C cosmetic profile. `character` is a roster id (not a path). `color` is
+// the client's requested palette index, validated by the server; 0 = unassigned
+// (clients fall back to their deterministic id colour).
+struct PlayerProfileData {
+    uint32_t player_id;
+    char     character[32];
+    uint8_t  color;
+    uint8_t  reserved[3];
+};
+constexpr size_t kPlayerProfileSizeBase = sizeof(PlayerProfileData);
 
 struct XpUpdateData {
     uint32_t player_id;
@@ -650,6 +673,11 @@ struct DiscoveredServer {
     uint16_t port = 0;
     uint32_t cur_players = 0;
     uint32_t max_players = 0;
+    // Optional tail fields (new servers). Old servers omit them; old clients
+    // ignore them because they stop parsing after the players token.
+    std::string map;
+    uint16_t http_port = 0;
+    bool password = false;
     double last_seen = 0.0;   // monotonic seconds, for staleness pruning
 };
 
@@ -672,12 +700,23 @@ public:
                         std::string& out_version,
                         uint32_t& out_cur_players,
                         uint32_t* out_max_players,
-                        uint16_t* out_port = nullptr);
+                        uint16_t* out_port = nullptr,
+                        std::string* out_map = nullptr,
+                        uint16_t* out_http_port = nullptr,
+                        bool* out_password = nullptr);
 
     // Server mode: keep the announced player counts current.
     void set_player_count(uint32_t cur, uint32_t max) {
         m_current_players = cur;
         m_max_players = max;
+    }
+
+    // Server mode: publish the optional tail (map/HTTP port/password) in the
+    // discovery reply. Call on startup and whenever the active map changes.
+    void set_server_info(uint16_t http_port, const char* map, bool password) {
+        m_http_port = http_port;
+        m_server_map = map ? map : "";
+        m_has_password = password;
     }
 
     // Client mode: copy currently-known servers (entries unseen for >9s are dropped).
@@ -697,6 +736,9 @@ private:
     uint16_t    m_game_port = 0;
     uint32_t    m_max_players = 32;
     uint32_t    m_current_players = 0;
+    uint16_t    m_http_port = 0;
+    std::string m_server_map;
+    bool        m_has_password = false;
     std::vector<DiscoveredServer> m_discovered;
 };
 

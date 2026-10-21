@@ -8,6 +8,7 @@
 #include "../Audio/SoundManager.hpp"
 #include "../Renderer/raygui/raygui.h"
 #include "MenuStyle.hpp"
+#include <algorithm>
 
 void ToggleSettings() {
     if (ShowSettings) {
@@ -41,7 +42,21 @@ void UpdateSettings() {
 
     const float x0 = win.x + 14, x1 = win.x + W - 14;
     const float gap = 8, w3 = (x1 - x0 - gap * 2) / 3;
-    float y = win.y + 42;
+    static float s_scroll = 0.0f;
+    const float contentH = 1000.0f;
+    const float viewH = H - 42.0f;
+    const float maxScroll = std::max(0.0f, contentH - viewH);
+    if (CheckCollisionPointRec(GetMousePosition(), win)) {
+        const float wheel = GetMouseWheelMove();
+        if (wheel != 0.0f) s_scroll -= wheel * 40.0f;
+    }
+    s_scroll = std::clamp(s_scroll, 0.0f, maxScroll);
+
+    // The panel used to draw a 1000px column from a fixed top on any screen,
+    // so everything below the window height was unreachable. Scissor the body
+    // and offset it by the wheel value instead.
+    BeginScissorMode((int)win.x, (int)(win.y + 36), (int)win.width, (int)(win.height - 36));
+    float y = win.y + 42 - s_scroll;
 
     // Latched toggles: the button shows ON/OFF and lights up when set.
     auto tgl = [&](int col, const char* label, bool on) {
@@ -219,6 +234,18 @@ void UpdateSettings() {
         CrosshairVisible = !CrosshairVisible;
     }
 
+    EndScissorMode();
+    if (maxScroll > 0) {
+        const float trackH = win.height - 50.0f;
+        const float thumbH = std::max(24.0f, trackH * (viewH / contentH));
+        const float t = (maxScroll > 0.0f) ? (s_scroll / maxScroll) : 0.0f;
+        DrawRectangle((int)(win.x + win.width - 6), (int)(win.y + 40), 3, (int)trackH,
+                      (Color){20, 32, 54, 220});
+        DrawRectangle((int)(win.x + win.width - 6),
+                      (int)(win.y + 40 + (trackH - thumbH) * t), 3, (int)thumbH,
+                      angelsui::kBorder);
+    }
+
     // Log output, in the same framing.
     if (ShowLogWindow) {
         Rectangle log = { win.x + W + 10, win.y, 500, 500 };
@@ -231,51 +258,4 @@ void UpdateSettings() {
             ly += 16;
         }
     }
-}
-
-void ShowMenuSetiings() {
-    Rectangle LayoutRecs[15] = {
-        (Rectangle){ 72, 85, 120, 24 },
-        (Rectangle){ 62, 115, 391, 419 },
-        (Rectangle){ 71, 145, 374, 200 },
-        (Rectangle){ 94, 186, 120, 24 },
-        (Rectangle){ 172, 237, 120, 24 },
-        (Rectangle){ 171, 278, 120, 24 },
-        (Rectangle){ 311, 258, 120, 24 },
-        (Rectangle){ 325, 176, 88, 24 },
-        (Rectangle){ 325, 214, 88, 24 },
-        (Rectangle){ 336, 399, 88, 24 },
-        (Rectangle){ 182, 407, 120, 16 },
-        (Rectangle){ 72, 361, 374, 85 },
-        (Rectangle){ 73, 452, 120, 24 },
-        (Rectangle){ 74, 486, 146, 26 },
-        (Rectangle){ 268, 475, 140, 28 },
-    };
-    GuiWindowBox(LayoutRecs[1], "Settings");
-    GuiLabel(LayoutRecs[0], "Angels95 Settings");
-    GuiPanel(LayoutRecs[2], "Window");
-    if (GuiButton(LayoutRecs[3], "Toggle Fullscreen")) ToggleFullscreen();
-    VSYNCToggle = GuiToggle(LayoutRecs[7], "VSync", VSYNCToggle);
-    MXAAToggle = GuiToggle(LayoutRecs[8], "MXAA x4", MXAAToggle);
-
-    GuiPanel(LayoutRecs[11], "Audio");
-    MuteToggle = GuiToggle(LayoutRecs[9], "Mute Audio", MuteToggle);
-    AudioSlider = GuiSlider(LayoutRecs[10], "Audio Volume", NULL, AudioSlider, 0, 100);
-
-    GuiLabel(LayoutRecs[12], "ANGELS95 ");
-    GuiLabel(LayoutRecs[13], "TribeWarez 2025");
-    GuiLabel(LayoutRecs[14], "@EC, JF , ZT , NC , LC");
-
-    if (VSYNCToggle) {
-        SetConfigFlags(FLAG_VSYNC_HINT);
-    } else {
-        ClearWindowState(FLAG_VSYNC_HINT);
-    }
-
-    if (MXAAToggle) {
-        SetConfigFlags(FLAG_MSAA_4X_HINT);
-    } else {
-        ClearWindowState(FLAG_MSAA_4X_HINT);
-    }
-    ApplyMasterVolume();
 }

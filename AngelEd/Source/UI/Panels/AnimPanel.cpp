@@ -219,6 +219,9 @@ static LRESULT CALLBACK AnimPanelProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
         }
         break;
     }
+    case WM_GETMINMAXINFO:
+        EnforceMinTrackSize(l, 390, 350);
+        break;
     case WM_CLOSE: ShowAnimPanel(false); break;
     case WM_DESTROY: g_editorPanels.hAnimPanel = nullptr; break;
     default: return DefWindowProc(hwnd, msg, w, l);

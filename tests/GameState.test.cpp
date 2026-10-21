@@ -1351,6 +1351,37 @@ static int test_campaign_flag_defaults_off() {
 // leaves every objective list empty in that mode, so this is belt-and-braces —
 // it pins the gate itself against any future objective source (which is the
 // reason the flag lives on GameState instead of buried in argv).
+static int test_plain_coop_default_world() {
+    TEST("--world pins plain-co-op join placement");
+    GameState gs;
+    WorldState a = make_test_world(0); a.name = "Alpha";
+    WorldState b = make_test_world(1); b.name = "Beta";
+    gs.worlds().push_back(a);
+    gs.worlds().push_back(b);
+
+    // Default (no --world) is world 0.
+    CHECK_EQ(gs.current_mission_world_index(), 0);
+
+    // --world Beta moves join placement; an unknown name is rejected and leaves
+    // the previous choice intact rather than silently falling back.
+    CHECK(gs.set_default_world("Beta"));
+    CHECK_EQ(gs.current_mission_world_index(), 1);
+    CHECK_EQ(gs.default_world_index(), 1);
+    CHECK(!gs.set_default_world("NoSuchWorld"));
+    CHECK_EQ(gs.current_mission_world_index(), 1);
+
+    // Campaign owns placement; the plain-co-op pin must not override it.
+    WorldState::Objective o;
+    o.id = "DefaultWorldGate";
+    o.type = "kill";
+    o.target = 1;
+    gs.worlds()[0].objectives.push_back(o);
+    gs.set_campaign_enabled(true);
+    CHECK_EQ(gs.current_mission_world_index(), 0);
+
+    PASS(); return 0; END_TEST();
+}
+
 static int test_campaign_gates_frontier_placement() {
     TEST("--campaign gates current_mission_world_index (join placement)");
     GameState gs;
@@ -1454,6 +1485,7 @@ int main() {
     failures += test_objective_id_fits_wire_field();
     failures += test_campaign_flag_defaults_off();
     failures += test_campaign_gates_frontier_placement();
+    failures += test_plain_coop_default_world();
     failures += test_campaign_gates_objective_seeding();
     failures += test_starting_mission_flag_roundtrip();
     failures += test_starting_mission_pins_frontier();

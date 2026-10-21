@@ -13,6 +13,8 @@ static bool ParticlesEnabled = true;
 static bool FPSEnabled = false;
 static bool ShowLogWindow = false;
 static float ResolutionScale = 1.0f;
+// Multiplier on top of the automatic DPI/resolution scale. 1.0 = automatic.
+static float UiScale = 1.0f;
 
 // --- Gameplay settings (Settings -> Gameplay) ---
 // Cross-TU consumers read the inline mirrors in GameplayFlags.hpp; these are the

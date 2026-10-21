@@ -5,6 +5,7 @@
 #include "../../Renderer/ViewModel.hpp"
 #include "../../Renderer/CombatFX.hpp"
 #include "../../Audio/SoundManager.hpp"
+#include "../../Input/Keybinds.hpp"
 #include "raymath.h"
 #include "../../Particle/OzParticleSimulationManager.hpp"
 #include <cstdlib>
@@ -152,7 +153,7 @@ void WeaponBehaviour::FireWeapon(Camera3D& cam) {
 
 void WeaponBehaviour::HandleInput(bool uiBlocking, Camera3D& cam) {
     if (uiBlocking) return;
-    if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT)) return;
+    if (!Keybinds::Down(GameAction::Fire)) return;
     EntityInstance* wep = LightningEntityManager::Instance().SelectedEntity();
     if (wep && wep->def && wep->def->type == EntityType::WEAPON)
         FireWeapon(cam);

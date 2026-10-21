@@ -2,7 +2,9 @@
 #include "Log.hpp"
 #include "Events/EventBus.hpp"
 #include "Menu/SettingsMenu.hpp"
+#include "Menu/PauseMenu.hpp"
 #include "ClientSettings.hpp"
+#include "Input/Keybinds.hpp"
 #include "Client/JoinUri.hpp"
 #include "Client/ProtocolHandler.hpp"
 #include "Client/Client.hpp"
@@ -177,34 +179,34 @@ struct RemoteAnimState {
 void DrawRemotePlayers3D(Shader litShader) {
     if (!g_network_enabled || !g_client.is_connected()) return;
 
-    // Shared player character. oz::PlayerModel walks a fallback chain, so a
-    // remote player is a model unless every rung failed — in which case we draw
-    // a primitive placeholder rather than nothing.
+    // Per-character model cache. The id comes from PLAYER_PROFILE; unknown ids
+    // fall through to the Player def, so an old server or a missing character
+    // never makes a player invisible.
     auto& pm = oz::PlayerModel::Instance();
-    oz::Mesh* mesh = pm.Get();
-    oz::SkeletalMesh* skel = pm.Skeletal();
-    const bool animated = skel != nullptr;
     const EntityDef* pdef = LightningEntityRegistry::Instance().Find("Player");
     const float dt = GetFrameTime();
-
-    // Scale the character to the local player's collision silhouette. The
-    // character GLBs are authored in metres while PlayerMovement::Height is 2.8,
-    // so drawing them unscaled leaves remote players at roughly half size.
-    // A `model_height` stat on the Player def overrides the target; a NEGATIVE
-    // value means "draw at the authored scale, do not normalise".
-    float modelScale = pm.NormalisedScale(g_playerMovement.Height);
-    if (pdef) {
-        auto mh = pdef->stats.floats.find("model_height");
-        if (mh != pdef->stats.floats.end()) {
-            if (mh->second < 0.0f) modelScale = 1.0f;
-            else if (mh->second > 0.0f) modelScale = pm.NormalisedScale(mh->second);
-        }
-    }
 
     static std::unordered_map<uint32_t, RemoteAnimState> anim;
     const auto& players = g_client.remote_players();
     for (const auto& rp : players) {
         if (!rp.active) continue;
+        oz::Mesh* mesh = pm.Get(rp.characterId);
+        oz::SkeletalMesh* skel = pm.Skeletal(rp.characterId);
+        const bool animated = skel != nullptr;
+
+        // Scale the character to the local player's collision silhouette. A
+        // `model_height` stat on the Player def overrides the target; a NEGATIVE
+        // value means "draw at the authored scale, do not normalise".
+        float modelScale = pm.NormalisedScale(rp.characterId, g_playerMovement.Height);
+        if (pdef) {
+            auto mh = pdef->stats.floats.find("model_height");
+            if (mh != pdef->stats.floats.end()) {
+                if (mh->second < 0.0f) modelScale = 1.0f;
+                else if (mh->second > 0.0f)
+                    modelScale = pm.NormalisedScale(rp.characterId, mh->second);
+            }
+        }
+
         // rp.position is the sender's camera (eye) position; draw from the feet
         // so remote bodies rest on the ground instead of floating at eye level.
         float eyeH = (rp.stance == net::STANCE_CROUCH)
@@ -221,9 +223,13 @@ void DrawRemotePlayers3D(Shader litShader) {
                 float dx = rp.position.x - a.last.x;
                 float dz = rp.position.z - a.last.z;
                 bool moving = a.hasLast && (dx * dx + dz * dz) > 0.0004f;
-                int wanted = moving
-                    ? skel->FindClip(pdef ? pdef->animChase : "")
-                    : skel->FindClip(pdef ? pdef->animIdle : "");
+                const angelsmenu::CharacterDef* cdef =
+                    angelsmenu::CharacterRoster::Instance().Find(rp.characterId);
+                const std::string idle = (cdef && !cdef->animIdle.empty())
+                    ? cdef->animIdle : (pdef ? pdef->animIdle : "");
+                const std::string chase = (cdef && !cdef->animChase.empty())
+                    ? cdef->animChase : (pdef ? pdef->animChase : "");
+                int wanted = moving ? skel->FindClip(chase) : skel->FindClip(idle);
                 if (wanted < 0) wanted = 0;
                 if (wanted != a.clip) { a.clip = wanted; a.time = 0.0f; }
                 a.time += dt * (rp.stance == net::STANCE_SPRINT ? 1.5f : 1.0f);
@@ -239,11 +245,7 @@ void DrawRemotePlayers3D(Shader litShader) {
             // a lowered stance (static stub - no skeletal crouch clip yet).
             float yScale = (rp.stance == net::STANCE_CROUCH) ? 0.65f : 1.0f;
             mt.scale = {modelScale, modelScale * yScale, modelScale};
-            // Real lit shader, not {0}: passing a zero Shader made oz::Mesh fall
-            // back to the model's own materials, so remote players were drawn
-            // outside the game's lighting pass and read as unlit/invisible in a
-            // dim room while every other mesh in the scene was lit.
-            pm.DrawInstance(mt, litShader, clip, clipTime);
+            pm.DrawInstance(rp.characterId, mt, litShader, clip, clipTime);
         } else {
             // Fallback capsule scaled to the local player box so remote avatars
             // match the collision silhouette (body Height, width/2 radius).
@@ -559,6 +561,19 @@ int main(int argc, char** argv){
                 OZ_WARN("Bad --shot-cam (expected x,y,z,yaw[,pitch]): %s", argv[i]);
         } else if (strcmp(arg, "--shot-hud") == 0) {
             g_shot.hideHud = false;
+        } else if (strcmp(arg, "--menu-shot") == 0 && i + 1 < argc) {
+            const std::string page = JoinUri::Lower(argv[++i]);
+            if (page == "home") g_menuShotPage = 0;
+            else if (page == "play") g_menuShotPage = 1;
+            else if (page == "multiplayer") g_menuShotPage = 2;
+            else if (page == "character") g_menuShotPage = 3;
+            else if (page == "settings") g_menuShotPage = 4;
+            else OZ_WARN("Bad --menu-shot page (home|play|multiplayer|character|settings): %s", page.c_str());
+            g_skipMenu = false;   // menu capture must run the real menu
+        } else if (strcmp(arg, "--menu-shot-out") == 0 && i + 1 < argc) {
+            g_menuShotOut = argv[++i];
+        } else if (strcmp(arg, "--menu-shot-frames") == 0 && i + 1 < argc) {
+            g_menuShotFrames = std::max(2, atoi(argv[++i]));
         } else if ((strcmp(arg, "--join") == 0 || strcmp(arg, "--connect") == 0) && i + 1 < argc) {
             if (!ApplyJoinTarget(argv[++i]))
                 OZ_WARN("Invalid --join target: %s", argv[i]);
@@ -592,7 +607,10 @@ int main(int argc, char** argv){
         // its own GameManager and refuses to start on an unknown one. A
         // refusal is loud in System/HostedServer.log and this client's
         // self-join then fails visibly rather than silently joining nothing.
-        LaunchHostedServer(27015, g_cliHostMission.empty() ? nullptr : g_cliHostMission.c_str());
+        if (!LaunchHostedServer(27015, g_cliHostMission.empty() ? nullptr : g_cliHostMission.c_str())) {
+            OZ_ERROR("--host: server launch failed");
+            return 1;
+        }
         SetServerJoinIP = "127.0.0.1";
         SetServerJoinPort = 27015;
         SetServerJoinFlag = true;
@@ -611,10 +629,22 @@ int main(int argc, char** argv){
                 g_world_to_load, (int)g_shot.cams.size(), g_shot.delayFrames,
                 (int)g_shot.hideHud, g_shot.outPath.c_str());
     }
+    if (g_menuShotPage >= 0) {
+        if (g_menuShotOut.empty()) g_menuShotOut = "System/menu_shot.png";
+        EnsureShotOutputDir(g_menuShotOut);
+        OZ_INFO("Menu shot: page=%d out='%s' frames=%d",
+                g_menuShotPage, g_menuShotOut.c_str(), g_menuShotFrames);
+    }
 
     // Load persisted user settings BEFORE window creation so window size,
     // VSync and MSAA are applied by InitWindow.
     LoadClientSettings();
+
+    if (g_menuShotPage >= 0 && g_shot.resWidth > 0 && g_shot.resHeight > 0) {
+        ConfigWindowWidth = g_shot.resWidth;
+        ConfigWindowHeight = g_shot.resHeight;
+        OZ_INFO("Menu shot resolution: %dx%d", ConfigWindowWidth, ConfigWindowHeight);
+    }
 
     if (g_shot.active) {
         // Deterministic, reproducible captures: nothing that varies run to run
@@ -658,6 +688,7 @@ ShowSpellbook = false;
 
     InitWindow(ConfigWindowWidth, ConfigWindowHeight,
                g_shot.active ? "Angels95 [shot]" : "Angels95");
+    SetWindowMinSize(960, 600);
     SetExitKey(0);
     SetTargetFPS(60);
 
@@ -688,14 +719,29 @@ ShowSpellbook = false;
     });
     WeaponBehaviour::Instance().SetClient(&g_client, &g_network_enabled);
     PickupPawns::Instance().SetClient(&g_client);
+
+    // Pause state lives outside the per-frame loop so the native menu's
+    // Settings item can pause the world too. `g_settingsPausedGame` distinguishes
+    // "settings paused a running game" (resume on close) from "settings was
+    // opened from the pause menu" (stay paused).
+    static bool g_gamePaused = false;
+    static bool g_settingsPausedGame = false;
+
     oz::ui::CreateNativeMenuBar({
         []() { SetSceneId = OmegaTechData.LevelIndex; SetSceneFlag = true; },
         []() { SaveGame(); },
-        []() { CloseWindow(); },
+        []() { g_quitRequested = true; },
         []() {
             ShowSettings = !ShowSettings;
-            if (ShowSettings) { ShowCursor(); EnableCursor(); }
-            else { HideCursor(); DisableCursor(); }
+            if (ShowSettings) {
+                if (!g_gamePaused) g_settingsPausedGame = true;
+                g_gamePaused = true;
+                ShowCursor(); EnableCursor();
+            } else if (g_settingsPausedGame) {
+                g_gamePaused = false;
+                g_settingsPausedGame = false;
+                HideCursor(); DisableCursor();
+            }
         },
         []() { oz::ui::ShowAboutDialog(); },
     });
@@ -715,9 +761,11 @@ ShowSpellbook = false;
     bool shotRunComplete = false;
 
     // Outer loop: return to menu after gameplay
-    while (!WindowShouldClose() && !shotRunComplete) {
+    while (!WindowShouldClose() && !shotRunComplete && !g_quitRequested) {
     PlayHomeScreen();
-    if (WindowShouldClose()) break;
+    if (WindowShouldClose() || g_quitRequested) break;
+    g_gamePaused = false;
+    g_settingsPausedGame = false;
     g_returnToMenu = false;
 
     LoadWorld();
@@ -932,14 +980,14 @@ ShowSpellbook = false;
     HideCursor(); 
     DisableCursor();  
     
-    while (!WindowShouldClose() && !g_returnToMenu)
+    while (!WindowShouldClose() && !g_returnToMenu && !g_quitRequested)
     {
         // Borderless window drag (Alt+Left), so the window can be moved while
         // paused or in a menu even though it has no OS title bar.
         HandleBorderlessWindowDrag();
 
         // Console toggle with ^ (grave) key
-        if (IsKeyPressed(KEY_GRAVE)) {
+        if (Keybinds::Pressed(GameAction::Console)) {
             g_consoleOpen = !g_consoleOpen;
             if (g_consoleOpen) {
                 ShowCursor();
@@ -958,62 +1006,76 @@ ShowSpellbook = false;
         }
 
         // Pause menu state
-        static bool g_gamePaused = false;
         {
             static bool pauseKeyWasDown = false;
-            bool pauseKeyNow = IsKeyPressed(KEY_ESCAPE);
-            if (pauseKeyNow && !pauseKeyWasDown) {
+            bool pauseKeyNow = Keybinds::Pressed(GameAction::Pause);
+            // While Settings is open, Escape belongs to the settings panel, not
+            // to the pause toggle. Otherwise Escape would unpause the world and
+            // leave the settings overlay floating over live gameplay.
+            if (!ShowSettings && pauseKeyNow && !pauseKeyWasDown) {
                 g_gamePaused = !g_gamePaused;
                 if (g_gamePaused) { ShowCursor(); EnableCursor(); }
-                else if (!ShowSettings && !ShowInventory && !ShowSkillTree && !ShowSpellbook && !g_consoleOpen) { HideCursor(); DisableCursor(); }
+                else if (!ShowSettings && !ShowInventory && !ShowSkillTree &&
+                         !ShowSpellbook && !g_consoleOpen) { HideCursor(); DisableCursor(); }
             }
             pauseKeyWasDown = pauseKeyNow;
         }
 
+        // Settings may have been closed by its own close button (which does not
+        // go through the native-menu callback). Resume only when the settings
+        // panel was what paused a running game.
+        if (!ShowSettings && g_settingsPausedGame) {
+            g_gamePaused = false;
+            g_settingsPausedGame = false;
+            if (!ShowInventory && !ShowSkillTree && !ShowSpellbook && !g_consoleOpen) {
+                HideCursor();
+                DisableCursor();
+            }
+        }
+
         // Skip game input/update when paused
         if (g_gamePaused) {
-            // Draw pause menu overlay
-            int sw = GetScreenWidth(), sh = GetScreenHeight();
-            DrawRectangle(0, 0, sw, sh, (Color){0,0,0,180});
+            // Put the frozen world back on screen. The old code drew the
+            // overlay over whatever happened to be in the back buffer.
+            DrawTexturePro(Target.texture,
+                           (Rectangle){0, 0, (float)Target.texture.width,
+                                       (float)-Target.texture.height},
+                           (Rectangle){0, 0, (float)GetScreenWidth(),
+                                       (float)GetScreenHeight()},
+                           (Vector2){0, 0}, 0.0f, WHITE);
 
-            Texture2D heading = OmegaTechData.PauseHeading;
-            if (heading.id > 0) {
-                float hx = (sw - heading.width) / 2.0f;
-                DrawTexture(heading, (int)hx, sh/2 - heading.height - 80, WHITE);
-            }
-
-            const char* labels[] = {"Resume", "Settings", "Main Menu", "Quit"};
-            int btnCount = 4;
-            int btnW = 220, btnH = 50, gap = 10;
-            int totalH = btnCount * btnH + (btnCount - 1) * gap;
-            int startY = sh/2 - totalH/2;
-
-            for (int i = 0; i < btnCount; i++) {
-                int bx = (sw - btnW) / 2;
-                int by = startY + i * (btnH + gap);
-                Rectangle r = {(float)bx, (float)by, (float)btnW, (float)btnH};
-                bool hover = CheckCollisionPointRec(GetMousePosition(), r);
-                bool clicked = hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
-
-                Texture2D tex = clicked ? OmegaTechData.BtnClicked :
-                                hover ? OmegaTechData.BtnHover : OmegaTechData.BtnNormal;
-                if (tex.id > 0) {
-                    DrawTexturePro(tex,
-                        (Rectangle){0,0,(float)tex.width,(float)tex.height},
-                        r, (Vector2){0,0}, 0, WHITE);
-                } else {
-                    DrawRectangleRec(r, (Color){50,50,70,220});
-                    DrawRectangleLinesEx(r, 2, (Color){100,100,140,255});
+            if (ShowSettings) {
+                UpdateSettings();
+                if (IsKeyPressed(KEY_ESCAPE)) ShowSettings = false;
+            } else {
+                auto metrics = angelsmenu::MenuMetrics::Compute(
+                    (float)GetScreenWidth(), (float)GetScreenHeight(),
+                    GetWindowScaleDPI().y, UiScale);
+                const auto action = angelsmenu::DrawPauseMenu(metrics, GetFrameTime());
+                switch (action) {
+                    case angelsmenu::PauseAction::Resume:
+                        g_gamePaused = false;
+                        if (!ShowSettings && !ShowInventory && !ShowSkillTree &&
+                            !ShowSpellbook && !g_consoleOpen) { HideCursor(); DisableCursor(); }
+                        break;
+                    case angelsmenu::PauseAction::Settings:
+                        ShowSettings = true;
+                        ShowCursor();
+                        EnableCursor();
+                        break;
+                    case angelsmenu::PauseAction::SaveGame:
+                        SaveGame();
+                        break;
+                    case angelsmenu::PauseAction::MainMenu:
+                        g_gamePaused = false;
+                        g_returnToMenu = true;
+                        break;
+                    case angelsmenu::PauseAction::Quit:
+                        g_gamePaused = false;
+                        g_quitRequested = true;
+                        break;
+                    default: break;
                 }
-                DrawText(labels[i], bx + (btnW - MeasureText(labels[i], 18)) / 2,
-                         by + (btnH - 18) / 2, 18, WHITE);
-
-                    if (clicked) {
-                    if (i == 0) { g_gamePaused = false; HideCursor(); DisableCursor(); }
-                    else if (i == 1) { ToggleSettings(); g_gamePaused = false; }
-                    else if (i == 2) { g_gamePaused = false; g_returnToMenu = true; }
-                    else if (i == 3) { CloseWindow(); return 0; }
-                    }
             }
 
             EndDrawing();
@@ -1157,7 +1219,7 @@ ShowSpellbook = false;
                                                            OmegaTechData.MainCamera);
 
         // ADS / Zoom (right-click)
-        WeaponBehaviour::Instance().SetAdsActive(!uiBlocking && IsMouseButtonDown(MOUSE_BUTTON_RIGHT));
+        WeaponBehaviour::Instance().SetAdsActive(!uiBlocking && Keybinds::Down(GameAction::AltFire));
 
         // Recoil recovery + camera application
         WeaponBehaviour::Instance().Update(OmegaTechData.MainCamera);
@@ -1330,7 +1392,7 @@ ShowSpellbook = false;
 
                 // Auto-collect when walking over a pickup (also E) — handled
                 // by PickupPawns (networked pickups only; throttled internally).
-                PickupPawns::Instance().Update(IsKeyPressed(KEY_E),
+                PickupPawns::Instance().Update(Keybinds::Pressed(GameAction::Interact),
                                                OmegaTechData.MainCamera.position,
                                                g_network_world_index,
                                                GetTime());

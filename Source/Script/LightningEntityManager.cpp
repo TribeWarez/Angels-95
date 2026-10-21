@@ -17,6 +17,9 @@
 #include "../GameplayFlags.hpp"
 #include "../World/OzOzoneLoader.hpp"
 #endif
+// Keybinds is needed by the unguarded HandleInput below, in every build
+// (including OMEGA_TEST_ENV, which still compiles that function).
+#include "../Input/Keybinds.hpp"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -1420,14 +1423,14 @@ void LightningEntityManager::HandleInput(bool uiBlocking) {
     // A modal owns the keyboard and the wheel while it is up.
     if (uiBlocking) return;
 
-    if (IsKeyPressed(KEY_ONE))   SelectSlot(0);
-    if (IsKeyPressed(KEY_TWO))   SelectSlot(1);
-    if (IsKeyPressed(KEY_THREE)) SelectSlot(2);
-    if (IsKeyPressed(KEY_FOUR))  SelectSlot(3);
-    if (IsKeyPressed(KEY_FIVE))  SelectSlot(4);
-    if (IsKeyPressed(KEY_SIX))   SelectSlot(5);
-    if (IsKeyPressed(KEY_SEVEN)) SelectSlot(6);
-    if (IsKeyPressed(KEY_EIGHT)) SelectSlot(7);
+    if (Keybinds::Pressed(GameAction::Hotbar1)) SelectSlot(0);
+    if (Keybinds::Pressed(GameAction::Hotbar2)) SelectSlot(1);
+    if (Keybinds::Pressed(GameAction::Hotbar3)) SelectSlot(2);
+    if (Keybinds::Pressed(GameAction::Hotbar4)) SelectSlot(3);
+    if (Keybinds::Pressed(GameAction::Hotbar5)) SelectSlot(4);
+    if (Keybinds::Pressed(GameAction::Hotbar6)) SelectSlot(5);
+    if (Keybinds::Pressed(GameAction::Hotbar7)) SelectSlot(6);
+    if (Keybinds::Pressed(GameAction::Hotbar8)) SelectSlot(7);
 
     // Mouse wheel cycles slots. GetMouseWheelMove is the only wheel source in
     // the engine (raygui's is unused here), and nothing read it before, so the
@@ -1458,13 +1461,13 @@ void LightningEntityManager::HandleInput(bool uiBlocking) {
         }
     }
 
-    // R to reload selected weapon
-    if (IsKeyPressed(KEY_R)) {
+    // Reload selected weapon
+    if (Keybinds::Pressed(GameAction::Reload)) {
         ReloadSelectedWeapon();
     }
 
-    // Enter/E to use selected item
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_E)) {
+    // Enter/E to use selected item (Enter stays fixed as UI navigation).
+    if (IsKeyPressed(KEY_ENTER) || Keybinds::Pressed(GameAction::Interact)) {
         EntityInstance* sel = SelectedEntity();
         if (sel && sel->def) {
             // Trigger on_use action. Goes through RunAction so its queued

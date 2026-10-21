@@ -162,7 +162,7 @@ Three binary save files in `GameData/Saves/` (all `.gitignore`d):
 | File | Contents |
 |---|---|
 | `TF.sav` | Toggle flags + object ownership (100 flags) |
-| `POS.sav` | Player position + level |
+| `POS.sav` | Player position + level + world name (`x:y:z:level:world:`) |
 | `Script.sav` | (obsolete) removed with the legacy WDL system |
 
 ## Pause Menu
@@ -170,8 +170,11 @@ Three binary save files in `GameData/Saves/` (all `.gitignore`d):
 Press **Escape** during gameplay to open the pause menu overlay:
 
 - **Resume** — return to gameplay
-- **Settings** — open developer settings panel
+- **Settings** — open the player settings panel; the world stays paused
+- **Save Game** — write `TF.sav` / `POS.sav` / `Campaign.sav`
 - **Main Menu** — return to title screen (world is unloaded)
-- **Quit** — exit the game
+- **Quit** — exit the game cleanly through the single `CloseWindow()` path
 
-The pause menu uses custom button textures (`menu_button.png`, `menu_button_hover.png`, `menu_button_clicked.png`) and heading (`menu_heading.png`) from `GameData/Tex/Title/`.
+The overlay uses `Menu/MenuMetrics.hpp` + `MenuStyle.hpp`, so it scales with the
+window/DPI and supports Up/Down/Enter as well as the mouse. `Escape` closes
+Settings first and only then resumes the game.

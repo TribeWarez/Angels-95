@@ -3,6 +3,7 @@
 #define _UNICODE
 #include "../../../Source/WindowsCompat.hpp"
 #include "../../../Source/Package/PackageAssetLoader.hpp"
+#include "../../../Source/IniConfig.hpp"
 #include "../../../Source/Pawn/OzPawnSystem.hpp"
 #include "../../../Source/Script/LightningEntityRegistry.hpp"
 #include "../../../Source/World/OzOzoneLoader.hpp"
@@ -19,6 +20,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
+#include <cwctype>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <algorithm>
@@ -75,6 +78,7 @@ static const wchar_t* CLASS_PROPSPANEL = L"OzPropsPanel";
 static const wchar_t* CLASS_STATSSIDEBAR = L"OzStatsSidebar";
 static const wchar_t* CLASS_LEVELLIST = L"OzLevelList";
 static const wchar_t* CLASS_ANIMPANEL  = L"OzAnimPanel";
+static const wchar_t* CLASS_KEYMAP    = L"OzKeymap";
 static const int STATS_SIDEBAR_W = 200;
 
 
@@ -155,6 +159,7 @@ static LRESULT CALLBACK HmEditorProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l);
 static LRESULT CALLBACK WorldGraphProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l);
 static LRESULT CALLBACK LevelListProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l);
 static LRESULT CALLBACK StatsSidebarProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l);
+static LRESULT CALLBACK KeymapProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l);
 
 // =====================================================================
 // Helper functions
@@ -178,7 +183,11 @@ static HWND CreateCtrl(HWND hParent, const wchar_t* cls, const wchar_t* text,
 }
 
 static HWND CreateButton(HWND hParent, const wchar_t* text, int x, int y, int w, int h, int id) {
-    return CreateCtrl(hParent, L"BUTTON", text, x, y, w, h, id, BS_PUSHBUTTON);
+    // WS_TABSTOP is required for the panel Tab ring (UiShell.cpp). It was missing
+    // everywhere, so Apply/Close were unreachable from the keyboard even after
+    // the ring learned to walk WS_TABSTOP controls.
+    return CreateCtrl(hParent, L"BUTTON", text, x, y, w, h, id,
+                      BS_PUSHBUTTON | WS_TABSTOP);
 }
 
 static HWND CreateLabel(HWND hParent, const wchar_t* text, int x, int y, int w, int h, int id) {
@@ -200,7 +209,18 @@ static HFONT GetBoldUiFont() {
 
 static HWND CreateListBox(HWND hParent, int x, int y, int w, int h, int id) {
     return CreateCtrl(hParent, L"LISTBOX", L"", x, y, w, h, id,
-                      WS_BORDER | WS_VSCROLL | LBS_NOTIFY);
+                      WS_BORDER | WS_VSCROLL | LBS_NOTIFY | WS_TABSTOP);
+}
+
+// Minimum drag size for a panel whose controls are hand-placed. Panels with a
+// real reflow function call their own layout on WM_SIZE; the fixed ones must at
+// least refuse to shrink below their content.
+static void EnforceMinTrackSize(LPARAM l, int minW, int minH) {
+    MINMAXINFO* mm = (MINMAXINFO*)l;
+    if (mm) {
+        mm->ptMinTrackSize.x = minW;
+        mm->ptMinTrackSize.y = minH;
+    }
 }
 
 // --- Icon buttons (owner-draw) for the native stats sidebar -----------------

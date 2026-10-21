@@ -44,6 +44,8 @@ enum EditorMenuCmd {
     IDM_WORLD_GRAPH,
     IDM_LEVEL_LIST,
     IDM_FULLSCREEN,
+    IDM_MAXIMIZE,
+    IDM_RESET_LAYOUT,
     IDM_RESET_CAM,
     IDM_VIEW_TOP,
     IDM_VIEW_BOTTOM,
@@ -51,6 +53,7 @@ enum EditorMenuCmd {
     IDM_VIEW_LEFT,
     IDM_VIEW_PERSPECTIVE,
     IDM_ABOUT,
+    IDM_KEYMAP,
     // Context menu actions
     IDM_PROPERTIES = 2001,
     IDM_DELETE_ENTITY,
@@ -74,6 +77,13 @@ inline constexpr int kAutoConvexMaxBoxes = 2048;
 // Forward declarations
 void EditorLog(const char* fmt, ...);
 void HistoryPush();
+
+// Unsaved-document flag. Lives here (inline, shared by every TU) because
+// Subsystems/History.cpp is a REAL translation unit and sets it from
+// HistoryPush(), while the title bar and the New/Open/close guards read it from
+// the Main TU. A file-static in EditorLog.cpp was invisible to History.o.
+inline bool g_documentDirty = false;
+
 void HistoryUndo();
 void HistoryRedo();
 void HistoryClear();

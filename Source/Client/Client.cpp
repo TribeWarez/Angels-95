@@ -20,6 +20,19 @@ static uint32_t id_to_color_packed(uint32_t id) {
     return (c & 0xFF) | ((c >> 8) & 0xFF00) | ((c >> 16) & 0xFF0000) | 0xFF000000u;
 }
 
+// Cosmetic palette matching TEAM_COLORS in Menu/TitleMenu.hpp. Kept local so
+// the client networking TU does not depend on the menu; index 0 falls back to
+// the deterministic id colour.
+static uint32_t profile_color_packed(uint8_t index) {
+    static const uint32_t colors[8] = {
+        0xFF645A5Au, // unassigned grey (RGBA byte order: AABBGGRR)
+        0xFF2828C8u, 0xFFDC6428u, 0xFF3CB428u,
+        0xFF1EAAC8u, 0xFFC8B43Cu, 0xFFC832A0u, 0xFF1E82DCu,
+    };
+    if (index == 0 || index >= 8) return 0;
+    return colors[index];
+}
+
 bool OmegaClient::connect(const char* ip, uint16_t port) {
     // Present the active player profile to the server (protocol v2). Read here
     // rather than from the caller so the profile always reflects whatever the
@@ -470,6 +483,37 @@ void OmegaClient::handle_message(const net::NetworkMessage& msg) {
                 m_hasWorldSpawn = true;
             }
             if (m_on_world_changed) m_on_world_changed(wcd.world_index, wcd.accepted != 0);
+            break;
+        }
+        case net::MessageType::PLAYER_PROFILE: {
+            if (msg.size < net::kPlayerProfileSizeBase) break;
+            net::PlayerProfileData pd{};
+            memcpy(&pd, msg.payload, sizeof(pd));
+            pd.character[sizeof(pd.character) - 1] = '\0';
+            const std::string character =
+                net::SanitizeCharacterId(std::string(pd.character));
+            const uint32_t packed = profile_color_packed(pd.color);
+
+            const std::lock_guard<std::mutex> lock(m_msg_mutex);
+            bool found = false;
+            for (auto& rp : m_remote_players) {
+                if (rp.player_id == pd.player_id) {
+                    rp.characterId = character;
+                    rp.color_packed = (packed != 0) ? packed : id_to_color_packed(rp.player_id);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                // The profile can arrive before the first PLAYER_UPDATE. Create
+                // an inactive placeholder; the update activates it later.
+                RemotePlayer rp;
+                rp.player_id = pd.player_id;
+                rp.characterId = character;
+                rp.color_packed = (packed != 0) ? packed : id_to_color_packed(pd.player_id);
+                rp.active = false;
+                m_remote_players.push_back(std::move(rp));
+            }
             break;
         }
         case net::MessageType::OBJECTIVE_STATE: {

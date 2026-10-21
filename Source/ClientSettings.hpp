@@ -7,6 +7,7 @@
 
 #include "Settings.hpp"
 #include "GameplayFlags.hpp"
+#include "Input/Keybinds.hpp"
 #include "IniConfig.hpp"
 
 static const char* kClientIniPath = "System/Angels95.ini";
@@ -24,6 +25,7 @@ static inline void LoadClientSettings() {
     VSYNCToggle        = cfg.GetBool(S, "vsync",  VSYNCToggle);
     MXAAToggle         = cfg.GetBool(S, "msaa",   MXAAToggle);
     ResolutionScale    = CfgClampF(cfg.GetFloat(S, "resolution_scale",  ResolutionScale),  0.25f, 4.0f);
+    UiScale            = CfgClampF(cfg.GetFloat(S, "ui_scale", UiScale), 0.75f, 2.0f);
     TextureFilterMode  = CfgClampI(cfg.GetInt(S,  "texture_filter",    TextureFilterMode), 0, 5);
     PixelSize          = CfgClampF(cfg.GetFloat(S, "pixel_size", PixelSize), 1.0f, 32.0f);
     JitterEnabled      = cfg.GetBool(S, "jitter",      JitterEnabled);
@@ -51,6 +53,9 @@ static inline void LoadClientSettings() {
     WeaponHand       = CfgClampI(cfg.GetInt(S, "weapon_hand", WeaponHand), 0, 1);
     g_goreEnabled    = GoreEnabled;
     g_weaponHand     = WeaponHand;
+    g_mouseSensitivity = CfgClampF(cfg.GetFloat(S, "mouse_sensitivity", g_mouseSensitivity), 0.1f, 5.0f);
+    g_invertY        = cfg.GetBool(S, "invert_y", g_invertY);
+    Keybinds::Load(cfg);
     BorderlessWindow = cfg.GetBool(S, "borderless", BorderlessWindow);
 
     CrosshairStyleSel = CfgClampI(cfg.GetInt(S, "crosshair_style", CrosshairStyleSel),
@@ -74,6 +79,7 @@ static inline void SaveClientSettings() {
     cfg.SetBool(S, "vsync",  VSYNCToggle);
     cfg.SetBool(S, "msaa",   MXAAToggle);
     cfg.SetFloat(S, "resolution_scale",  ResolutionScale);
+    cfg.SetFloat(S, "ui_scale",          UiScale);
     cfg.SetInt(S,   "texture_filter",    TextureFilterMode);
     cfg.SetFloat(S, "pixel_size",        PixelSize);
     cfg.SetBool(S, "jitter",             JitterEnabled);
@@ -94,6 +100,9 @@ static inline void SaveClientSettings() {
     cfg.SetFloat(S, "sfx_volume",   SfxVolume);
     cfg.SetBool(S, "gore",          GoreEnabled);
     cfg.SetInt(S,  "weapon_hand",   WeaponHand);
+    cfg.SetFloat(S, "mouse_sensitivity", g_mouseSensitivity);
+    cfg.SetBool(S,  "invert_y",     g_invertY);
+    Keybinds::Save(cfg);
     cfg.SetBool(S, "borderless",    BorderlessWindow);
     cfg.SetInt(S,   "crosshair_style",     CrosshairStyleSel);
     cfg.SetBool(S,  "crosshair_visible",   CrosshairVisible);

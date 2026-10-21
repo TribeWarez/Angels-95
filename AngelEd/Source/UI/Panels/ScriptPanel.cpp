@@ -25,7 +25,10 @@ static const int ID_SCRIPT_NEWCREATE = 110;
 // to a def with no world instance - Player.ozls is exactly that, and its
 // jump_sound / hurt_sound stats have to be editable somewhere.
 static const int ID_SCRIPT_PROPS  = 111;
-static const int ID_SCRIPT_NEWCANCEL = 111;
+// Was 111 too - the same value as ID_SCRIPT_PROPS. The Properties button hit the
+// NEWCANCEL branch below first and merely closed the (inactive) new-script form,
+// so Properties never worked. Keep every control ID in this panel distinct.
+static const int ID_SCRIPT_NEWCANCEL = 112;
 
 struct ScriptListEntry {
     std::string name;
@@ -179,6 +182,39 @@ static LRESULT CALLBACK ScriptMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
     static HWND hList = nullptr;
     static HWND hDetail = nullptr;
 
+    // Reflow for the normal (list + detail) mode. The new-script form is a small
+    // fixed dialog and is left alone. Called after every rebuild and on WM_SIZE.
+    auto applyLayout = [&]() {
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+        HWND list = GetDlgItem(hwnd, ID_SCRIPT_LIST);
+        HWND detail = GetDlgItem(hwnd, ID_SCRIPT_DETAIL);
+        if (!list || !detail) return;
+
+        const int m = 10, btnH = 28;
+        const int top = 32;
+        const int avail = rc.bottom - top - btnH - 3 * m;
+        int listH = avail * 45 / 100;
+        if (listH < 60) listH = 60;
+        MoveWindow(list, m, top, rc.right - 2 * m, listH, TRUE);
+        int detailH = avail - listH - 8;
+        if (detailH < 40) detailH = 40;
+        MoveWindow(detail, m, top + listH + 8, rc.right - 2 * m, detailH, TRUE);
+
+        const int by = rc.bottom - m - btnH;
+        struct Btn { int id; int w; };
+        const Btn btns[] = {
+            {ID_SCRIPT_EDIT, 70}, {ID_SCRIPT_PROPS, 80}, {ID_SCRIPT_NEW, 90},
+            {ID_SCRIPT_DELETE, 70}, {ID_SCRIPT_RELOAD, 70}, {ID_SCRIPT_CLOSE, 70},
+        };
+        int x = m;
+        for (const auto& b : btns) {
+            if (HWND h = GetDlgItem(hwnd, b.id))
+                MoveWindow(h, x, by, b.w, btnH, TRUE);
+            x += b.w + 6;
+        }
+    };
+
     // Builds the panel contents for the current mode (normal / new-script form).
     // Destroy-and-rebuild follows the house PopulatePropertiesPanel pattern.
     auto buildPanel = [&]() {
@@ -222,6 +258,7 @@ static LRESULT CALLBACK ScriptMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
             CreateButton(hwnd, L"Close", 510, 378, 90, 28, ID_SCRIPT_CLOSE);
         }
         SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
+        applyLayout();
         InvalidateRect(hwnd, nullptr, TRUE);
     };
 
@@ -365,6 +402,12 @@ static LRESULT CALLBACK ScriptMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
         }
         break;
     }
+    case WM_SIZE:
+        applyLayout();
+        break;
+    case WM_GETMINMAXINFO:
+        EnforceMinTrackSize(l, 620, 440);
+        break;
     case WM_CLOSE:
         s_scriptNewMode = false;
         ShowScriptManager(false);

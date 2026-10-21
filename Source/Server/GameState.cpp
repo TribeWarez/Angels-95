@@ -742,12 +742,27 @@ WorldState* GameState::get_world(int idx) {
     return &m_worlds[idx];
 }
 
+bool GameState::set_default_world(const std::string& name) {
+    if (name.empty()) return true;
+    for (size_t i = 0; i < m_worlds.size(); ++i) {
+        if (m_worlds[i].name == name) {
+            m_defaultWorld = (int)i;
+            return true;
+        }
+    }
+    return false;
+}
+
 int GameState::current_mission_world_index() const {
-    // --campaign OFF: joiners land in world 0. The seed gate already leaves
-    // every objective list empty, so both loops below would fall through to 0
-    // anyway — the explicit early-out states the gate and defends against any
-    // future objective source.
-    if (!m_campaignEnabled) return 0;
+    // --campaign OFF: joiners land in the requested plain-co-op world (default
+    // world 0). --world lets the host picker actually mean something; before
+    // this the dropdown set a client-side world that the server immediately
+    // overrode with world 0.
+    if (!m_campaignEnabled) {
+        if (m_defaultWorld >= 0 && m_defaultWorld < (int)m_worlds.size())
+            return m_defaultWorld;
+        return 0;
+    }
 
     // Join placement scans the MISSION GRAPH (FirstMissionWorld -> next), not
     // world-list order. Every unplayed mission world IsFrontier at the same

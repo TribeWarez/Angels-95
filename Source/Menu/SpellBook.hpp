@@ -6,7 +6,7 @@
 //
 // Two pieces, both header-only (no Makefile / ci.yml entry - see AGENTS.md):
 //   DrawSpellBar()  - the persistent HUD row, drawn every frame
-//   DrawSpellbook() - the modal opened with KEY_Q: bind spells to the bar
+//   DrawSpellbook() - the modal opened by the Spellbook action (Q by default): bind spells to the bar
 //
 // Header-only and raygui-free, matching Menu/MenuStyle.hpp, which supplies every
 // primitive used here.

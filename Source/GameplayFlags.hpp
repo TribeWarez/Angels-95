@@ -24,3 +24,8 @@ inline bool g_goreEnabled = true;
 // Weapon hand for the first-person view-model: 0 = right, 1 = left. Mirrors the
 // view-model across the camera's YZ plane.
 inline int g_weaponHand = 0;
+
+// Mouse look sensitivity multiplier and Y-inversion. Exposed on the Controls
+// page; PlayerMovement multiplies its per-controller MouseSensitivity by this.
+inline float g_mouseSensitivity = 1.0f;
+inline bool  g_invertY = false;

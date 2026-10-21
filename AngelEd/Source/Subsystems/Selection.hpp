@@ -27,4 +27,8 @@ int ClampPropInt(int v, int lo, int hi);
 // the edit with the pre-edit transform.
 void SnapGizmoToSelection(const EditorSelection& sel);
 
+// Centre the viewport on the current selection, preserving the current view
+// direction and distance. Used by the World Hierarchy's Frame Selection item.
+void FocusSelectionInViewport();
+
 #endif // ANGEL_ED_SUBSYSTEMS_SELECTION_HPP

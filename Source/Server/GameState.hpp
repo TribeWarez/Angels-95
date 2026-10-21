@@ -79,6 +79,12 @@ struct ServerPlayer {
     int team = 0;
     int requested_team = 0;
 
+    // Cosmetic character id + colour from the auth profile. The id is sanitised
+    // to [A-Za-z0-9_-] by Server.cpp before it is stored or rebroadcast; it is
+    // never opened/resolved on the server.
+    std::string character;
+    int color = 0;
+
     // Party/lobby (Phase 4 scaffold). 0 = no party. The server assigns a party
     // when a player joins a coop world; solo players stay ungrouped.
     int party_id = 0;
@@ -488,6 +494,13 @@ public:
     void set_starting_mission(const std::string& name) { m_startingMission = name; }
     const std::string& starting_mission() const { return m_startingMission; }
 
+    // `--world <name>`: the plain-co-op spawn world. Validated by Server.cpp
+    // after init_worlds; the name is stored as an index so a directory-order
+    // change cannot silently retarget a running server. Ignored when the
+    // campaign arc is enabled (the mission frontier owns join placement).
+    bool set_default_world(const std::string& name);
+    int default_world_index() const { return m_defaultWorld; }
+
     // Respawned pickups notifier (consumed by server for broadcast)
     struct RespawnedPickupInfo { int world_index; int pickup_id; };
     std::vector<RespawnedPickupInfo> consume_respawned_pickups() {
@@ -517,6 +530,7 @@ private:
     std::string m_gamedata_dir;                // captured by init_worlds for save/load
     bool m_campaignEnabled = false;            // --campaign (default OFF = classic co-op)
     std::string m_startingMission;             // --mission <name> (empty = campaign's first)
+    int m_defaultWorld = 0;                    // --world <name> for plain co-op
     uint32_t m_next_player_id = 1;
     uint32_t m_tick_count = 0;
     std::vector<WorldState> m_worlds;

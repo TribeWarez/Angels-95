@@ -5,6 +5,7 @@
 #include "SlotBar.hpp"
 #include "../../Script/LightningEntityManager.hpp"
 #include "../../Script/LightningEntityRegistry.hpp"
+#include "../../Input/Keybinds.hpp"
 #include "../../Renderer/OzAssetMapper.hpp"
 #include "../../Client/Client.hpp"
 #include "../../Log.hpp"
@@ -663,11 +664,15 @@ void InventoryBehaviour::DrawOverlay(const Camera3D& cam) {
         hoveredHotbar = hover;
     }
 
-    // === Drop (Q) ===
-    // Q drops whatever the cursor is over: a backpack item, an equipment piece,
-    // or a hotbar cell. Suppressed while a drag is in flight so a drop cannot
-    // race the drag resolution.
-    if (IsKeyPressed(KEY_Q) && m_dragKind == DragKind::NONE) {
+    // === Drop (rebindable; default G) ===
+    // Drops whatever the cursor is over: a backpack item, an equipment piece, or
+    // a hotbar cell. Suppressed while a drag is in flight so a drop cannot race
+    // the drag resolution.
+    //
+    // This used to be Q, the SAME key as the spellbook toggle. Pressing it with
+    // the inventory open dropped the item AND switched to the spellbook, which
+    // closed the overlay - so "drop" looked like it dismissed the inventory.
+    if (Keybinds::Pressed(GameAction::DropItem) && m_dragKind == DragKind::NONE) {
         if (hoveredBp >= 0)             DropBackpackItem(hoveredBp, cam);
         else if (hoveredEq >= 0)        DropEquipmentSlot(hoveredEq, cam);
         else if (hoveredHotbar >= 0)    DropHotbarSlot(hoveredHotbar, cam);
@@ -718,9 +723,17 @@ void InventoryBehaviour::DrawOverlay(const Camera3D& cam) {
         }
     }
 
-    // Controls hint
-    DrawText("TAB: close  |  Drag to reorder  |  Right-click use / unequip  |  Q: drop hovered  |  ENTER use  |  E: pickup  |  K: skills  |  ^: console",
-             px + 20, py + panel_h - 22, 12, DARKGRAY);
+    // Controls hint. The keys come from the same table the input reads, so a
+    // rebind can never leave the overlay advertising the old key.
+    {
+        const std::string dropKey = Keybinds::KeyName(Keybinds::Key(GameAction::DropItem));
+        const std::string useKey  = Keybinds::KeyName(Keybinds::Key(GameAction::Interact));
+        const std::string skillKey = Keybinds::KeyName(Keybinds::Key(GameAction::Skills));
+        const std::string consoleKey = Keybinds::KeyName(Keybinds::Key(GameAction::Console));
+        DrawText(TextFormat("TAB: close  |  Drag to reorder  |  Right-click use / unequip  |  %s: drop hovered  |  ENTER use  |  %s: pickup  |  %s: skills  |  %s: console",
+                            dropKey.c_str(), useKey.c_str(), skillKey.c_str(), consoleKey.c_str()),
+                 px + 20, py + panel_h - 22, 12, DARKGRAY);
+    }
 }
 
 // ---------------------------------------------------------------------------

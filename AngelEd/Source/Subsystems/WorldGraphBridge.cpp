@@ -47,6 +47,11 @@ void Editor_SetPlaceMode(int mode) { g_placeMode = (PlaceMode)mode; }
 static WNDPROC g_originalWndProc = nullptr;
 
 static LRESULT CALLBACK EditorWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    // Unsaved-document guard for the window close button / Alt+F4. Returning 0
+    // without calling the original proc cancels the close, so GLFW never sees it.
+    if (msg == WM_CLOSE) {
+        if (!ConfirmDiscardDocument("exiting")) return 0;
+    }
     if (msg == WM_COMMAND) {
         int id = LOWORD(wParam);
         switch (id) {
@@ -55,32 +60,10 @@ static LRESULT CALLBACK EditorWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             case IDM_SAVE:          if (!g_documentPath.empty()) SaveWorldDocument(g_documentPath); return 0;
             case IDM_SAVE_AS:       FileSaveAs(); return 0;
             case IDM_PLAY_TEST: {
-                // Compile the current document to disk first so playtest shows
-                // exactly what the editor sees (and never launches a stale file).
-                if (g_documentPath.empty()) {
-                    FileSaveAs();
-                    if (g_documentPath.empty()) return 0; // user cancelled
-                }
-                if (!SaveWorldDocument(g_documentPath)) {
-                    EditorLog("ERROR: could not save '%s' for playtest", g_documentPath.string().c_str());
-                    return 0;
-                }
-                std::string worldDir = g_documentPath.parent_path().filename().string();
-                std::string ext = g_documentPath.extension().string();
-                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                std::string worldArg;
-                if (ext == ".ozone") {
-                    worldArg = g_documentPath.string();
-                }
-                if (!worldArg.empty()) {
-                    if (IsPathFile("System/Angels95.exe")) {
-                        std::string cmd = "start \"\" System\\Angels95.exe --world \"" + worldArg + "\" --world-dir " + worldDir;
-                        EditorLog("Launching: %s", cmd.c_str());
-                        system(cmd.c_str());
-                    } else {
-                        EditorLog("ERROR: System/Angels95.exe not found");
-                    }
-                }
+                // One implementation; see PlayTestCurrentWorld(). It saves first so
+                // the client never runs a stale document, and reports a missing
+                // executable instead of silently launching nothing.
+                PlayTestCurrentWorld();
             } return 0;
             case IDM_EXIT:          CloseWindow(); return 0;
             case IDM_MODEL_BRW:     ToggleModelBrowser(); return 0;
@@ -92,6 +75,11 @@ static LRESULT CALLBACK EditorWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             case IDM_PICKUP_PANEL:  TogglePickupPanel(); return 0;
             case IDM_HEIGHTMAP:     ToggleHeightmapEditor(); return 0;
             case IDM_FULLSCREEN:    ToggleFullscreen(); return 0;
+            case IDM_MAXIMIZE: {
+                HWND w = (HWND)GetWindowHandle();
+                if (w) ShowWindow(w, IsZoomed(w) ? SW_RESTORE : SW_MAXIMIZE);
+            } return 0;
+            case IDM_RESET_LAYOUT:  ResetPanelLayouts(); return 0;
             case IDM_RESET_CAM:     SetViewPerspective(); ResetCamera(); return 0;
             case IDM_VIEW_TOP:      { Vector3 c = OTEditor.MainCamera.target; SetViewPreset({c.x,c.y+80,c.z+0.1f},c,{0,0,-1}); } return 0;
             case IDM_VIEW_BOTTOM:   { Vector3 c = OTEditor.MainCamera.target; SetViewPreset({c.x,c.y-80,c.z+0.1f},c,{0,0,1}); } return 0;
@@ -100,6 +88,7 @@ static LRESULT CALLBACK EditorWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             case IDM_VIEW_PERSPECTIVE: SetViewPerspective(); return 0;
             case IDM_WORLD_GRAPH:   ToggleWorldGraph(); return 0;
             case IDM_LEVEL_LIST:    ShowLevelList(!g_editorPanels.showLevelList); RefreshLevelList(); return 0;
+            case IDM_KEYMAP:        ShowKeymapPanel(!g_editorPanels.showKeymap); return 0;
             case IDM_ABOUT:         MessageBoxA(NULL, "AngelEd v1.0\nOzWorld Editor\nBased on OmegaTech\nTribeWarez 2026", "About AngelEd", MB_OK | MB_ICONINFORMATION); return 0;
             case IDM_UNDO:          HistoryUndo(); return 0;
             case IDM_REDO:          HistoryRedo(); return 0;

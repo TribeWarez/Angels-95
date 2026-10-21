@@ -55,6 +55,7 @@ std::string g_public_ip;                 // --public-ip (NAT)
 std::string g_bind_ip;                   // --bind (default = all interfaces)
 bool g_campaign = false;                 // --campaign (mission arc; default OFF)
 std::string g_mission;                   // --mission <name> (implies --campaign)
+std::string g_world_pin;                 // --world <name> (plain co-op spawn world)
 // The world the named mission resolves to, filled during startup validation.
 // Only used to report the map; empty = no --mission.
 std::string g_mission_world;
@@ -65,6 +66,7 @@ std::string current_map_name() {
     // alphabetically-first world in the server browser and in HTTP /map would
     // tell joining players the wrong map.
     if (!g_mission_world.empty()) return g_mission_world;
+    if (!g_world_pin.empty()) return g_world_pin;
     return g_world_list.empty() ? std::string("unknown") : g_world_list[0];
 }
 
@@ -202,8 +204,38 @@ static net::NpcStateUpdateData make_npc_state(const WorldState& ws, int npc_inde
 // Sent on join AND as the answer to REQUEST_WORLD, because the client's request is
 // advisory: the server validates the index against its own loaded worlds, so the
 // client must not assume its request took. `accepted` distinguishes the two cases.
-static void send_world_change(net::NetworkPlayer& player, int world_index, bool accepted) {
-    net::WorldChangeData wcd{};
+// Cosmetic character/colour snapshot. The id is already sanitised before this
+// is called; re-clamp the colour here so a corrupt ServerPlayer cannot write
+// arbitrary bytes into a client palette lookup.
+static net::NetworkMessage make_player_profile_msg(const ServerPlayer& sp) {
+    net::PlayerProfileData pd{};
+    pd.player_id = sp.id;
+    std::strncpy(pd.character, sp.character.c_str(), sizeof(pd.character) - 1);
+    pd.color = (uint8_t)std::clamp(sp.color, 0, 7);
+
+    net::NetworkMessage msg{};
+    msg.magic = net::MAGIC;
+    msg.type = static_cast<uint32_t>(net::MessageType::PLAYER_PROFILE);
+    msg.size = sizeof(pd);
+    msg.sequence = 0;
+    msg.timestamp = static_cast<uint32_t>(time(nullptr));
+    std::memcpy(msg.payload, &pd, sizeof(pd));
+    return msg;
+}
+
+static void broadcast_player_profile(const ServerPlayer& sp) {
+    if (!g_game_server) return;
+    auto msg = make_player_profile_msg(sp);
+    g_game_server->broadcast_message(msg);
+}
+
+static void send_player_profile_to(const net::NetworkPlayer& target, const ServerPlayer& sp) {
+    if (!g_game_server) return;
+    auto msg = make_player_profile_msg(sp);
+    g_game_server->send_message(target, msg);
+}
+
+static void send_world_change(net::NetworkPlayer& player, int world_index, bool accepted) {    net::WorldChangeData wcd{};
     wcd.world_index = world_index;
     wcd.accepted = accepted ? 1 : 0;
     wcd.spawnX = 0.0f;
@@ -248,6 +280,22 @@ static void on_player_join(net::NetworkPlayer& player) {
     // first LoadWorld, WORLD_CHANGE is its authoritative view.
     ServerPlayer* sp = g_game_state.get_player(player.id);
     const int wi = sp ? sp->world_index : 0;
+
+    // Cosmetic profile: the auth payload's modelPath is a roster id (legacy
+    // clients may still send a path). Sanitize it before it reaches a client;
+    // the server never resolves it. Broadcast this player to everyone and send
+    // every existing player's profile to this one, so late joiners see the same
+    // characters as early joiners.
+    if (sp) {
+        sp->character = net::SanitizeCharacterId(player.profile.modelPath);
+        sp->color = net::ClampRequestedTeam(player.profile.requestedTeam);
+        broadcast_player_profile(*sp);
+        for (const auto& other : g_game_server->players()) {
+            if (other.id == player.id) continue;
+            if (const ServerPlayer* osp = g_game_state.get_player(other.id))
+                send_player_profile_to(player, *osp);
+        }
+    }
 
     send_join_world_list(player, wi);
 
@@ -1024,6 +1072,8 @@ int main(int argc, char** argv) {
             g_public_ip = argv[++i];
         else if (strcmp(argv[i], "--campaign") == 0)
             g_campaign = true;
+        else if (strcmp(argv[i], "--world") == 0 && i + 1 < argc)
+            g_world_pin = argv[++i];
         else if (strcmp(argv[i], "--mission") == 0 && i + 1 < argc) {
             g_mission = argv[++i];
             // A named mission is a campaign concept by definition: without the
@@ -1037,7 +1087,7 @@ int main(int argc, char** argv) {
                    " [--bind IP|HOST] [--auth-token T] [--admin-token T]\n");
             printf("                  [--server-name NAME] [--master host[:port]]"
                    " [--master-http URL] [--public-ip IP] [--campaign]\n");
-            printf("                  [--mission NAME]\n");
+            printf("                  [--mission NAME] [--world NAME]\n");
             printf("  --bind         Interface for UDP+HTTP (default 0.0.0.0 = all).\n");
             printf("  --auth-token   Require Bearer auth for the HTTP API (env: OZ_AUTH_TOKEN)\n");
             printf("  --admin-token  Enable admin COMMANDs (list/say/kick; env: OZ_ADMIN_TOKEN)\n");
@@ -1051,6 +1101,8 @@ int main(int argc, char** argv) {
             printf("  --mission NAME Start the arc at this `: mission` def's world (implies\n");
             printf("                 --campaign). Unknown name = startup error, never a\n");
             printf("                 silent fallback to world 0.\n");
+            printf("  --world NAME   Plain co-op spawn world (default: world 0). Ignored\n");
+            printf("                 with --campaign (the mission frontier owns placement).\n");
             printf("  Config file:   System/OzServer.ini ([Server]/[Auth]/[MasterServers]; CLI overrides)\n");
             return 0;
         }
@@ -1141,6 +1193,24 @@ int main(int argc, char** argv) {
 
     g_game_state.init_worlds(g_gamedata_dir, g_world_list);
 
+    // --world is a plain-co-op placement pin. The campaign frontier owns join
+    // placement, so combining them would be a silent contradiction.
+    if (!g_world_pin.empty()) {
+        if (g_campaign) {
+            OZ_WARN("--world '%s' ignored: --campaign places joiners at the mission frontier",
+                    g_world_pin.c_str());
+            g_world_pin.clear();
+        } else if (!g_game_state.set_default_world(g_world_pin)) {
+            fprintf(stderr,
+                    "AngelServ: --world '%s' is not one of the loaded worlds. Refusing to start.\n",
+                    g_world_pin.c_str());
+            return 1;
+        } else {
+            OZ_INFO("--world '%s' -> spawn world %d", g_world_pin.c_str(),
+                    g_game_state.default_world_index());
+        }
+    }
+
     // Start UDP game server
     net::NetworkServer game_server;
     g_game_server = &game_server;
@@ -1166,7 +1236,8 @@ int main(int argc, char** argv) {
 
     // LAN discovery
     net::NetworkDiscovery discovery;
-    discovery.init("Angels95", "0.2.1", static_cast<uint16_t>(game_port));
+    discovery.init(g_server_name.c_str(), "0.2.1", static_cast<uint16_t>(game_port));
+    discovery.set_server_info(static_cast<uint16_t>(http_port), current_map_name().c_str(), false);
     discovery.start();
     g_discovery = &discovery;
 
@@ -1197,6 +1268,7 @@ int main(int argc, char** argv) {
     auto last_frame = std::chrono::steady_clock::now();
     while (g_running) {
         game_server.update();
+        discovery.set_server_info(static_cast<uint16_t>(http_port), current_map_name().c_str(), false);
         discovery.update();
 
         // Refresh the master heartbeat payload ~every 300ms.

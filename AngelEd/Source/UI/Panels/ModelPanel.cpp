@@ -165,7 +165,7 @@ static LRESULT CALLBACK ModelBrwProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
         // roots with the real folder hierarchy underneath.
         hList = CreateWindowEx(WS_EX_CLIENTEDGE, WC_TREEVIEWW, L"",
              WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_HSCROLL | TVS_HASBUTTONS |
-             TVS_HASLINES | TVS_LINESATROOT | TVS_SHOWSELALWAYS,
+             TVS_HASLINES | TVS_LINESATROOT | TVS_SHOWSELALWAYS | WS_TABSTOP,
              8, 32, 230, PH - 100, hwnd, (HMENU)(INT_PTR)ID_MDL_SCOPE,
              g_hInst, nullptr);
         hPreview = CreateWindowEx(WS_EX_STATICEDGE, L"STATIC", L"",

@@ -92,6 +92,7 @@ static bool LoadWorldDocument(const fs::path& path) {
         // The scene was just replaced wholesale. The WorldGraph list is derived from
         // PawnSystem/ZoneManager/OzoneLoader, so every row is now stale.
         MarkWorldGraphDirty();
+        g_documentDirty = false;   // a freshly opened document matches disk
         return ok;
     }
     // OZONE-only editor: any non-.ozone world format is unsupported.

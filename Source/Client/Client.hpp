@@ -66,6 +66,7 @@ struct RemotePlayer {
     float health = 100;
     bool active = false;
     uint32_t color_packed = 0xFFFFFFFF; // RGBA
+    std::string characterId;            // roster id from PLAYER_PROFILE ("" = default)
     int ammo = 0;           // current ammo in the remote player's selected weapon
     int magazine = 0;       // its magazine size
     uint8_t stance = 0;     // net::PlayerStance (crouch/sprint) for rendering

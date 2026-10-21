@@ -15,7 +15,11 @@ namespace fs = std::filesystem;
 
 #define MaxCachedModels 200
 
-inline RenderTexture2D Target;
+// The viewport draws directly to the window (there is no offscreen Target any
+// more). It used to keep a 320x200 render texture that nothing rendered into and
+// then stretched it over the viewport - a leftover from an earlier pass that only
+// survived because an uninitialised texture usually has alpha 0. That made the
+// editor's output depend on driver luck and broke windowed resizing.
 
 enum class LightingMode : uint8_t { LIT, UNLIT, WIREFRAME, DYNAMIC };
 
@@ -216,8 +220,6 @@ inline void Init(){
     OTEditor.PreviewCamera.up = (Vector3){ 0.0f, 1.0f, 0.0f };         
     OTEditor.PreviewCamera.fovy = 45.0f;                                
     OTEditor.PreviewCamera.projection = CAMERA_PERSPECTIVE;         
-
-    Target = LoadRenderTexture(320 , 200);
 
     // Initialize lit fog shader for editor.
     //

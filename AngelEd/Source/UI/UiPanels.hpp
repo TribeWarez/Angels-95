@@ -65,6 +65,29 @@ PawnTreeNode BuildPawnTree();
 // --- Windows-only functions ---
 void CreateAllEditorWindows(void* hInst, void* hRaylibWnd);
 
+// Restore every panel to its built-in rect and maximize the main window. Backs
+// View -> Reset Layout; panel geometry is persisted in System/AngelEd.ini.
+void ResetPanelLayouts();
+
+// Keyboard plumbing for the native panels.
+//
+// The message pump in Main.cpp calls EditorUi_HandleMessage BEFORE
+// TranslateMessage/DispatchMessage. It owns the things a plain modeless window
+// does not get for free:
+//   - Tab / Shift+Tab focus cycling (WS_TABSTOP controls, including the
+//     controls that live on the Surface Properties tab PAGE windows),
+//   - Ctrl+A select-all in EDIT controls (single-line EDIT does not support it),
+//   - Ctrl+Backspace word delete,
+//   - Enter = next field, Escape = leave field / close panel.
+// `msg` is an MSG*; void* keeps <windows.h> out of this header.
+// Returns true when the message was consumed and must NOT be dispatched.
+bool EditorUi_HandleMessage(void* msg);
+
+// True when keyboard focus belongs to the raylib viewport (or nothing is
+// focused yet). Used to gate viewport shortcuts so typing in a panel field can
+// never switch modes, toggle the heightmap or delete the selection.
+bool EditorUi_ViewportHasFocus();
+
 // Rebuild the Pawn Manager "Actor Hierarchy" tree from the current registries.
 // Call after PawnDefs/.ozls defs are loaded (windows are created before then).
 void RefreshPawnManager();
@@ -78,6 +101,7 @@ void ShowPickupPanel(bool show);
 void ShowNodePanel(bool show);
 void ShowHeightmapEditor(bool show);
 void ShowWorldGraph(bool show);
+void ShowKeymapPanel(bool show);
 
     // Surface Properties (UT99-style, per-face). `renderable` is an
     // OzoneRenderable index and `faceMask` a bitmask of SurfaceFace, so one
@@ -112,6 +136,9 @@ int GetStatsSidebarWidth();
 #else
 // Stub implementations for non-Windows
 inline void CreateAllEditorWindows(void*, void*) {}
+inline void ResetPanelLayouts() {}
+inline bool EditorUi_HandleMessage(void*) { return false; }
+inline bool EditorUi_ViewportHasFocus() { return true; }
 inline void RefreshPawnManager() {}
 inline void DestroyAllEditorWindows() {}
 inline void ShowSoundManager(bool) {}
@@ -125,6 +152,7 @@ inline void ShowPickupPanel(bool) {}
 inline void ShowNodePanel(bool) {}
 inline void ShowHeightmapEditor(bool) {}
 inline void ShowWorldGraph(bool) {}
+inline void ShowKeymapPanel(bool) {}
 inline void ShowPropertiesPanel(bool) {}
 inline void ShowLevelList(bool) {}
 inline void RefreshLevelList() {}

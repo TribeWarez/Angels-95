@@ -829,6 +829,61 @@ static int test_world_change_without_spawn_tail() {
     return 0;
 }
 
+static void test_sanitize_character_id() {
+    test_count++;
+    printf("  TEST SanitizeCharacterId... ");
+
+    if (net::SanitizeCharacterId("arcanist") != "arcanist") { printf("FAIL: valid id altered\n"); return; }
+    if (net::SanitizeCharacterId("a_b-9") != "a_b-9") { printf("FAIL: valid id chars altered\n"); return; }
+    if (!net::SanitizeCharacterId("../evil").empty()) { printf("FAIL: path survived\n"); return; }
+    if (!net::SanitizeCharacterId("has space").empty()) { printf("FAIL: space survived\n"); return; }
+    if (!net::SanitizeCharacterId(std::string(80, 'a')).empty()) {
+        printf("FAIL: oversized id accepted\n"); return; }
+    if (!net::SanitizeCharacterId("").empty()) { printf("FAIL: empty accepted\n"); return; }
+
+    pass_count++;
+    printf("PASS\n");
+}
+
+static void test_discovery_tail() {
+    test_count++;
+    printf("  TEST discovery tail... ");
+
+    net::NetworkDiscovery discovery;
+    std::string name, version, map;
+    uint32_t cur = 0, max = 0;
+    uint16_t port = 0, httpPort = 0;
+    bool pw = false;
+
+    // Legacy format: no tail. Every optional field stays at its default.
+    if (!discovery.parse_response("OZRESPONSE:My Server:0.2.1:27015:3/8",
+                                  name, version, cur, &max, &port, &map, &httpPort, &pw))
+        { printf("FAIL: legacy rejected\n"); return; }
+    if (name != "My Server" || version != "0.2.1" || port != 27015 ||
+        cur != 3 || max != 8 || !map.empty() || httpPort != 0 || pw)
+        { printf("FAIL: legacy fields\n"); return; }
+
+    // New tail: parsed only if present; an unknown key is ignored.
+    if (!discovery.parse_response(
+            "OZRESPONSE:Coop:0.2.1:27016:5/16;http=8080;map=CitadelRuins;pw=1;x=9",
+            name, version, cur, &max, &port, &map, &httpPort, &pw))
+        { printf("FAIL: tail rejected\n"); return; }
+    if (name != "Coop" || port != 27016 || cur != 5 || max != 16)
+        { printf("FAIL: tail base fields\n"); return; }
+    if (httpPort != 8080 || map != "CitadelRuins" || !pw)
+        { printf("FAIL: tail optional fields\n"); return; }
+
+    // A malformed optional value must not destroy the base record.
+    if (!discovery.parse_response("OZRESPONSE:S:1:1:1/2;http=notaport;map=;pw=0",
+                                  name, version, cur, &max, &port, &map, &httpPort, &pw))
+        { printf("FAIL: malformed tail rejected\n"); return; }
+    if (httpPort != 0 || !map.empty() || pw)
+        { printf("FAIL: malformed tail parsed\n"); return; }
+
+    pass_count++;
+    printf("PASS\n");
+}
+
 int main() {
     printf("Network packet tests:\n");
     test_magic_constant();
@@ -844,6 +899,7 @@ int main() {
     test_client_ping_rtt();
     test_sanitize_display_name();
     test_sanitize_asset_ref();
+    test_sanitize_character_id();
     test_clamp_requested_team();
     test_make_unique_name();
     test_auth_payload_layout();
@@ -853,6 +909,7 @@ int main() {
     test_auth_accepts_legacy_v1();
     test_world_change_roundtrip();
     test_world_change_without_spawn_tail();
+    test_discovery_tail();
 
     printf("\nResults: %d/%d passed\n", pass_count, test_count);
     return (pass_count == test_count) ? 0 : 1;

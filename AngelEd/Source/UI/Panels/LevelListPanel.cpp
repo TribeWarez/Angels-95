@@ -107,6 +107,27 @@ static void PopulateLevelList(HWND hList) {
     }
 }
 
+static void LevelListLayout(HWND hwnd) {
+    RECT rc;
+    GetClientRect(hwnd, &rc);
+    const int m = 6, btnH = 26, btnW = 110;
+    HWND list = GetDlgItem(hwnd, ID_LL_LIST);
+    if (list) {
+        int h = rc.bottom - btnH - m * 3;
+        if (h < 40) h = 40;
+        MoveWindow(list, m, m, rc.right - 2 * m, h, TRUE);
+    }
+    const int by = rc.bottom - m - btnH;
+    int x = m;
+    const int ids[] = {ID_LL_OPEN, ID_LL_LINK, ID_LL_REFRESH};
+    for (int id : ids) {
+        if (HWND h = GetDlgItem(hwnd, id)) MoveWindow(h, x, by, btnW, btnH, TRUE);
+        x += btnW + 6;
+    }
+    if (HWND h = GetDlgItem(hwnd, ID_LL_CLOSE))
+        MoveWindow(h, rc.right - m - btnW, by, btnW, btnH, TRUE);
+}
+
 static LRESULT CALLBACK LevelListProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
     static HWND hList;
     switch (msg) {
@@ -117,7 +138,7 @@ static LRESULT CALLBACK LevelListProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
         int listH = rc.bottom - bw - margin * 3;
 
         hList = CreateWindowEx(0, WC_LISTVIEW, L"",
-            WS_CHILD | WS_VISIBLE | WS_BORDER | LVS_REPORT | LVS_SINGLESEL,
+            WS_CHILD | WS_VISIBLE | WS_BORDER | LVS_REPORT | LVS_SINGLESEL | WS_TABSTOP,
             margin, margin, rc.right - margin * 2, listH,
             hwnd, (HMENU)ID_LL_LIST, g_hInst, nullptr);
         ListView_SetExtendedListViewStyle(hList, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
@@ -140,8 +161,15 @@ static LRESULT CALLBACK LevelListProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
 
         BuildLevelList();
         PopulateLevelList(hList);
+        LevelListLayout(hwnd);
         break;
     }
+    case WM_SIZE:
+        LevelListLayout(hwnd);
+        break;
+    case WM_GETMINMAXINFO:
+        EnforceMinTrackSize(l, 500, 320);
+        break;
     case WM_USER + 51:
         BuildLevelList();
         PopulateLevelList(hList);

@@ -1,6 +1,8 @@
 #pragma once
 #include "raylib.h"
 #include "raymath.h"
+#include "../Input/Keybinds.hpp"
+#include "../GameplayFlags.hpp"
 #include <cmath>
 
 // PlayerMovement — per-frame physics and movement state
@@ -76,8 +78,8 @@ public:
         if (dt <= 0.0f) dt = 1.0f / 60.0f;
 
         if (!inputBlocked) {
-            isCrouching = IsKeyDown(KEY_LEFT_CONTROL);
-            isSprinting = IsKeyDown(KEY_LEFT_SHIFT) && !isCrouching;
+            isCrouching = Keybinds::Down(GameAction::Crouch);
+            isSprinting = Keybinds::Down(GameAction::Sprint) && !isCrouching;
         } else {
             isSprinting = false;
         }
@@ -99,8 +101,8 @@ public:
         }
 
         Vector2 md = GetMouseDelta();
-        Yaw -= md.x * MouseSensitivity;
-        Pitch -= md.y * MouseSensitivity;
+        Yaw -= md.x * MouseSensitivity * g_mouseSensitivity;
+        Pitch -= md.y * MouseSensitivity * g_mouseSensitivity * (g_invertY ? -1.0f : 1.0f);
 
         // Gamepad right stick look (raylib's first-person camera provided this)
         float lookX = GetGamepadAxisMovement(0, GAMEPAD_AXIS_RIGHT_X);
@@ -113,10 +115,10 @@ public:
 
         // --- Move input relative to yaw ---
         float f = 0.0f, r = 0.0f;
-        if (IsKeyDown(KEY_W)) f += 1.0f;
-        if (IsKeyDown(KEY_S)) f -= 1.0f;
-        if (IsKeyDown(KEY_D)) r += 1.0f;
-        if (IsKeyDown(KEY_A)) r -= 1.0f;
+        if (Keybinds::Down(GameAction::MoveForward)) f += 1.0f;
+        if (Keybinds::Down(GameAction::MoveBack)) f -= 1.0f;
+        if (Keybinds::Down(GameAction::MoveRight)) r += 1.0f;
+        if (Keybinds::Down(GameAction::MoveLeft)) r -= 1.0f;
         float gx = GetGamepadAxisMovement(0, GAMEPAD_AXIS_LEFT_X);
         float gy = GetGamepadAxisMovement(0, GAMEPAD_AXIS_LEFT_Y);
         if (fabsf(gx) > 0.15f) r += gx;

@@ -87,7 +87,7 @@ swprintf(buf, 128, L"Collision: %d vols", collisionVols);
         wchar_t modeW[32] = L"MODEL";
         if (mode && mode[0])
             MultiByteToWideChar(CP_UTF8, 0, mode, -1, modeW, 32);
-        swprintf(buf, 128, L"Mode: %s", modeW);
+        swprintf(buf, 128, L"Mode: %ls", modeW);
         setA(g_sbMode, buf);
     }
     swprintf(buf, 128, L"%.1f %.1f %.1f", camX, camY, camZ);

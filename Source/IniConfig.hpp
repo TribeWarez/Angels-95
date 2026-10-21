@@ -18,6 +18,20 @@ public:
         data.clear();
         std::ifstream f(path);
         if (!f.is_open()) return false;
+        return ParseStream(f);
+    }
+
+    // Parse already-loaded text. Used by package-aware loaders (the character
+    // roster may live inside player.ozpak) and by headless tests, which must not
+    // depend on the process working directory.
+    bool ParseText(const std::string& text) {
+        data.clear();
+        std::istringstream f(text);
+        return ParseStream(f);
+    }
+
+private:
+    bool ParseStream(std::istream& f) {
         std::string line, currentSection;
         while (std::getline(f, line)) {
             // Trim
@@ -49,6 +63,7 @@ public:
         return true;
     }
 
+public:
     bool Save(const char* path) {
         std::ofstream f(path);
         if (!f.is_open()) return false;

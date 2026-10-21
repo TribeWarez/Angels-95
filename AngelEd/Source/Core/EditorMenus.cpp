@@ -7,47 +7,55 @@
 // single TU for AngelEd's core layer. See Wiki/Editor-Architecture-Refactor.md.
 // =============================================================================
 
+#include "../EditorKeys.hpp"
+
 static void CreateEditorMenuBar() {
 #ifdef _WIN32
     HWND hWnd = (HWND)GetWindowHandle();
     if (!hWnd) return;
+
+    // Menu hints come from the SAME table the shortcuts read, so a rebind cannot
+    // leave the menu advertising a key that no longer does anything.
+    auto menuLabel = [](const char* text, EdAction a) {
+        return std::string(text) + "\t" + EdKeys::ShortcutText(a);
+    };
 
     // Subclass the raylib/GLFW window so we can intercept menu WM_COMMAND
     g_originalWndProc = (WNDPROC)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)EditorWndProc);
 
     HMENU hMenu = CreateMenu();
     HMENU hFile = CreatePopupMenu();
-    AppendMenuA(hFile, MF_STRING, IDM_NEW, "&New\tN");
-    AppendMenuA(hFile, MF_STRING, IDM_OPEN, "&Open...\tO");
-    AppendMenuA(hFile, MF_STRING, IDM_SAVE, "&Save\tS");
-    AppendMenuA(hFile, MF_STRING, IDM_SAVE_AS, "Save &As...");
+    AppendMenuA(hFile, MF_STRING, IDM_NEW, menuLabel("&New", EdAction::New).c_str());
+    AppendMenuA(hFile, MF_STRING, IDM_OPEN, menuLabel("&Open...", EdAction::Open).c_str());
+    AppendMenuA(hFile, MF_STRING, IDM_SAVE, menuLabel("&Save", EdAction::Save).c_str());
+    AppendMenuA(hFile, MF_STRING, IDM_SAVE_AS, menuLabel("Save &As...", EdAction::SaveAs).c_str());
     AppendMenuA(hFile, MF_SEPARATOR, 0, NULL);
-    AppendMenuA(hFile, MF_STRING, IDM_PLAY_TEST, "&Play Test\tP");
+    AppendMenuA(hFile, MF_STRING, IDM_PLAY_TEST, menuLabel("&Play Test", EdAction::Play).c_str());
     AppendMenuA(hFile, MF_SEPARATOR, 0, NULL);
-    AppendMenuA(hFile, MF_STRING, IDM_EXIT, "E&xit\tQ");
+    AppendMenuA(hFile, MF_STRING, IDM_EXIT, menuLabel("E&xit", EdAction::Exit).c_str());
     AppendMenuA(hMenu, MF_POPUP, (UINT_PTR)hFile, "&File");
 
     HMENU hEdit = CreatePopupMenu();
-    AppendMenuA(hEdit, MF_STRING, IDM_UNDO, "&Undo\tCtrl+Z");
-    AppendMenuA(hEdit, MF_STRING, IDM_REDO, "&Redo\tCtrl+Y");
+    AppendMenuA(hEdit, MF_STRING, IDM_UNDO, menuLabel("&Undo", EdAction::Undo).c_str());
+    AppendMenuA(hEdit, MF_STRING, IDM_REDO, menuLabel("&Redo", EdAction::Redo).c_str());
     AppendMenuA(hMenu, MF_POPUP, (UINT_PTR)hEdit, "&Edit");
 
     HMENU hView = CreatePopupMenu();
-    AppendMenuA(hView, MF_STRING, IDM_MODEL_BRW, "Model &Browser\tF5");
-    AppendMenuA(hView, MF_STRING, IDM_SOUND_MGR, "&Sound Manager\tF6");
-    AppendMenuA(hView, MF_STRING, IDM_TEXTURE_MGR, "&Texture Manager\tF7");
-    AppendMenuA(hView, MF_STRING, IDM_PAWN_MGR, "&Pawn Manager\tF8");
-    AppendMenuA(hView, MF_STRING, IDM_SCRIPT_MGR, "&Script Manager\tF9");
+    AppendMenuA(hView, MF_STRING, IDM_MODEL_BRW, menuLabel("Model &Browser", EdAction::ModelBrowser).c_str());
+    AppendMenuA(hView, MF_STRING, IDM_SOUND_MGR, menuLabel("&Sound Manager", EdAction::SoundManager).c_str());
+    AppendMenuA(hView, MF_STRING, IDM_TEXTURE_MGR, menuLabel("&Texture Manager", EdAction::TextureManager).c_str());
+    AppendMenuA(hView, MF_STRING, IDM_PAWN_MGR, menuLabel("&Pawn Manager", EdAction::PawnManager).c_str());
+    AppendMenuA(hView, MF_STRING, IDM_SCRIPT_MGR, menuLabel("&Script Manager", EdAction::ScriptManager).c_str());
     AppendMenuA(hView, MF_SEPARATOR, 0, NULL);
     // No Zone Properties / Light Properties entries. Their per-zone rows live in
     // Entity Properties (right-click a zone or light) and their level-state rows
     // in the WorldGraph "Map (level)" row. Both old windows duplicated that state
     // in a global that Apply could silently drop.
     AppendMenuA(hView, MF_STRING, IDM_NODE_PANEL, "&Node Panel");
-    AppendMenuA(hView, MF_STRING, IDM_PICKUP_PANEL, "&Pickups\tF10");
-    AppendMenuA(hView, MF_STRING, IDM_HEIGHTMAP, "&Heightmap Editor\tH");
+    AppendMenuA(hView, MF_STRING, IDM_PICKUP_PANEL, menuLabel("&Pickups", EdAction::PickupPanel).c_str());
+    AppendMenuA(hView, MF_STRING, IDM_HEIGHTMAP, menuLabel("&Heightmap Editor", EdAction::Heightmap).c_str());
     AppendMenuA(hView, MF_SEPARATOR, 0, NULL);
-    AppendMenuA(hView, MF_STRING, IDM_WORLD_GRAPH, "&World Graph Explorer");
+    AppendMenuA(hView, MF_STRING, IDM_WORLD_GRAPH, menuLabel("World &Hierarchy", EdAction::Hierarchy).c_str());
     AppendMenuA(hView, MF_STRING, IDM_LEVEL_LIST, "Level &List / Campaign");
     AppendMenuA(hMenu, MF_POPUP, (UINT_PTR)hView, "&View");
 
@@ -63,9 +71,13 @@ static void CreateEditorMenuBar() {
 
     HMENU hSettings = CreatePopupMenu();
     AppendMenuA(hSettings, MF_STRING, IDM_FULLSCREEN, "Toggle &Fullscreen\tF11");
+    AppendMenuA(hSettings, MF_STRING, IDM_MAXIMIZE, "&Maximize Window (Windowed Full Size)");
+    AppendMenuA(hSettings, MF_SEPARATOR, 0, NULL);
+    AppendMenuA(hSettings, MF_STRING, IDM_RESET_LAYOUT, "Reset Panel &Layout");
     AppendMenuA(hMenu, MF_POPUP, (UINT_PTR)hSettings, "&Settings");
 
     HMENU hHelp = CreatePopupMenu();
+    AppendMenuA(hHelp, MF_STRING, IDM_KEYMAP, "&Keyboard Shortcuts...");
     AppendMenuA(hHelp, MF_STRING, IDM_ABOUT, "&About AngelEd");
     AppendMenuA(hMenu, MF_POPUP, (UINT_PTR)hHelp, "&Help");
 

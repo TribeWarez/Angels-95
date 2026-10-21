@@ -15,19 +15,10 @@ double now_seconds() {
     return duration_cast<duration<double>>(steady_clock::now().time_since_epoch()).count();
 }
 
-// The guaranteed default. Chosen because it is rigged and carries its own
-// embedded textures, so it cannot be broken by losing a sibling PNG.
+// The guaranteed default. Rigged and carries its own embedded textures.
 constexpr const char* kDefaultMesh = "GameData/Pawn/Player/Plague_Arcanist.glb";
-// Last rung before the placeholder. Static and tiny; kept because a 61 KB file
-// is worth having when the 4 MB default is missing.
 constexpr const char* kLegacyMesh  = "GameData/Pawn/Player/Character_Killer_01.glb";
 constexpr const char* kLegacyTex   = "GameData/Pawn/Player/Character_Killer_01.png";
-
-// Directory handed to MeshCache for relative-path resolution. Note this differs
-// from the historical `GameData/Pawn/Player/`, because the def's `mesh` is a
-// repo-root path and `ResolveMeshAsset` already passes GameData-rooted and
-// absolute paths through verbatim — pointing baseDir at the Player folder only
-// helped one of the two naming styles.
 constexpr const char* kBaseDir = "GameData/";
 
 } // namespace
@@ -39,10 +30,24 @@ PlayerModel& PlayerModel::Instance() {
     return *instance;
 }
 
-bool PlayerModel::TryResolveAsset(std::string& meshPath, std::string& texPath,
+std::string PlayerModel::ResolveId(const std::string& characterId) {
+    // Legacy profiles stored a mesh path; CharacterRoster maps that back to the
+    // entry id. Unknown ids resolve to "", which means "the Player def".
+    return angelsmenu::CharacterRoster::Instance().ResolveSelection(characterId);
+}
+
+bool PlayerModel::TryResolveAsset(const std::string& characterId,
+                                  std::string& meshPath, std::string& texPath,
                                   bool& skeletal) const {
-    // Rung 1: the authoring hook. "Player" is looked up the same way a zone's
-    // name= finds its skyzone def, so no new plumbing is needed for it.
+    // Rung 1: the character roster entry.
+    if (const angelsmenu::CharacterDef* c =
+            angelsmenu::CharacterRoster::Instance().Find(characterId)) {
+        meshPath = c->mesh;
+        texPath = c->texture;
+        skeletal = (c->meshType == "skeletal");
+        return true;
+    }
+    // Rung 2: the authoring hook on the Player def.
     if (const EntityDef* def = LightningEntityRegistry::Instance().Find("Player")) {
         if (!def->mesh.empty()) {
             meshPath = def->mesh;
@@ -51,108 +56,120 @@ bool PlayerModel::TryResolveAsset(std::string& meshPath, std::string& texPath,
             return true;
         }
     }
-    // Rungs 2 and 3. No texture is forced onto them: both carry their own
-    // materials, and a def that names a mesh without a texture would otherwise
-    // get Character_Killer_01.png smeared across every material by Mesh::Load.
+    // Rung 3: the guaranteed default.
     meshPath = kDefaultMesh;
     texPath.clear();
     skeletal = false;
     return true;
 }
 
-void PlayerModel::EnsureLoaded() {
-    if (m_tried) return;                        // resolved once; never redo it
-    if (m_retryAfter > 0.0 && now_seconds() < m_retryAfter) return;
+PlayerModel::Entry& PlayerModel::EnsureLoaded(const std::string& characterId) {
+    const std::string id = ResolveId(characterId);
 
+    auto found = m_entries.find(id);
+    if (found != m_entries.end()) {
+        Entry& existing = found->second;
+        if (existing.tried) return existing;
+        if (existing.retryAfter > 0.0 && now_seconds() < existing.retryAfter)
+            return existing;
+    }
+
+    Entry e;
     std::string meshPath, texPath;
     bool skeletal = false;
-    TryResolveAsset(meshPath, texPath, skeletal);
+    TryResolveAsset(id, meshPath, texPath, skeletal);
 
-    m_mesh = skeletal
+    e.mesh = skeletal
         ? MeshCache::Instance().GetSkeletal(meshPath, texPath, kBaseDir, true)
         : MeshCache::Instance().GetStatic(meshPath, texPath, kBaseDir, true);
 
-    if (m_mesh && m_mesh->Valid()) {
-        m_skel = dynamic_cast<SkeletalMesh*>(m_mesh.get());
-        m_tried = true;
-        m_sourcePath = meshPath;
-        OZ_INFO("PlayerModel: using '%s' (%s)", meshPath.c_str(),
-                (m_skel && m_skel->ClipCount() > 0) ? "skeletal" : "static");
-        return;
+    if (e.mesh && e.mesh->Valid()) {
+        e.skel = dynamic_cast<SkeletalMesh*>(e.mesh.get());
+        e.tried = true;
+        e.sourcePath = meshPath;
+        OZ_INFO("PlayerModel[%s]: using '%s' (%s)",
+                id.empty() ? "default" : id.c_str(), meshPath.c_str(),
+                (e.skel && e.skel->ClipCount() > 0) ? "skeletal" : "static");
+        m_entries[id] = std::move(e);
+        return m_entries[id];
     }
 
-    // Rung 2 failed. Walk down to the legacy asset rather than giving up: the
-    // point of this class is that a remote player is always a model, not a
-    // capsule, and a 61 KB fallback costs nothing.
-    m_mesh.reset();
-    m_skel = nullptr;
-    m_mesh = MeshCache::Instance().GetStatic(kLegacyMesh, kLegacyTex, kBaseDir, true);
-    if (m_mesh && m_mesh->Valid()) {
-        m_skel = dynamic_cast<SkeletalMesh*>(m_mesh.get());
-        m_tried = true;
-        m_sourcePath = kLegacyMesh;
+    // A named character that fails to load must not become a capsule. Fall back
+    // to the default asset, but keep the failure rate-limited so a missing file
+    // costs one probe per retry interval rather than one per frame.
+    if (!id.empty()) {
+        if (m_unknownReported.insert(id).second)
+            OZ_WARN("PlayerModel: character '%s' failed to load '%s' — using the default model",
+                    id.c_str(), meshPath.c_str());
+        // IMPORTANT: this may insert into m_entries and rehash it, so do not
+        // hold a reference to any map element across the call.
+        Entry fallback = EnsureLoaded({});
+        e.mesh = fallback.mesh;
+        e.skel = fallback.skel;
+        e.tried = (fallback.mesh && fallback.mesh->Valid());
+        e.sourcePath = fallback.sourcePath;
+        if (!e.tried) e.retryAfter = now_seconds() + kRetryInterval;
+        m_entries[id] = std::move(e);
+        return m_entries[id];
+    }
+
+    // Default failed: walk down to the legacy asset.
+    e.mesh = MeshCache::Instance().GetStatic(kLegacyMesh, kLegacyTex, kBaseDir, true);
+    if (e.mesh && e.mesh->Valid()) {
+        e.skel = dynamic_cast<SkeletalMesh*>(e.mesh.get());
+        e.tried = true;
+        e.sourcePath = kLegacyMesh;
         OZ_WARN("PlayerModel: '%s' unavailable — fell back to '%s'",
                 meshPath.c_str(), kLegacyMesh);
-        return;
+        m_entries[id] = std::move(e);
+        return m_entries[id];
     }
-    m_mesh.reset();
-    m_skel = nullptr;
-
-    // Nothing loaded. Do NOT latch: back off and try again, so a def that
-    // registers after this frame heals on its own (it produces a different
-    // MeshCache key, so it is not shadowed by the negative entry cached above).
-    // A file that was merely missing from disk stays missing until the path
-    // changes — MeshCache caches negative results, and clearing that cache
-    // mid-session is not worth it for an asset the build ships.
-    m_retryAfter = now_seconds() + kRetryInterval;
+    e.mesh.reset();
+    e.skel = nullptr;
+    e.retryAfter = now_seconds() + kRetryInterval;
     OZ_WARN("PlayerModel: no player model (tried '%s' then '%s') — placeholder in use; retrying in %.1fs",
             meshPath.c_str(), kLegacyMesh, kRetryInterval);
+    m_entries[id] = std::move(e);
+    return m_entries[id];
 }
 
-Mesh* PlayerModel::Get() {
-    EnsureLoaded();
-    return (m_mesh && m_mesh->Valid()) ? m_mesh.get() : nullptr;
+Mesh* PlayerModel::Get(const std::string& characterId) {
+    Entry& e = EnsureLoaded(characterId);
+    return (e.mesh && e.mesh->Valid()) ? e.mesh.get() : nullptr;
 }
 
-SkeletalMesh* PlayerModel::Skeletal() {
-    Get();
-    return (m_skel && m_skel->ClipCount() > 0) ? m_skel : nullptr;
+SkeletalMesh* PlayerModel::Skeletal(const std::string& characterId) {
+    Entry& e = EnsureLoaded(characterId);
+    return (e.skel && e.skel->ClipCount() > 0) ? e.skel : nullptr;
 }
 
-bool PlayerModel::Ready() {
-    return Get() != nullptr;
+bool PlayerModel::Ready(const std::string& characterId) {
+    return Get(characterId) != nullptr;
 }
 
-float PlayerModel::NormalisedScale(float targetHeight) const {
-    if (!m_mesh || !m_mesh->Valid()) return 1.0f;
-    const BoundingBox& b = m_mesh->Bounds();
+float PlayerModel::NormalisedScale(const std::string& characterId, float targetHeight) {
+    Entry& e = EnsureLoaded(characterId);
+    if (!e.mesh || !e.mesh->Valid()) return 1.0f;
+    const BoundingBox& b = e.mesh->Bounds();
     const float h = b.max.y - b.min.y;
-    // A zero/negative extent means the mesh has no usable vertical span (a flat
-    // card, or bounds we never measured). Fall back to unscaled rather than
-    // dividing by something near zero and launching the player into orbit.
     if (h <= 0.0001f) return 1.0f;
     return targetHeight / h;
 }
 
-void PlayerModel::DrawInstance(const MeshTransform& t, Shader litShader,
-                               int animClip, float animTime) {
-    Mesh* mesh = Get();
-    if (!mesh) return;
-
-    if (animClip >= 0 && m_skel && m_skel->ClipCount() > 0)
-        m_skel->ApplyPose(animClip, animTime);
-
+void PlayerModel::DrawInstance(const std::string& characterId, const MeshTransform& t,
+                               Shader litShader, int animClip, float animTime) {
+    Entry& e = EnsureLoaded(characterId);
+    if (!e.mesh || !e.mesh->Valid()) return;
+    if (animClip >= 0 && e.skel && e.skel->ClipCount() > 0)
+        e.skel->ApplyPose(animClip, animTime);
     MeshTransform mt = t;
     mt.yaw += kFacingOffsetDeg;
-    mesh->Draw(mt, litShader);
+    e.mesh->Draw(mt, litShader);
 }
 
 void PlayerModel::Invalidate() {
-    m_mesh.reset();
-    m_skel = nullptr;
-    m_tried = false;
-    m_retryAfter = 0.0;
-    m_sourcePath.clear();
+    m_entries.clear();
+    m_unknownReported.clear();
 }
 
 } // namespace oz

@@ -176,7 +176,7 @@ struct ModelBounds {
 // numbers, names) are not paths and must not be reported.
 bool isAssetRefKey(const std::string& k) {
     static const char* kKeys[] = {
-        "icon", "mesh", "mesh_override", "texture",
+        "icon", "mesh", "mesh_override", "texture", "portrait",
         "model_path", "model_texture", "sprite_path", "scream_path",
         "fire_sound", "swing_sound", "hit_sound", "reload_sound", "equip_sound",
         "cast_sound", "jump_sound", "land_sound", "walk_sound", "run_sound",

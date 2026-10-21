@@ -54,6 +54,9 @@ static LRESULT CALLBACK NodePanelProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
         }
         break;
     }
+    case WM_GETMINMAXINFO:
+        EnforceMinTrackSize(l, 230, 250);
+        break;
     case WM_CLOSE:
         ShowNodePanel(false);
         break;

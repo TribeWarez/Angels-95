@@ -4,6 +4,7 @@
 #include "Client/JoinUri.hpp"
 #include "Network/NetworkSession.hpp"
 #include "PlayerProfile.hpp"
+#include "Menu/CharacterRoster.hpp"
 #include "Renderer/OzAssetMapper.hpp"
 #include "Audio/SoundManager.hpp"
 #include "World/OzOzoneLoader.hpp"
@@ -86,6 +87,14 @@ Texture2D g_skySideTex = {0};   // optional horizon/side skybox variant
 bool SetServerJoinFlag = false;
 const char *SetServerJoinIP = nullptr;
 int SetServerJoinPort = 27015;
+
+// Set by the title/pause menu's Quit. The outer loop checks this and falls
+// through to the single teardown block + CloseWindow at the end of main().
+bool g_quitRequested = false;
+
+// World name restored from POS.sav (the field appended after level). Empty when
+// the save predates the field or no save exists.
+std::string g_savedWorldName;
 
 void LoadSave();
 void SaveGame();
@@ -650,6 +659,20 @@ void OmegaTechInit()
     // Initialize LightningScript entity system
     LightningEntityRegistry::Instance().Init();
     LightningEntityManager::Instance().Init();
+
+    // Player character roster (GameData/Pawn/Player/characters.cfg, packed by
+    // player.ozpak). Loaded after the package loader so a release install reads
+    // the packaged copy; warnings name every skipped entry.
+    {
+        std::string rosterText =
+            LoadFileTextWithFallback("GameData/Pawn/Player/characters.cfg");
+        auto& roster = angelsmenu::CharacterRoster::Instance();
+        roster.LoadFromText(rosterText);
+        for (const auto& warning : roster.Warnings())
+            OZ_WARN("CharacterRoster: %s", warning.c_str());
+        if (!roster.Loaded())
+            OZ_WARN("CharacterRoster: no characters.cfg entries; the Player def is the default");
+    }
     // Phase 2: load the Angels95 game hierarchy (: game / : campaign / : sector
     // / : mission) now that the registry has parsed every .ozls def.
     oz::game::GameManager::Instance().Init();
@@ -990,9 +1013,21 @@ inline void HandleBorderlessWindowDrag() {
 // refusal is only useful if it can be found: the old POSIX branch redirected
 // the child to /dev/null, and a `start /B` child of a Windows GUI parent has
 // no console to inherit.
-void LaunchHostedServer(int serverPort, const char* missionOrNull)
+bool LaunchHostedServer(int serverPort, const char* missionOrNull,
+                        const char* worldOrNull = nullptr,
+                        const char* serverNameOrNull = nullptr)
 {
     std::string args = "--port " + std::to_string(serverPort) + " --dir GameData";
+    if (worldOrNull && worldOrNull[0]) {
+        args += " --world \"";
+        args += worldOrNull;
+        args += "\"";
+    }
+    if (serverNameOrNull && serverNameOrNull[0]) {
+        args += " --server-name \"";
+        args += serverNameOrNull;
+        args += "\"";
+    }
     // Co-op host: pin the campaign arc to the mission picked in the Co-op pane
     // or named on the CLI. Quoted because the name is author-supplied and the
     // command line goes through cmd/sh.
@@ -1040,13 +1075,15 @@ void LaunchHostedServer(int serverPort, const char* missionOrNull)
     if (!std::filesystem::exists(exePath, exeStatError)) {
         OZ_ERROR("Failed to launch %s: '%s' not found (run the build, or start "
                  "from the directory the run scripts use)", exeName, exePath.c_str());
-        return;
+        return false;
     }
-    if (std::system(cmd.c_str()) == 0)
+    if (std::system(cmd.c_str()) == 0) {
         OZ_INFO("Launched %s on port %d (child output appends to System/HostedServer.log)",
                 exeName, serverPort);
-    else
-        OZ_ERROR("Failed to launch %s (see System/HostedServer.log)", exeName);
+        return true;
+    }
+    OZ_ERROR("Failed to launch %s (see System/HostedServer.log)", exeName);
+    return false;
 }
 
 void PlayHomeScreen()
@@ -1064,11 +1101,28 @@ void PlayHomeScreen()
         return;
     }
 
-    TitleMenu menu;
+    // The title track is stopped when the menu is left. On a return to the menu
+    // nothing restarted it, so the title screen was silent after the first game.
+    SoundManager::Instance().PlayStream(OmegaTechData.HomeScreenMusic);
+    // Returning from a game leaves the cursor captured/hidden. The title screen
+    // is mouse-driven, so undo that here rather than relying on the previous
+    // menu path.
+    ShowCursor();
+    EnableCursor();
 
+    TitleMenu menu;
+    if (g_menuShotPage >= 0) menu.SetStartPage(g_menuShotPage);
+
+    int menuShotFrames = 0;
     while (!menu.Tick() && !WindowShouldClose())
     {
         HandleBorderlessWindowDrag();
+        if (g_menuShotPage >= 0 && ++menuShotFrames >= g_menuShotFrames)
+        {
+            if (!g_menuShotOut.empty()) TakeScreenshot(g_menuShotOut.c_str());
+            g_quitRequested = true;
+            break;
+        }
     }
 
     SoundManager::Instance().StopStream(OmegaTechData.HomeScreenMusic);
@@ -1080,6 +1134,12 @@ void PlayHomeScreen()
         OmegaTechData.HomeScreenVideo = ray_video_t{};
     }
 
+    if (menu.ShouldQuit())
+    {
+        g_quitRequested = true;
+        return;
+    }
+
     if (menu.ShouldLoadGame() || menu.GetSelectedWorld())
     {
         UnloadRenderTexture(Target);
@@ -1087,10 +1147,44 @@ void PlayHomeScreen()
         OmegaTechData.Deaths = 1;
     }
 
+    if (menu.ShouldLoadGame())
+    {
+        // Load inventory/flags/campaign state first: it also restores the saved
+        // camera position. The world must be named explicitly, because the old
+        // path only set LoadFlag (never read) and then loaded whatever
+        // g_world_to_load happened to hold — at startup, EngineTest.
+        LoadSave();
+        if (!menu.IsCampaignContinue() && !g_savedWorldName.empty())
+        {
+            strncpy(g_world_to_load, g_savedWorldName.c_str(), sizeof(g_world_to_load) - 1);
+            g_world_to_load[sizeof(g_world_to_load) - 1] = '\0';
+        }
+        // The camera position in POS.sav belongs to the world that was saved.
+        // A campaign continue may resolve to a different mission world (the
+        // campaign save wins over the practice save), so only trust the saved
+        // position when the worlds agree; otherwise use the mission's spawn.
+        const char* contWorld = menu.GetSelectedWorld();
+        if (menu.IsCampaignContinue() &&
+            (!contWorld || g_savedWorldName.empty() || g_savedWorldName != contWorld)) {
+            SetCameraFlag = false;
+        }
+    }
+
     if (menu.GetSelectedWorld())
     {
+        // Campaign mission launch: record the active mission before LoadWorld,
+        // so SaveGame (called from LoadWorld) writes the mission the player
+        // actually chose instead of the previous session's.
+        if (!menu.ShouldStartServer() && menu.GetSelectedMission() &&
+            oz::game::GameManager::Instance().Loaded()) {
+            oz::game::GameManager::Instance().SetActiveMission(menu.GetSelectedMission());
+        }
         strncpy(g_world_to_load, menu.GetSelectedWorld(), sizeof(g_world_to_load) - 1);
         g_world_to_load[sizeof(g_world_to_load) - 1] = '\0';
+    }
+    else if (menu.ShouldLoadGame() && g_savedWorldName.empty())
+    {
+        OZ_WARN("Continue: the save has no world; staying in '%s'", g_world_to_load);
     }
 
     if (menu.ShouldJoinServer())
@@ -1120,16 +1214,16 @@ void PlayHomeScreen()
     {
         int port = menu.GetJoinPort();
         if (port <= 0 || port > 65535) port = 27015;
-        SetServerJoinIP = "127.0.0.1";
-        SetServerJoinPort = port;
-        SetServerJoinFlag = true;
-        // Co-op host: pin the campaign arc to the mission picked in the Co-op
-        // pane. The server resolves the name through its own GameManager and
-        // refuses to start on an unknown one, so a stale selection surfaces as
-        // a loud failure (see System/HostedServer.log) instead of dropping the
-        // players into the wrong level. LaunchHostedServer is the single
-        // spawn path — the CLI --host / --host-mission flags share it.
-        LaunchHostedServer(port, menu.GetCoopMission());
+        // Co-op host pins a mission; plain host pins a world. Both go through
+        // the single spawn path shared with --host / --host-mission.
+        if (LaunchHostedServer(port, menu.GetCoopMission(), menu.GetSelectedWorld(),
+                               menu.GetHostServerName())) {
+            SetServerJoinIP = "127.0.0.1";
+            SetServerJoinPort = port;
+            SetServerJoinFlag = true;
+        } else {
+            OZ_ERROR("Host: server launch failed; staying offline");
+        }
     }
 
     OmegaTechData.Deaths = 1;
@@ -1402,7 +1496,8 @@ void SaveGame()
     wstring Position = to_wstring(OmegaTechData.MainCamera.position.x) + L':' +
                        to_wstring(OmegaTechData.MainCamera.position.y) + L':' +
                        to_wstring(OmegaTechData.MainCamera.position.z) + L':' +
-                       to_wstring(OmegaTechData.LevelIndex) + L':';
+                       to_wstring(OmegaTechData.LevelIndex) + L':' +
+                       wstring(g_world_to_load, g_world_to_load + strlen(g_world_to_load)) + L':';
 
     wofstream Outfile1;
     Outfile1.open("GameData/Saves/POS.sav");
@@ -1418,6 +1513,8 @@ void SaveGame()
 
 void LoadSave()
 {
+    g_savedWorldName.clear();
+
     // Campaign state (active mission).
     {
         std::ifstream cf("GameData/Saves/Campaign.sav");
@@ -1509,13 +1606,25 @@ void LoadSave()
             OmegaTechData.LevelIndex = 1;
         }
 
+        // The world field was appended after level. A save without it is the
+        // legacy format; g_savedWorldName stays empty and the caller falls back
+        // to the campaign mission or the current world.
+        wstring savedWorld = WSplitValue(Position, 4);
+        g_savedWorldName.clear();
+        for (wchar_t wc : savedWorld) {
+            if (wc == L':' || wc == L'\r' || wc == L'\n') break;
+            if (wc < 128) g_savedWorldName.push_back((char)wc);
+        }
+
         SetCameraFlag = true;
 
         try {
-            int X = ToFloat(WSplitValue(Position, 0));
-            int Y = ToFloat(WSplitValue(Position, 1));
-            int Z = ToFloat(WSplitValue(Position, 2));
-            SetCameraPos = {float(X), float(Y), float(Z)};
+            // Keep the authored float precision. This used to cast to int, so a
+            // save/continue round-trip moved the player by up to a unit.
+            float X = ToFloat(WSplitValue(Position, 0));
+            float Y = ToFloat(WSplitValue(Position, 1));
+            float Z = ToFloat(WSplitValue(Position, 2));
+            SetCameraPos = {X, Y, Z};
         } catch (...) {
             SetCameraPos = {0.0f, 10.0f, 0.0f};
         }

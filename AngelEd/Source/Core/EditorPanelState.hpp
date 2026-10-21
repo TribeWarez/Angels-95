@@ -87,6 +87,7 @@ struct EditorPanelState {
     // faces the current selection covers (a bitmask, so "(3 Selected)" is just a
     // popcount); Apply writes to every one of them.
     bool showSurfaceProps = false;
+    bool showKeymap = false;   // Help -> Keyboard Shortcuts
     int  surfaceRenderable = -1;      // OzoneRenderable index
     uint32_t surfaceFaceMask = 0;     // bitmask of SurfaceFace
     // Write surface.def (the brush-wide default) instead of the faces in the mask.
@@ -113,6 +114,10 @@ struct EditorPanelState {
     // currently is; collapsing them would either lose the reset or commit a brush
     // the user never positioned.
     int currentToolMode = 0;    // persistent tool mode: 0=cam,1=move,2=scale,3=rotate
+    // Gizmo snapping. 0 = off. Ctrl forces 1.0, Shift forces 0.1 regardless.
+    // The toolbar shows/cycles this so snapping is discoverable, not a hidden key.
+    float gizmoSnap = 0.0f;
+    float gizmoAngleSnap = 15.0f;   // degrees; Shift = 1 degree
 
     // Terrain editing
     int terrainBrushMode = 0;       // 0=raise, 1=lower, 2=flatten
@@ -160,6 +165,10 @@ struct EditorPanelState {
     // therefore showed one "Map (level)" row and stayed wrong until Refresh was pressed
     // by hand. Mutations set this; the frame loop consumes it once per frame.
     bool worldGraphDirty = false;
+    // One-shot: centre the camera on the current selection. Set by the World
+    // Hierarchy's "Frame Selection" item and consumed by the frame loop. This is
+    // live state, not a mutation: the UI never touches the camera directly.
+    bool focusSelection = false;
     // (the actionSelectFromGraph* fields moved to ed::Event SelectEntity — see above)
 
     // LevelList / Campaign panel
@@ -416,6 +425,7 @@ struct DefStatRow {
     void* hLevelList = nullptr;
     void* hAnimPanel = nullptr;
     void* hSurfaceProps = nullptr;
+    void* hKeymap = nullptr;
 
     // Preview bitmap (Windows only)
     void* hPreviewBitmap = nullptr;
@@ -438,6 +448,7 @@ WinPos propsPanelPos = {300, 120, 540, 560};
     WinPos levelListPos = {200, 120, 560, 420};
     WinPos animPanelPos  = {430, 180, 380, 390};
     WinPos surfacePropsPos = {760, 140, 520, 440};
+    WinPos keymapPos = {420, 240, 520, 420};
 #endif
 };
 

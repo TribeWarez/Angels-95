@@ -1,5 +1,6 @@
 #include "Network.hpp"
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -86,6 +87,7 @@ const char* message_type_string(MessageType type) {
         case MessageType::PICKUP_RESYNC:   return "PICKUP_RESYNC";
         case MessageType::REQUEST_WORLD:    return "REQUEST_WORLD";
         case MessageType::WORLD_CHANGE:     return "WORLD_CHANGE";
+        case MessageType::PLAYER_PROFILE:   return "PLAYER_PROFILE";
         case MessageType::WEAPON_AMMO:      return "WEAPON_AMMO";
         case MessageType::SERVER_CHALLENGE: return "SERVER_CHALLENGE";
         case MessageType::CLIENT_AUTH:      return "CLIENT_AUTH";
@@ -159,6 +161,18 @@ std::string SanitizeAssetRef(const std::string& raw, size_t max_len) {
         }
     }
     TrimAsciiSpace(out);
+    return out;
+}
+
+std::string SanitizeCharacterId(const std::string& raw, size_t max_len) {
+    if (raw.empty() || max_len == 0) return "";
+    if (raw.size() > max_len) return "";
+    std::string out;
+    out.reserve(raw.size());
+    for (unsigned char c : raw) {
+        if (!(std::isalnum(c) || c == '_' || c == '-')) return "";
+        out.push_back(static_cast<char>(c));
+    }
     return out;
 }
 
@@ -1029,7 +1043,10 @@ bool NetworkDiscovery::parse_response(const char* response,
                                       std::string& out_version,
                                       uint32_t& out_cur_players,
                                       uint32_t* out_max_players,
-                                      uint16_t* out_port) {
+                                      uint16_t* out_port,
+                                      std::string* out_map,
+                                      uint16_t* out_http_port,
+                                      bool* out_password) {
     if (!response) return false;
 
     const char* prefix = "OZRESPONSE";
@@ -1050,14 +1067,50 @@ bool NetworkDiscovery::parse_response(const char* response,
     end = std::strchr(p, ':');
     if (!end) return false;
     std::string sport(p, end - p);
-    uint16_t port = static_cast<uint16_t>(std::stoul(sport));
+    uint16_t port = 0;
+    try {
+        unsigned long v = std::stoul(sport);
+        if (v > 65535) return false;
+        port = static_cast<uint16_t>(v);
+    } catch (...) {
+        return false;
+    }
     if (out_port) *out_port = port;
     p = end + 1;
 
     uint32_t cur = 0, max = 0;
-    std::sscanf(p, "%u/%u", &cur, &max);
+    int consumed = 0;
+    if (std::sscanf(p, "%u/%u%n", &cur, &max, &consumed) < 2) return false;
     out_cur_players = cur;
     if (out_max_players) *out_max_players = max;
+
+    // Optional forward-compatible tail. Old servers stop after players/max, so
+    // every field here is optional; an unknown or malformed key is ignored.
+    if (out_map) out_map->clear();
+    if (out_http_port) *out_http_port = 0;
+    if (out_password) *out_password = false;
+    const char* tail = p + consumed;
+    while (tail && *tail == ';') {
+        ++tail;
+        const char* eq = std::strchr(tail, '=');
+        if (!eq) break;
+        const std::string key(tail, eq - tail);
+        const char* valueStart = eq + 1;
+        const char* valueEnd = std::strchr(valueStart, ';');
+        const std::string value = valueEnd ? std::string(valueStart, valueEnd - valueStart)
+                                           : std::string(valueStart);
+        if (key == "http" && out_http_port) {
+            try {
+                unsigned long v = std::stoul(value);
+                if (v <= 65535) *out_http_port = static_cast<uint16_t>(v);
+            } catch (...) {}
+        } else if (key == "map" && out_map) {
+            *out_map = value;
+        } else if (key == "pw" && out_password) {
+            *out_password = (value == "1" || value == "true");
+        }
+        tail = valueEnd;
+    }
 
     return true;
 }
@@ -1069,12 +1122,24 @@ void NetworkDiscovery::handle_datagram(char* buf, size_t len, uint32_t sender_ad
         // Server mode: answer probes (and other servers' announces) with our details,
         // sent back to the probe's source port.
         if (m_game_port == 0) return;
-        char reply[192];
+        auto clean = [](const std::string& in) {
+            std::string out;
+            for (unsigned char c : in) {
+                if (c >= 0x20 && c != 0x7F && c != ':' && c != ';') out.push_back((char)c);
+            }
+            return out;
+        };
+        const std::string safeName = clean(m_game_name);
+        const std::string safeVer = clean(m_game_version);
+        const std::string safeMap = clean(m_server_map);
+        char reply[384];
         int rlen = snprintf(reply, sizeof(reply),
-                            "OZRESPONSE:%s:%s:%u:%u/%u",
-                            m_game_name.c_str(), m_game_version.c_str(),
+                            "OZRESPONSE:%s:%s:%u:%u/%u;http=%u;map=%s;pw=%d",
+                            safeName.c_str(), safeVer.c_str(),
                             (unsigned)m_game_port,
-                            m_current_players, m_max_players);
+                            m_current_players, m_max_players,
+                            (unsigned)m_http_port, safeMap.c_str(),
+                            m_has_password ? 1 : 0);
         if (rlen > 0) {
             struct sockaddr_in to;
             memset(&to, 0, sizeof(to));
@@ -1092,7 +1157,8 @@ void NetworkDiscovery::handle_datagram(char* buf, size_t len, uint32_t sender_ad
         DiscoveredServer entry;
         uint32_t cur = 0, max = 0;
         uint16_t port = 0;
-        if (parse_response(buf, entry.name, entry.version, cur, &max, &port)) {
+        if (parse_response(buf, entry.name, entry.version, cur, &max, &port,
+                           &entry.map, &entry.http_port, &entry.password)) {
             entry.cur_players = cur;
             entry.max_players = max;
             entry.port = port;
@@ -1112,6 +1178,9 @@ void NetworkDiscovery::handle_datagram(char* buf, size_t len, uint32_t sender_ad
                     d.version = entry.version;
                     d.cur_players = entry.cur_players;
                     d.max_players = entry.max_players;
+                    d.map = entry.map;
+                    d.http_port = entry.http_port;
+                    d.password = entry.password;
                     return;
                 }
             }

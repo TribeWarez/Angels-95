@@ -52,13 +52,13 @@ void CreateNativeMenuBar(const MenuBarCallbacks& callbacks) {
 
     HMENU hMenuBar = CreateMenu();
     HMENU hFileMenu = CreatePopupMenu();
-    AppendMenuA(hFileMenu, MF_STRING, kIdmFileLoad, "&Load World...");
+    AppendMenuA(hFileMenu, MF_STRING, kIdmFileLoad, "&Restart World");
     AppendMenuA(hFileMenu, MF_STRING, kIdmFileSave, "&Save Game");
     AppendMenuA(hFileMenu, MF_SEPARATOR, 0, NULL);
     AppendMenuA(hFileMenu, MF_STRING, kIdmFileQuit, "&Quit");
     AppendMenuA(hMenuBar, MF_POPUP, (UINT_PTR)hFileMenu, "&File");
     HMENU hSettingsMenu = CreatePopupMenu();
-    AppendMenuA(hSettingsMenu, MF_STRING, kIdmSettings, "&Developer Settings...");
+    AppendMenuA(hSettingsMenu, MF_STRING, kIdmSettings, "&Settings...");
     AppendMenuA(hMenuBar, MF_POPUP, (UINT_PTR)hSettingsMenu, "&Settings");
     HMENU hAboutMenu = CreatePopupMenu();
     AppendMenuA(hAboutMenu, MF_STRING, kIdmAbout, "&About Angels95...");
@@ -68,7 +68,7 @@ void CreateNativeMenuBar(const MenuBarCallbacks& callbacks) {
 
 void ShowAboutDialog() {
     MessageBoxA(NULL,
-        "Angels95 v1.0\nOzWorld GameEngine Engine\nBased on OmegaTech\nTribeWarez 2026",
+        "Angels95 v0.2.1\nOmegaTech Engine (OzWorld)\nraylib 5.5  //  C++20\nTribeWarez 2026",
         "About Angels95", MB_OK | MB_ICONINFORMATION);
 }
 

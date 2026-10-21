@@ -1,4 +1,5 @@
 #include "PlayerPhysics.hpp"
+#include "../Input/Keybinds.hpp"
 
 namespace oz {
 namespace physics {
@@ -33,8 +34,8 @@ void PlayerPhysics::UpdateFlyVertical(Camera3D& cam, float baseSpeed, const Phys
     // restricted-flight caller (spectate, dead, a zone that disables ascent)
     // something that actually works.
     float vy = 0.0f;
-    if (allowUp && IsKeyDown(KEY_SPACE)) vy += 1.0f;
-    if (allowDown && IsKeyDown(KEY_LEFT_CONTROL)) vy -= 1.0f;
+    if (allowUp && Keybinds::Down(GameAction::Jump)) vy += 1.0f;
+    if (allowDown && Keybinds::Down(GameAction::Crouch)) vy -= 1.0f;
     cam.position.y += vy * baseSpeed * phys.flySpeedMult * dt;
 }
 
@@ -44,7 +45,7 @@ void PlayerPhysics::UpdateWaterVertical(Camera3D& cam, Motion& motion, float sav
     (void)eyeHeight;
     cam.position.y = savedCamY;
 
-    if (IsKeyPressed(KEY_SPACE) && !swimBlocked)
+    if (Keybinds::Pressed(GameAction::Jump) && !swimBlocked)
         motion.velocityY = phys.swimUpSpeed;
 
     if (!motion.onGround) {
@@ -64,9 +65,9 @@ void PlayerPhysics::UpdateLadderVertical(Camera3D& cam, Motion& motion, float sa
     if (uiBlocked)
         return;
 
-    if (IsKeyDown(KEY_W))
+    if (Keybinds::Down(GameAction::MoveForward))
         cam.position.y += phys.ladderSpeed * dt;
-    if (IsKeyDown(KEY_S))
+    if (Keybinds::Down(GameAction::MoveBack))
         cam.position.y -= phys.ladderSpeed * dt;
 }
 
@@ -74,7 +75,7 @@ void PlayerPhysics::UpdateGroundVertical(Camera3D& cam, Motion& motion, float sa
                                          bool jumpBlocked, const PhysicsInfo& phys, float dt) {
     cam.position.y = savedCamY;
 
-    if (IsKeyPressed(KEY_SPACE) && motion.onGround && !jumpBlocked) {
+    if (Keybinds::Pressed(GameAction::Jump) && motion.onGround && !jumpBlocked) {
         motion.velocityY = phys.jumpSpeed;
         motion.onGround = false;
     }

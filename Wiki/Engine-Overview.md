@@ -113,10 +113,16 @@ Angels95/
       DspReverb.hpp          # Schroeder reverb DSP (master mix)
 
     Menu/
-      TitleMenu.hpp          # Title/home screen menu
-      InternetBrowser.hpp    # Async Internet server browser
+      TitleMenu.hpp          # Single-shell title menu (pages + actions)
+      MenuMetrics.hpp        # Responsive layout math (raylib-free, tested)
+      MenuStyle.hpp          # Shared palette/widgets with the in-game panel
+      CharacterRoster.hpp    # characters.cfg parser (raylib-free, tested)
+      CharacterPreview.hpp   # Real model portraits + live 3D preview
+      ServerBrowserModel.hpp # LAN/internet merge, sort/filter/favourites (tested)
+      PauseMenu.hpp          # In-game pause overlay (shared metrics/style)
+      InternetBrowser.hpp    # Async Internet server browser (parallel probes)
       SkillTree.hpp          # Ethereal skill tree (b78)
-      SettingsMenu.hpp       # Settings menu
+      SettingsMenu.hpp       # In-game settings panel (shared player settings)
 
     UI/
       UiHandler.cpp/.hpp     # Win32 native menu bar (oz::ui::CreateNativeMenuBar)

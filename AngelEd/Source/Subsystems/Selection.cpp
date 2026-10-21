@@ -475,8 +475,19 @@ PlayerStartNode* FindPlayerStartById(int id) {
     return nullptr;
 }
 
-void SnapGizmoToSelection(const EditorSelection& sel) {
-    OmegaTechEditor.X = sel.pos.x;
+// Centre the camera on the current selection. Distance and direction are kept,
+// so this reads as "look here" rather than as a view reset. The World Hierarchy
+// exposes it as Frame Selection on a row.
+void FocusSelectionInViewport() {
+    if (g_sel.type == SelType::NONE) return;
+    Vector3 p = g_sel.pos;
+    Vector3 delta = Vector3Subtract(OTEditor.MainCamera.position, OTEditor.MainCamera.target);
+    if (Vector3Length(delta) < 0.001f) delta = {8.0f, 8.0f, 8.0f};
+    OTEditor.MainCamera.target = p;
+    OTEditor.MainCamera.position = Vector3Add(p, delta);
+}
+
+void SnapGizmoToSelection(const EditorSelection& sel) {    OmegaTechEditor.X = sel.pos.x;
     OmegaTechEditor.Y = sel.pos.y;
     OmegaTechEditor.Z = sel.pos.z;
     OmegaTechEditor.S = sel.scale > 0.01f ? sel.scale : 1.0f;

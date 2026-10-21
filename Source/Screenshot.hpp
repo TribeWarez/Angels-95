@@ -33,6 +33,13 @@ struct ShotCam {
     float pitch = 0;            // degrees, positive = look up
 };
 
+// Developer menu capture (--menu-shot). Separate from ScreenshotSession because
+// it runs the REAL title menu, not the world renderer. Page ids:
+// 0 Home, 1 Play, 2 Multiplayer, 3 Character, 4 Settings. -1 = off.
+inline int g_menuShotPage = -1;
+inline std::string g_menuShotOut;
+inline int g_menuShotFrames = 10;
+
 struct ScreenshotSession {
     bool active = false;
     std::string outPath;               // base .png path
