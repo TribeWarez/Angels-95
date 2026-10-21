@@ -184,6 +184,17 @@ if (-not $status) {
     exit 0
 }
 
+# A headless runner has no git identity, and `git commit` then dies with
+# "Author identity unknown" BEFORE the push - which looks like an auth failure if
+# you only read the exit code. Scope the fallback to this temp clone so a
+# developer's own identity is never touched.
+$identEmail = (& git -C $work config user.email) 2>$null
+if (-not $identEmail) {
+    Write-Host 'No git identity configured - setting one on the temp clone only.'
+    Invoke-Git @('-C', $work, 'config', 'user.name', 'angels95-wiki-sync')
+    Invoke-Git @('-C', $work, 'config', 'user.email', 'wiki-sync@users.noreply.github.com')
+}
+
 if (-not $Message) { $Message = 'docs: sync wiki with the tracked Wiki/ folder' }
 Invoke-Git @('-C', $work, 'commit', '-m', $Message)
 
@@ -196,5 +207,17 @@ if ($DryRun) {
     exit 0
 }
 
-Invoke-Git @('-C', $work, 'push', 'origin', 'HEAD:master')
+try {
+    Invoke-Git @('-C', $work, 'push', 'origin', 'HEAD:master')
+} catch {
+    # The wiki is a sibling repository. GITHUB_TOKEN is scoped to THIS one and is
+    # commonly refused here; say what actually fixes it instead of leaving a bare
+    # "exit code 128" and a stale wiki.
+    Write-Host ''
+    Write-Host 'Wiki push failed. The wiki lives in its own repository'
+    Write-Host '(<repo>.wiki.git), which GITHUB_TOKEN often cannot write to.'
+    Write-Host 'Add a fine-grained PAT with "Contents: read and write" as the'
+    Write-Host 'repository secret WIKI_TOKEN, then re-run the workflow.'
+    throw
+}
 Write-Host 'Wiki published.'
