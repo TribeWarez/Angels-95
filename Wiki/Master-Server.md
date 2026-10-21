@@ -13,6 +13,12 @@ mirroring the classic Unreal Tournament / GameSpy model:
 
 LAN discovery (UDP 27100) is unchanged and still works alongside this.
 
+The **deployed** master lives in its own repository:
+[TribeWarez/angels95-master-server](https://github.com/TribeWarez/angels95-master-server).
+`AngelMaster` in this repo implements the same protocol and is what you build to
+self-host a list; that repository is the hosted service behind
+`angels95.tribewarez.com`.
+
 ---
 
 ## 1. Master server — `AngelMaster`

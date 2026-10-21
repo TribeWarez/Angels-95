@@ -106,7 +106,7 @@ passes the extension with its leading dot to
 ## Testing
 
 ```bash
-make test                # runs ALL test suites
+make test                # runs ALL test suites, then FAILS if any suite failed
 make test_parser         # LightningScriptParser tests
 make test_context        # LightningScriptContext tests
 make test_registry       # LightningEntityRegistry tests
@@ -117,7 +117,26 @@ make test_join_uri       # angels95:// URI parsing tests
 make test_master         # master heartbeat/list codec tests
 make test_network        # Network packet serialization + find_free_port tests
 make test_game_state     # GameState projectile simulation + AMMO pickup tests
+make test_ozanim         # .ozanim vertex-keyframe format tests
+make test_ozls_writer    # OzlsWriter patch-in-place tests
+make test_autoconvex     # voxeliser / SAT collision tests
+make test_csg            # CSG carve-budget tests
+make test_brushmesh      # cylinder/pyramid winding + plane tests
+make test_surface        # surface flags, fog curve parity, light uniform parity
+make test_gametype       # GameTypeInfo ruleset tests
+make test_editorbus      # editor event vocabulary tests
+make test_assetscope     # editor asset-scope tree tests
+make test_events         # EventBus / TriggerSystem / ObjectiveSystem tests
+make test_game           # game-hierarchy def loading tests
+make test_gizmomath      # editor gizmo math tests
+make test_keybinds       # keybind table tests
+make test_menu           # menu layout metrics tests
 ```
+
+`make test` also runs `worldcheck` over every shipped world (with `--headroom-all`
+and `--asset-refs`) and `tools/check_editor_objects.sh`, so a broken map or a
+compiled-but-never-linked editor object fails the build. A suite that crashes
+counts as a failure: the exit code is authoritative, not a log grep.
 
 Tests are standalone `.test.cpp` files compiled directly into executables (no test framework). Most use no raylib dependency (`SERVER_CXX` compiler with `-DOMEGA_TEST_ENV`). `test_entity_manager` and `test_pawn_system` link raylib for Vector3/BoundingBox types.
 

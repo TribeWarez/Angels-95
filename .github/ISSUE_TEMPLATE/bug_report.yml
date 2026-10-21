@@ -1,0 +1,104 @@
+name: Bug report
+description: Something in the client, server, master server, editor, or a shipped world behaves incorrectly.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The build id and the matching log lines decide most
+        issues, so please include both where you can.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of the project is at fault?
+      options:
+        - Client (Angels95)
+        - Dedicated server (AngelServ)
+        - Master server (AngelMaster)
+        - Editor (AngelEd)
+        - Asset packer (OzPack)
+        - A shipped world (OZONE map)
+        - Build / CI
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: build
+    attributes:
+      label: Build id
+      description: |
+        The release tag shown in the title footer / About, or `AngelServ --version`.
+        Use `dev` for a local build.
+      placeholder: b101
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: OS, GPU and raylib source
+      description: Which OS, GPU/driver, and whether raylib came from the repo build or system packages.
+      placeholder: Windows 11, RTX 3060, w64devkit build
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Launch `Angels95.exe --world Dust_Ravine`
+        2. Walk to the north corridor
+        3. Press E on the health vial
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What happened instead. Screenshots are welcome - drag them into this box.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        `System/angels95.log` holds the client or server log (it is truncated on
+        each run), `AngelEd.log` the editor. Paste the last ~50 lines plus any
+        `OZ_WARN` / `OZ_ERROR` lines.
+      render: text
+
+  - type: textarea
+    id: repro-content
+    attributes:
+      label: World or script snippet
+      description: |
+        If the bug involves a map or a script, paste the offending OZONE line or
+        `.ozls` definition. A minimal reproduction is the most useful thing you
+        can attach.
+      render: text
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched the existing issues and this is not a duplicate.
+          required: true
+        - label: This is not a security vulnerability (those go through SECURITY.md instead).
+          required: true

@@ -1,6 +1,6 @@
 # Engine Roadmap — Gap Analysis & Priorities
 
-Status as of **b82** (delivery log for b57–b82 below). This page is the living
+Status as of **b101** (delivery logs for b57–b101 below). This page is the living
 gap analysis for the Angels95 / OmegaTech engine: what exists, what is missing
 compared with a conventional game engine, and the prioritized plan to close the
 gaps. Each entry lists the `file:line` evidence so work can start without
@@ -10,6 +10,33 @@ Legend: **[0]** security/correctness, **[1]** engine fundamentals,
 **[2]** multiplayer completeness, **[3]** presentation, **[4]** tooling/UX.
 
 ---
+
+## b83–b101 delivery log
+
+### Tier 1 — engine fundamentals
+- **Sky seams closed** by deriving V from world elevation in `Sky.fs`. The six
+  skybox quads disagreed on their per-face V mapping (33–40 colour levels at a
+  corner, measured with a pixel scan); corners fell to 1–5 levels and the cap
+  band from 50 to 1. Legacy panoramas now sample their upper half only.
+- **Generated content textures** with reproducible, deterministic PowerShell
+  generators: `tools/gen_sky_textures.ps1` (sky gradients/caps) and
+  `tools/gen_water_textures.ps1` (`water_pool`, `waterfall_streaks`, `foam`).
+- **`tools/worldcheck` is part of the gate**: `make test` runs it over every
+  shipped world with `--headroom-all` and `--asset-refs`, and now **fails** on a
+  failing suite instead of grepping the log for `FAIL`.
+
+### Tier 3 — presentation
+- Campaign content: `World_endless_snow` (b83/b84), the EngineTest desert path
+  (b93), the `Aethelgard_Ruins` mission world, SilentPines Gorge and Dusk Falls
+  (b101). All-brush terrain, 0.9 risers, impact foam at every cascade.
+- Surface decals and brush-wide surface scope (b89/b94); sky/water authoring
+  recipes documented in `Wiki/Outdoor-Maps-Changes.md`.
+
+### Tier 4 — tooling/UX
+- Editor layer tree (Core/Subsystems/Resources/UI) and the event bus (b89/b90).
+- Responsive title menu, server browser, character select, `--world` (b97);
+  build-id versioning (`Source/Version.hpp`) and TDM team rules (b98).
+- Issue templates and the README/docs refresh (b101).
 
 ## b57–b82 delivery log
 

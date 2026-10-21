@@ -310,10 +310,34 @@ AngelEd loads, edits and exports OZONE only. Export path:
 `Source/PPGIO.hpp` provides `LoadFile`, `WSplitValue`, `WReadValue`, `ToFloat`
 (save/config parsing only).
 
+## Water and sky authoring (b101)
+
+Two recipes that fail by *looking plausible*, so both are worth stating:
+
+**Cascades and pools.** A water surface needs the flag bits, not just the speed:
+
+```
+# falls sheet - UNLIT|TRANSLUCENT|TWO_SIDED|PAN_V|NO_BSP_CUTS
+add box x y zmid 0.2 22 12 0 texPath=GameData/Tex/Global/EFX/waterfall_streaks.png texScaleU=1.5 texScaleV=1 flags=268962944 surfAlpha=0.9 panV=-0.35
+
+# still pool - UNLIT|PAN_U|TRANSLUCENT
+add box x y ztop 26 0.3 18 0 texPath=GameData/Tex/Global/EFX/water_pool.png texScaleU=1.5 texScaleV=1.5 flags=264320 surfAlpha=0.8 panU=0.05
+```
+
+`panU=`/`panV=` without their bit are **inert**, and an opaque slab reads as tiled
+stone. `NO_BSP_CUTS` keeps a sheet cosmetic so it never becomes an invisible wall.
+Full rationale in `Wiki/Outdoor-Maps-Changes.md`.
+
+**Sky.** `Sky.fs` samples the sky by world **elevation**, not by the quad's
+texcoord, so `levelinfo`'s cap and side paths should point at the **same**
+horizontally periodic, vertically symmetric gradient
+(`tools/gen_sky_textures.ps1`). A separate cap image leaves a visible trapezoid
+where the cap meets the walls.
+
 ## Authoring traps
 
 Each of these fails **silently** - the line parses, the value is just ignored,
-or the wrong thing happens. All four shipped worlds hit at least one of them
+or the wrong thing happens. Every shipped world has hit at least one of them
 before being fixed.
 
 ### `texSlot` — positional or keyword

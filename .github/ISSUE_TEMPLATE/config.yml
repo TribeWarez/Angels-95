@@ -1,0 +1,18 @@
+# Issue template routing.
+#
+# Blank issues are disabled so every report lands in a form that asks for the
+# build id and the log - those are what make a report reproducible.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Master server repository
+    url: https://github.com/TribeWarez/angels95-master-server
+    about: The hosted master server (heartbeat intake and public server list). Report deployment or listing issues there.
+
+  - name: Security policy
+    url: https://github.com/TribeWarez/Angels-95/blob/master/SECURITY.md
+    about: Please report vulnerabilities privately instead of opening a public issue.
+
+  - name: Contributing guide
+    url: https://github.com/TribeWarez/Angels-95/blob/master/CONTRIBUTING.md
+    about: Build steps, test gate, and the conventions this codebase expects.

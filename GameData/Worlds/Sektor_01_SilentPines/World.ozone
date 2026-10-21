@@ -25,7 +25,9 @@ add box -91 0 8 42 20 140 0 texPath=GameData/Worlds/EngineTest/oztex/tileset/05_
 # --- Valley floor: west bank / river bed / east bank (no sub: separate adds) ---
 add box -31 0 -1 78 2 140 0 texPath=GameData/Worlds/EngineTest/oztex/tileset/05_grass_jungle_256.png texScaleU=3.5 texScaleV=3.5
 add box 17 0 -2.2 18 2 140 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1.5 texScaleV=1.5
-add box 56 0 -1 60 2 140 0 texPath=GameData/Worlds/EngineTest/oztex/tileset/05_grass_jungle_256.png texScaleU=3.5 texScaleV=3.5
+add box 50 0 -1 48 2 140 0 texPath=GameData/Worlds/EngineTest/oztex/tileset/05_grass_jungle_256.png texScaleU=3.5 texScaleV=3.5
+add box 80 41 -1 12 2 58 0 texPath=GameData/Worlds/EngineTest/oztex/tileset/05_grass_jungle_256.png texScaleU=3.5 texScaleV=3.5
+add box 80 -41 -1 12 2 58 0 texPath=GameData/Worlds/EngineTest/oztex/tileset/05_grass_jungle_256.png texScaleU=3.5 texScaleV=3.5
 
 # --- River: shallow, fast, scrolling along Y (PAN_V, not PAN_U) ---
 add box 17 0 -0.55 18 0.3 140 0 texPath=GameData/Tex/Global/EFX/water_pool.png texScaleU=1.5 texScaleV=6 flags=526464 surfAlpha=0.8 panV=0.12
@@ -48,8 +50,13 @@ add box 86.8 0 13 1.4 26 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04
 add box 85.9 0 11 0.2 22 12 0 texPath=GameData/Tex/Global/EFX/waterfall_streaks.png texScaleU=1.5 texScaleV=1 flags=268962944 surfAlpha=0.9 panV=-0.35
 
 # --- Plunge pool ---
-add box 80 0 -2.6 12 2 24 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1.5 texScaleV=1.5
+add box 80 0 -1.9 12 2 24 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1.5 texScaleV=1.5
 add box 80 0 -0.55 12 0.3 24 0 texPath=GameData/Tex/Global/EFX/water_pool.png texScaleU=1.5 texScaleV=1.5 flags=264320 surfAlpha=0.8 panU=0.05 panV=0.03
+
+# Stone rim: without it the 0.4-deep water reads as a blue strip lying on the lawn.
+add box 80 12.3 0.05 14 0.6 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1.5 texScaleV=0.5
+add box 80 -12.3 0.05 14 0.6 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1.5 texScaleV=0.5
+add box 73.7 0 0.05 0.6 0.6 25.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.5 texScaleV=1.5
 
 # --- Impact foam: fast band on the pool surface, churn wall, shore foam ---
 add box 84 0 -0.28 4 0.25 13 0 texPath=GameData/Tex/Global/EFX/foam.png texScaleU=1 texScaleV=2 flags=788480 surfAlpha=0.9 panU=0.5

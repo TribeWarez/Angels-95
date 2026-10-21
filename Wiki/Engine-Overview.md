@@ -196,7 +196,7 @@ Angels95/
     angels95-serv.service   # VPS systemd unit (AngelServ/AngelMaster)
 ```
 
-## Key Systems (b57–b82)
+## Key Systems (b57–b101)
 
 ### GameUI / SlotBar object-bar HUD (b82)
 `GameData/Tex/Engine/GameUI.ozls` (`EntityType::GAMEUI`) is the authored source
@@ -259,6 +259,30 @@ runs after `CloseWindow`). `.ozanim` is a raylib-free text morph format
 (`Source/Package/Anim/`); `AnimatedMesh` samples clips and CPU-uploads
 positions. Wind-affected meshes (`wind=1`) draw with `Wind.vs` (height-weighted
 sine sway); `oz::SetWindUniforms` uploads the sway params per draw.
+
+### Skybox and water (b101)
+
+`Source/Renderer/Skybox.hpp` draws six quads, and `GameData/Shaders/Sky.fs` takes
+the sky's vertical coordinate from **world elevation**
+(`clamp(dir.y * 0.5 + 0.5, 0, 1)`) rather than from the quad's texcoord. The six
+quads do not agree on their V mapping — measured in-client, adjacent walls at a
+cube corner differed by 33–40 colour levels at the same screen row, and the outer
+panels ramped horizontally *within* a row. Elevation belongs to the view ray, so
+every face and the cap now agree by construction: corners fell to 1–5 levels and
+the cap band from 50 to 1. The cost is that a wall samples only V ≥ 0.5, so legacy
+panorama skies show their upper half (measured better, but worth knowing).
+
+`tools/gen_sky_textures.ps1` produces horizontally periodic, vertically symmetric
+gradients (`sky_grad_day.png`, `sky_grad_dusk.png`) plus optional caps. Both
+outdoor worlds pass the gradient as **cap and sides**, because a separate cap image
+leaves a trapezoid where the cap meets the walls.
+
+Water is paint, not simulation. `tools/gen_water_textures.ps1` generates
+`water_pool.png`, `waterfall_streaks.png` (alpha streaks with deliberately punched
+gaps — the shader multiplies texture alpha by `uAlpha`) and `foam.png`. Cascades
+are `UNLIT|TRANSLUCENT|TWO_SIDED|PAN_V|NO_BSP_CUTS` (268962944) sheets; pools are
+`UNLIT|PAN_U|TRANSLUCENT` (264320) slabs. `Surface.fs`/`LitFog.fs` have no depth
+texture, so refraction or depth tinting is a renderer project, not a shader tweak.
 
 ### Screenshot mode (b82)
 `--shot <out.png>` plus `--shot-delay`, `--shot-res`, `--shot-cam` (repeatable,
@@ -375,7 +399,7 @@ Pickup types come from the LightningScript entity registry (`.ozls` definitions)
 ## Known Editor Gaps
 
 The editor is covered in detail by `Wiki/Editor-Usage.md`; the remaining
-limitations (as of b82):
+limitations (as of b101):
 
 - Render meshes are not CSG-carved (CSG booleans process collision volumes only)
 - Undo/redo covers world state only; camera and selection are not restored

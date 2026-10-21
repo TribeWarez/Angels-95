@@ -13,14 +13,15 @@ aesthetics, a custom **OZONE** world format, a
 (`AngelEd`), and a dedicated standalone server (`AngelServ`) with no raylib
 dependency.
 
-Current release: **b82**.
+Current release: **b101**.
 
 ---
 
 ## Showcase
 
-All 12 shots captured in-engine via `--shot` mode (PS1-style, HUD-free,
-1920x1060) across the four shipped worlds.
+All shots captured in-engine via `--shot` mode (PS1-style, HUD-free, 1920x1051).
+The four classic showcase worlds are below; the campaign worlds added in b101
+follow.
 
 ### Citadel Ruins
 
@@ -58,10 +59,41 @@ one zone of every zone type, and a portal to Dust Ravine.
 <img src="GameData/Screenshots/EngineTest_2.png" width="32%" alt="Engine Test — great hall" />
 <img src="GameData/Screenshots/EngineTest_3.png" width="32%" alt="Engine Test — courtyard and portal" />
 
+### Sektor 01 — SilentPines
+
+The campaign opener: a cliff-top arrival overlooking a forested gorge, a stepped
+descent, a river and bridge, a waterfall into a plunge pool, and Nali-style
+shrine ruins in the pine valley.
+
+<img src="GameData/Screenshots/Sektor_01_SilentPines_1.png" width="32%" alt="SilentPines — arrival ledge over the gorge" />
+<img src="GameData/Screenshots/Sektor_01_SilentPines_2.png" width="32%" alt="SilentPines — the waterfall and plunge pool" />
+<img src="GameData/Screenshots/Sektor_01_SilentPines_3.png" width="32%" alt="SilentPines — shrine terrace and pines" />
+
+### KryoArchipel — Dusk Falls
+
+Three dusk-lit cascade terraces at 16, 8 and 0, two waterfalls into pools that
+sit under their falls, a ruined aqueduct you can walk over, stepping stones
+through the basin, and a lookout exit.
+
+<img src="GameData/Screenshots/KryoArchipel_Severny_1.png" width="32%" alt="Dusk Falls — upper terrace at dusk" />
+<img src="GameData/Screenshots/KryoArchipel_Severny_2.png" width="32%" alt="Dusk Falls — the cascade and aqueduct" />
+<img src="GameData/Screenshots/KryoArchipel_Severny_3.png" width="32%" alt="Dusk Falls — basin and stepping stones" />
+
 ---
 
 ## Features
 
+- **Two outdoor campaign maps (b101)** — `Sektor_01_SilentPines` (forested
+  gorge: cliff-top arrival, stepped descent, river and bridge, waterfall,
+  shrine ruins) and `KryoArchipel_Severny` / Dusk Falls (three dusk cascade
+  terraces, ruined aqueduct, stepping stones), plus `Aethelgard_Ruins`
+  promoted from the tech demo into a playable mission world.
+- **Sky and water rendering (b101)** — the sky samples its vertical gradient
+  from **world elevation** instead of the quad texcoord, so the six skybox
+  faces agree at every corner (corner steps fell from 33–40 colour levels to
+  1–5); deterministic generators produce the pool, waterfall-streak and foam
+  textures, and every cascade gets an impact band, a faster churn wall and
+  shore foam.
 - **Dedicated server** — UDP multiplayer, HTTP map API and `/status`, LAN
   discovery (UDP `27100`) plus internet discovery via `AngelMaster` heartbeats;
   runs headless on Linux or Windows.
@@ -246,13 +278,18 @@ to create `.oz*` packages from `GameData/`.
 ## Tests
 
 ```bash
-make test   # builds + runs all suites, continues past failures
+make test   # builds + runs every suite, then FAILS if any suite failed
 ```
 
-Standalone tests (no framework) land in the repo root as executables.
-Suites: parser, context, registry, entity_manager, pawn_system,
-ozone_parser, join_uri, master, network, game_state. Single suites:
-`make test_parser`, etc.
+Standalone tests (no framework) land in the repo root as executables. 24 suites:
+parser, context, registry, entity_manager, pawn_system, ozone_parser, join_uri,
+master, network, game_state, ozanim, ozls_writer, autoconvex, csg, brushmesh,
+surface, gametype, editorbus, assetscope, events, game, gizmomath, keybinds,
+menu. Single suites: `make test_parser`, etc.
+
+`make test` also runs `worldcheck` over every shipped world (including
+`--asset-refs`) and `tools/check_editor_objects.sh`, so a broken map or a
+compiled-but-never-linked editor object fails the build rather than shipping.
 
 ---
 
@@ -268,6 +305,33 @@ ozone_parser, join_uri, master, network, game_state. Single suites:
 ---
 
 ## Changelog
+
+### b101 — 2026-10-21
+- Two outdoor campaign maps (`Sektor_01_SilentPines`, `KryoArchipel_Severny` /
+  Dusk Falls) and `Aethelgard_Ruins` promoted to a full mission world; sky
+  sampled by world elevation (corner seams 33–40 levels → 1–5, cap band 50 → 1);
+  generated pool / waterfall-streak / foam textures with impact foam at every
+  cascade; terrace relief, ground decals and debris.
+
+### b83–b100 — release log
+- **b100** — Linux runner pinned to `ubuntu-24.04` + GLIBC ≤ 2.39 gate (b99 required GLIBC_2.43 and crashed every container).
+- **b99** — b98 completed, including the Linux miniz feature-test fix.
+- **b98** — master listing fix, build-id versioning, TDM friendly fire, slot/bind fixes, hierarchy committed.
+- **b97** — responsive title menu, server browser, character select, `--world`.
+- **b96** — editor surface/transform fixes, brush sizing, MP heartbeat, build exit code.
+- **b95** — client fails fast when `AngelServ.exe` is missing (`start /B` hangs cmd).
+- **b94** — real surface decals, item drop + hotbar reorder, overflow stash, sprint bob damp, gore, hierarchy scaffold.
+- **b93** — EngineTest's Egyptian desert path, plus three renderer fixes the path exposed.
+- **b92** — GameData restructured by role, packaged install completed, shot crash / 22 buried lights / 57 missing assets fixed.
+- **b91** — maintenance release.
+- **b90** — editor reaches its designed layer tree (Core/Subsystems/Resources/UI); brush-selection index-space fix (could delete the wrong brush).
+- **b89** — editor event bus + Core/UI/Subsystems split; exporter surface-flag data loss fixed.
+- **b88** — remote players visible, pickups reconcile, editor property panels consolidated.
+- **b87** — `GameTypeInfo` ruleset: scoring, teams, win conditions, networking, scoreboard.
+- **b86** — AutoConvex collision, `:light` defs, CSG no-collision warning.
+- **b85** — `.ozls` sound stats, writable `.ozls` editor.
+- **b84** — `World_endless_snow`, `tools/worldcheck`, editor pickup/equip refactor.
+- **b83** — `World_endless_snow` snowbound industrial complex (radar sectors, refinery, power plant, rail yard).
 
 ### b82 — 2026-10-01
 - GameUI object-bar HUD (`SlotBar`) — data-driven atlas + `slot_rects`, click-to-select, shared between in-world hotbar and inventory overlay; editor asset-scope tree + pack-on-import; `SoundManager`/`ZoneManager` extraction; `--shot` screenshot mode; new pawn/player assets.
@@ -365,9 +429,31 @@ ozone_parser, join_uri, master, network, game_state. Single suites:
 See also [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md),
 [CONTRIBUTING.md](CONTRIBUTING.md), and [SECURITY.md](SECURITY.md).
 
+## Related repositories
+
+| Repository | What it is |
+|---|---|
+| [TribeWarez/angels95-master-server](https://github.com/TribeWarez/angels95-master-server) | The hosted master server: heartbeat intake and the public server list behind `angels95.tribewarez.com`. The in-repo `AngelMaster` is the same protocol; the hosted deployment lives there. |
+| [paganswrath/OmegaTech](https://github.com/paganswrath/OmegaTech) | The engine Angels95 was originally built on top of. |
+| [paganswrath/OTEditor](https://github.com/paganswrath/OTEditor) | The original OmegaTech level editor. |
+
 ## Acknowledgments
 
 - [raylib](https://www.raylib.com/) — Ramon Santamaria
 - [raygui](https://github.com/raysan5/raygui) — Immediate-mode GUI
 - [pl_mpeg](https://github.com/phoboslab/pl_mpeg) — MPEG1 video playback
 - [c99-raylib-video-player](https://github.com/WEREMSOFT/c99-raylib-vide-player) — Video integration
+
+---
+
+## Origins
+
+Angels95 is a reimagining of the **OmegaTech Engine**, and would not exist
+without the original source released by [paganswrath](https://github.com/paganswrath):
+
+- **[OmegaTech](https://github.com/paganswrath/OmegaTech)** — the engine this
+  project was built on top of.
+- **[OTEditor](https://github.com/paganswrath/OTEditor)** — the OmegaTech editor
+  that AngelEd descends from.
+
+If you are interested in where this codebase came from, start there. Thank you.
