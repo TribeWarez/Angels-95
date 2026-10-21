@@ -21,6 +21,10 @@ ifeq ($(UNAME_S),Linux)
   RPATH := -Wl,-rpath=.
   EXE :=
   SERVER_LIBS := -lm -pthread
+  # miniz.c is compiled as strict C99; glibc only declares ftello/fseeko when a
+  # POSIX feature level is requested. Ubuntu 24.04's glibc started rejecting
+  # the implicit declarations, which broke the Linux CI build at miniz.o.
+  MINIZ_DEFS := -D_POSIX_C_SOURCE=200809L
 else
   # Windows (MINGW/MSYS/CYGWIN)
   PIC :=
@@ -37,6 +41,7 @@ else
   RPATH :=
   EXE := .exe
   SERVER_LIBS := -lm -lws2_32 -lwinhttp
+  MINIZ_DEFS :=
 endif
 
 # Windows resource files (icon embedding) only apply to Windows builds;
@@ -180,7 +185,7 @@ $(BUILD_DIR)/raygui.o: Source/Renderer/raygui/raygui.c | $(BUILD_DIR)
 # Must be compiled as C (gcc): g++ would C++-mangle the definitions while
 # consumers see extern "C" prototypes from miniz.h.
 $(BUILD_DIR)/miniz.o: Source/miniz/miniz.c Source/miniz/miniz.h | $(BUILD_DIR)
-	$(CC) $(OPTFLAGS) -std=c99 $(PIC) -ISource/miniz -c Source/miniz/miniz.c -o $@
+	$(CC) $(OPTFLAGS) -std=c99 $(PIC) $(MINIZ_DEFS) -ISource/miniz -c Source/miniz/miniz.c -o $@
 
 # 5. Compile Network library (used by both client and server)
 $(BUILD_DIR)/Network.o: Source/Network/Network.cpp Source/Network/Network.hpp | $(BUILD_DIR)
