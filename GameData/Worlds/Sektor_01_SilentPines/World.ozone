@@ -28,7 +28,7 @@ add box 17 0 -2.2 18 2 140 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.
 add box 56 0 -1 60 2 140 0 texPath=GameData/Worlds/EngineTest/oztex/tileset/05_grass_jungle_256.png texScaleU=3.5 texScaleV=3.5
 
 # --- River: shallow, fast, scrolling along Y (PAN_V, not PAN_U) ---
-add box 17 0 -0.55 18 0.3 140 0 texPath=GameData/Tex/Global/EFX/liquid_water.png texScaleU=1 texScaleV=4 flags=526464 surfAlpha=0.7 panV=0.12
+add box 17 0 -0.55 18 0.3 140 0 texPath=GameData/Tex/Global/EFX/water_pool.png texScaleU=1.5 texScaleV=6 flags=526464 surfAlpha=0.8 panV=0.12
 
 # --- Bridge over the river: deck top 0.9, 0.45 landings so it is walk-up ---
 add box 17 0 0.7 30 0.4 18 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1
@@ -45,11 +45,11 @@ add box 86.8 0 13 1.4 26 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04
 
 # --- Waterfall sheet: just in front of the backing rock, translucent, scrolls down ---
 # flags = UNLIT 2048 | TRANSLUCENT 128 | TWO_SIDED 1024 | PAN_V 524288 | NO_BSP_CUTS 268435456
-add box 85.9 0 11 0.2 22 12 0 texPath=GameData/Tex/Global/EFX/liquid_water.png texScaleU=1 texScaleV=2 flags=268962944 surfAlpha=0.6 panV=-0.35
+add box 85.9 0 11 0.2 22 12 0 texPath=GameData/Tex/Global/EFX/waterfall_streaks.png texScaleU=1.5 texScaleV=1 flags=268962944 surfAlpha=0.9 panV=-0.35
 
 # --- Plunge pool ---
 add box 80 0 -2.6 12 2 24 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1.5 texScaleV=1.5
-add box 80 0 -0.55 12 0.3 24 0 texPath=GameData/Tex/Global/EFX/liquid_water.png texScaleU=1.5 texScaleV=1.5 flags=264320 surfAlpha=0.7 panU=0.05 panV=0.03
+add box 80 0 -0.55 12 0.3 24 0 texPath=GameData/Tex/Global/EFX/water_pool.png texScaleU=1.5 texScaleV=1.5 flags=264320 surfAlpha=0.8 panU=0.05 panV=0.03
 
 # --- Descent: 19 solid columns, 0.9 drop each, from the plateau edge to the floor ---
 add box -68.5 0 8.55 3 17.1 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1

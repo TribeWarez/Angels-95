@@ -27,8 +27,8 @@ on a float comparison boundary.
 ```
 # Cascade sheet (0.2 thick), 0.1 clear of the solid face it hangs on
 add box <x> <y> <zmid> 0.2 <h> <d> 0 \
-  texPath=GameData/Tex/Global/EFX/liquid_water.png texScaleU=1 texScaleV=1 \
-  flags=268962944 surfAlpha=0.6 panV=-0.35
+  texPath=GameData/Tex/Global/EFX/waterfall_streaks.png texScaleU=1.5 texScaleV=1 \
+  flags=268962944 surfAlpha=0.9 panV=-0.35
 ```
 
 `268962944` = `SURF_UNLIT` 2048 | `SURF_TRANSLUCENT` 128 | `SURF_TWO_SIDED` 1024 |
@@ -38,11 +38,29 @@ add box <x> <y> <zmid> 0.2 <h> <d> 0 \
   grey slab.
 - `NO_BSP_CUTS` keeps the sheet cosmetic so it is not an invisible wall.
 - Negative `panV` scrolls the texture downward (`uv.y += uPan.y * uTime`).
-- Static pools/rivers use `flags=264320` (UNLIT | PAN_U | TRANSLUCENT) with `surfAlpha=0.7` —
-  translucent reads as water, opaque does not.
+- Pools/rivers use `flags=264320` (UNLIT | PAN_U | TRANSLUCENT) with `surfAlpha=0.8`.
 
 SilentPines' falls also needed a **rock face behind the notch** (`x 86.1..87.5`): with the notch
 open to the skybox the water read as a blue panel rather than a fall.
+
+## Water textures (`tools/gen_water_textures.ps1`)
+
+The repo shipped one water texture, `liquid_water.png`: a high-contrast blue tile pattern. On a
+large pool it reads as bathroom tiling, and on a cascade sheet as a flat blue panel. Two
+textures were generated instead (deterministic — fixed RNG seeds, so re-running rewrites
+identical bytes):
+
+| Texture | Size | Purpose |
+|---|---|---|
+| `water_pool.png` | 64x64 RGB | Dark, low-contrast ripple field (mean RGB ≈ 18/40/58). Pool slabs are `UNLIT|PAN_U|TRANSLUCENT` at `surfAlpha=0.8`, so the stone bed shows through: dark reads as depth, bright reads as a pool. |
+| `waterfall_streaks.png` | 64x128 RGBA | Vertical streaks with **punched transparent gaps** (12.3% of pixels alpha 0, mean alpha 156). |
+
+The alpha is the whole point: `Surface.fs` multiplies the sampled texture's alpha by `uAlpha`,
+so transparent holes are what turn a sheet into falling water. The first version of the
+generator drew 150 anti-aliased lines over a 64px width and measured **84% of pixels inked** —
+a near-solid pale panel. The script now draws 90 thin streaks and then erases 34 small
+rectangles with `CompositingMode.SourceCopy`, which is what guarantees real holes rather than
+low-alpha haze.
 
 ## The UV trap that dominated the first art pass
 
@@ -70,12 +88,13 @@ reads #1.
 1. **Skybox cube seams.** The skybox is a six-quad cube with direction-projected UVs; the top
    face reads as a bright band across the horizon and the cube edges are visible. Every shipped
    outdoor world has this.
-2. **Water is a flat scrolling texture.** `liquid_water.png` is the only water texture in the
-   repo; there is no foam, refraction or depth term. Cascades read correctly *in motion* (the
-   pan) but as flat blue in a still.
-3. **Outdoor scale reads arena-like.** With no terrain and AABB-only collision, a wide valley
-   is a floor plate between tall boxes. The maps are tuned small and fogged to make that read as
-   a gorge rather than a courtyard — the same lesson as the Aethelgard backdrop rings.
+2. **Water is still a scrolling texture, not a simulation.** No foam sheet, refraction or depth
+   term exists; `waterfall_streaks.png` and `water_pool.png` are paint, and the motion comes from
+   the pan. The look is now deliberate rather than accidental, but it is 1998, not 2004.
+3. **Outdoor scale reads arena-like.** With no terrain and AABB-only collision, a wide valley is
+   a floor plate between tall boxes. Dusk Falls was tightened for this reason (depth 168 -> 102,
+   pools 27x24/44x24/38x28 -> 20x18/26x18/26x22, aqueduct narrowed, seven ruin fragments added);
+   the terraces now have landmarks and a horizon instead of reading as empty plains.
 4. **No waterfall audio loop.** Script `play_sound` is one-shot; the keyed loop API is
    stat-driven only. The falls are silent.
 
