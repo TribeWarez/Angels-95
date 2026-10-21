@@ -68,16 +68,16 @@ static void DispatchFrameEvents(const std::vector<ed::Event>& events) {
                 g_placeMode = PlaceMode::MODEL;
                 g_sel = { SelType::NONE, -1, "", {0,0,0} };
                 g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
-                OmegaTechEditor.DrawModel = true;
+                AngelTechEditor.DrawModel = true;
                 EMID = 200 + ci.primitive;
-                OmegaTechEditor.X = OTEditor.MainCamera.target.x;
-                OmegaTechEditor.Y = OTEditor.MainCamera.target.y;
-                OmegaTechEditor.Z = OTEditor.MainCamera.target.z;
-                OmegaTechEditor.W = 4.0f;
-                OmegaTechEditor.H = 4.0f;
-                OmegaTechEditor.L = 4.0f;
-                OmegaTechEditor.S = 1.0f;
-                OmegaTechEditor.R = 0.0f;
+                AngelTechEditor.X = OTEditor.MainCamera.target.x;
+                AngelTechEditor.Y = OTEditor.MainCamera.target.y;
+                AngelTechEditor.Z = OTEditor.MainCamera.target.z;
+                AngelTechEditor.W = 4.0f;
+                AngelTechEditor.H = 4.0f;
+                AngelTechEditor.L = 4.0f;
+                AngelTechEditor.S = 1.0f;
+                AngelTechEditor.R = 0.0f;
                 break;
             }
             case ed::Ev::CsgCommit: {
@@ -89,21 +89,21 @@ static void DispatchFrameEvents(const std::vector<ed::Event>& events) {
                     // Default to a box at the camera if no primitive is armed.
                     if (EMID < 200) {
                         EMID = 200;
-                        OmegaTechEditor.X = OTEditor.MainCamera.target.x;
-                        OmegaTechEditor.Y = OTEditor.MainCamera.target.y;
-                        OmegaTechEditor.Z = OTEditor.MainCamera.target.z;
-                        OmegaTechEditor.W = 4.0f;
-                        OmegaTechEditor.H = 4.0f;
-                        OmegaTechEditor.L = 4.0f;
+                        AngelTechEditor.X = OTEditor.MainCamera.target.x;
+                        AngelTechEditor.Y = OTEditor.MainCamera.target.y;
+                        AngelTechEditor.Z = OTEditor.MainCamera.target.z;
+                        AngelTechEditor.W = 4.0f;
+                        AngelTechEditor.H = 4.0f;
+                        AngelTechEditor.L = 4.0f;
                     }
                     // Same CSG placement logic as the ENTER key (collision is
                     // rebuilt by RebuildCollisionVolumes inside
                     // CommitBrushRenderable).
                     int primType = EMID - 200;
-                    Vector3 center = {OmegaTechEditor.X, OmegaTechEditor.Y, OmegaTechEditor.Z};
-                    Vector3 size = {OmegaTechEditor.W, OmegaTechEditor.H, OmegaTechEditor.L};
+                    Vector3 center = {AngelTechEditor.X, AngelTechEditor.Y, AngelTechEditor.Z};
+                    Vector3 size = {AngelTechEditor.W, AngelTechEditor.H, AngelTechEditor.L};
                     int ridx = CommitBrushRenderable(primType, center, size,
-                                                     OmegaTechEditor.R, OmegaTechEditor.S,
+                                                     AngelTechEditor.R, AngelTechEditor.S,
                                                      ci.operation);
                     if (ridx >= 0) {
                         EditorLog("CSG commit: op=%d prim=%d at (%.1f,%.1f,%.1f) size=(%.1f,%.1f,%.1f)",
@@ -113,7 +113,7 @@ static void DispatchFrameEvents(const std::vector<ed::Event>& events) {
                 }
                 // Placing via the toolbox is done - drop the ghost so the
                 // viewport returns to normal selection (Enter does the same).
-                if (g_sel.type == SelType::NONE) OmegaTechEditor.DrawModel = false;
+                if (g_sel.type == SelType::NONE) AngelTechEditor.DrawModel = false;
                 break;
             }
             case ed::Ev::ConvertToAnimated:
@@ -211,11 +211,11 @@ static void DispatchFrameEvents(const std::vector<ed::Event>& events) {
                         // the legacy index or the registry. Resolving it here from
                         // an index meant a panel rebuild between the click and the
                         // frame placed a different pickup.
-                        OmegaTechEditor.ActivePickupName = pr.key;
+                        AngelTechEditor.ActivePickupName = pr.key;
                         break;
                     case ed::PlacementRequest::Kind::Node:
                         g_placeMode = PlaceMode::NODE;
-                        OmegaTechEditor.ActiveNodeType =
+                        AngelTechEditor.ActiveNodeType =
                             (EditorNodeType)atoi(pr.key.c_str());
                         break;
                     case ed::PlacementRequest::Kind::Model:
@@ -223,11 +223,11 @@ static void DispatchFrameEvents(const std::vector<ed::Event>& events) {
                         EMID = 0;   // 0 = user-selected obj
                         break;
                 }
-                OmegaTechEditor.DrawModel = true;
-                OmegaTechEditor.X = OTEditor.MainCamera.position.x;
-                OmegaTechEditor.Y = OTEditor.MainCamera.position.y;
-                OmegaTechEditor.Z = OTEditor.MainCamera.position.z;
-                OmegaTechEditor.R = 1;
+                AngelTechEditor.DrawModel = true;
+                AngelTechEditor.X = OTEditor.MainCamera.position.x;
+                AngelTechEditor.Y = OTEditor.MainCamera.position.y;
+                AngelTechEditor.Z = OTEditor.MainCamera.position.z;
+                AngelTechEditor.R = 1;
                 break;
             }
             case ed::Ev::OpenWorld: {

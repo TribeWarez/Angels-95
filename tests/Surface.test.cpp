@@ -643,7 +643,7 @@ static void test_skybox_has_one_implementation() {
     check(coreCode.find("GenMeshPlane(") == std::string::npos,
           "Core.hpp no longer builds skybox faces - they belong to oz::Skybox");
     check(coreCode.find("SkyboxFace") == std::string::npos,
-          "OmegaTechData has no SkyboxFace array - the client does not own the "
+          "AngelTechData has no SkyboxFace array - the client does not own the "
           "cube's models");
     check(edCode.find("GenMeshPlane(") == std::string::npos,
           "AngelEd no longer builds skybox faces - it shares oz::Skybox");

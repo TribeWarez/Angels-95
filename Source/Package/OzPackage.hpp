@@ -10,7 +10,7 @@
 #include "../miniz/miniz.h"
 
 // ============================================================================
-// OzPackage — universal asset container format for Angels95 / OmegaTech
+// OzPackage — universal asset container format for Angels95 / AngelTech
 //
 // Package types (magic):
 //   OZPK  — generic asset package (.ozpak) — models, mtl, scripts

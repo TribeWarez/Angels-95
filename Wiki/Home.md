@@ -1,8 +1,8 @@
-# Angels95 — OmegaTech Engine
+# Angels95 — AngelTech Engine
 
 ![Angels95 Title Splash](../GameData/Tex/Title/splash.png)
 
-Angels95 reimagines the OmegaTech Engine as a **multiplayer game world** — a persistent, server-authoritative realm where players explore partitioned worlds, collect power-ups, level up, and fight NPCs alongside other connected players.
+Angels95 is a **multiplayer game world** built on **AngelTech**, the engine that began life as the OmegaTech Engine — a persistent, server-authoritative realm where players explore partitioned worlds, collect power-ups, level up, and fight NPCs alongside other connected players.
 
 Built on [raylib](https://www.raylib.com/) 5.5 with PS1-inspired retro aesthetics and a custom OZONE world format. Current release: **b101**.
 

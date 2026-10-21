@@ -36,8 +36,8 @@ std::string Editor_GetCurrentWorldDir() {
     if (g_documentPath.empty()) return "";
     return g_documentPath.parent_path().string();
 }
-int Editor_GetCsgOperation() { return OmegaTechEditor.CSGOperation; }
-void Editor_SetCsgOperation(int op) { OmegaTechEditor.CSGOperation = op; }
+int Editor_GetCsgOperation() { return AngelTechEditor.CSGOperation; }
+void Editor_SetCsgOperation(int op) { AngelTechEditor.CSGOperation = op; }
 int Editor_GetPlaceMode() { return (int)g_placeMode; }
 void Editor_SetPlaceMode(int mode) { g_placeMode = (PlaceMode)mode; }
 

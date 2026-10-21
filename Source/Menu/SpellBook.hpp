@@ -243,7 +243,7 @@ inline void DrawSpellbook(bool& show) {
             }
             if (target >= 0) {
                 lem.SetSpellInSlot(target, d->name);
-                OmegaTechTextSystem.Write(std::string(d->name) + " bound to [" +
+                AngelTechTextSystem.Write(std::string(d->name) + " bound to [" +
                                           SlotKeyLabel(target) + "]");
             } else {
                 OZ_WARN("Spellbook: bar is full (5 slots); clear one first");

@@ -1,6 +1,6 @@
 # LightningScript Reference
 
-LightningScript is the OmegaTech Engine's scripting language for defining entity behaviors, world interactions, and dynamic events. It replaces the legacy ParasiteScript system.
+LightningScript is the AngelTech Engine's scripting language for defining entity behaviors, world interactions, and dynamic events. It replaces the legacy ParasiteScript system.
 
 Files use the `.ozls` extension.
 

@@ -370,7 +370,7 @@ static constexpr int HOTBAR_SIZE = 8;
 
     // --- Phase-1 script commands that need the world/camera host (Core.hpp) ---
     // teleport / change_world / apply_area_damage / spawn_projectile / play_clip
-    // are queued here because LightningEntityManager cannot see OmegaTechData
+    // are queued here because LightningEntityManager cannot see AngelTechData
     // (MainCamera / the world-load globals). Core.hpp drains them each frame,
     // exactly like the fog/skybox/music state above.
     std::vector<LightningScriptContext::ScriptCommand> TakePendingWorldCommands() {

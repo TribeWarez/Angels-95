@@ -371,7 +371,7 @@ void ApplyPanelProperties(const std::vector<ed::Event>& events) {
         // Publish the applied transform back to the gizmo.
         //
         // The frame loop has a "sync gizmo position back to selected entity" pass
-        // that writes OmegaTechEditor into the live selection every frame. When
+        // that writes AngelTechEditor into the live selection every frame. When
         // the Properties panel changed that same entity, the next frame restored
         // the PRE-EDIT position/rotation, so a Pos or Rot edit appeared to do
         // nothing. Only do this when the event really targeted the live

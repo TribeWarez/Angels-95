@@ -243,7 +243,7 @@ public:
     }
 };
 
-EngineData OmegaTechData;
+EngineData AngelTechData;
 
 bool LoadFlag = false;
 
@@ -252,7 +252,7 @@ bool LoadFlag = false;
 
 auto LoadWorld()
 {
-    OZ_INFO("LoadWorld: loading world %d (frame=%llu)", OmegaTechData.LevelIndex, (unsigned long long)OmegaTechData.Ticker);
+    OZ_INFO("LoadWorld: loading world %d (frame=%llu)", AngelTechData.LevelIndex, (unsigned long long)AngelTechData.Ticker);
     PlayFade();
     PawnSystem::Instance().ClearLights();
 
@@ -268,11 +268,11 @@ auto LoadWorld()
     SoundManager::Instance().ResetWorldAudio();
 
     {
-        OmegaTechData.DamageFlash = 0.0f;
+        AngelTechData.DamageFlash = 0.0f;
 
         LightningEntityManager::Instance().SetPlayerHealth(100.0f);
 
-        OmegaTechData.SkyboxEnabled = false;
+        AngelTechData.SkyboxEnabled = false;
 
         // Resolve the asset directory prefix. g_world_to_load may be a world NAME
         // (assets live in GameData/Worlds/<name>/) or a direct file path (editor
@@ -312,8 +312,8 @@ auto LoadWorld()
             if (WorldModels.Skybox.id > 0)
                 UnloadTexture(WorldModels.Skybox);
             WorldModels.Skybox = LoadTextureWithFallback(TextFormat("%sModels/Skybox.png", assetPrefix.c_str()));
-            OmegaTechData.SkyboxEnabled = (WorldModels.Skybox.id > 0);
-            if (OmegaTechData.SkyboxEnabled)
+            AngelTechData.SkyboxEnabled = (WorldModels.Skybox.id > 0);
+            if (AngelTechData.SkyboxEnabled)
                 OZ_INFO("World skybox: loaded %sModels/Skybox.png", assetPrefix.c_str());
         }
 
@@ -369,8 +369,8 @@ auto LoadWorld()
             // the shader was (re)loaded or the materials ended up with the
             // default shader the client rendered the world fullbright. The
             // editor already re-applies it after load; the client must too.
-            if (OmegaTechData.Lights.id > 0)
-                OzoneLoader::Instance().SetLitFogShader(OmegaTechData.Lights);
+            if (AngelTechData.Lights.id > 0)
+                OzoneLoader::Instance().SetLitFogShader(AngelTechData.Lights);
         }
 
         // Apply level metadata (LevelInfo/Particles) after entities are loaded
@@ -383,7 +383,7 @@ auto LoadWorld()
                 {
                     if (WorldModels.Skybox.id > 0) UnloadTexture(WorldModels.Skybox);
                     WorldModels.Skybox = newSky;
-                    OmegaTechData.SkyboxEnabled = true;
+                    AngelTechData.SkyboxEnabled = true;
                     OZ_INFO("LevelInfo: skybox '%s'", s.skyboxPath.c_str());
                 }
                 else
@@ -432,7 +432,7 @@ auto LoadWorld()
         // Spawn at the world's playerstart unless resuming from a saved
         // position ("Continue" from the title menu sets SetCameraFlag).
         if (!SetCameraFlag)
-            PawnSystem::Instance().RespawnPlayerAtStart(OmegaTechData.MainCamera);
+            PawnSystem::Instance().RespawnPlayerAtStart(AngelTechData.MainCamera);
 
         SaveGame();
     }
@@ -472,8 +472,8 @@ void UpdateLightSources()
 {
     // Lighting now lives in Renderer/LitLightning (LitLightning_UpdateFrame).
     // Kept as a thin engine-side adapter that supplies the engine globals.
-    LitLightning_UpdateFrame(PawnSystem::Instance().GetLights(), OmegaTechData.Lights,
-                             OmegaTechData.MainCamera, OmegaTechData.GameLights[0],
+    LitLightning_UpdateFrame(PawnSystem::Instance().GetLights(), AngelTechData.Lights,
+                             AngelTechData.MainCamera, AngelTechData.GameLights[0],
                              GetFrameTime());
 
     // The surface program carries its OWN copy of the lights[]/viewPos/ambient/fog
@@ -497,7 +497,7 @@ void UpdateLightSources()
         oz::SurfaceMaterial::Instance().SetFog(fogCol, fogStart, fogEnd,
                                                fogDensity, fogIntensity);
         oz::SurfaceMaterial::Instance().UpdateFrame(PawnSystem::Instance().GetLights(),
-                                                OmegaTechData.MainCamera,
+                                                AngelTechData.MainCamera,
                                                 GetFrameTime(), amb);
     }
 
@@ -513,50 +513,50 @@ void UpdateLightSources()
     // frame-level version advances every light's phase, so running it once per
     // program runs all flicker at double speed (see its comment). This is the
     // per-program half only, exactly as SurfaceMaterial::UpdateFrame uses it.
-    if (OmegaTechData.WindShader.id > 0 &&
-        OmegaTechData.WindShader.id != OmegaTechData.Lights.id) {
+    if (AngelTechData.WindShader.id > 0 &&
+        AngelTechData.WindShader.id != AngelTechData.Lights.id) {
         static int s_windViewPosLoc = -2, s_windAmbientLoc = -2;
         static int s_windFogColorLoc = -2, s_windFogStartLoc = -2, s_windFogEndLoc = -2;
         static int s_windFogDensityLoc = -2, s_windFogIntensityLoc = -2;
         if (s_windViewPosLoc == -2) {
-            s_windViewPosLoc = OmegaTechData.WindShader.locs[SHADER_LOC_VECTOR_VIEW];
-            s_windAmbientLoc = GetShaderLocation(OmegaTechData.WindShader, "ambient");
-            s_windFogColorLoc = GetShaderLocation(OmegaTechData.WindShader, "fogColor");
-            s_windFogStartLoc = GetShaderLocation(OmegaTechData.WindShader, "fogStart");
-            s_windFogEndLoc = GetShaderLocation(OmegaTechData.WindShader, "fogEnd");
-            s_windFogDensityLoc = GetShaderLocation(OmegaTechData.WindShader, "fogDensity");
-            s_windFogIntensityLoc = GetShaderLocation(OmegaTechData.WindShader, "fogIntensity");
+            s_windViewPosLoc = AngelTechData.WindShader.locs[SHADER_LOC_VECTOR_VIEW];
+            s_windAmbientLoc = GetShaderLocation(AngelTechData.WindShader, "ambient");
+            s_windFogColorLoc = GetShaderLocation(AngelTechData.WindShader, "fogColor");
+            s_windFogStartLoc = GetShaderLocation(AngelTechData.WindShader, "fogStart");
+            s_windFogEndLoc = GetShaderLocation(AngelTechData.WindShader, "fogEnd");
+            s_windFogDensityLoc = GetShaderLocation(AngelTechData.WindShader, "fogDensity");
+            s_windFogIntensityLoc = GetShaderLocation(AngelTechData.WindShader, "fogIntensity");
         }
 
-        LitLightning_Update(PawnSystem::Instance().GetLights(), OmegaTechData.WindShader,
-                            OmegaTechData.MainCamera, GetFrameTime());
+        LitLightning_Update(PawnSystem::Instance().GetLights(), AngelTechData.WindShader,
+                            AngelTechData.MainCamera, GetFrameTime());
 
-        const float windViewPos[3] = { OmegaTechData.MainCamera.position.x,
-                                       OmegaTechData.MainCamera.position.y,
-                                       OmegaTechData.MainCamera.position.z };
+        const float windViewPos[3] = { AngelTechData.MainCamera.position.x,
+                                       AngelTechData.MainCamera.position.y,
+                                       AngelTechData.MainCamera.position.z };
         if (s_windViewPosLoc >= 0)
-            SetShaderValue(OmegaTechData.WindShader, s_windViewPosLoc, windViewPos, SHADER_UNIFORM_VEC3);
+            SetShaderValue(AngelTechData.WindShader, s_windViewPosLoc, windViewPos, SHADER_UNIFORM_VEC3);
 
         float windAmb[4];
         FillDefaultAmbient(windAmb);
         OzoneLoader::Instance().GetWorldAmbient(windAmb);
         if (s_windAmbientLoc >= 0)
-            SetShaderValue(OmegaTechData.WindShader, s_windAmbientLoc, windAmb, SHADER_UNIFORM_VEC4);
+            SetShaderValue(AngelTechData.WindShader, s_windAmbientLoc, windAmb, SHADER_UNIFORM_VEC4);
 
         float windFogCol[3] = {0.7f, 0.7f, 0.8f};
         float windFogStart = 10.0f, windFogEnd = 100.0f, windFogDensity = 1.0f, windFogIntensity = 1.0f;
         OzoneLoader::Instance().GetWorldFog(windFogCol, windFogStart, windFogEnd,
                                             windFogDensity, windFogIntensity);
         if (s_windFogColorLoc >= 0)
-            SetShaderValue(OmegaTechData.WindShader, s_windFogColorLoc, windFogCol, SHADER_UNIFORM_VEC3);
+            SetShaderValue(AngelTechData.WindShader, s_windFogColorLoc, windFogCol, SHADER_UNIFORM_VEC3);
         if (s_windFogStartLoc >= 0)
-            SetShaderValue(OmegaTechData.WindShader, s_windFogStartLoc, &windFogStart, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(AngelTechData.WindShader, s_windFogStartLoc, &windFogStart, SHADER_UNIFORM_FLOAT);
         if (s_windFogEndLoc >= 0)
-            SetShaderValue(OmegaTechData.WindShader, s_windFogEndLoc, &windFogEnd, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(AngelTechData.WindShader, s_windFogEndLoc, &windFogEnd, SHADER_UNIFORM_FLOAT);
         if (s_windFogDensityLoc >= 0)
-            SetShaderValue(OmegaTechData.WindShader, s_windFogDensityLoc, &windFogDensity, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(AngelTechData.WindShader, s_windFogDensityLoc, &windFogDensity, SHADER_UNIFORM_FLOAT);
         if (s_windFogIntensityLoc >= 0)
-            SetShaderValue(OmegaTechData.WindShader, s_windFogIntensityLoc, &windFogIntensity, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(AngelTechData.WindShader, s_windFogIntensityLoc, &windFogIntensity, SHADER_UNIFORM_FLOAT);
     }
 }
 
@@ -632,9 +632,9 @@ struct LevelFogState {
 };
 static LevelFogState g_levelFog;
 
-void OmegaTechInit()
+void AngelTechInit()
 {
-    OZ_INFO("=== OmegaTech Engine starting ===");
+    OZ_INFO("=== AngelTech Engine starting ===");
     OZ_INFO("CWD: %s", fs::current_path().string().c_str());
     OZ_INFO("GameData/Worlds exists: %d", (int)fs::exists("GameData/Worlds"));
     OZ_INFO("System/Data/Zones exists: %d", (int)fs::exists("System/Data/Zones"));
@@ -817,46 +817,46 @@ void OmegaTechInit()
         }
     }
 
-    OmegaTechData.InitCamera();
+    AngelTechData.InitCamera();
 
-    OmegaTechData.PixelShader = LoadShaderWithFallback(0, "GameData/Shaders/Pixel.fs");
+    AngelTechData.PixelShader = LoadShaderWithFallback(0, "GameData/Shaders/Pixel.fs");
     // Legacy FogShader disabled - using LitFog material shader instead
-    OmegaTechData.FogShader = {0};
-    OmegaTechData.LineShader = LoadShaderWithFallback(0, "GameData/Shaders/Scanlines.fs");
-    OmegaTechData.SobelShader = LoadShaderWithFallback(0, "GameData/Shaders/Sobel.fs");
-    OmegaTechData.ToonShader = LoadShaderWithFallback(0, "GameData/Shaders/Toon.fs");
-    OmegaTechData.JitterShader = LoadShaderWithFallback(0, "GameData/Shaders/Jitter.fs");
-    OmegaTechData.Lights = LoadShaderWithFallback("GameData/Shaders/Lights/Lighting.vs", "GameData/Shaders/Lights/LitFog.fs");
-    OmegaTechData.WindShader = LoadShaderWithFallback("GameData/Shaders/Lights/Wind.vs", "GameData/Shaders/Lights/LitFog.fs");
-    if (OmegaTechData.WindShader.id == 0) {
-        OmegaTechData.WindShader = OmegaTechData.Lights; // graceful fallback: no sway
+    AngelTechData.FogShader = {0};
+    AngelTechData.LineShader = LoadShaderWithFallback(0, "GameData/Shaders/Scanlines.fs");
+    AngelTechData.SobelShader = LoadShaderWithFallback(0, "GameData/Shaders/Sobel.fs");
+    AngelTechData.ToonShader = LoadShaderWithFallback(0, "GameData/Shaders/Toon.fs");
+    AngelTechData.JitterShader = LoadShaderWithFallback(0, "GameData/Shaders/Jitter.fs");
+    AngelTechData.Lights = LoadShaderWithFallback("GameData/Shaders/Lights/Lighting.vs", "GameData/Shaders/Lights/LitFog.fs");
+    AngelTechData.WindShader = LoadShaderWithFallback("GameData/Shaders/Lights/Wind.vs", "GameData/Shaders/Lights/LitFog.fs");
+    if (AngelTechData.WindShader.id == 0) {
+        AngelTechData.WindShader = AngelTechData.Lights; // graceful fallback: no sway
         OZ_WARN("Wind.vs shader not found — foliage wind disabled");
     }
     OZ_INFO("Shaders loaded (Pixel=%d, Line=%d, Sobel=%d, Toon=%d, Jitter=%d, Lights=%d, Wind=%d)",
-            OmegaTechData.PixelShader.id, OmegaTechData.LineShader.id,
-            OmegaTechData.SobelShader.id, OmegaTechData.ToonShader.id,
-            OmegaTechData.JitterShader.id, OmegaTechData.Lights.id, OmegaTechData.WindShader.id);
-    OzoneLoader::Instance().SetLitFogShader(OmegaTechData.Lights);
+            AngelTechData.PixelShader.id, AngelTechData.LineShader.id,
+            AngelTechData.SobelShader.id, AngelTechData.ToonShader.id,
+            AngelTechData.JitterShader.id, AngelTechData.Lights.id, AngelTechData.WindShader.id);
+    OzoneLoader::Instance().SetLitFogShader(AngelTechData.Lights);
 
     // Initialize all lights to disabled
     for (int i = 0; i < MAX_LIGHTS; i++)
     {
-        OmegaTechData.GameLights[i] = {0};
+        AngelTechData.GameLights[i] = {0};
     }
 
-    OmegaTechData.Lights.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(OmegaTechData.Lights, "viewPos");
-    int AmbientLoc = GetShaderLocation(OmegaTechData.Lights, "ambient");
+    AngelTechData.Lights.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(AngelTechData.Lights, "viewPos");
+    int AmbientLoc = GetShaderLocation(AngelTechData.Lights, "ambient");
     float ambient[4];
     FillDefaultAmbient(ambient);
-    SetShaderValue(OmegaTechData.Lights, AmbientLoc, ambient, SHADER_UNIFORM_VEC4);
+    SetShaderValue(AngelTechData.Lights, AmbientLoc, ambient, SHADER_UNIFORM_VEC4);
     OzoneLoader::Instance().SetWorldAmbient(ambient[0], ambient[1], ambient[2], ambient[3]);
 
     // Initialize fog uniforms
-    int fogStartLoc = GetShaderLocation(OmegaTechData.Lights, "fogStart");
-    int fogEndLoc = GetShaderLocation(OmegaTechData.Lights, "fogEnd");
-    int fogDensityLoc = GetShaderLocation(OmegaTechData.Lights, "fogDensity");
-    int fogColorLoc = GetShaderLocation(OmegaTechData.Lights, "fogColor");
-    int fogIntensityLoc = GetShaderLocation(OmegaTechData.Lights, "fogIntensity");
+    int fogStartLoc = GetShaderLocation(AngelTechData.Lights, "fogStart");
+    int fogEndLoc = GetShaderLocation(AngelTechData.Lights, "fogEnd");
+    int fogDensityLoc = GetShaderLocation(AngelTechData.Lights, "fogDensity");
+    int fogColorLoc = GetShaderLocation(AngelTechData.Lights, "fogColor");
+    int fogIntensityLoc = GetShaderLocation(AngelTechData.Lights, "fogIntensity");
 
     float fogStart = 10.0f;
     float fogEnd = 100.0f;
@@ -864,11 +864,11 @@ void OmegaTechInit()
     float fogColor[3] = {0.7f, 0.7f, 0.8f};
     float fogIntensity = 1.0f;
 
-    SetShaderValue(OmegaTechData.Lights, fogStartLoc, &fogStart, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(OmegaTechData.Lights, fogEndLoc, &fogEnd, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(OmegaTechData.Lights, fogDensityLoc, &fogDensity, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(OmegaTechData.Lights, fogColorLoc, fogColor, SHADER_UNIFORM_VEC3);
-    SetShaderValue(OmegaTechData.Lights, fogIntensityLoc, &fogIntensity, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(AngelTechData.Lights, fogStartLoc, &fogStart, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(AngelTechData.Lights, fogEndLoc, &fogEnd, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(AngelTechData.Lights, fogDensityLoc, &fogDensity, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(AngelTechData.Lights, fogColorLoc, fogColor, SHADER_UNIFORM_VEC3);
+    SetShaderValue(AngelTechData.Lights, fogIntensityLoc, &fogIntensity, SHADER_UNIFORM_FLOAT);
     // Publish the same defaults so the surface program starts in sync (its fog
     // uniforms were previously never set at all and stayed at the GLSL defaults,
     // which happened to match only by coincidence).
@@ -885,25 +885,25 @@ void OmegaTechInit()
     for (int i = 0; i < 3; i++) g_levelFog.fogColor[i] = fogColor[i];
 
     // uTime uniform for GPU light animation
-    static int uTimeLoc = GetShaderLocation(OmegaTechData.Lights, "uTime");
+    static int uTimeLoc = GetShaderLocation(AngelTechData.Lights, "uTime");
     float timeVal = (float)GetTime();
-    SetShaderValue(OmegaTechData.Lights, uTimeLoc, &timeVal, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(AngelTechData.Lights, uTimeLoc, &timeVal, SHADER_UNIFORM_FLOAT);
 
-    OmegaTechData.HomeScreen = LoadTextureWithFallback("GameData/Tex/Title/Title.png");
-    OmegaTechData.PauseHeading = LoadTexture("GameData/Tex/Title/menu_heading.png");
-    OmegaTechData.BtnNormal = LoadTexture("GameData/Tex/Title/menu_button.png");
-    OmegaTechData.BtnHover = LoadTexture("GameData/Tex/Title/menu_button_hover.png");
-    OmegaTechData.BtnClicked = LoadTexture("GameData/Tex/Title/menu_button_clicked.png");
+    AngelTechData.HomeScreen = LoadTextureWithFallback("GameData/Tex/Title/Title.png");
+    AngelTechData.PauseHeading = LoadTexture("GameData/Tex/Title/menu_heading.png");
+    AngelTechData.BtnNormal = LoadTexture("GameData/Tex/Title/menu_button.png");
+    AngelTechData.BtnHover = LoadTexture("GameData/Tex/Title/menu_button_hover.png");
+    AngelTechData.BtnClicked = LoadTexture("GameData/Tex/Title/menu_button_clicked.png");
     if (IsPathFile("GameData/Tex/Title/Title.mpg"))
-        OmegaTechData.HomeScreenVideo = ray_video_open("GameData/Tex/Title/Title.mpg");
-    OmegaTechData.HomeScreenMusic = LoadMusicWithFallback("GameData/Audio/Music/Title.mp3");
+        AngelTechData.HomeScreenVideo = ray_video_open("GameData/Tex/Title/Title.mpg");
+    AngelTechData.HomeScreenMusic = LoadMusicWithFallback("GameData/Audio/Music/Title.mp3");
 
-    OmegaTechTextSystem.Bar = LoadTextureWithFallback("GameData/Tex/Engine/TextBar.png");
-    OmegaTechTextSystem.BarFont = LoadFontWithFallback("GameData/Tex/Engine/Font.ttf");
+    AngelTechTextSystem.Bar = LoadTextureWithFallback("GameData/Tex/Engine/TextBar.png");
+    AngelTechTextSystem.BarFont = LoadFontWithFallback("GameData/Tex/Engine/Font.ttf");
     // UI/gameplay one-shots + the typewriter blip (all owned by SoundManager).
     SoundManager::Instance().LoadCoreSounds();
 
-    OmegaTechData.GameLights[0] = CreateLight(LIGHT_DIRECTIONAL, {OmegaTechData.MainCamera.position.x, OmegaTechData.MainCamera.position.y, OmegaTechData.MainCamera.position.z}, Vector3Zero(), WHITE, OmegaTechData.Lights);
+    AngelTechData.GameLights[0] = CreateLight(LIGHT_DIRECTIONAL, {AngelTechData.MainCamera.position.x, AngelTechData.MainCamera.position.y, AngelTechData.MainCamera.position.z}, Vector3Zero(), WHITE, AngelTechData.Lights);
 
     Target = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
 
@@ -922,7 +922,7 @@ void OmegaTechInit()
         }
     }
 
-    SoundManager::Instance().PlayStream(OmegaTechData.HomeScreenMusic);
+    SoundManager::Instance().PlayStream(AngelTechData.HomeScreenMusic);
 }
 
 void PlaySplashScreen()
@@ -1089,21 +1089,21 @@ bool LaunchHostedServer(int serverPort, const char* missionOrNull,
 void PlayHomeScreen()
 {
     // Re-open the title video if a previous menu visit released it.
-    if (!OmegaTechData.HomeScreenVideo.ok && IsPathFile("GameData/Tex/Title/Title.mpg"))
-        OmegaTechData.HomeScreenVideo = ray_video_open("GameData/Tex/Title/Title.mpg");
+    if (!AngelTechData.HomeScreenVideo.ok && IsPathFile("GameData/Tex/Title/Title.mpg"))
+        AngelTechData.HomeScreenVideo = ray_video_open("GameData/Tex/Title/Title.mpg");
 
     if (g_skipMenu)
     {
         g_skipMenu = false;
         UnloadRenderTexture(Target);
         Target = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
-        OmegaTechData.Deaths = 1;
+        AngelTechData.Deaths = 1;
         return;
     }
 
     // The title track is stopped when the menu is left. On a return to the menu
     // nothing restarted it, so the title screen was silent after the first game.
-    SoundManager::Instance().PlayStream(OmegaTechData.HomeScreenMusic);
+    SoundManager::Instance().PlayStream(AngelTechData.HomeScreenMusic);
     // Returning from a game leaves the cursor captured/hidden. The title screen
     // is mouse-driven, so undo that here rather than relying on the previous
     // menu path.
@@ -1125,13 +1125,13 @@ void PlayHomeScreen()
         }
     }
 
-    SoundManager::Instance().StopStream(OmegaTechData.HomeScreenMusic);
+    SoundManager::Instance().StopStream(AngelTechData.HomeScreenMusic);
 
     // Release the title video (it will be re-opened on the next menu visit).
-    if (OmegaTechData.HomeScreenVideo.ok)
+    if (AngelTechData.HomeScreenVideo.ok)
     {
-        ray_video_destroy(&OmegaTechData.HomeScreenVideo);
-        OmegaTechData.HomeScreenVideo = ray_video_t{};
+        ray_video_destroy(&AngelTechData.HomeScreenVideo);
+        AngelTechData.HomeScreenVideo = ray_video_t{};
     }
 
     if (menu.ShouldQuit())
@@ -1144,7 +1144,7 @@ void PlayHomeScreen()
     {
         UnloadRenderTexture(Target);
         Target = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
-        OmegaTechData.Deaths = 1;
+        AngelTechData.Deaths = 1;
     }
 
     if (menu.ShouldLoadGame())
@@ -1226,12 +1226,12 @@ void PlayHomeScreen()
         }
     }
 
-    OmegaTechData.Deaths = 1;
+    AngelTechData.Deaths = 1;
 }
 
 void UpdateEntitiesSim(float dt)
 {
-    Vector3 playerPos = OmegaTechData.MainCamera.position;
+    Vector3 playerPos = AngelTechData.MainCamera.position;
 
     // Single-pass zone scan for player â€” replaces 4 separate CheckZoneCollision calls
     ZoneManager::Instance().UpdatePlayerRegion(playerPos, g_playerMovement.PlayerBounds);
@@ -1329,7 +1329,7 @@ void UpdateEntitiesSim(float dt)
     {
         auto& fb = PawnSystem::Instance().m_pickupFeedback;
         if (fb.collected) {
-            OmegaTechTextSystem.Write(TextFormat("Collected: %s", fb.typeName.c_str()));
+            AngelTechTextSystem.Write(TextFormat("Collected: %s", fb.typeName.c_str()));
             fb.collected = false;
         }
     }
@@ -1360,9 +1360,9 @@ void UpdateEntitiesSim(float dt)
             float mitigated = oz::MitigateDamage(damage, lem.GetPlayerDefense());
             lem.SetPlayerHealth(std::max(0.0f, lem.GetPlayerHealth() - mitigated));
             g_damageCooldown = 1.0f;
-            if (OmegaTechData.DamageFlash <= 0.0f)
-                OmegaTechData.DamageFlash = kDamageFlashDuration;
-            if (OmegaTechData.Ticker % 2 == 0)
+            if (AngelTechData.DamageFlash <= 0.0f)
+                AngelTechData.DamageFlash = kDamageFlashDuration;
+            if (AngelTechData.Ticker % 2 == 0)
             {
                 SoundManager::Instance().PlayChasing();
             }
@@ -1380,9 +1380,9 @@ void UpdateEntitiesSim(float dt)
                 // First death frame: start the countdown, reset stats now.
                 LightningEntityManager::Instance().SetPlayerHealth(100.0f);
                 LightningEntityManager::Instance().SetPlayerMana(100.0f);
-                OmegaTechData.Deaths++;
-                OZ_INFO("Player died! Death #%d", OmegaTechData.Deaths);
-                OmegaTechTextSystem.Write(TextFormat("You died! Death #%d", OmegaTechData.Deaths));
+                AngelTechData.Deaths++;
+                OZ_INFO("Player died! Death #%d", AngelTechData.Deaths);
+                AngelTechTextSystem.Write(TextFormat("You died! Death #%d", AngelTechData.Deaths));
                 float respawnTime = 5.0f;
                 const auto& settings = PawnSystem::Instance().GetWorldInfo().settings;
                 if (settings.respawnTime >= 0.0f) respawnTime = settings.respawnTime;
@@ -1394,7 +1394,7 @@ void UpdateEntitiesSim(float dt)
                 if (s_respawnTimer <= 0.0f)
                 {
                     s_respawnTimer = 0.0f;
-                    PawnSystem::Instance().RespawnPlayerAtStart(OmegaTechData.MainCamera);
+                    PawnSystem::Instance().RespawnPlayerAtStart(AngelTechData.MainCamera);
                     // Refill items from save
                     LoadSave();
                 }
@@ -1416,7 +1416,7 @@ void UpdatePlayer()
     static float s_phase = 0.0f;
     static float s_prevBobY = 0.0f;
 
-    const Vector3 camPos = OmegaTechData.MainCamera.position;
+    const Vector3 camPos = AngelTechData.MainCamera.position;
     if (!s_prevInit) { s_prevPos = camPos; s_prevInit = true; }
     const float dt = GetFrameTime();
     const float dx = camPos.x - s_prevPos.x;
@@ -1443,18 +1443,18 @@ void UpdatePlayer()
         PlayerController::Instance().StopWalkLoop();
     }
 
-    OmegaTechData.MainCamera.position.y += bobY;
+    AngelTechData.MainCamera.position.y += bobY;
     // Move the target by the bob DELTA, not the absolute bob: UpdateLookAndMove
     // already folded last frame's bob into the target through the camera
     // position, so an absolute add would double it and pitch the view. The delta
     // keeps target - position == look direction, i.e. a true eye bob.
-    OmegaTechData.MainCamera.target.y += (bobY - s_prevBobY);
+    AngelTechData.MainCamera.target.y += (bobY - s_prevBobY);
     s_prevBobY = bobY;
 
     // Feed the weapon view-model so it sways on the same phase.
     oz::ViewModel::Instance().SetViewBob(s_phase, bobAmp);
 
-    g_playerMovement.UpdateBounds(OmegaTechData.MainCamera);
+    g_playerMovement.UpdateBounds(AngelTechData.MainCamera);
 }
 
 void SaveGame()
@@ -1493,10 +1493,10 @@ void SaveGame()
     Outfile.open("GameData/Saves/TF.sav");
     Outfile << TFlags;
 
-    wstring Position = to_wstring(OmegaTechData.MainCamera.position.x) + L':' +
-                       to_wstring(OmegaTechData.MainCamera.position.y) + L':' +
-                       to_wstring(OmegaTechData.MainCamera.position.z) + L':' +
-                       to_wstring(OmegaTechData.LevelIndex) + L':' +
+    wstring Position = to_wstring(AngelTechData.MainCamera.position.x) + L':' +
+                       to_wstring(AngelTechData.MainCamera.position.y) + L':' +
+                       to_wstring(AngelTechData.MainCamera.position.z) + L':' +
+                       to_wstring(AngelTechData.LevelIndex) + L':' +
                        wstring(g_world_to_load, g_world_to_load + strlen(g_world_to_load)) + L':';
 
     wofstream Outfile1;
@@ -1601,9 +1601,9 @@ void LoadSave()
     if (!Position.empty())
     {
         try {
-            OmegaTechData.LevelIndex = int(ToFloat(WSplitValue(Position, 3)));
+            AngelTechData.LevelIndex = int(ToFloat(WSplitValue(Position, 3)));
         } catch (...) {
-            OmegaTechData.LevelIndex = 1;
+            AngelTechData.LevelIndex = 1;
         }
 
         // The world field was appended after level. A save without it is the
@@ -1695,11 +1695,11 @@ void DrawWorld()
 
 // Detect sky zone BEFORE 3D mode begins (needed for sky camera setup)
     PawnSystem::Instance().UpdateSkyZone(
-        OmegaTechData.MainCamera.position,
+        AngelTechData.MainCamera.position,
         g_playerMovement.PlayerBounds);
     bool inSkyZone = PawnSystem::Instance().IsInSkyZone();
 
-    BeginMode3D(OmegaTechData.MainCamera);
+    BeginMode3D(AngelTechData.MainCamera);
 
 // ---------------------------------------------------------------------------
 // 3D Skybox Cube - drawn first with depth-write disabled so it sits behind all
@@ -1718,7 +1718,7 @@ void DrawWorld()
 // ---------------------------------------------------------------------------
 {
     Texture2D capTex = {0};
-    if (WorldModels.Skybox.id > 0 && OmegaTechData.SkyboxEnabled) {
+    if (WorldModels.Skybox.id > 0 && AngelTechData.SkyboxEnabled) {
         capTex = WorldModels.Skybox;
     } else if (inSkyZone) {
         SkyZoneNode* sky = PawnSystem::Instance().GetActiveSkyZone();
@@ -1747,7 +1747,7 @@ void DrawWorld()
         // correct winding and want it. Imported meshes opt back out via
         // oz::ScopedCullOff in oz::Mesh::Draw (see Renderer/CullState.hpp - this
         // used to be a raw call that nothing ever turned back off).
-        oz::Skybox::Instance().Draw(OmegaTechData.MainCamera.position,
+        oz::Skybox::Instance().Draw(AngelTechData.MainCamera.position,
                                     capTex, g_skySideTex,
                                     /*cullBackfaces=*/true, &fog);
     }
@@ -1760,7 +1760,7 @@ void DrawWorld()
 if (inSkyZone)
     {
         rlDisableDepthMask();
-        OzoneLoader::Instance().DrawZoneGeometry(OmegaTechData.MainCamera);
+        OzoneLoader::Instance().DrawZoneGeometry(AngelTechData.MainCamera);
         rlEnableDepthMask();
     }
 
@@ -1769,18 +1769,18 @@ if (inSkyZone)
     SoundManager::Instance().UpdateSoundZones(ZoneManager::Instance().GetPlayerRegion());
     SoundManager::Instance().Update();
 
-    OzoneLoader::Instance().DrawWorldGeometry(OmegaTechData.MainCamera);
+    OzoneLoader::Instance().DrawWorldGeometry(AngelTechData.MainCamera);
 
     // Additive re-draw of every SURF_GLOW face, after the opaque world so the
     // halo lands on top of the composited image. No-op unless a surface actually
     // carries the flag, so this costs two vector scans on a normal frame.
-    OzoneLoader::Instance().DrawGlowGeometry(OmegaTechData.MainCamera);
+    OzoneLoader::Instance().DrawGlowGeometry(AngelTechData.MainCamera);
 
     // OZONE brush collision — chunk-accelerated query, delegated to the
     // physics module via the adapter below.
     {
         oz::physics::OzoneCollisionQuery q;
-        Vector3 cp = OmegaTechData.MainCamera.position;
+        Vector3 cp = AngelTechData.MainCamera.position;
         // Effective eye height shrinks while crouching (dynamic player stance)
         float playerFeet = cp.y - g_playerMovement.EyeHeight;
         if (oz::physics::PlayerPhysics().TestObstacleOverlap(g_playerMovement.PlayerBounds,
@@ -1797,7 +1797,7 @@ if (inSkyZone)
         oz::physics::PlayerPhysics::Motion motion;
         motion.onGround = g_playerMovement.onGround;
         motion.velocityY = g_playerMovement.velocityY;
-        pphys.ClampToGround(OmegaTechData.MainCamera, motion, g_playerMovement.EyeHeight, q);
+        pphys.ClampToGround(AngelTechData.MainCamera, motion, g_playerMovement.EyeHeight, q);
         g_playerMovement.onGround = motion.onGround;
         g_playerMovement.velocityY = motion.velocityY;
     }
@@ -1841,9 +1841,9 @@ if (inSkyZone)
     // remote players all live here so they render inside the 3D camera pass.
     {
         CombatFX::Instance().Update(GetFrameTime());
-        PawnSystem::Instance().DrawProjectiles(OmegaTechData.MainCamera, OmegaTechData.Lights);
-        CombatFX::Instance().Draw3D(OmegaTechData.MainCamera);
-        DrawRemotePlayers3D(OmegaTechData.Lights);
+        PawnSystem::Instance().DrawProjectiles(AngelTechData.MainCamera, AngelTechData.Lights);
+        CombatFX::Instance().Draw3D(AngelTechData.MainCamera);
+        DrawRemotePlayers3D(AngelTechData.Lights);
     }
 
     if (Debug)
@@ -1886,27 +1886,27 @@ if (inSkyZone)
         // switch and is not derived from the level.
         if (ParticlesEnabled)
             OzParticleSimulationManager::Instance().UpdateWeather(
-                GetFrameTime(), OmegaTechData.MainCamera.position);
+                GetFrameTime(), AngelTechData.MainCamera.position);
 
         // Draw pawns / entity billboards exactly once per frame (kept out of
         // the sim steps so a catch-up frame doesn't re-draw the scene).
-        PawnSystem::Instance().DrawAll(OmegaTechData.MainCamera, OmegaTechData.Lights);
-        PawnSystem::Instance().DrawEntities(OmegaTechData.MainCamera, OmegaTechData.Lights, OmegaTechData.WindShader);
-        DrawLightFlares(OmegaTechData.MainCamera);
+        PawnSystem::Instance().DrawAll(AngelTechData.MainCamera, AngelTechData.Lights);
+        PawnSystem::Instance().DrawEntities(AngelTechData.MainCamera, AngelTechData.Lights, AngelTechData.WindShader);
+        DrawLightFlares(AngelTechData.MainCamera);
 
         // First-person weapon view-model (drawn on top of the world).
         // Suppressed for --shot captures: the view-model is camera-locked UI,
         // not the level, and it covers a third of the frame.
         if (!(g_shot.active && g_shot.hideHud)) {
             oz::ViewModel::Instance().Update(GetFrameTime());
-            oz::ViewModel::Instance().Draw(OmegaTechData.MainCamera, OmegaTechData.Lights);
+            oz::ViewModel::Instance().Draw(AngelTechData.MainCamera, AngelTechData.Lights);
         }
     }
     // Collision rollback - delegated to the physics module.
     if (ObjectCollision)
     {
         oz::physics::PlayerPhysics().RestorePosition(
-            OmegaTechData.MainCamera,
+            AngelTechData.MainCamera,
             g_playerMovement.OldX, g_playerMovement.OldY, g_playerMovement.OldZ,
             g_playerMovement.isNoClip);
         ObjectCollision = false;
@@ -1931,17 +1931,17 @@ if (inSkyZone)
         // opcodes used to clear the pending value instead of signalling the host,
         // so they never restored anything.
         if (lem.TakePendingFogRestore()) {
-            static int fogD = GetShaderLocation(OmegaTechData.Lights, "fogDensity");
-            static int fogC = GetShaderLocation(OmegaTechData.Lights, "fogColor");
-            static int fogS = GetShaderLocation(OmegaTechData.Lights, "fogStart");
-            static int fogE = GetShaderLocation(OmegaTechData.Lights, "fogEnd");
-            static int fogI = GetShaderLocation(OmegaTechData.Lights, "fogIntensity");
+            static int fogD = GetShaderLocation(AngelTechData.Lights, "fogDensity");
+            static int fogC = GetShaderLocation(AngelTechData.Lights, "fogColor");
+            static int fogS = GetShaderLocation(AngelTechData.Lights, "fogStart");
+            static int fogE = GetShaderLocation(AngelTechData.Lights, "fogEnd");
+            static int fogI = GetShaderLocation(AngelTechData.Lights, "fogIntensity");
             const LevelFogState& L = g_levelFog;
-            SetShaderValue(OmegaTechData.Lights, fogS, &L.fogStart, SHADER_UNIFORM_FLOAT);
-            SetShaderValue(OmegaTechData.Lights, fogE, &L.fogEnd, SHADER_UNIFORM_FLOAT);
-            SetShaderValue(OmegaTechData.Lights, fogD, &L.fogDensity, SHADER_UNIFORM_FLOAT);
-            SetShaderValue(OmegaTechData.Lights, fogC, L.fogColor, SHADER_UNIFORM_VEC3);
-            SetShaderValue(OmegaTechData.Lights, fogI, &L.fogIntensity, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(AngelTechData.Lights, fogS, &L.fogStart, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(AngelTechData.Lights, fogE, &L.fogEnd, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(AngelTechData.Lights, fogD, &L.fogDensity, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(AngelTechData.Lights, fogC, L.fogColor, SHADER_UNIFORM_VEC3);
+            SetShaderValue(AngelTechData.Lights, fogI, &L.fogIntensity, SHADER_UNIFORM_FLOAT);
             // PUBLISH, or SurfaceMaterial keeps the previous fog.
             //
             // OzoneLoader owns the world's fog because raylib has no
@@ -1964,12 +1964,12 @@ if (inSkyZone)
 
         if (lem.HasPendingFog())
         {
-            static int fogDensityLoc = GetShaderLocation(OmegaTechData.Lights, "fogDensity");
-            static int fogColorLoc = GetShaderLocation(OmegaTechData.Lights, "fogColor");
+            static int fogDensityLoc = GetShaderLocation(AngelTechData.Lights, "fogDensity");
+            static int fogColorLoc = GetShaderLocation(AngelTechData.Lights, "fogColor");
             float density = lem.PendingFogDensity();
             float color[3] = {lem.PendingFogR(), lem.PendingFogG(), lem.PendingFogB()};
-            SetShaderValue(OmegaTechData.Lights, fogDensityLoc, &density, SHADER_UNIFORM_FLOAT);
-            SetShaderValue(OmegaTechData.Lights, fogColorLoc, color, SHADER_UNIFORM_VEC3);
+            SetShaderValue(AngelTechData.Lights, fogDensityLoc, &density, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(AngelTechData.Lights, fogColorLoc, color, SHADER_UNIFORM_VEC3);
             // PUBLISH. See the note on restore_fog above: writing only this
             // program leaves SurfaceMaterial - and therefore every painted backdrop
             // and every surface-flagged brush - on the startup fog.
@@ -1993,7 +1993,7 @@ if (inSkyZone)
             }
             // WorldModels.Skybox is left alone: it is the level's own texture and
             // is still what the sky pass falls back to.
-            OmegaTechData.SkyboxEnabled = (WorldModels.Skybox.id > 0);
+            AngelTechData.SkyboxEnabled = (WorldModels.Skybox.id > 0);
             OZ_INFO("LightningScript: restore_skybox - reverted to level skybox");
         }
 
@@ -2018,7 +2018,7 @@ if (inSkyZone)
                     if (WorldModels.Skybox.id > 0)
                         UnloadTexture(WorldModels.Skybox);
                     WorldModels.Skybox = newSky;
-                    OmegaTechData.SkyboxEnabled = true;
+                    AngelTechData.SkyboxEnabled = true;
                 } else {
                     OZ_WARN("LightningScript: skybox '%s' not found", path.c_str());
                 }
@@ -2027,18 +2027,18 @@ if (inSkyZone)
 
         // Apply pending Ambient changes from script contexts
         if (lem.TakePendingAmbientRestore()) {
-            static int ambLoc = GetShaderLocation(OmegaTechData.Lights, "ambient");
+            static int ambLoc = GetShaderLocation(AngelTechData.Lights, "ambient");
             float amb[4];
             FillDefaultAmbient(amb);   // the world default, not a hardcoded 1.0
-            SetShaderValue(OmegaTechData.Lights, ambLoc, amb, SHADER_UNIFORM_VEC4);
+            SetShaderValue(AngelTechData.Lights, ambLoc, amb, SHADER_UNIFORM_VEC4);
             OzoneLoader::Instance().SetWorldAmbient(amb[0], amb[1], amb[2], amb[3]);
             OZ_INFO("LightningScript: restore_ambient - reverted to level default");
         }
         if (lem.HasPendingAmbient())
         {
             float amb[4] = {lem.PendingAmbientR(), lem.PendingAmbientG(), lem.PendingAmbientB(), 1.0f};
-            static int ambientLoc = GetShaderLocation(OmegaTechData.Lights, "ambient");
-            SetShaderValue(OmegaTechData.Lights, ambientLoc, amb, SHADER_UNIFORM_VEC4);
+            static int ambientLoc = GetShaderLocation(AngelTechData.Lights, "ambient");
+            SetShaderValue(AngelTechData.Lights, ambientLoc, amb, SHADER_UNIFORM_VEC4);
             OzoneLoader::Instance().SetWorldAmbient(amb[0], amb[1], amb[2], amb[3]);
             lem.ClearPendingAmbient();
         }
@@ -2060,19 +2060,19 @@ if (inSkyZone)
             {
                 auto &eo = region.combinedEnv;
                 OZ_DEBUG("Zone env: applyFog=%d applyAmbient=%d", eo.applyFog, eo.applyAmbient);
-                if (eo.applyFog && OmegaTechData.Lights.id > 0)
+                if (eo.applyFog && AngelTechData.Lights.id > 0)
                 {
                     float fc[3] = {eo.fogR / 255.0f, eo.fogG / 255.0f, eo.fogB / 255.0f};
                     float fd = eo.fogDensity;
-                    static int fogDensityLoc = GetShaderLocation(OmegaTechData.Lights, "fogDensity");
-                    static int fogColorLoc = GetShaderLocation(OmegaTechData.Lights, "fogColor");
-                    static int fogStartLoc = GetShaderLocation(OmegaTechData.Lights, "fogStart");
-                    static int fogEndLoc = GetShaderLocation(OmegaTechData.Lights, "fogEnd");
-                    SetShaderValue(OmegaTechData.Lights, fogColorLoc, fc, SHADER_UNIFORM_VEC3);
-                    SetShaderValue(OmegaTechData.Lights, fogDensityLoc, &fd, SHADER_UNIFORM_FLOAT);
+                    static int fogDensityLoc = GetShaderLocation(AngelTechData.Lights, "fogDensity");
+                    static int fogColorLoc = GetShaderLocation(AngelTechData.Lights, "fogColor");
+                    static int fogStartLoc = GetShaderLocation(AngelTechData.Lights, "fogStart");
+                    static int fogEndLoc = GetShaderLocation(AngelTechData.Lights, "fogEnd");
+                    SetShaderValue(AngelTechData.Lights, fogColorLoc, fc, SHADER_UNIFORM_VEC3);
+                    SetShaderValue(AngelTechData.Lights, fogDensityLoc, &fd, SHADER_UNIFORM_FLOAT);
                     float fs = eo.fogStart, fe = eo.fogEnd;
-                    SetShaderValue(OmegaTechData.Lights, fogStartLoc, &fs, SHADER_UNIFORM_FLOAT);
-                    SetShaderValue(OmegaTechData.Lights, fogEndLoc, &fe, SHADER_UNIFORM_FLOAT);
+                    SetShaderValue(AngelTechData.Lights, fogStartLoc, &fs, SHADER_UNIFORM_FLOAT);
+                    SetShaderValue(AngelTechData.Lights, fogEndLoc, &fe, SHADER_UNIFORM_FLOAT);
                     // Publish alongside the uniform so the surface program gets
                     // the same fog from UpdateLightSources' single mirror point.
                     OzoneLoader::Instance().SetWorldFog(fc, fs, fe, fd);
@@ -2080,13 +2080,13 @@ if (inSkyZone)
                     FogIntensity = (fd > 0) ? fd : 0.3f;
                     FogTint = {(unsigned char)eo.fogR, (unsigned char)eo.fogG, (unsigned char)eo.fogB, 255};
                 }
-                if (eo.applyAmbient && OmegaTechData.Lights.id > 0)
+                if (eo.applyAmbient && AngelTechData.Lights.id > 0)
                 {
                     float amb[4] = {eo.ambR / 255.0f * eo.ambIntensity,
                                     eo.ambG / 255.0f * eo.ambIntensity,
                                     eo.ambB / 255.0f * eo.ambIntensity, 1.0f};
-                    static int ambientLoc = GetShaderLocation(OmegaTechData.Lights, "ambient");
-                    SetShaderValue(OmegaTechData.Lights, ambientLoc, amb, SHADER_UNIFORM_VEC4);
+                    static int ambientLoc = GetShaderLocation(AngelTechData.Lights, "ambient");
+                    SetShaderValue(AngelTechData.Lights, ambientLoc, amb, SHADER_UNIFORM_VEC4);
                     OzoneLoader::Instance().SetWorldAmbient(amb[0], amb[1], amb[2], amb[3]);
                 }
                 g_activeEnvZone = envZoneName;
@@ -2095,7 +2095,7 @@ if (inSkyZone)
             {
                 // Exited env zone â€” restore defaults from WorldInfo
                 OZ_DEBUG("Zone env: restoring WorldInfo defaults");
-                if (OmegaTechData.Lights.id > 0)
+                if (AngelTechData.Lights.id > 0)
                 {
                     auto& wi = PawnSystem::Instance().GetWorldInfo();
                     float defFogColor[3] = {wi.defaultEnv.fogR / 255.0f,
@@ -2103,14 +2103,14 @@ if (inSkyZone)
                                             wi.defaultEnv.fogB / 255.0f};
                     float defFogDensity = wi.defaultEnv.fogDensity;
                     float defFogStart = wi.defaultEnv.fogStart, defFogEnd = wi.defaultEnv.fogEnd;
-                    static int fogDensityLoc = GetShaderLocation(OmegaTechData.Lights, "fogDensity");
-                    static int fogColorLoc = GetShaderLocation(OmegaTechData.Lights, "fogColor");
-                    static int fogStartLoc = GetShaderLocation(OmegaTechData.Lights, "fogStart");
-                    static int fogEndLoc = GetShaderLocation(OmegaTechData.Lights, "fogEnd");
-                    SetShaderValue(OmegaTechData.Lights, fogColorLoc, defFogColor, SHADER_UNIFORM_VEC3);
-                    SetShaderValue(OmegaTechData.Lights, fogDensityLoc, &defFogDensity, SHADER_UNIFORM_FLOAT);
-                    SetShaderValue(OmegaTechData.Lights, fogStartLoc, &defFogStart, SHADER_UNIFORM_FLOAT);
-                    SetShaderValue(OmegaTechData.Lights, fogEndLoc, &defFogEnd, SHADER_UNIFORM_FLOAT);
+                    static int fogDensityLoc = GetShaderLocation(AngelTechData.Lights, "fogDensity");
+                    static int fogColorLoc = GetShaderLocation(AngelTechData.Lights, "fogColor");
+                    static int fogStartLoc = GetShaderLocation(AngelTechData.Lights, "fogStart");
+                    static int fogEndLoc = GetShaderLocation(AngelTechData.Lights, "fogEnd");
+                    SetShaderValue(AngelTechData.Lights, fogColorLoc, defFogColor, SHADER_UNIFORM_VEC3);
+                    SetShaderValue(AngelTechData.Lights, fogDensityLoc, &defFogDensity, SHADER_UNIFORM_FLOAT);
+                    SetShaderValue(AngelTechData.Lights, fogStartLoc, &defFogStart, SHADER_UNIFORM_FLOAT);
+                    SetShaderValue(AngelTechData.Lights, fogEndLoc, &defFogEnd, SHADER_UNIFORM_FLOAT);
                     OzoneLoader::Instance().SetWorldFog(defFogColor, defFogStart,
                                                         defFogEnd, defFogDensity);
                 }
@@ -2124,7 +2124,7 @@ if (inSkyZone)
     // Route script HUD messages (msg opcode) to the on-screen text system
         if (!lem.PendingMessage().empty())
         {
-            OmegaTechTextSystem.Write(lem.PendingMessage());
+            AngelTechTextSystem.Write(lem.PendingMessage());
             lem.ClearPendingMessage();
         }
 
@@ -2132,8 +2132,8 @@ if (inSkyZone)
         if (lem.PlayerHurt())
         {
             lem.ClearPlayerHurt();
-            if (OmegaTechData.DamageFlash <= 0.0f)
-                OmegaTechData.DamageFlash = kDamageFlashDuration;
+            if (AngelTechData.DamageFlash <= 0.0f)
+                AngelTechData.DamageFlash = kDamageFlashDuration;
             // Same routed handler as the network PLAYER_HURT path, so a script
             // `damage` and a server hit cannot double-play and both respect the
             // authored hurt_sound / death_sound split.
@@ -2148,7 +2148,7 @@ if (inSkyZone)
         {
             if (cmd.op == "teleport")
             {
-                OmegaTechData.MainCamera.position = {cmd.x, cmd.y, cmd.z};
+                AngelTechData.MainCamera.position = {cmd.x, cmd.y, cmd.z};
                 g_playerMovement.LookInit = false;   // re-derive look from the new spot
             }
             else if (cmd.op == "change_world")
@@ -2162,14 +2162,14 @@ if (inSkyZone)
             }
             else if (cmd.op == "area_damage")
             {
-                lem.ApplyAreaDamage(OmegaTechData.MainCamera.position, cmd.f0, (int)cmd.f1);
+                lem.ApplyAreaDamage(AngelTechData.MainCamera.position, cmd.f0, (int)cmd.f1);
             }
             else if (cmd.op == "projectile")
             {
-                Vector3 fwd = Vector3Normalize(Vector3Subtract(OmegaTechData.MainCamera.target,
-                                                               OmegaTechData.MainCamera.position));
+                Vector3 fwd = Vector3Normalize(Vector3Subtract(AngelTechData.MainCamera.target,
+                                                               AngelTechData.MainCamera.position));
                 ProjectileNode pn;
-                pn.position = Vector3Add(OmegaTechData.MainCamera.position, Vector3Scale(fwd, 2.0f));
+                pn.position = Vector3Add(AngelTechData.MainCamera.position, Vector3Scale(fwd, 2.0f));
                 pn.velocity = Vector3Scale(fwd, cmd.x > 0.0f ? cmd.x : 20.0f);
                 pn.damage = cmd.y;
                 pn.lifetime = cmd.z > 0.0f ? cmd.z : 2.0f;
@@ -2195,31 +2195,31 @@ if (inSkyZone)
 
     if (SetSceneFlag)
     {
-        OmegaTechData.LevelIndex = SetSceneId;
+        AngelTechData.LevelIndex = SetSceneId;
         LoadWorld();
         if (g_portalTransitionPending)
         {
             // Arriving via portal: place player at the portal's target spawn,
             // preserving view direction.
-            Vector3 oldPos = OmegaTechData.MainCamera.position;
-            OmegaTechData.MainCamera.position = g_portalSpawnPos;
+            Vector3 oldPos = AngelTechData.MainCamera.position;
+            AngelTechData.MainCamera.position = g_portalSpawnPos;
             // Never arrive under the terrain: lift the camera to the OZONE
             // heightmap surface at this XZ when the raw spawn sits below grade.
             float groundY = OzoneLoader::Instance().HasHeightmap()
                                 ? OzoneLoader::Instance().SampleHeightmapY(g_portalSpawnPos.x, g_portalSpawnPos.z)
                                 : -99999.0f;
             if (groundY > -50000.0f &&
-                OmegaTechData.MainCamera.position.y < groundY + g_playerMovement.EyeHeight)
-                OmegaTechData.MainCamera.position.y = groundY + g_playerMovement.EyeHeight;
-            OmegaTechData.MainCamera.target.x += OmegaTechData.MainCamera.position.x - oldPos.x;
-            OmegaTechData.MainCamera.target.y += OmegaTechData.MainCamera.position.y - oldPos.y;
-            OmegaTechData.MainCamera.target.z += OmegaTechData.MainCamera.position.z - oldPos.z;
+                AngelTechData.MainCamera.position.y < groundY + g_playerMovement.EyeHeight)
+                AngelTechData.MainCamera.position.y = groundY + g_playerMovement.EyeHeight;
+            AngelTechData.MainCamera.target.x += AngelTechData.MainCamera.position.x - oldPos.x;
+            AngelTechData.MainCamera.target.y += AngelTechData.MainCamera.position.y - oldPos.y;
+            AngelTechData.MainCamera.target.z += AngelTechData.MainCamera.position.z - oldPos.z;
             // Reset movement state to the arrival point so the collision
             // "restore" path can't yank the player back to a stale position
             // from the previous world.
-            g_playerMovement.OldX = OmegaTechData.MainCamera.position.x;
-            g_playerMovement.OldY = OmegaTechData.MainCamera.position.y;
-            g_playerMovement.OldZ = OmegaTechData.MainCamera.position.z;
+            g_playerMovement.OldX = AngelTechData.MainCamera.position.x;
+            g_playerMovement.OldY = AngelTechData.MainCamera.position.y;
+            g_playerMovement.OldZ = AngelTechData.MainCamera.position.z;
             g_playerMovement.velocityY = 0.0f;
             g_playerMovement.onGround = true;
             g_portalTransitionPending = false;
@@ -2234,7 +2234,7 @@ if (inSkyZone)
                 rp.targetSpawn = g_portalReturnPos;
                 rp.bidirectional = true;
                 rp.enabled = false; // armed after the player moves away
-                Vector3 c = OmegaTechData.MainCamera.position;
+                Vector3 c = AngelTechData.MainCamera.position;
                 rp.bounds = {
                     {c.x - 1.5f, c.y - 1.5f, c.z - 1.5f},
                     {c.x + 1.5f, c.y + 1.5f, c.z + 1.5f}
@@ -2250,16 +2250,16 @@ if (inSkyZone)
 
     if (SetCameraFlag)
     {
-        OmegaTechData.MainCamera.position = SetCameraPos;
+        AngelTechData.MainCamera.position = SetCameraPos;
         SetCameraFlag = false;
     }
 
-    if (OmegaTechData.Ticker != 60)
+    if (AngelTechData.Ticker != 60)
     {
-        OmegaTechData.Ticker++;
+        AngelTechData.Ticker++;
     }
     else
     {
-        OmegaTechData.Ticker = 0;
+        AngelTechData.Ticker = 0;
     }
 }

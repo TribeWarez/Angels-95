@@ -895,7 +895,7 @@ void LightningEntityManager::ApplyEntityScriptEffects(EntityInstance& inst) {
     // Engine-generic ones (event/objective/worldflag/xp/grant_item) are applied
     // here; world/camera-dependent ones (teleport/change_world/area_damage/
     // spawn_projectile/play_clip) are queued for Core.hpp, which owns
-    // OmegaTechData and the camera.
+    // AngelTechData and the camera.
     for (auto& cmd : inst.ctx.PopCommands()) {
         if (cmd.op == "event") {
             oz::events::Event ev;

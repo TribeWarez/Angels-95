@@ -11,7 +11,7 @@
 // wheel-only; and there were no handles to grab, so the only feedback was the
 // red selection box. The frame loop already publishes the gizmo transform into
 // the live selection every frame (Main.cpp), so this file only ever writes
-// OmegaTechEditor - never the entity - which keeps ONE write path.
+// AngelTechEditor - never the entity - which keeps ONE write path.
 // ============================================================================
 
 #include "GizmoMath.hpp"
@@ -54,7 +54,7 @@ static bool Gizmo_TypeCanRotate() {
            g_sel.type == SelType::MODEL || g_sel.type == SelType::PARTICLE;
 }
 
-static Vector3 Gizmo_Pivot() { return {OmegaTechEditor.X, OmegaTechEditor.Y, OmegaTechEditor.Z}; }
+static Vector3 Gizmo_Pivot() { return {AngelTechEditor.X, AngelTechEditor.Y, AngelTechEditor.Z}; }
 
 // Screen-constant handle length: world size grows with camera distance so the
 // gizmo stays the same apparent size while zooming.
@@ -202,11 +202,11 @@ bool Gizmo_BeginDrag(Vector2 mouse, const Camera3D& cam, int toolMode) {
     const ozg::Vec3 p = ToOz(pivot);
 
     g_gizmoStartPivot = p;
-    g_gizmoStartX = OmegaTechEditor.X;
-    g_gizmoStartY = OmegaTechEditor.Y;
-    g_gizmoStartZ = OmegaTechEditor.Z;
-    g_gizmoStartR = OmegaTechEditor.R;
-    g_gizmoStartS = OmegaTechEditor.S;
+    g_gizmoStartX = AngelTechEditor.X;
+    g_gizmoStartY = AngelTechEditor.Y;
+    g_gizmoStartZ = AngelTechEditor.Z;
+    g_gizmoStartR = AngelTechEditor.R;
+    g_gizmoStartS = AngelTechEditor.S;
 
     if (IsAxis(h)) {
         if (!ozg::RayAxisParameter(ro, rd, p, ToOz(AxisVector(h)), g_gizmoStartParam))
@@ -252,20 +252,20 @@ void Gizmo_UpdateDrag(Vector2 mouse, const Camera3D& cam, int toolMode) {
             if (s < 0.05f) s = 0.05f;
             if (s > 100.0f) s = 100.0f;
             if (snap > 0.0f) s = ozg::SnapValue(s, snap);
-            OmegaTechEditor.S = s;
+            AngelTechEditor.S = s;
             return;
         }
 
         const float delta = t - g_gizmoStartParam;
         if (h == GizmoHandle::AxisX) {
             float v = g_gizmoStartX + delta;
-            OmegaTechEditor.X = ozg::SnapValue(v, snap);
+            AngelTechEditor.X = ozg::SnapValue(v, snap);
         } else if (h == GizmoHandle::AxisY) {
             float v = g_gizmoStartY + delta;
-            OmegaTechEditor.Y = ozg::SnapValue(v, snap);
+            AngelTechEditor.Y = ozg::SnapValue(v, snap);
         } else {
             float v = g_gizmoStartZ + delta;
-            OmegaTechEditor.Z = ozg::SnapValue(v, snap);
+            AngelTechEditor.Z = ozg::SnapValue(v, snap);
         }
         return;
     }
@@ -280,9 +280,9 @@ void Gizmo_UpdateDrag(Vector2 mouse, const Camera3D& cam, int toolMode) {
         ozg::Vec3 hit;
         if (!ozg::RayPlane(ro, rd, p, normal, hit)) return;
         const ozg::Vec3 delta = ozg::Sub(hit, g_gizmoStartHit);
-        OmegaTechEditor.X = ozg::SnapValue(g_gizmoStartX + delta.x, snap);
-        OmegaTechEditor.Y = ozg::SnapValue(g_gizmoStartY + delta.y, snap);
-        OmegaTechEditor.Z = ozg::SnapValue(g_gizmoStartZ + delta.z, snap);
+        AngelTechEditor.X = ozg::SnapValue(g_gizmoStartX + delta.x, snap);
+        AngelTechEditor.Y = ozg::SnapValue(g_gizmoStartY + delta.y, snap);
+        AngelTechEditor.Z = ozg::SnapValue(g_gizmoStartZ + delta.z, snap);
         return;
     }
 
@@ -294,7 +294,7 @@ void Gizmo_UpdateDrag(Vector2 mouse, const Camera3D& cam, int toolMode) {
         deltaDeg = ozg::WrapDeg180(deltaDeg);
         float r = g_gizmoStartR + deltaDeg;
         r = ozg::SnapAngle(r, Gizmo_AngleStep());
-        OmegaTechEditor.R = r;
+        AngelTechEditor.R = r;
         return;
     }
 }
@@ -307,11 +307,11 @@ void Gizmo_CancelDrag() {
     if (!Gizmo_IsDragging()) return;
     // The frame loop publishes the gizmo into the entity, so restoring the gizmo
     // restores the entity on the next sync. No second write path.
-    OmegaTechEditor.X = g_gizmoStartX;
-    OmegaTechEditor.Y = g_gizmoStartY;
-    OmegaTechEditor.Z = g_gizmoStartZ;
-    OmegaTechEditor.R = g_gizmoStartR;
-    OmegaTechEditor.S = g_gizmoStartS;
+    AngelTechEditor.X = g_gizmoStartX;
+    AngelTechEditor.Y = g_gizmoStartY;
+    AngelTechEditor.Z = g_gizmoStartZ;
+    AngelTechEditor.R = g_gizmoStartR;
+    AngelTechEditor.S = g_gizmoStartS;
     g_gizmoDragHandle = GizmoHandle::None;
 }
 

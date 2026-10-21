@@ -380,8 +380,8 @@ static void ExecuteConsoleCommand(const char* cmd) {
                 g_world_to_load[sizeof(g_world_to_load) - 1] = '\0';
                 OZ_INFO("World switch: %s -> %s", g_world_to_load, name);
                 SetSceneFlag = true;
-                OmegaTechData.MainCamera.position = (Vector3){0.0f, 20.0f, 0.0f};
-                OmegaTechData.MainCamera.target = (Vector3){0.0f, 20.0f, -10.0f};
+                AngelTechData.MainCamera.position = (Vector3){0.0f, 20.0f, 0.0f};
+                AngelTechData.MainCamera.target = (Vector3){0.0f, 20.0f, -10.0f};
             } else {
                 OZ_WARN("World '%s' not found in GameData/Worlds/", name);
             }
@@ -709,10 +709,10 @@ ShowSpellbook = false;
         SoundManager::Instance().SetSfxGain(SfxVolume / 100.0f);
     }
 
-    OmegaTechInit();
+    AngelTechInit();
     GameUi::Instance().Init();
     InventoryBehaviour::Instance().SetMessageSink([](const std::string& msg) {
-        OmegaTechTextSystem.Write(msg);
+        AngelTechTextSystem.Write(msg);
     });
     InventoryBehaviour::Instance().SetFeedbackSink([]() {
         SoundManager::Instance().PlayUIClick();
@@ -728,7 +728,7 @@ ShowSpellbook = false;
     static bool g_settingsPausedGame = false;
 
     oz::ui::CreateNativeMenuBar({
-        []() { SetSceneId = OmegaTechData.LevelIndex; SetSceneFlag = true; },
+        []() { SetSceneId = AngelTechData.LevelIndex; SetSceneFlag = true; },
         []() { SaveGame(); },
         []() { g_quitRequested = true; },
         []() {
@@ -770,7 +770,7 @@ ShowSpellbook = false;
 
     LoadWorld();
     g_client.set_on_chat_received([](const std::string& msg) {
-        OmegaTechTextSystem.Write(msg);
+        AngelTechTextSystem.Write(msg);
     });
     g_client.set_on_item_collected([](int item_id, int quantity) {
         InventoryBehaviour::Instance().OnItemCollected(item_id, quantity);
@@ -1083,8 +1083,8 @@ ShowSpellbook = false;
         }
 
         // Game-over overlay when player has died 3 times
-        if (PlayerController::Instance().DrawGameOver(OmegaTechData.Deaths,
-                OmegaTechData.BtnClicked, OmegaTechData.BtnHover, OmegaTechData.BtnNormal,
+        if (PlayerController::Instance().DrawGameOver(AngelTechData.Deaths,
+                AngelTechData.BtnClicked, AngelTechData.BtnHover, AngelTechData.BtnNormal,
                 g_returnToMenu,
                 []() { LoadWorld(); })) {
             EndDrawing();
@@ -1096,13 +1096,13 @@ ShowSpellbook = false;
         bool left_click_now = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
         bool left_just_pressed = left_click_now && !left_click_was_down;
 
-        g_playerMovement.OldX = OmegaTechData.MainCamera.position.x;
-        g_playerMovement.OldY = OmegaTechData.MainCamera.position.y;
-        g_playerMovement.OldZ = OmegaTechData.MainCamera.position.z;
+        g_playerMovement.OldX = AngelTechData.MainCamera.position.x;
+        g_playerMovement.OldY = AngelTechData.MainCamera.position.y;
+        g_playerMovement.OldZ = AngelTechData.MainCamera.position.z;
 
         // Save Y so the vertical physics below can own it (the horizontal
         // controller never touches Y).
-        float savedCamY = OmegaTechData.MainCamera.position.y;
+        float savedCamY = AngelTechData.MainCamera.position.y;
 
         // Custom first-person controller: mouse look + WASD at a speed derived
         // from the player entity's authored movement_speed, with hold-Shift
@@ -1111,7 +1111,7 @@ ShowSpellbook = false;
             bool uiBlocked = ShowSettings || ShowInventory || ShowSkillTree || ShowSpellbook || g_consoleOpen;
             float moveSpeedScalar = LightningEntityManager::Instance().GetPlayerMovementSpeed();
             g_playerMovement.UpdateLookAndMove(
-                OmegaTechData.MainCamera, GetFrameTime(), moveSpeedScalar, uiBlocked);
+                AngelTechData.MainCamera, GetFrameTime(), moveSpeedScalar, uiBlocked);
         }
 
         // Fixed 60 Hz timestep for movement physics (zone/water/jump/gravity).
@@ -1127,7 +1127,7 @@ ShowSpellbook = false;
         for (int s = 0; s < move_steps; ++s) {
         {
             const float dt = kMoveDt;
-            Vector3 playerPos = OmegaTechData.MainCamera.position;
+            Vector3 playerPos = AngelTechData.MainCamera.position;
             static std::string lastZoneName;
 
             // Get active zones from pre-computed player region (set in UpdateEntities)
@@ -1203,26 +1203,26 @@ ShowSpellbook = false;
         // --- Jump / Fly / Noclip Y management ---
         const bool verticalBlocked = g_consoleOpen || ShowInventory || ShowSkillTree || ShowSpellbook;
         for (int s = 0; s < move_steps; ++s) {
-            PlayerController::Instance().UpdateVertical(kMoveDt, OmegaTechData.MainCamera,
+            PlayerController::Instance().UpdateVertical(kMoveDt, AngelTechData.MainCamera,
                                                         savedCamY, verticalBlocked, zonePhysics);
         }
 
         const bool uiBlocking = ShowSettings || ShowInventory || ShowSkillTree || ShowSpellbook || g_consoleOpen;
 
         // Weapon fire AFTER camera so left-click does not disrupt movement
-        WeaponBehaviour::Instance().HandleInput(uiBlocking, OmegaTechData.MainCamera);
+        WeaponBehaviour::Instance().HandleInput(uiBlocking, AngelTechData.MainCamera);
 
         // Spell bar (Z/X/C/V/B). Also after the camera, because a cast aims
         // along the view direction. uiBlocking is the same modal flag, so a cast
         // cannot fire underneath the spellbook while it is open.
         LightningEntityManager::Instance().HandleSpellInput(uiBlocking,
-                                                           OmegaTechData.MainCamera);
+                                                           AngelTechData.MainCamera);
 
         // ADS / Zoom (right-click)
         WeaponBehaviour::Instance().SetAdsActive(!uiBlocking && Keybinds::Down(GameAction::AltFire));
 
         // Recoil recovery + camera application
-        WeaponBehaviour::Instance().Update(OmegaTechData.MainCamera);
+        WeaponBehaviour::Instance().Update(AngelTechData.MainCamera);
 
         left_click_was_down = left_click_now;
 
@@ -1253,7 +1253,7 @@ ShowSpellbook = false;
             g_playerMovement.isNoClip = true;
             g_playerMovement.LookInit = true;
             if (!g_shot.camApplied && g_shot.shotIndex < (int)g_shot.cams.size()) {
-                ApplyShotCamera(OmegaTechData.MainCamera, g_shot.cams[g_shot.shotIndex]);
+                ApplyShotCamera(AngelTechData.MainCamera, g_shot.cams[g_shot.shotIndex]);
                 g_shot.camApplied = true;
                 if (g_shot.startTime < 0.0)
                     g_shot.startTime = GetTime();
@@ -1269,24 +1269,24 @@ ShowSpellbook = false;
         // Apply post-processing shaders during final blit
         {
             bool shaderActive = false;
-            if (PixelShader && OmegaTechData.PixelShader.id > 0) {
-                BeginShaderMode(OmegaTechData.PixelShader);
-                SetShaderValue(OmegaTechData.PixelShader, GetShaderLocation(OmegaTechData.PixelShader, "pixelWidth"), &PixelSize, SHADER_UNIFORM_FLOAT);
-                SetShaderValue(OmegaTechData.PixelShader, GetShaderLocation(OmegaTechData.PixelShader, "pixelHeight"), &PixelSize, SHADER_UNIFORM_FLOAT);
+            if (PixelShader && AngelTechData.PixelShader.id > 0) {
+                BeginShaderMode(AngelTechData.PixelShader);
+                SetShaderValue(AngelTechData.PixelShader, GetShaderLocation(AngelTechData.PixelShader, "pixelWidth"), &PixelSize, SHADER_UNIFORM_FLOAT);
+                SetShaderValue(AngelTechData.PixelShader, GetShaderLocation(AngelTechData.PixelShader, "pixelHeight"), &PixelSize, SHADER_UNIFORM_FLOAT);
                 shaderActive = true;
             }
-            if (JitterEnabled && OmegaTechData.JitterShader.id > 0) {
-                if (!shaderActive) BeginShaderMode(OmegaTechData.JitterShader);
+            if (JitterEnabled && AngelTechData.JitterShader.id > 0) {
+                if (!shaderActive) BeginShaderMode(AngelTechData.JitterShader);
                 float t = float(GetTime());
-                SetShaderValue(OmegaTechData.JitterShader, GetShaderLocation(OmegaTechData.JitterShader, "uTime"), &t, SHADER_UNIFORM_FLOAT);
-                SetShaderValue(OmegaTechData.JitterShader, GetShaderLocation(OmegaTechData.JitterShader, "uIntensity"), &JitterIntensity, SHADER_UNIFORM_FLOAT);
+                SetShaderValue(AngelTechData.JitterShader, GetShaderLocation(AngelTechData.JitterShader, "uTime"), &t, SHADER_UNIFORM_FLOAT);
+                SetShaderValue(AngelTechData.JitterShader, GetShaderLocation(AngelTechData.JitterShader, "uIntensity"), &JitterIntensity, SHADER_UNIFORM_FLOAT);
                 shaderActive = true;
             }
-            if (FogEnabled && OmegaTechData.FogShader.id > 0) {
-                if (!shaderActive) BeginShaderMode(OmegaTechData.FogShader);
+            if (FogEnabled && AngelTechData.FogShader.id > 0) {
+                if (!shaderActive) BeginShaderMode(AngelTechData.FogShader);
                 float fc[4] = { FogTint.r / 255.0f, FogTint.g / 255.0f, FogTint.b / 255.0f, FogTint.a / 255.0f };
-                SetShaderValue(OmegaTechData.FogShader, GetShaderLocation(OmegaTechData.FogShader, "fogColor"), fc, SHADER_UNIFORM_VEC4);
-                SetShaderValue(OmegaTechData.FogShader, GetShaderLocation(OmegaTechData.FogShader, "fogIntensity"), &FogIntensity, SHADER_UNIFORM_FLOAT);
+                SetShaderValue(AngelTechData.FogShader, GetShaderLocation(AngelTechData.FogShader, "fogColor"), fc, SHADER_UNIFORM_VEC4);
+                SetShaderValue(AngelTechData.FogShader, GetShaderLocation(AngelTechData.FogShader, "fogIntensity"), &FogIntensity, SHADER_UNIFORM_FLOAT);
                 shaderActive = true;
             }
             DrawTexturePro(Target.texture, (Rectangle){ 0, 0, Target.texture.width, -Target.texture.height }, (Rectangle){ 0, 0, float(GetScreenWidth()), float(GetScreenHeight())}, (Vector2){ 0, 0 } , 0.f , WHITE);
@@ -1317,11 +1317,11 @@ ShowSpellbook = false;
             DrawFPS(0,0);
         }
 
-        OmegaTechTextSystem.Update();
+        AngelTechTextSystem.Update();
 
         // Network client update
         if (g_network_enabled) {
-            Camera3D& cam = OmegaTechData.MainCamera;
+            Camera3D& cam = AngelTechData.MainCamera;
             Vector3 fwd = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
             float yaw = atan2f(fwd.x, fwd.z);
             float pitch = asinf(fwd.y);
@@ -1393,7 +1393,7 @@ ShowSpellbook = false;
                 // Auto-collect when walking over a pickup (also E) — handled
                 // by PickupPawns (networked pickups only; throttled internally).
                 PickupPawns::Instance().Update(Keybinds::Pressed(GameAction::Interact),
-                                               OmegaTechData.MainCamera.position,
+                                               AngelTechData.MainCamera.position,
                                                g_network_world_index,
                                                GetTime());
             }
@@ -1401,7 +1401,7 @@ ShowSpellbook = false;
 
         // HUD: player stats (always visible)
         if (!(g_shot.active && g_shot.hideHud))
-            InventoryBehaviour::Instance().DrawHud(OmegaTechData.MainCamera, OmegaTechData.Ticker,
+            InventoryBehaviour::Instance().DrawHud(AngelTechData.MainCamera, AngelTechData.Ticker,
                                                    g_playerMovement.isCrouching, g_playerMovement.isSprinting);
 
         // Screen flash on pickup collect (fades out). Driven by
@@ -1428,13 +1428,13 @@ ShowSpellbook = false;
         }
 
         // Damage vignette (red edge flash on taking damage). Driven by
-        // OmegaTechData.DamageFlash, set by both contact damage and the scripted
+        // AngelTechData.DamageFlash, set by both contact damage and the scripted
         // `damage` opcode. Drawn under the HUD but over the world.
-        if (OmegaTechData.DamageFlash > 0.0f && !(g_shot.active && g_shot.hideHud)) {
-            OmegaTechData.DamageFlash -= GetFrameTime();
-            if (OmegaTechData.DamageFlash < 0.0f) OmegaTechData.DamageFlash = 0.0f;
+        if (AngelTechData.DamageFlash > 0.0f && !(g_shot.active && g_shot.hideHud)) {
+            AngelTechData.DamageFlash -= GetFrameTime();
+            if (AngelTechData.DamageFlash < 0.0f) AngelTechData.DamageFlash = 0.0f;
             // ease-out: sharp on impact, gentle fade.
-            const float t = OmegaTechData.DamageFlash / kDamageFlashDuration;
+            const float t = AngelTechData.DamageFlash / kDamageFlashDuration;
             const float ease = t * t;
             const int sw = GetScreenWidth(), sh = GetScreenHeight();
             const int band = std::max(40, sh / 8);
@@ -1459,7 +1459,7 @@ ShowSpellbook = false;
 
         // Inventory overlay
         if (ShowInventory) {
-            InventoryBehaviour::Instance().DrawOverlay(OmegaTechData.MainCamera);
+            InventoryBehaviour::Instance().DrawOverlay(AngelTechData.MainCamera);
         }
 
         // Ethereal skill tree overlay

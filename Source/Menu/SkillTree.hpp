@@ -177,9 +177,9 @@ inline void DrawOverlay(bool& show) {
                     lem.SetPlayerMana(cur - n.cost);
                 lem.UnlockSkill(n.def->name);
                 OZ_INFO("SkillTree: unlocked '%s'", n.def->name.c_str());
-                OmegaTechTextSystem.Write("Ethereal skill awakened: " + n.def->name);
+                AngelTechTextSystem.Write("Ethereal skill awakened: " + n.def->name);
             } else {
-                OmegaTechTextSystem.Write("Not enough " +
+                AngelTechTextSystem.Write("Not enough " +
                     std::string(n.costType == "psychic_energy" ? "psychic energy" : "mana") +
                     " for " + n.def->name);
             }
@@ -205,7 +205,7 @@ inline void DrawOverlay(bool& show) {
         DrawText(txt, bx + (bw - tw2) / 2, by + 6, 12, canRespec ? WHITE : LIGHTGRAY);
         if (canRespec && hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             lem.RespecSkills();
-            OmegaTechTextSystem.Write("Ethereal skills reset - resources refunded.");
+            AngelTechTextSystem.Write("Ethereal skills reset - resources refunded.");
         }
     }
 

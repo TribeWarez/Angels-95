@@ -198,7 +198,7 @@ public:
         m_browser.LoadState(kBrowserStatePath);
         m_filter.source = angelsmenu::ServerFilter::Lan;
 
-        // The roster is normally loaded once in OmegaTechInit; load it here too
+        // The roster is normally loaded once in AngelTechInit; load it here too
         // so the menu is usable in a tool/test harness that skipped that block.
         if (!CharacterRoster::Instance().Loaded()) LoadRoster();
 
@@ -216,7 +216,7 @@ public:
             PlayerProfileManager::Instance().Update(m_profileSlot, m_activeProfile);
         }
 
-        m_preview.SetShader(OmegaTechData.Lights);
+        m_preview.SetShader(AngelTechData.Lights);
         m_lastInternetRefresh = GetTime();
     }
 
@@ -243,7 +243,7 @@ public:
     bool Tick() {
         if (WindowShouldClose()) { m_exit = true; return true; }
 
-        SoundManager::Instance().UpdateStream(OmegaTechData.HomeScreenMusic);
+        SoundManager::Instance().UpdateStream(AngelTechData.HomeScreenMusic);
 
         m_metrics = angelsmenu::MenuMetrics::Compute(
             (float)GetScreenWidth(), (float)GetScreenHeight(),
@@ -956,7 +956,7 @@ private:
     // ---------------------------------------------------------------------
     void DrawBackground() {
         auto& tex = m_textures;
-        ray_video_t& vid = OmegaTechData.HomeScreenVideo;
+        ray_video_t& vid = AngelTechData.HomeScreenVideo;
         if (vid.ok && vid.texture.id != 0) {
             ray_video_update(&vid, GetFrameTime());
             if (vid.texture.id != 0) {
@@ -1025,7 +1025,7 @@ private:
         if (m_textures.titleBg.id) {
             DrawText("ANGELS95", tx, ty, FS(18), angelsui::kText);
             tx += MeasureText("ANGELS95", FS(18)) + FS(10);
-            DrawText("// OMEGATECH", tx, ty + FS(2), FS(10),
+            DrawText("// ANGELTECH", tx, ty + FS(2), FS(10),
                      (Color){120, 160, 200, 210});
         } else {
             DrawText("ANGELS95", tx, ty, FS(18), angelsui::kText);
@@ -1152,7 +1152,7 @@ private:
             DrawText("ANGELS95", (int)x, (int)y, FS(34), angelsui::kText);
             y += FS(42);
         }
-        DrawText("OmegaTech Engine  //  co-op campaign and skirmish",
+        DrawText("Angels95 //  co-op campaign and skirmish",
                  (int)x, (int)y, FS(13), angelsui::kTextDim);
         y += FS(28);
 
@@ -2255,7 +2255,7 @@ private:
         Card(panel, true);
         DrawText("ANGELS95", (int)(panel.x + FS(20)), (int)(panel.y + FS(18)),
                  FS(26), angelsui::kText);
-        DrawText("Powered by the OmegaTech Engine  //  raylib 5.5  //  C++20",
+        DrawText("Powered by the AngelTech Engine  //  raylib 5.5  //  C++20",
                  (int)(panel.x + FS(20)), (int)(panel.y + FS(52)), FS(11),
                  angelsui::kTextDim);
         DrawText("TribeWarez 2026  //  @EC, JF, ZT, NC, LC",

@@ -1,6 +1,6 @@
 # World Format (OZONE)
 
-OmegaTech uses a single world description format: **OZONE**.
+AngelTech uses a single world description format: **OZONE**.
 
 > **Note:** The legacy **WDL** (World Description Language) format and its runtime
 > fallback loader have been **removed**. OZONE plus the LightningScript/Pawn

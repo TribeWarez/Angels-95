@@ -9,7 +9,7 @@
 // Core.hpp / Data.hpp are single-translation-unit globals, so this behaviour
 // receives its rendering context (camera / ticker / stance) as arguments and
 // emits log + feedback through injected sinks instead of reaching into
-// OmegaTechTextSystem / SoundManager directly. Item/inventory data comes
+// AngelTechTextSystem / SoundManager directly. Item/inventory data comes
 // from the shared Pawn/Items.hpp.
 class InventoryBehaviour {
 public:

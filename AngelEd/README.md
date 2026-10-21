@@ -1,6 +1,6 @@
 # OTEditor
 
-OTEditor is a Windows level editor for the OmegaTech / Angels95 game engine. It combines Win32 native panels with a raylib 3D viewport for creating and editing game worlds.
+OTEditor is a Windows level editor for the AngelTech / Angels95 game engine. It combines Win32 native panels with a raylib 3D viewport for creating and editing game worlds.
 
 ## Features
 

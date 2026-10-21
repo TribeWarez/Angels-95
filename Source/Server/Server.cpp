@@ -1,4 +1,4 @@
-// AngelServ – Dedicated server for OmegaTech / OzWorld
+// AngelServ – Dedicated server for AngelTech / OzWorld
 // Provides UDP game server + HTTP map API + LAN discovery.
 // Build: g++ -O3 --std=c++20 -fPIC -lpthread -lm
 // Usage: AngelServ [--port P] [--http-port P] [--dir GameData]
@@ -1105,7 +1105,7 @@ int main(int argc, char** argv) {
             return 0;
         }
         else if (strcmp(argv[i], "--help") == 0) {
-            printf("AngelServ %s (protocol %u) -- OzWorld/OmegaTech dedicated server\n",
+            printf("AngelServ %s (protocol %u) -- OzWorld/AngelTech dedicated server\n",
                    oz::kBuildVersion, (unsigned)net::PROTOCOL_VERSION);
             printf("Usage: AngelServ [--port P] [--http-port P] [--dir GameData]"
                    " [--bind IP|HOST] [--auth-token T] [--admin-token T]\n");

@@ -487,11 +487,11 @@ void FocusSelectionInViewport() {
     OTEditor.MainCamera.position = Vector3Add(p, delta);
 }
 
-void SnapGizmoToSelection(const EditorSelection& sel) {    OmegaTechEditor.X = sel.pos.x;
-    OmegaTechEditor.Y = sel.pos.y;
-    OmegaTechEditor.Z = sel.pos.z;
-    OmegaTechEditor.S = sel.scale > 0.01f ? sel.scale : 1.0f;
-    OmegaTechEditor.R = sel.rotation;
+void SnapGizmoToSelection(const EditorSelection& sel) {    AngelTechEditor.X = sel.pos.x;
+    AngelTechEditor.Y = sel.pos.y;
+    AngelTechEditor.Z = sel.pos.z;
+    AngelTechEditor.S = sel.scale > 0.01f ? sel.scale : 1.0f;
+    AngelTechEditor.R = sel.rotation;
     if (sel.type == SelType::BRUSH) {
         // Size comes from the RENDERABLE, not the collision volume. sel.index is a
         // renderable index (see the note in EditorRaycastAt), so indexing
@@ -508,17 +508,17 @@ void SnapGizmoToSelection(const EditorSelection& sel) {    OmegaTechEditor.X = s
             const AabbBox w = RotatedAabbY(local, r->rotation,
                                            r->position.x, r->position.y,
                                            r->position.z, r->scale);
-            OmegaTechEditor.W = w.maxX - w.minX;
-            OmegaTechEditor.H = w.maxY - w.minY;
-            OmegaTechEditor.L = w.maxZ - w.minZ;
+            AngelTechEditor.W = w.maxX - w.minX;
+            AngelTechEditor.H = w.maxY - w.minY;
+            AngelTechEditor.L = w.maxZ - w.minZ;
         }
     } else if (sel.type == SelType::WINDZONE) {
         auto& zones = PawnSystem::Instance().GetWindZones();
         for (auto& z : zones) {
             if ((int)z.id == sel.index) {
-                OmegaTechEditor.W = z.bounds.max.x - z.bounds.min.x;
-                OmegaTechEditor.H = z.bounds.max.y - z.bounds.min.y;
-                OmegaTechEditor.L = z.bounds.max.z - z.bounds.min.z;
+                AngelTechEditor.W = z.bounds.max.x - z.bounds.min.x;
+                AngelTechEditor.H = z.bounds.max.y - z.bounds.min.y;
+                AngelTechEditor.L = z.bounds.max.z - z.bounds.min.z;
                 break;
             }
         }
@@ -526,9 +526,9 @@ void SnapGizmoToSelection(const EditorSelection& sel) {    OmegaTechEditor.X = s
         auto& zones = ZoneManager::Instance().GetZones();
         for (auto& z : zones) {
             if ((int)z.id == sel.index) {
-                OmegaTechEditor.W = z.bounds.max.x - z.bounds.min.x;
-                OmegaTechEditor.H = z.bounds.max.y - z.bounds.min.y;
-                OmegaTechEditor.L = z.bounds.max.z - z.bounds.min.z;
+                AngelTechEditor.W = z.bounds.max.x - z.bounds.min.x;
+                AngelTechEditor.H = z.bounds.max.y - z.bounds.min.y;
+                AngelTechEditor.L = z.bounds.max.z - z.bounds.min.z;
                 break;
             }
         }
@@ -536,9 +536,9 @@ void SnapGizmoToSelection(const EditorSelection& sel) {    OmegaTechEditor.X = s
         auto& portals = ZoneManager::Instance().GetPortals();
         if (sel.index >= 0 && sel.index < (int)portals.size()) {
             auto& p = portals[sel.index];
-            OmegaTechEditor.W = p.bounds.max.x - p.bounds.min.x;
-            OmegaTechEditor.H = p.bounds.max.y - p.bounds.min.y;
-            OmegaTechEditor.L = p.bounds.max.z - p.bounds.min.z;
+            AngelTechEditor.W = p.bounds.max.x - p.bounds.min.x;
+            AngelTechEditor.H = p.bounds.max.y - p.bounds.min.y;
+            AngelTechEditor.L = p.bounds.max.z - p.bounds.min.z;
         }
     }
     EditorLog("Gizmo snapped to %s idx=%d", sel.name.c_str(), sel.index);
@@ -560,19 +560,19 @@ static bool EditorPickEntity(bool toggleOffSame = true) {
         if (toggleOffSame && g_sel.type == prevSel.type && g_sel.index == prevSel.index) {
             g_sel = { SelType::NONE, -1, "", {0,0,0} };
             g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
-            OmegaTechEditor.DrawModel = false;
+            AngelTechEditor.DrawModel = false;
             return true;
         }
         // Clicking a different zone while one is selected = deselect
         if (toggleOffSame && prevSel.type != SelType::NONE && g_sel.type == SelType::ZONE) {
             g_sel = { SelType::NONE, -1, "", {0,0,0} };
             g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
-            OmegaTechEditor.DrawModel = false;
+            AngelTechEditor.DrawModel = false;
             return true;
         }
         EditorLog("Selected: %s (type=%d idx=%d x=%f y=%f z=%f)",
                   g_sel.name.c_str(), (int)g_sel.type, g_sel.index, (float)g_sel.pos.x, (float)g_sel.pos.y, (float)g_sel.pos.z);
-        OmegaTechEditor.DrawModel = true;
+        AngelTechEditor.DrawModel = true;
         SnapGizmoToSelection(g_sel);
         if (g_sel.type == SelType::PORTAL) {
             // Portals have no list window any more; the Entity Properties panel
@@ -581,7 +581,7 @@ static bool EditorPickEntity(bool toggleOffSame = true) {
             g_editorPanels.portalTargetWorld = g_sel.name;
         }
     } else {
-        OmegaTechEditor.DrawModel = false;
+        AngelTechEditor.DrawModel = false;
         return false;
     }
     return true;
@@ -635,7 +635,7 @@ else if (g_sel.type == SelType::BRUSH) {
     }
     g_sel = { SelType::NONE, -1, "", {0,0,0} };
     g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
-    OmegaTechEditor.DrawModel = false; // drop the gizmo so picking isn't gated
+    AngelTechEditor.DrawModel = false; // drop the gizmo so picking isn't gated
 }
 
 static void DuplicateSelectedEntity() {
@@ -811,10 +811,10 @@ static bool AdoptSelection(const ed::Selection& pick) {
     // arming the gizmo would put a draggable handle at {0,0,0} that the Move tool
     // then writes into g_sel.pos every frame. Only an instance selection gets one.
     if (g_sel.type != SelType::MAP) {
-        OmegaTechEditor.DrawModel = true;
+        AngelTechEditor.DrawModel = true;
         SnapGizmoToSelection(g_sel);
     } else {
-        OmegaTechEditor.DrawModel = false;
+        AngelTechEditor.DrawModel = false;
     }
     return true;
 }

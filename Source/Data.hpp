@@ -51,6 +51,6 @@ class WorldModelSet
 
 inline WorldModelSet WorldModels;
 
-// Audio state (GameSounds/OmegaTechSoundData and every playback call) lives in
+// Audio state (GameSounds/AngelTechSoundData and every playback call) lives in
 // Audio/SoundManager.hpp — include it instead of reaching for raylib sound
 // handles directly.

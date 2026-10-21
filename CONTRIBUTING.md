@@ -1,4 +1,4 @@
-# Contributing to Angels95 / OmegaTech Engine
+# Contributing to Angels95 / AngelTech Engine
 
 Thanks for your interest! This is a clone-and-play battlefield of a game
 engine — C++20, plain Makefiles (no CMake for the game itself), raylib 5.5 for

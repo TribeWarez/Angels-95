@@ -2,7 +2,7 @@
 
 Status: **scaffold (Phase 0)**. This page is the single source of truth for the
 World/Game hierarchy (SP Campaign / MP COOP) and for the boundary between the
-OmegaTech engine base and the Angels95 game layer. It records the target design;
+AngelTech engine base and the Angels95 game layer. It records the target design;
 the Phase-0 pass only lays down the spec, the content scaffold and inert code
 stubs, so read the **Roadmap** section for what is actually implemented.
 
@@ -24,7 +24,7 @@ The engine already has the right primitives but no hierarchy and no boundary:
   (`Source/Script/LightningEntityManager.cpp`, `Source/Pawn/OzPawnSystem.cpp`,
   `Source/Main.cpp`). `Wiki/Engine-Roadmap.md` lists "Event bus" as a gap.
 - **Gameplay is hardcoded in the engine**: pawn `.cfg` parsing
-  (`Source/Core.hpp` OmegaTechInit), item effects (`Source/Pawn/Items.hpp`),
+  (`Source/Core.hpp` AngelTechInit), item effects (`Source/Pawn/Items.hpp`),
   weapon/spell discriminators (`LightningEntityManager::FireSelectedWeapon` /
   `CastSpell`), the zone-physics `switch` (`Source/Main.cpp`), skill bonuses,
   the equipment-slot table, 3-death game-over, and the portal "campaign" globals.
@@ -193,7 +193,7 @@ hardcoded switch. Game types register from `Source/Game/GameBoxedTypes.cpp`.
 
 | Hardcoded today | Target |
 |---|---|
-| Pawn `.cfg` parser (`Core.hpp` OmegaTechInit) | `: pawn` `.ozls` defs (unify with `EntityDef`) |
+| Pawn `.cfg` parser (`Core.hpp` AngelTechInit) | `: pawn` `.ozls` defs (unify with `EntityDef`) |
 | Item effects (`Source/Pawn/Items.hpp`) | `on_use`/`on_collect` scripts + generic opcodes |
 | Weapon/spell discriminators (`LightningEntityManager`) | `on_fire`/`on_swing`/`on_cast` + `spawn_projectile`/`apply_area_damage` |
 | Zone-physics `switch` (`Main.cpp`) | drive from merged `PhysicsInfo` data |

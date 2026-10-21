@@ -103,7 +103,7 @@ public:
     // --- music -------------------------------------------------------------
 
     // Generic stream helpers for callers that own their own Music handle (the
-    // title screen owns OmegaTechData.HomeScreenMusic, which lives in Core.hpp
+    // title screen owns AngelTechData.HomeScreenMusic, which lives in Core.hpp
     // and therefore cannot be referenced from here).
     void PlayStream(Music music);
     void StopStream(Music music);

@@ -7,7 +7,7 @@
 #include <vector>
 #include <mutex>
 
-// Logging system for OmegaTech.
+// Logging system for AngelTech.
 // Provides macros compatible with OzWorld's oz_log.h interface.
 // Also provides a log window that can be rendered with raygui.
 

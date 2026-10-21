@@ -172,5 +172,5 @@ void ClearScene() {
     pawns.ClearWindZones();
     pawns.ClearMeshObjects();
     pawns.ClearSkyZones();
-    OmegaTechEditor.DrawModel = false;
+    AngelTechEditor.DrawModel = false;
 }

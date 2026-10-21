@@ -1,6 +1,6 @@
 # Master Server & Internet Discovery
 
-Angels95 / OmegaTech ships three cooperating pieces for internet server browsing,
+Angels95 / AngelTech ships three cooperating pieces for internet server browsing,
 mirroring the classic Unreal Tournament / GameSpy model:
 
 1. **`AngelMaster`** — a standalone master server. Receives heartbeats from

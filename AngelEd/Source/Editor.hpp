@@ -344,7 +344,7 @@ class InEditor{
         int CSGOperation = 0;
 };
 
-static InEditor OmegaTechEditor;
+static InEditor AngelTechEditor;
 
 inline char ScriptEditorBuffer[1200];
 
@@ -368,8 +368,8 @@ inline int EMID = 1;
 static wstring BuildWDLPlaceCommand(const wstring& prefix, int subId) {
     wstring cmd = prefix;
     if (subId >= 0) cmd += to_wstring(subId);
-    cmd += L":" + to_wstring(OmegaTechEditor.X) + L":" + to_wstring(OmegaTechEditor.Y) + L":" +
-           to_wstring(OmegaTechEditor.Z) + L":" + to_wstring(OmegaTechEditor.S) + L":" + to_wstring(OmegaTechEditor.R) + L":";
+    cmd += L":" + to_wstring(AngelTechEditor.X) + L":" + to_wstring(AngelTechEditor.Y) + L":" +
+           to_wstring(AngelTechEditor.Z) + L":" + to_wstring(AngelTechEditor.S) + L":" + to_wstring(AngelTechEditor.R) + L":";
     return cmd;
 }
 

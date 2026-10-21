@@ -1,7 +1,7 @@
 # Engine Roadmap — Gap Analysis & Priorities
 
 Status as of **b101** (delivery logs for b57–b101 below). This page is the living
-gap analysis for the Angels95 / OmegaTech engine: what exists, what is missing
+gap analysis for the Angels95 / AngelTech engine: what exists, what is missing
 compared with a conventional game engine, and the prioritized plan to close the
 gaps. Each entry lists the `file:line` evidence so work can start without
 re-auditing.

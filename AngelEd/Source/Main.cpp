@@ -766,7 +766,7 @@ int main(int argc, char **argv){
             // In MODEL placement with Scale/Rotate tool modes the wheel is
             // reserved for scaling/rotating the ghost instead.
             bool wheelReservedForTool =
-                (g_placeMode == PlaceMode::MODEL && OmegaTechEditor.DrawModel &&
+                (g_placeMode == PlaceMode::MODEL && AngelTechEditor.DrawModel &&
                  g_editorPanels.currentToolMode != 0);
             if (!wheelReservedForTool) {
                 float wheel = GetMouseWheelMove();
@@ -1101,16 +1101,16 @@ if (g_editorPanels.showCollisionBounds) {
         }
 
         // --- Placement visuals ---
-        if (OmegaTechEditor.DrawModel)
+        if (AngelTechEditor.DrawModel)
         {
-            float px = OmegaTechEditor.X, py = OmegaTechEditor.Y, pz = OmegaTechEditor.Z;
-            float ps = OmegaTechEditor.S, pr = OmegaTechEditor.R;
+            float px = AngelTechEditor.X, py = AngelTechEditor.Y, pz = AngelTechEditor.Z;
+            float ps = AngelTechEditor.S, pr = AngelTechEditor.R;
 
             if (g_placeMode == PlaceMode::MODEL) {
                 if (EMID >= 200) {
                     // OZONE primitive ghost
                     int primType = EMID - 200;
-                    Vector3 size = {OmegaTechEditor.W * ps, OmegaTechEditor.H * ps, OmegaTechEditor.L * ps};
+                    Vector3 size = {AngelTechEditor.W * ps, AngelTechEditor.H * ps, AngelTechEditor.L * ps};
                     Vector3 center = {px, py, pz};
                     DrawBoundingBox((BoundingBox){{px - size.x*0.5f, py - size.y*0.5f, pz - size.z*0.5f},
                                                   {px + size.x*0.5f, py + size.y*0.5f, pz + size.z*0.5f}}, ORANGE);
@@ -1150,21 +1150,21 @@ if (g_editorPanels.showCollisionBounds) {
                             DrawCubeWires({px,py,pz}, ps, ps, ps, ORANGE);
                     }
                 } else if (EMID == -1) {
-                    DrawBoundingBox((BoundingBox){{px,py,pz},{OmegaTechEditor.W,OmegaTechEditor.H,OmegaTechEditor.L}}, ORANGE);
-                    DrawCubeWires({OmegaTechEditor.W,OmegaTechEditor.H,OmegaTechEditor.L}, ps, ps, ps, PINK);
+                    DrawBoundingBox((BoundingBox){{px,py,pz},{AngelTechEditor.W,AngelTechEditor.H,AngelTechEditor.L}}, ORANGE);
+                    DrawCubeWires({AngelTechEditor.W,AngelTechEditor.H,AngelTechEditor.L}, ps, ps, ps, PINK);
                 } else if (EMID == -2) {
-                    DrawBoundingBox((BoundingBox){{px,py,pz},{OmegaTechEditor.W,OmegaTechEditor.H-5,OmegaTechEditor.L}}, ORANGE);
-                    DrawCubeWires({OmegaTechEditor.W,OmegaTechEditor.H-5,OmegaTechEditor.L}, ps, ps, ps, PINK);
+                    DrawBoundingBox((BoundingBox){{px,py,pz},{AngelTechEditor.W,AngelTechEditor.H-5,AngelTechEditor.L}}, ORANGE);
+                    DrawCubeWires({AngelTechEditor.W,AngelTechEditor.H-5,AngelTechEditor.L}, ps, ps, ps, PINK);
                 }
             } else if (g_placeMode == PlaceMode::PICKUP) {
                 // Draw pickup preview from model (fallback to colored cube)
                 static Model g_pickupPreviewModel = {0};
                 static std::string g_pickupPreviewName;
-                if (g_pickupPreviewName != OmegaTechEditor.ActivePickupName) {
+                if (g_pickupPreviewName != AngelTechEditor.ActivePickupName) {
                     if (g_pickupPreviewModel.meshes) UnloadModel(g_pickupPreviewModel);
                     g_pickupPreviewModel = {0};
-                    g_pickupPreviewName = OmegaTechEditor.ActivePickupName;
-                    const EntityDef* edef = LightningEntityRegistry::Instance().Find(OmegaTechEditor.ActivePickupName);
+                    g_pickupPreviewName = AngelTechEditor.ActivePickupName;
+                    const EntityDef* edef = LightningEntityRegistry::Instance().Find(AngelTechEditor.ActivePickupName);
                     if (edef && !edef->mesh.empty()) {
                         // Resolve relative mesh/texture paths beside the .ozls.
                         std::string baseDir;
@@ -1184,7 +1184,7 @@ if (g_editorPanels.showCollisionBounds) {
                     DrawModelEx(g_pickupPreviewModel, {px, py, pz}, {0, pr, 0}, pr, {ps, ps, ps}, WHITE);
                 } else {
                     Color c = GREEN;
-                    const EntityDef* edef = LightningEntityRegistry::Instance().Find(OmegaTechEditor.ActivePickupName);
+                    const EntityDef* edef = LightningEntityRegistry::Instance().Find(AngelTechEditor.ActivePickupName);
                     if (edef) {
                         auto it = edef->stats.vec3s.find("preview_color");
                         if (it != edef->stats.vec3s.end()) {
@@ -1198,25 +1198,25 @@ if (g_editorPanels.showCollisionBounds) {
                 }
             } else if (g_placeMode == PlaceMode::NODE) {
                 Color c = BLUE;
-                switch (OmegaTechEditor.ActiveNodeType) {
+                switch (AngelTechEditor.ActiveNodeType) {
                     case EditorNodeType::SPAWN:  c = BLUE;    break;
                     case EditorNodeType::NPC:    c = MAGENTA; break;
                     case EditorNodeType::LIGHT:  c = YELLOW;  break;
                     case EditorNodeType::ZONE:   c = SKYBLUE; break;
                     case EditorNodeType::PORTAL: c = PURPLE;  break;
                 }
-                if (OmegaTechEditor.ActiveNodeType == EditorNodeType::PORTAL) {
+                if (AngelTechEditor.ActiveNodeType == EditorNodeType::PORTAL) {
                     // Portal preview: full volume wireframe + swirl marker
-                    float hw = fmaxf(OmegaTechEditor.W, 1) * 0.5f;
-                    float hh = fmaxf(OmegaTechEditor.H, 1) * 0.5f;
-                    float hd = fmaxf(OmegaTechEditor.L, 1) * 0.5f;
+                    float hw = fmaxf(AngelTechEditor.W, 1) * 0.5f;
+                    float hh = fmaxf(AngelTechEditor.H, 1) * 0.5f;
+                    float hd = fmaxf(AngelTechEditor.L, 1) * 0.5f;
                     DrawCubeWires({px, py, pz}, hw * 2, hh * 2, hd * 2, c);
                     DrawCube({px, py, pz}, hw * 2, hh * 2, hd * 2, (Color){c.r,c.g,c.b,40});
                     DrawSphere({px, py + hh, pz}, 0.3f, c);
-                } else if (OmegaTechEditor.ActiveNodeType == EditorNodeType::ZONE) {
-                    float hw = fmaxf(OmegaTechEditor.W, 1) * 0.5f;
-                    float hh = fmaxf(OmegaTechEditor.H, 1) * 0.5f;
-                    float hd = fmaxf(OmegaTechEditor.L, 1) * 0.5f;
+                } else if (AngelTechEditor.ActiveNodeType == EditorNodeType::ZONE) {
+                    float hw = fmaxf(AngelTechEditor.W, 1) * 0.5f;
+                    float hh = fmaxf(AngelTechEditor.H, 1) * 0.5f;
+                    float hd = fmaxf(AngelTechEditor.L, 1) * 0.5f;
                     DrawCubeWires({px, py, pz}, hw * 2, hh * 2, hd * 2, c);
                     DrawCube({px, py, pz}, hw * 2, hh * 2, hd * 2, (Color){c.r,c.g,c.b,30});
                 } else {
@@ -1251,26 +1251,26 @@ if (g_editorPanels.showCollisionBounds) {
                 HistoryPush();
             }
             if (!IsMouseButtonDown(2)) {
-                if (IsKeyPressed(KEY_U)) OmegaTechEditor.X -= 2.0f;
-                if (IsKeyPressed(KEY_J)) OmegaTechEditor.X += 2.0f;
-                if (IsKeyPressed(KEY_H)) OmegaTechEditor.Z += 2.0f;
-                if (IsKeyPressed(KEY_K)) OmegaTechEditor.Z -= 2.0f;
-                if (IsKeyPressed(KEY_Y)) OmegaTechEditor.Y -= 2.0f;
-                if (IsKeyPressed(KEY_I)) OmegaTechEditor.Y += 2.0f;
+                if (IsKeyPressed(KEY_U)) AngelTechEditor.X -= 2.0f;
+                if (IsKeyPressed(KEY_J)) AngelTechEditor.X += 2.0f;
+                if (IsKeyPressed(KEY_H)) AngelTechEditor.Z += 2.0f;
+                if (IsKeyPressed(KEY_K)) AngelTechEditor.Z -= 2.0f;
+                if (IsKeyPressed(KEY_Y)) AngelTechEditor.Y -= 2.0f;
+                if (IsKeyPressed(KEY_I)) AngelTechEditor.Y += 2.0f;
             } else {
-                if (IsKeyPressed(KEY_U)) OmegaTechEditor.W -= 2.0f;
-                if (IsKeyPressed(KEY_J)) OmegaTechEditor.W += 2.0f;
-                if (IsKeyPressed(KEY_H)) OmegaTechEditor.L += 2.0f;
-                if (IsKeyPressed(KEY_K)) OmegaTechEditor.L -= 2.0f;
-                if (IsKeyPressed(KEY_Y)) OmegaTechEditor.H -= 2.0f;
-                if (IsKeyPressed(KEY_I)) OmegaTechEditor.H += 2.0f;
+                if (IsKeyPressed(KEY_U)) AngelTechEditor.W -= 2.0f;
+                if (IsKeyPressed(KEY_J)) AngelTechEditor.W += 2.0f;
+                if (IsKeyPressed(KEY_H)) AngelTechEditor.L += 2.0f;
+                if (IsKeyPressed(KEY_K)) AngelTechEditor.L -= 2.0f;
+                if (IsKeyPressed(KEY_Y)) AngelTechEditor.H -= 2.0f;
+                if (IsKeyPressed(KEY_I)) AngelTechEditor.H += 2.0f;
             }
 
-            if (IsKeyPressed(KEY_O)) OmegaTechEditor.R += 90.0f;
-            if (IsKeyPressed(KEY_L)) OmegaTechEditor.R -= 90.0f;
-            if (IsKeyDown(KEY_T)) OmegaTechEditor.S += 0.5f;
+            if (IsKeyPressed(KEY_O)) AngelTechEditor.R += 90.0f;
+            if (IsKeyPressed(KEY_L)) AngelTechEditor.R -= 90.0f;
+            if (IsKeyDown(KEY_T)) AngelTechEditor.S += 0.5f;
             // NOTE: scale-down is B, not G â€” G cycles the CSG op in MODEL mode.
-            if (IsKeyDown(KEY_B)) OmegaTechEditor.S -= 0.5f;
+            if (IsKeyDown(KEY_B)) AngelTechEditor.S -= 0.5f;
 
             // Vertex-edit transform (Phase C): the movement/rotate keys deform
             // the selected vertices instead of moving the mesh node.
@@ -1278,16 +1278,16 @@ if (g_editorPanels.showCollisionBounds) {
                 MeshObjectNode* vn = PawnSystem::Instance().GetMeshObject(g_editorPanels.animTargetMesh);
                 oz::AnimatedMesh* vam = AnimTarget();
                 if (!g_editorPanels.animPrevValid) {
-                    g_editorPanels.animPrevX = OmegaTechEditor.X;
-                    g_editorPanels.animPrevY = OmegaTechEditor.Y;
-                    g_editorPanels.animPrevZ = OmegaTechEditor.Z;
-                    g_editorPanels.animPrevR = OmegaTechEditor.R;
+                    g_editorPanels.animPrevX = AngelTechEditor.X;
+                    g_editorPanels.animPrevY = AngelTechEditor.Y;
+                    g_editorPanels.animPrevZ = AngelTechEditor.Z;
+                    g_editorPanels.animPrevR = AngelTechEditor.R;
                     g_editorPanels.animPrevValid = true;
                 }
-                float vdx = OmegaTechEditor.X - g_editorPanels.animPrevX;
-                float vdy = OmegaTechEditor.Y - g_editorPanels.animPrevY;
-                float vdz = OmegaTechEditor.Z - g_editorPanels.animPrevZ;
-                float vdr = OmegaTechEditor.R - g_editorPanels.animPrevR;
+                float vdx = AngelTechEditor.X - g_editorPanels.animPrevX;
+                float vdy = AngelTechEditor.Y - g_editorPanels.animPrevY;
+                float vdz = AngelTechEditor.Z - g_editorPanels.animPrevZ;
+                float vdr = AngelTechEditor.R - g_editorPanels.animPrevR;
                 if (vn && vn->editPose && vam && !g_editorPanels.animSelVerts.empty() &&
                     (vdx != 0.0f || vdy != 0.0f || vdz != 0.0f || vdr != 0.0f)) {
                     AnimSnapshotPush();
@@ -1318,17 +1318,17 @@ if (g_editorPanels.showCollisionBounds) {
                     }
                 }
                 // Park the gizmo so the node itself doesn't move while editing.
-                OmegaTechEditor.X = g_editorPanels.animPrevX;
-                OmegaTechEditor.Y = g_editorPanels.animPrevY;
-                OmegaTechEditor.Z = g_editorPanels.animPrevZ;
-                OmegaTechEditor.R = g_editorPanels.animPrevR;
+                AngelTechEditor.X = g_editorPanels.animPrevX;
+                AngelTechEditor.Y = g_editorPanels.animPrevY;
+                AngelTechEditor.Z = g_editorPanels.animPrevZ;
+                AngelTechEditor.R = g_editorPanels.animPrevR;
             } else {
                 g_editorPanels.animPrevValid = false;
             }
 
             // Sync gizmo position back to selected entity (for manipulation)
             if (g_sel.type != SelType::NONE && !g_editorPanels.animEditVerts) {
-                Vector3 newPos = {OmegaTechEditor.X, OmegaTechEditor.Y, OmegaTechEditor.Z};
+                Vector3 newPos = {AngelTechEditor.X, AngelTechEditor.Y, AngelTechEditor.Z};
                 int idx = g_sel.index;
                 if (g_sel.type == SelType::NPC) {
                     Pawn* p = PawnSystem::Instance().Get(idx);
@@ -1357,8 +1357,8 @@ if (g_editorPanels.showCollisionBounds) {
                                              r->position.z - center.z};
                             r->position = {newPos.x + delta.x, newPos.y + delta.y, newPos.z + delta.z};
                             // Scale/Rotate tool modes write back to the renderable
-                            if (g_editorPanels.currentToolMode == 2) r->scale = OmegaTechEditor.S;
-                            if (g_editorPanels.currentToolMode == 3) r->rotation = OmegaTechEditor.R * DEG2RAD;
+                            if (g_editorPanels.currentToolMode == 2) r->scale = AngelTechEditor.S;
+                            if (g_editorPanels.currentToolMode == 3) r->rotation = AngelTechEditor.R * DEG2RAD;
                         }
                     }
                     OzoneLoader::Instance().RebuildCollisionVolumes();
@@ -1396,9 +1396,9 @@ if (g_editorPanels.showCollisionBounds) {
                     }
                 } else if (g_sel.type == SelType::MESH) {
                     if (MeshObjectNode* m = PawnSystem::Instance().GetMeshObject(idx)) {
-                        m->yaw = OmegaTechEditor.R;   // UI works in degrees
-                        if (g_editorPanels.currentToolMode == 2 && OmegaTechEditor.S > 0.01f)
-                            m->scale = OmegaTechEditor.S;
+                        m->yaw = AngelTechEditor.R;   // UI works in degrees
+                        if (g_editorPanels.currentToolMode == 2 && AngelTechEditor.S > 0.01f)
+                            m->scale = AngelTechEditor.S;
                         // The gizmo / raycast store the model's world CENTRE, but
                         // m->position is the model's ORIGIN (often the feet). Writing
                         // the centre straight into position shifted every model by
@@ -1423,7 +1423,7 @@ if (g_editorPanels.showCollisionBounds) {
                 } else if (g_sel.type == SelType::PARTICLE) {
                     if (ParticleEmitterNode* e = PawnSystem::Instance().GetParticleEmitter(idx)) {
                         e->position = newPos;
-                        e->yaw = OmegaTechEditor.R;
+                        e->yaw = AngelTechEditor.R;
                     }
                 } else if (g_sel.type == SelType::PATHNODE) {
                     if (PathNode* pn = PawnSystem::Instance().GetPathNode(idx))
@@ -1442,9 +1442,9 @@ if (g_editorPanels.showCollisionBounds) {
                         CachedModels[idx].X = newPos.x;
                         CachedModels[idx].Y = newPos.y;
                         CachedModels[idx].Z = newPos.z;
-                        CachedModels[idx].R = OmegaTechEditor.R;
-                        if (g_editorPanels.currentToolMode == 2 && OmegaTechEditor.S > 0.01f)
-                            CachedModels[idx].S = OmegaTechEditor.S;
+                        CachedModels[idx].R = AngelTechEditor.R;
+                        if (g_editorPanels.currentToolMode == 2 && AngelTechEditor.S > 0.01f)
+                            CachedModels[idx].S = AngelTechEditor.S;
                     }
                 }
                 // Update selection stored position
@@ -1479,9 +1479,9 @@ if (g_editorPanels.showCollisionBounds) {
                                 MeshObjectNode node;
                                 node.meshPath = path;
                                 node.skeletal = (ext == ".glb" || ext == ".gltf" || ext == ".iqm");
-                                node.position = {OmegaTechEditor.X, OmegaTechEditor.Y, OmegaTechEditor.Z};
-                                node.yaw = OmegaTechEditor.R;
-                                node.scale = OmegaTechEditor.S;
+                                node.position = {AngelTechEditor.X, AngelTechEditor.Y, AngelTechEditor.Z};
+                                node.yaw = AngelTechEditor.R;
+                                node.scale = AngelTechEditor.S;
                                 PawnSystem::Instance().AddMeshObject(node);
                                 EditorLog("Placed Mesh.%s '%s'",
                                           node.skeletal ? "Skeletal" : "Static", path.c_str());
@@ -1492,30 +1492,30 @@ if (g_editorPanels.showCollisionBounds) {
                     }
                 } else if (g_placeMode == PlaceMode::PICKUP) {
                     PickupNode node;
-                    node.position = {OmegaTechEditor.X, OmegaTechEditor.Y, OmegaTechEditor.Z};
-                    node.typeName = OmegaTechEditor.ActivePickupName;
+                    node.position = {AngelTechEditor.X, AngelTechEditor.Y, AngelTechEditor.Z};
+                    node.typeName = AngelTechEditor.ActivePickupName;
                     PawnSystem::Instance().AddPickup(node);
                     EditorLog("Placed pickup '%s'", node.typeName.c_str());
                 } else if (g_placeMode == PlaceMode::NODE) {
-                    if (OmegaTechEditor.ActiveNodeType == EditorNodeType::ZONE) {
-                        float hw = fmaxf(OmegaTechEditor.W, 1) * 0.5f;
-                        float hh = fmaxf(OmegaTechEditor.H, 1) * 0.5f;
-                        float hd = fmaxf(OmegaTechEditor.L, 1) * 0.5f;
-                        float minX = OmegaTechEditor.X - hw, maxX = OmegaTechEditor.X + hw;
-                        float minY = OmegaTechEditor.Y - hh, maxY = OmegaTechEditor.Y + hh;
-                        float minZ = OmegaTechEditor.Z - hd, maxZ = OmegaTechEditor.Z + hd;
+                    if (AngelTechEditor.ActiveNodeType == EditorNodeType::ZONE) {
+                        float hw = fmaxf(AngelTechEditor.W, 1) * 0.5f;
+                        float hh = fmaxf(AngelTechEditor.H, 1) * 0.5f;
+                        float hd = fmaxf(AngelTechEditor.L, 1) * 0.5f;
+                        float minX = AngelTechEditor.X - hw, maxX = AngelTechEditor.X + hw;
+                        float minY = AngelTechEditor.Y - hh, maxY = AngelTechEditor.Y + hh;
+                        float minZ = AngelTechEditor.Z - hd, maxZ = AngelTechEditor.Z + hd;
                         ZoneVolumeNode node;
                         node.bounds = {{minX, minY, minZ}, {maxX, maxY, maxZ}};
                         node.zoneType = ZoneType::ZONE_WATER;
                         node.intensity = 1.0f;
                         ZoneManager::Instance().AddZone(node);
-                    } else if (OmegaTechEditor.ActiveNodeType == EditorNodeType::PORTAL) {
-                        float hw = fmaxf(OmegaTechEditor.W, 1) * 0.5f;
-                        float hh = fmaxf(OmegaTechEditor.H, 1) * 0.5f;
-                        float hd = fmaxf(OmegaTechEditor.L, 1) * 0.5f;
-                        float minX = OmegaTechEditor.X - hw, maxX = OmegaTechEditor.X + hw;
-                        float minY = OmegaTechEditor.Y - hh, maxY = OmegaTechEditor.Y + hh;
-                        float minZ = OmegaTechEditor.Z - hd, maxZ = OmegaTechEditor.Z + hd;
+                    } else if (AngelTechEditor.ActiveNodeType == EditorNodeType::PORTAL) {
+                        float hw = fmaxf(AngelTechEditor.W, 1) * 0.5f;
+                        float hh = fmaxf(AngelTechEditor.H, 1) * 0.5f;
+                        float hd = fmaxf(AngelTechEditor.L, 1) * 0.5f;
+                        float minX = AngelTechEditor.X - hw, maxX = AngelTechEditor.X + hw;
+                        float minY = AngelTechEditor.Y - hh, maxY = AngelTechEditor.Y + hh;
+                        float minZ = AngelTechEditor.Z - hd, maxZ = AngelTechEditor.Z + hd;
                         std::string target(g_editorPanels.portalTargetWorld);
                         if (target.empty()) target = "EngineTest";
                         ZonePortal portal;
@@ -1525,15 +1525,15 @@ if (g_editorPanels.showCollisionBounds) {
                         portal.bidirectional = true;
                         ZoneManager::Instance().AddPortal(portal);
                         RefreshLevelList();
-                    } else if (OmegaTechEditor.ActiveNodeType == EditorNodeType::SPAWN) {
+                    } else if (AngelTechEditor.ActiveNodeType == EditorNodeType::SPAWN) {
                         PlayerStartNode node;
-                        node.position = {OmegaTechEditor.X, OmegaTechEditor.Y, OmegaTechEditor.Z};
-                        node.yaw = OmegaTechEditor.R;
+                        node.position = {AngelTechEditor.X, AngelTechEditor.Y, AngelTechEditor.Z};
+                        node.yaw = AngelTechEditor.R;
                         PawnSystem::Instance().AddPlayerStart(node);
-                    } else if (OmegaTechEditor.ActiveNodeType == EditorNodeType::NPC) {
+                    } else if (AngelTechEditor.ActiveNodeType == EditorNodeType::NPC) {
                         PawnSystem::Instance().Spawn(
-                            {OmegaTechEditor.X, OmegaTechEditor.Y, OmegaTechEditor.Z}, "Walker");
-                    } else if (OmegaTechEditor.ActiveNodeType == EditorNodeType::LIGHT) {
+                            {AngelTechEditor.X, AngelTechEditor.Y, AngelTechEditor.Z}, "Walker");
+                    } else if (AngelTechEditor.ActiveNodeType == EditorNodeType::LIGHT) {
                         // The Enter-key / double-click placement path. It used to
                         // AddLight a bare default-constructed LightNode, which has
                         // FOUR problems:
@@ -1551,7 +1551,7 @@ if (g_editorPanels.showCollisionBounds) {
                         // all four; this now matches it.
                         LightNode node;
                         node.active = true;
-                        node.position = {OmegaTechEditor.X, OmegaTechEditor.Y, OmegaTechEditor.Z};
+                        node.position = {AngelTechEditor.X, AngelTechEditor.Y, AngelTechEditor.Z};
                         node.target = {0.0f, 0.0f, 0.0f};
                         node.color = WHITE;
                         node.intensity = 1.0f;
@@ -1563,7 +1563,7 @@ if (g_editorPanels.showCollisionBounds) {
                     }
                 }
 
-OmegaTechEditor.DrawModel = false;
+AngelTechEditor.DrawModel = false;
                 // This whole block bypasses the event bus and mutates PawnSystem /
                 // ZoneManager directly, so it has to flag the WorldGraph itself.
                 MarkWorldGraphDirty();
@@ -1573,11 +1573,11 @@ OmegaTechEditor.DrawModel = false;
                 // runs its own CsgProcessor over every renderable's stored csgOp.
                 if (EMID >= 200 && g_placeMode == PlaceMode::MODEL) {
                     int primType = EMID - 200;
-                    Vector3 center = {OmegaTechEditor.X, OmegaTechEditor.Y, OmegaTechEditor.Z};
-                    Vector3 size = {OmegaTechEditor.W, OmegaTechEditor.H, OmegaTechEditor.L};
+                    Vector3 center = {AngelTechEditor.X, AngelTechEditor.Y, AngelTechEditor.Z};
+                    Vector3 size = {AngelTechEditor.W, AngelTechEditor.H, AngelTechEditor.L};
                     int ridx = CommitBrushRenderable(
-                        primType, center, size, OmegaTechEditor.R, OmegaTechEditor.S,
-                        (int)OmegaTechEditor.CSGOperation);
+                        primType, center, size, AngelTechEditor.R, AngelTechEditor.S,
+                        (int)AngelTechEditor.CSGOperation);
                     if (ridx >= 0) {
                         EditorLog("Brush renderable added idx=%d prim=%d", ridx, primType);
                         // Auto-apply preselected texture to new brush
@@ -1598,10 +1598,10 @@ OmegaTechEditor.DrawModel = false;
                                  g_editorPanels.currentToolMode);
             } else if (g_editorPanels.currentToolMode == 2) {
                 float wheel = GetMouseWheelMove();
-                if (wheel != 0) OmegaTechEditor.S += wheel * 0.25f;
+                if (wheel != 0) AngelTechEditor.S += wheel * 0.25f;
             } else if (g_editorPanels.currentToolMode == 3) {
                 float wheel = GetMouseWheelMove();
-                if (wheel != 0) OmegaTechEditor.R += wheel * 15.0f;
+                if (wheel != 0) AngelTechEditor.R += wheel * 15.0f;
             } else if (IsMouseButtonDown(0)) {
                 // A selected entity moves only for an intentional gesture; a
                 // placement ghost (no selection) still drags freely. Suppressed
@@ -1618,28 +1618,28 @@ OmegaTechEditor.DrawModel = false;
                     // follow the cursor; this moves along the camera's right/up
                     // vectors, scaled by distance so it stays 1:1 on screen.
                     if (g_sel.type == SelType::NONE) {
-                        OmegaTechEditor.X += GetMouseDelta().x / 8;
-                        OmegaTechEditor.Y += GetMouseDelta().y / 8;
-                        OmegaTechEditor.Z -= (GetMouseWheelMove() * 2);
+                        AngelTechEditor.X += GetMouseDelta().x / 8;
+                        AngelTechEditor.Y += GetMouseDelta().y / 8;
+                        AngelTechEditor.Z -= (GetMouseWheelMove() * 2);
                     } else {
                         Vector3 fwd = Vector3Normalize(Vector3Subtract(
                             OTEditor.MainCamera.target, OTEditor.MainCamera.position));
                         Vector3 right = Vector3Normalize(Vector3CrossProduct(fwd, {0, 1, 0}));
                         Vector3 up = Vector3Normalize(Vector3CrossProduct(right, fwd));
                         const float dist = Vector3Distance(OTEditor.MainCamera.position,
-                                                           {OmegaTechEditor.X, OmegaTechEditor.Y, OmegaTechEditor.Z});
+                                                           {AngelTechEditor.X, AngelTechEditor.Y, AngelTechEditor.Z});
                         const float k = dist * 0.0016f;
                         const Vector2 d = GetMouseDelta();
-                        OmegaTechEditor.X += (right.x * d.x - up.x * d.y) * k;
-                        OmegaTechEditor.Y += (right.y * d.x - up.y * d.y) * k;
-                        OmegaTechEditor.Z += (right.z * d.x - up.z * d.y) * k;
+                        AngelTechEditor.X += (right.x * d.x - up.x * d.y) * k;
+                        AngelTechEditor.Y += (right.y * d.x - up.y * d.y) * k;
+                        AngelTechEditor.Z += (right.z * d.x - up.z * d.y) * k;
                     }
                 }
             }
             if (IsMouseButtonDown(1) && !g_suppressViewportDrag) {
-                OmegaTechEditor.W += GetMouseDelta().x / 8;
-                OmegaTechEditor.H += GetMouseDelta().y / 8;
-                OmegaTechEditor.L -= (GetMouseWheelMove() * 2);
+                AngelTechEditor.W += GetMouseDelta().x / 8;
+                AngelTechEditor.H += GetMouseDelta().y / 8;
+                AngelTechEditor.L -= (GetMouseWheelMove() * 2);
             }
         }
 
@@ -1953,9 +1953,9 @@ OmegaTechEditor.DrawModel = false;
             int volCount = (int)OzoneLoader::Instance().GetCollisionVolumes().size();
             int chunkCount = OzoneLoader::Instance().GetChunkManager().CellCount();
             UpdateStatsSidebar(
-                OmegaTechEditor.X, OmegaTechEditor.Y, OmegaTechEditor.Z,
-                OmegaTechEditor.W, OmegaTechEditor.H, OmegaTechEditor.L,
-                OmegaTechEditor.R, OmegaTechEditor.S,
+                AngelTechEditor.X, AngelTechEditor.Y, AngelTechEditor.Z,
+                AngelTechEditor.W, AngelTechEditor.H, AngelTechEditor.L,
+                AngelTechEditor.R, AngelTechEditor.S,
                 volCount, chunkCount, modeStr,
                 OTEditor.MainCamera.position.x,
                 OTEditor.MainCamera.position.y,
@@ -2491,7 +2491,7 @@ OmegaTechEditor.DrawModel = false;
 
         // CSG operation cycling
         if (EdKeys::Pressed(EdAction::CsgCycle) && g_placeMode == PlaceMode::MODEL) {
-            OmegaTechEditor.CSGOperation = (OmegaTechEditor.CSGOperation + 1) % 5;
+            AngelTechEditor.CSGOperation = (AngelTechEditor.CSGOperation + 1) % 5;
         }
 
         // Heightmap editor toggle — suppressed in vertex-edit mode (its key moves verts)
@@ -2520,10 +2520,10 @@ OmegaTechEditor.DrawModel = false;
             g_gizmoDrag = false;
             g_gizmoHistPushed = false;
         } else if (IsKeyPressed(KEY_ESCAPE) &&
-            (g_sel.type != SelType::NONE || OmegaTechEditor.DrawModel)) {
+            (g_sel.type != SelType::NONE || AngelTechEditor.DrawModel)) {
             g_sel = { SelType::NONE, -1, "", {0,0,0} };
             g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
-            OmegaTechEditor.DrawModel = false;
+            AngelTechEditor.DrawModel = false;
         }
         // Delete/Duplicate are for placed objects only. Both targets are `else if`
         // chains with no `else`, so gating on `!= NONE` alone would let the Map

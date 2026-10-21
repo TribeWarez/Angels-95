@@ -215,4 +215,4 @@ class TextSystem{
         }
 };
 
-static TextSystem OmegaTechTextSystem;
+static TextSystem AngelTechTextSystem;

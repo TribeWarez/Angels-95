@@ -1,4 +1,4 @@
-// AngelMaster ÔÇö standalone master server for Angels95 / OmegaTech.
+// AngelMaster ÔÇö standalone master server for Angels95 / AngelTech.
 //
 // Collects heartbeats from public game servers and serves the live list to
 // clients (HTTP/JSON) ÔÇö a lightweight GameSpy/Unreal-style master.

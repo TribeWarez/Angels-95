@@ -1,11 +1,11 @@
-# Angels95 — OmegaTech Engine
+# Angels95 — AngelTech Engine
 
 ![Angels95 Title Splash](GameData/Tex/Title/menu_heading.png)
 
-Angels95 reimagines the OmegaTech Engine as a **multiplayer game world** — a
-persistent, server-authoritative realm where players explore partitioned
-worlds, collect power-ups, level up, and fight NPCs alongside other connected
-players.
+Angels95 is a **multiplayer game world** built on **AngelTech** — the engine that
+began life as the OmegaTech Engine. It is a persistent, server-authoritative realm
+where players explore partitioned worlds, collect power-ups, level up, and fight
+NPCs alongside other connected players.
 
 Built on [raylib](https://www.raylib.com/) 5.5 with PS1-inspired retro
 aesthetics, a custom **OZONE** world format, a
@@ -448,11 +448,12 @@ See also [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md),
 
 ## Origins
 
-Angels95 is a reimagining of the **OmegaTech Engine**, and would not exist
+Angels95 began as a fork of the **OmegaTech Engine**, and would not exist
 without the original source released by [paganswrath](https://github.com/paganswrath):
 
 - **[OmegaTech](https://github.com/paganswrath/OmegaTech)** — the engine this
-  project was built on top of.
+  project was built on top of. The engine in this repository is now developed
+  under the name **AngelTech**.
 - **[OTEditor](https://github.com/paganswrath/OTEditor)** — the OmegaTech editor
   that AngelEd descends from.
 

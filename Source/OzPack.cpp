@@ -1,4 +1,4 @@
-// OzPack — Angels95 / OmegaTech package packer/unpacker
+// OzPack — Angels95 / AngelTech package packer/unpacker
 // Usage:
 //   OzPack pack <magic> <input_dir> <output.ozpak>
 //   OzPack unpack <input.ozpak> <output_dir>

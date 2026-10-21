@@ -1,6 +1,6 @@
 # Security Policy
 
-Angels95 / OmegaTech Engine is a hobby-grade multiplayer game project.
+Angels95 / AngelTech Engine is a hobby-grade multiplayer game project.
 Security issues are still taken seriously — especially in the dedicated
 server (`AngelServ`), which accepts untrusted network traffic.
 
