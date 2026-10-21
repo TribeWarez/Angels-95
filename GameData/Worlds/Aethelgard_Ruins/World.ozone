@@ -1,34 +1,371 @@
-# OZONE world scaffold - Aethelgard_Ruins
-# Sector: Sefirah_3_Oasis333   (see Wiki/Game-Hierarchy.md)
-# Placeholder geometry only: a floor, a perimeter and a sky zone.
+# OZONE world – Aethelgard_Ruins (Oasis 333 / Level 3)
+# Progressive redesign of the original EngineTest / surface-demo map
 # Format: ozone v1.0
+# Hierarchy: Terran Prime → Hydrosis Prime → Oasis 333 → Aethelgard_Ruins
+#
+# Flow: arrival court -> ritual chambers -> great hall (reverb) -> courtyard /
+#       pyramid arena -> Path of Dissolution (water -> acid -> lava) -> terminal.
+# The surface-flag gallery along the causeway is kept intact: it is both the
+# engine's flag demo and, in fiction, the buried relay reliefs of Aethelgard.
+#
+# Zone names are deliberately unchanged from the EngineTest originals - each one
+# is the lookup key for a sibling .ozls def in this directory, so renaming a zone
+# without re-keying its def silently detaches fog/ambient and the pool damage
+# timers. Physics is differentiated per zone instead.
 
-levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_noon.png
+# --- Arrival court + ritual chambers (safe tier, floors top at z=0.45) ---
+add box 10 -2.5 -0.25 60 0.5 95 0 1
+add box 20 -71 -0.25 46 0.5 42 0 5
+add box 59 0 -0.25 38 0.5 56 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=12 texScaleV=18
+add box 0 10 0.25 15 0.4 15 0 1
+add box 20 10 0.25 15 0.4 15 0 1
+add box 20 -10 0.25 15 0.4 15 0 1
+add box 0 -10 0.25 15 0.4 15 0 1
+add box 20 -38 0.25 23 0.4 23 0 1
+add box 59 0 0.1 36 0.4 52 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=9 texScaleV=13
+add box -5.25 17.75 4 4.5 8 0.5 0 2
+add box 5.25 17.75 4 4.5 8 0.5 0 2
+add box 0 17.75 6.75 6 2.5 0.5 0 2
+add box -5 2.25 4 5 8 0.5 0 2
+add box 5 2.25 4 5 8 0.5 0 2
+add box 7.75 15 4 0.5 8 5 0 2
+add box 7.75 5 4 0.5 8 5 0 2
+add box -7.75 10 4 0.5 8 15 0 2
+add box 0 10 8.25 15 0.5 15 0 4
+add cyl 0 10 8 0.8 0.8 8 16 0 3
+add cyl 0 10 8.4 1.1 1.1 0.8 16 0 3
+add box 20 17.75 4 15 8 0.5 0 2
+add box 15 2.25 4 5 8 0.5 0 2
+add box 25 2.25 4 5 8 0.5 0 2
+add box 27.75 10 4 0.5 8 15 0 2
+add box 12.25 15 4 0.5 8 5 0 2
+add box 12.25 5 4 0.5 8 5 0 2
+add box 20 10 8.25 15 0.5 15 0 4
+add cyl 20 10 8 0.8 0.8 8 16 0 3
+add cyl 20 10 8.4 1.1 1.1 0.8 16 0 3
+add box 15 -2.75 4 5 8 0.5 0 2
+add box 25 -2.75 4 5 8 0.5 0 2
+add box 15 -17.75 4 5 8 0.5 0 2
+add box 25 -17.75 4 5 8 0.5 0 2
+add box 27.75 -10 4 0.5 8 15 0 2
+add box 12.25 -5 4 0.5 8 5 0 2
+add box 12.25 -15 4 0.5 8 5 0 2
+add box 20 -10 8.25 15 0.5 15 0 4
+add cyl 20 -10 8 0.8 0.8 8 16 0 3
+add cyl 20 -10 8.4 1.1 1.1 0.8 16 0 3
+add box -5 -2.75 4 5 8 0.5 0 2
+add box 5 -2.75 4 5 8 0.5 0 2
+add box 0 -17.75 4 15 8 0.5 0 2
+add box 7.75 -5 4 0.5 8 5 0 2
+add box 7.75 -15 4 0.5 8 5 0 2
+add box -7.75 -10 4 0.5 8 15 0 2
+add box 0 -10 8.25 15 0.5 15 0 4
+add cyl 0 -10 8 0.8 0.8 8 16 0 3
+add cyl 0 -10 8.4 1.1 1.1 0.8 16 0 3
+add box 0 -10 0.05 9 0.5 9 0 2
 
-# Floor (placeholder)
-add box 0 0 -0.25 80 0.5 80 0
-# Perimeter walls (placeholder)
-add box 0 -40 1 80 2 2 0
-add box 0 40 1 80 2 2 0
-add box -40 0 1 2 2 80 0
-add box 40 0 1 2 2 80 0
+# --- Great Hall (engine_reverb zone; per-face slow pan on both long walls) ---
+add box 13 -26.75 4 9 8 0.5 0 2
+add box 27 -26.75 4 9 8 0.5 0 2
+add box 12 -49.75 4 9 8 0.5 0 2
+add box 28 -49.75 4 9 8 0.5 0 2
+add box 20 -49.75 6.75 7 2.5 0.5 0 2
+add box 31.75 -38 4 0.5 8 23 0 2 facepx_flags=262144 facepx_panU=0.08
+add box 8.25 -38 4 0.5 8 23 0 2 facenx_flags=262144 facenx_panU=-0.08
+add box 20 -38 0.75 11 1.5 11 0 2
+add box 20 -32 0.5 11 1 1 0 1
+add cyl 20 -38 6.5 0.9 0.9 5 16 0 3
+add box 12.75 -38 8.25 8.5 0.5 23 0 4
+add box 27.25 -38 8.25 8.5 0.5 23 0 4
+add cyl 12 -30 8 0.8 0.8 8 16 0 3
+add cyl 28 -30 8 0.8 0.8 8 16 0 3
+add cyl 12 -46 8 0.8 0.8 8 16 0 3
+add cyl 28 -46 8 0.8 0.8 8 16 0 3
 
-playerstart 0 0 0 0
-light directional 50 50 80 200 205 215 0.3
+# --- Courtyard connectors + pyramid arena ---
+add box 10 12.75 4 5 8 0.5 0 2
+add box 10 7.25 4 5 8 0.5 0 2
+add box 10 10 8.25 5 0.5 5 0 4
+add box 2.75 0 4 0.5 8 5 0 2
+add box -2.75 0 4 0.5 8 5 0 2
+add box 0 0 8.25 5 0.5 5 0 4
+add box 17.25 0 4 0.5 8 5 0 2
+add box 22.5 0 8.25 10 0.5 5 0 4
+add box 10 -7.25 4 5 8 0.5 0 2
+add box 10 -12.75 4 5 8 0.5 0 2
+add box 10 -10 8.25 5 0.5 5 0 4
+add box 22.75 -22 4 0.5 8 9 0 2
+add box 17.25 -22 4 0.5 8 9 0 2
+add box 20 -22 8.25 5 0.5 9 0 4
+add box 34 2.75 4 12 8 0.5 0 2
+add box 34 -2.75 4 12 8 0.5 0 2
+add box 34 0 8.25 12 0.5 5 0 4
+add box 34 0 0.25 12 0.4 5 0 1
+add box 20 -49.75 0.25 12 0.4 1 0 1
+add box 20 -55 0.25 6 0.4 10 0 1
+add box 12 -62 1.75 12 3.5 18 0 2
+add box 28 -62 1.75 12 3.5 18 0 2
+add box 12 -75 1.75 12 3.5 8 0 2
+add box 28 -75 1.75 12 3.5 8 0 2
+add box 20 -78.5 1.75 12 3.5 1 0 2
+add box 4 -62 1.75 4 3.5 26 0 2
+add box 36 -62 1.75 4 3.5 26 0 2
+add box 20 -66 0.25 28 0.4 24 0 1
+add box 16 -55 4.5 2 9 7 0 2
+add box 24 -55 4.5 2 9 7 0 2
+add box 20 -52 9.25 8 0.5 4 0 4
+add cyl 12 -55 6 0.5 0.5 6 16 0 3
+add cyl 28 -55 6 0.5 0.5 6 16 0 3
+add cyl 12 -72 6 0.5 0.5 6 16 0 3
+add cyl 28 -72 6 0.5 0.5 6 16 0 3
+add box 20 -66 0.9 6 1.8 2 0 3
+add box 20 -70 0.9 6 1.8 2 0 3
+add box 59 28 4 38 8 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=8 texScaleV=2
+add box 59 -28 4 38 8 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_02.png texScaleU=8 texScaleV=2
+add box 78 -18 4 1 8 20 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_02.png texScaleU=3 texScaleV=2
+add box 78 18 4 1 8 20 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_02.png texScaleU=3 texScaleV=2
+add box 78 0 6.75 1 2.5 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=2 texScaleV=1
+add box 40 15.25 4 1 8 25.5 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_03.png texScaleU=5 texScaleV=2
+add box 40 -15.25 4 1 8 25.5 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_04.png texScaleU=5 texScaleV=2
+add box 40 0 6.75 1 2.5 5 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png
+add box 40 36.5 4 1 8 17 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=5 texScaleV=2
+add box 40 -39 4 1 8 22 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=5 texScaleV=2
+add box 59 0 0.5 18 1 18 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_01.png texScaleU=6 texScaleV=6
+add box 59 0 1.5 15 1 15 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_02.png texScaleU=5 texScaleV=5
+add box 59 0 2.5 12 1 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_03.png texScaleU=4 texScaleV=4
+add box 59 0 3.5 9 1 9 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_04.png texScaleU=3 texScaleV=3
+add box 59 0 4.5 6 1 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_01.png texScaleU=2 texScaleV=2
+add box 59 0 5.5 3 1 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_02.png
+# Apex orb: glowing, cosmetic only (NO_BSP_CUTS so it leaves no invisible standable box).
+add sph 59 0 7.2 1 16 flags=268451840 surfGlow=(1,0.75,0.25)
+add cyl 59 22 14 0.3 1.6 14 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineaglestone.png texScaleU=2 texScaleV=4
+add cyl 44 -22 8 0.35 0.6 8 14 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=2 texScaleV=3
+add cyl 44 22 8 0.35 0.6 8 14 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=2 texScaleV=3
+add cyl 74 -22 8 0.35 0.6 8 14 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=2 texScaleV=3
+add cyl 49 -9 1.5 0.45 0.6 1.5 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png
+add cyl 69 -9 1.5 0.45 0.6 1.5 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png
+add cyl 49 9 1.5 0.45 0.6 1.5 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png
+add cyl 69 9 1.5 0.45 0.6 1.5 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png
+add box 74 22 4 5 8 5 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_06.png texScaleU=2 texScaleV=3
+add box 74 22 8.5 5 1 5 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=2 texScaleV=2
+add box 59 27.2 0.3 30 0.6 0.4 0 3 flags=16384 surfGlow=(0.35,0.8,1)
+add box 45 8 0.2 5 0.4 5 0 3
+add pln 41 -12 6 1 0 0 0 texPath=GameData/Worlds/Aethelgard_Ruins/oztex/tileset/04_ceiling_tech_128.png texScaleU=2 texScaleV=2 flags=268435456
+add cyl 45 0 1.2 0.9 1.1 1.2 12 0 3
+add box 45 -14 1 3 2 1 0 3
+add box -4 6 0.9 2 1.8 2 0 3
+add box 4 13 1.25 2 2.5 2 0 3
+add box 24 6 0.9 2 1.8 2 0 3
+add box 16 13 1.25 2 2.5 2 0 3
+add box 24 -14 0.9 2 1.8 2 0 3
+add box 16 -6 1.25 2 2.5 2 0 3
+add box -4 -6 0.9 2 1.8 2 0 3
+add box -4 -14 1.25 2 2.5 2 0 3
+add box 14 -42 0.9 2 1.8 2 0 3
+add box 26 -34 0.9 2 1.8 2 0 3
+add box 26 -44 1.25 2 2.5 2 0 3
+add box 9.5 -38 1.25 1 2.5 20 0 3
+add box 30.5 -38 1.25 1 2.5 20 0 3
 
-zone sky -60 -60 -30 60 60 60 1 name=Aethelgard_Ruins_sky
+# --- Painted backdrop ring (flags=8) ---
+add box 0 45 8 60 16 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_07.png texScaleU=12 texScaleV=4 flags=8
+add box -40 0 8 1 16 60 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_08.png texScaleU=12 texScaleV=4 flags=8
+add box 0 -92 9 60 18 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_09.png texScaleU=12 texScaleV=4 flags=8
+add box 43 -70 8 1 16 44 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=10 texScaleV=4 flags=8
+add box -43 -70 8 1 16 44 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_03.png texScaleU=10 texScaleV=4 flags=8
+add box 59 31 9 40 18 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_03.png texScaleU=10 texScaleV=4 flags=8
+add box 59 -31 9 40 18 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_04.png texScaleU=10 texScaleV=4 flags=8
+add box 81 -19 9 1 18 22 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_04.png texScaleU=3 texScaleV=3 flags=8
+add box 81 19 9 1 18 22 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_04.png texScaleU=3 texScaleV=3 flags=8
+add box 81 0 11.75 1 12.5 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=2 texScaleV=2 flags=8
 
-# COOP content (scaffold): NPCs + pickups so objectives are completable.
-npc Walker 10 10 0
-npc Walker -10 10 0
-npc Walker 10 -10 0
-npc Walker -10 -10 0
-npc Walker 0 20 0
-pickup pistol_01 5 0 0
-pickup rifle_01 -5 0 0
-pickup etheral_waver 0 -5 0
+# --- Path of Dissolution: causeway floor, boundary walls, pillars ---
+add box 79.5 0 -0.5 3 1 17 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=4
+add box 192 0 -0.5 222 1 34 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=44 texScaleV=7
+add box 192 0 0.05 222 0.1 10 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=44 texScaleV=2
+add box 192 17.3 1.25 222 2.5 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=44 texScaleV=1
+add box 192 -17.3 1.25 222 2.5 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=44 texScaleV=1
+add box 303.5 0 5 1 10 35.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_02.png texScaleU=8 texScaleV=2
+add box 84 11 3 2.4 6 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=1 texScaleV=2
+add box 84 11 6.4 3 0.8 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png
+add box 84 -11 3 2.4 6 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=1 texScaleV=2
+add box 84 -11 6.4 3 0.8 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png
+add cyl 138 7 7 0.55 0.75 7 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineaglestone.png texScaleU=1 texScaleV=2
+add box 138 7 7.4 2.2 0.8 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png
+add cyl 170 7 7 0.55 0.75 7 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineaglestone.png texScaleU=1 texScaleV=2
+add box 170 7 7.4 2.2 0.8 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png
+add cyl 202 7 7 0.55 0.75 7 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineaglestone.png texScaleU=1 texScaleV=2
+add box 202 7 7.4 2.2 0.8 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png
+add cyl 234 7 7 0.55 0.75 7 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineaglestone.png texScaleU=1 texScaleV=2
+add box 234 7 7.4 2.2 0.8 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png
+add cyl 266 7 7 0.55 0.75 7 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineaglestone.png texScaleU=1 texScaleV=2
+add box 266 7 7.4 2.2 0.8 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png
 
-# trigger scaffold
-trigger Trigger_EnterVolume 8 -5 0 18 5 8 once
-# portal scaffold to next mission world (box X 20-26, Y -4..4, Z 0-8; spawn 0 0 0 in the target)
-portal AlShaddai_Metropolis 20 -4 0 26 4 8 0 0 0 bidir
+# --- Surface-flag gallery (causeway reliefs; unchanged demo row) ---
+add box 96 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png
+add box 112 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png flags=2048
+add box 128 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png flags=4096
+add box 144 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png flags=16384 surfGlow=(0.1,0.22,0.4)
+add box 176 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png flags=262144 panU=0.15
+add box 192 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png flags=524288 panV=0.12
+add box 208 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png flags=128
+add box 224 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png flags=256
+add box 240 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Global/Items/Key.png flags=64
+add box 256 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png flags=268435456
+add box 272 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png flags=67108864
+add box 288 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png flags=8
+# Cosmetic plane: NO_BSP_CUTS + TWO_SIDED (268436480) - keep both bits.
+add pln 160 11 3.5 1 0 0 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png flags=268436480
+
+# --- Dissolution pools. Escalation is carried by pan speed + glow, not by size.
+# Water (calm): UNLIT|PAN_U|PAN_V = 788480 -> slow drift only.
+add box 109 -6.7 0.45 19.2 0.9 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=10 texScaleV=1
+add box 109 -13.3 0.45 19.2 0.9 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=10 texScaleV=1
+add box 99.7 -10 0.45 0.6 0.9 7.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=2 texScaleV=2
+add box 118.3 -10 0.45 0.6 0.9 7.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=2 texScaleV=2
+add box 109 -10 0.275 18 0.35 6 0 texPath=GameData/Tex/Global/EFX/liquid_water.png texScaleU=6 texScaleV=2 flags=788480 panU=0.05 panV=0.03
+# Acid (irritant): + SURF_GLOW = 804864, counter-drifting, faint green bleed.
+add box 157 -6.7 0.45 19.2 0.9 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=10 texScaleV=1
+add box 157 -13.3 0.45 19.2 0.9 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=10 texScaleV=1
+add box 147.7 -10 0.45 0.6 0.9 7.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=2 texScaleV=2
+add box 166.3 -10 0.45 0.6 0.9 7.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=2 texScaleV=2
+add box 157 -10 0.275 18 0.35 6 0 texPath=GameData/Tex/Global/EFX/liquid_acid.png texScaleU=6 texScaleV=2 flags=804864 panU=-0.04 panV=0.02 surfGlow=(0.05,0.18,0.05)
+# Lava (terminal burn): 804864, fastest pan, hot ember glow.
+add box 205 -6.7 0.45 19.2 0.9 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=10 texScaleV=1
+add box 205 -13.3 0.45 19.2 0.9 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=10 texScaleV=1
+add box 195.7 -10 0.45 0.6 0.9 7.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=2 texScaleV=2
+add box 214.3 -10 0.45 0.6 0.9 7.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=2 texScaleV=2
+add box 205 -10 0.275 18 0.35 6 0 texPath=GameData/Tex/Global/EFX/liquid_lava.png texScaleU=6 texScaleV=2 flags=804864 panU=0.03 panV=0.05 surfGlow=(0.18,0.04,0.01)
+
+# --- Terminal chamber: dais, obelisk (slow vertical drift), glowing sphinx orb ---
+add box 296 0 0.75 7 1.5 7 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=2 texScaleV=2
+add cyl 296 0 16.5 0.7 1.6 15 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineaglestone.png texScaleU=1 texScaleV=4 flags=524288 panV=0.06
+add sph 296 0 18 1.1 16 flags=268451840 surfGlow=(1,0.75,0.25)
+
+# Entities
+playerstart 0 8 0 0
+playerstart 0 -66 0 0
+pickup HealthVial 0 10 0.7 30
+pickup ManaVial 20 10 0.7 30
+pickup Key 20 -10 0.7 30
+pickup Coin 0 -10 0.7 30
+pickup EnergyCrystal 20 -38 2 30
+pickup Powerup 28 -38 0.7 30
+pickup HealthVial 0 -30 0.7 30
+pickup ManaVial 12 -70 0.7 30
+pickup Medkit 12 -38 2 30
+pickup Ammo 28 -30 0.7 30
+pickup rifle_01 59 -14 0.7 30
+pickup etheral_waver 59 14 0.7 30
+pickup HealthVial 44 -8 0.7 30
+pickup Ammo 44 6 0.7 30
+pickup Powerup 74 22 9.5 30
+npc Skaarj 20 -66 0.5
+npc Walker 26 -44 0.5
+npc Floater 14 -42 0.5
+npc Walker -4 -6 1
+npc Brute 24 -14 1
+npc Skaarj 24 5 1
+npc Walker -4 5 1
+npc Brute 59 -19 0.5
+npc Skaarj 47 0 0.5
+npc Skaarj 71 0 0.5
+npc Walker 47 19 0.5
+npc Skaarj 150 3 0.5
+npc Walker 230 -3 0.5
+npc Brute 285 4 0.5
+light directional 50 50 40 140 155 180 0.12
+light directional -50 -50 70 205 215 235 0.3
+light point 16 14 5.5 80 130 255 0.45 22
+light point -4 14 5.5 255 60 60 0.45 22
+light point 10 0 5 190 205 255 0.4 14
+light point 34 0 5.5 190 210 255 0.5 18
+light point 16 -14 5.5 255 170 50 0.45 22
+light point -4 -14 5.5 255 220 60 0.45 22
+light point 20 -22 5 190 205 255 0.45 16
+light point 49 9 2.4 255 165 75 0.75 16 effect=2
+light point 14 -30 5.5 200 215 255 0.38 20
+light point 49 -9 2.4 255 165 75 0.75 16 effect=2
+light point 59 0 9 190 210 255 0.5 34
+light point 16 -38 4.5 255 225 190 0.45 16
+light point 69 9 2.4 255 165 75 0.75 16 effect=2
+light point 28 -44 5.5 200 215 255 0.38 20
+light point 74 22 10.5 120 200 255 0.5 16
+light point 69 -9 2.4 255 165 75 0.75 16 effect=2
+light point 16 -60 4.5 255 180 80 0.6 18 effect=2
+light point 24 -60 4.5 255 180 80 0.6 18 effect=2
+light point 86 6.5 3.4 255 175 80 0.7 16 effect=2
+light point 20 -66 2 120 200 255 0.4 22
+light point 16 -68 4.5 255 180 80 0.5 16 effect=2
+light point 24 -68 4.5 255 180 80 0.5 16 effect=2
+light point 150 -6.2 3.4 255 175 80 0.7 16 effect=2
+light point 205 -10 2.2 255 150 60 0.6 18
+light point 255 6.5 3.4 255 175 80 0.7 16 effect=2
+
+# Zones. Names are unchanged from EngineTest so the sibling .ozls defs keep
+# binding; only the physics is differentiated along the progression.
+zone sky -90 -90 -30 320 90 90 1 name=engine_sky gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.6
+zone water -4.5 -14.5 -0.2 4.5 -5.5 3.5 1 name=engine_water gravity=18 jump=9 terminal=60 water_gravity=6 water_drag=0.9 swim_up=4 ladder_speed=6 fly_mult=1.5
+zone ladder 70.4 20 0 71.6 24 11 1 name=arena_ladder gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=7 fly_mult=1.5
+zone reverb 8.5 -49.5 0 31.5 -26.5 8 1 name=engine_reverb gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
+zone sound 12.5 2.5 0 27.5 17.5 8 1 name=engine_sound gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
+zone water 100 -13 -1 118 -7 2.5 1 name=path_water gravity=18 jump=9 terminal=60 water_gravity=6 water_drag=0.9 swim_up=4 ladder_speed=6 fly_mult=1.5
+zone water 148 -13 -1 166 -7 2.5 1 name=path_acid gravity=18 jump=9 terminal=60 water_gravity=5 water_drag=0.85 swim_up=3.5 ladder_speed=6 fly_mult=1.5
+zone water 196 -13 -1 214 -7 2.5 1 name=path_lava gravity=18 jump=9 terminal=60 water_gravity=4 water_drag=0.8 swim_up=3 ladder_speed=6 fly_mult=1.5
+zone sound 82 4 0 302 15 8 1 name=path_surface_demo gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
+
+# Threshold trigger: crossing onto the causeway (off both playerstarts).
+trigger Trigger_EnterVolume 82 -17 0 84 17 8 once
+# Campaign exit at the terminal (offline progression; online transition is
+# server-authoritative). Spawn is inside AlShaddai_Metropolis's floor.
+portal AlShaddai_Metropolis 300 -3 0 302.5 3 5.5 0 0 1 bidir
+Mesh.Static GameData/Tex/Global/Items/MedMeshes/Med_01.glb 45 0 1.2 0 scale=3
+Mesh.Skeletal GameData/Tex/Global/Gun/Rifle_01/Fbx_Files/Rifle_01.glb 45 -14 2 90 scale=3 anim=Idle
+Mesh.Static GameData/Worlds/World_endless_snow/Models/forest/forest_pine_1.glb 44 -24 0 0 scale=1.2 tex=GameData/Tex/Global/EFX/tree_pine_needles.png wind=1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/forest/forest_pine_2.glb 74 -24 0 30 scale=1.3 tex=GameData/Tex/Global/EFX/tree_pine_needles.png wind=1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/forest/forest_pine_2.glb 44 24 0 200 scale=1.15 tex=GameData/Tex/Global/EFX/tree_pine_needles.png wind=1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/forest/forest_pine_1.glb 64 24 0 150 scale=1.25 tex=GameData/Tex/Global/EFX/tree_pine_needles.png wind=1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_2m_0.glb 100 13 0 0 scale=0.9
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_2m_2.glb 126 14 0 47 scale=1.1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_4m_1.glb 168 13.5 0 94 scale=0.8
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_4m_3.glb 214 14 0 141
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_4m_5.glb 232 -14.5 0 188 scale=0.9
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_8m_1.glb 258 13 0 235 scale=1.15
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_8m_4.glb 286 -14 0 282 scale=0.85
+ParticleEmitter fire 49 -9 1.6 34 0.9 3.2 12 0.35 0.05 255 175 70 255 60 0 -2 6 0 0 1 0
+ParticleEmitter fire 69 -9 1.6 34 0.9 3.2 12 0.35 0.05 255 175 70 255 60 0 -2 6 0 0 1 0
+ParticleEmitter fire 49 9 1.6 34 0.9 3.2 12 0.35 0.05 255 175 70 255 60 0 -2 6 0 0 1 0
+ParticleEmitter fire 69 9 1.6 34 0.9 3.2 12 0.35 0.05 255 175 70 255 60 0 -2 6 0 0 1 0
+ParticleEmitter fire 86 6.5 1.5 34 0.9 3.2 12 0.35 0.05 255 175 70 255 60 0 -2 6 0 0 1 0
+ParticleEmitter fire 150 -6.2 1.5 34 0.9 3.2 12 0.35 0.05 255 175 70 255 60 0 -2 6 0 0 1 0
+ParticleEmitter fire 255 6.5 1.5 34 0.9 3.2 12 0.35 0.05 255 175 70 255 60 0 -2 6 0 0 1 0
+ParticleEmitter fire 200 -10 1.2 22 0.7 2.4 10 0.4 0.05 255 160 60 255 60 0 -1.6 5 0 0 1 0
+ParticleEmitter fire 210 -10 1.2 22 0.7 2.4 10 0.4 0.05 255 160 60 255 60 0 -1.6 5 0 0 1 0
+PathNode r1_a -4 5 1 radius=3 next=r1_b
+PathNode r1_b 4 14 1 radius=3 next=r1_a
+PathNode r2_a 24 5 1 radius=3 next=r2_b
+PathNode r2_b 16 14 1 radius=3 next=r2_a
+PathNode r3_a 24 -14 1 radius=3 next=r3_b
+PathNode r3_b 16 -5 1 radius=3 next=r3_a
+PathNode r4_a -4 -6 1 radius=3 next=r4_b
+PathNode r4_b -4 -15 1 radius=3 next=r4_a
+PathNode hall_a 14 -42 0.5 radius=4 next=hall_b
+PathNode hall_b 26 -34 0.5 radius=4 next=hall_c
+PathNode hall_c 26 -44 0.5 radius=4 next=hall_d
+PathNode hall_d 14 -34 0.5 radius=4 next=hall_a
+PathNode court 20 -66 0.5 radius=5 next=hall_a
+PathNode arena_a 47 -19 0.5 radius=4 next=arena_b
+PathNode arena_b 71 -19 0.5 radius=4 next=arena_c
+PathNode arena_c 71 19 0.5 radius=4 next=arena_d
+PathNode arena_d 47 19 0.5 radius=4 next=arena_a
+PathNode path_a 96 0 0.5 radius=4 next=path_b
+PathNode path_b 150 0 0.5 radius=4 next=path_c
+PathNode path_c 205 0 0.5 radius=4 next=path_d
+PathNode path_d 260 0 0.5 radius=4 next=path_e
+# path_e sat inside the terminal dais (solid to z=1.5 across x 292.5..299.5).
+PathNode path_e 288 0 0.5 radius=4 next=terminal
+PathNode terminal 290 0 0.5 radius=5 next=arena_d
+WindZone 42 -26 0 76 26 12 1 0 0.3 7 0.5
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_day.png GameData/Tex/Global/Sky/sky_noon.png
+
+# End of OZONE export – Aethelgard_Ruins (Oasis 333)

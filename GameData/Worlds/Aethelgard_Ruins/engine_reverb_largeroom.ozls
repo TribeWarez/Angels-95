@@ -1,0 +1,14 @@
+// Aethelgard_Ruins - Great Hall (name=engine_reverb in World.ozone).
+// The reverb zone covers the whole hall (y -49.5..-26.5), matching the zone box.
+entity "engine_reverb" : skyzone {
+    reverb_mix = 0.40
+    reverb_decay = 2.4
+    actions {
+        on_enter {
+            say "Entered the Great Hall - echo effect active"
+        }
+        on_exit {
+            say "Left the Great Hall"
+        }
+    }
+}

@@ -1,0 +1,12 @@
+// Aethelgard_Ruins - ritual pool chamber (name=engine_water in World.ozone).
+// Feedback only; the pool's physics come from the zone line's kwargs.
+entity "engine_water" : skyzone {
+    actions {
+        on_enter {
+            say "The ritual pool - reduced gravity, cold water"
+        }
+        on_exit {
+            say "Out of the ritual pool"
+        }
+    }
+}

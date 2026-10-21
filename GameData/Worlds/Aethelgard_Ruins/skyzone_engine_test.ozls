@@ -1,0 +1,24 @@
+// Aethelgard_Ruins - world sky zone (name=engine_sky in World.ozone).
+// Copied from GameData/Worlds/EngineTest/ with the wording re-themed only: the
+// entity NAME must stay "engine_sky" because the registry scopes world defs by
+// name, and the OZONE zone line still resolves its def by that key. Renaming one
+// without the other silently drops fog/ambient/skybox at load.
+entity "engine_sky" : skyzone {
+    fog_color = (0.62, 0.66, 0.72)
+    fog_density = 0.003
+    ambient_light = (0.58, 0.58, 0.60)
+    skybox = "GameData/Tex/Global/Sky/sky_day.png"
+    actions {
+        on_enter {
+            set_fog 0.62 0.66 0.72 0.003
+            set_ambient 0.58 0.58 0.60
+            set_skybox "GameData/Tex/Global/Sky/sky_day.png"
+            say "Aethelgard Ruins - ambient, fog and skybox active"
+        }
+        on_exit {
+            restore_fog
+            restore_skybox
+            say "Left the ruins' sky zone"
+        }
+    }
+}

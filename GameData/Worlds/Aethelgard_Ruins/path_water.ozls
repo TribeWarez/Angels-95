@@ -1,0 +1,13 @@
+// Aethelgard_Ruins - water pool on the Path of Dissolution (name=path_water).
+// The zone's physics come from the OZONE line; this def only carries feedback.
+entity "path_water" : skyzone {
+    actions {
+        on_enter {
+            play_sound "GameData/Audio/Sounds/Entities/land.wav"
+            say "Cool water - the pool deepens toward the middle"
+        }
+        on_exit {
+            say "Out of the water"
+        }
+    }
+}

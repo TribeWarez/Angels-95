@@ -1,0 +1,27 @@
+// Aethelgard_Ruins - lava pool, the last step of the Path of Dissolution
+// (name=path_lava). Burns harder and faster than the acid: 30-tick timer, 8
+// points. The fire emitters above it are authored in World.ozone, not here.
+entity "path_lava" : skyzone {
+    actions {
+        on_enter {
+            wtflag 2 1
+            var timer = 30
+            play_sound "GameData/Audio/Sounds/Entities/Hurt.mp3"
+            msg "Lava! Move!"
+        }
+        on_tick {
+            if ($flag2 >= 1) {
+                $timer = $timer - 1
+                if ($timer <= 0) {
+                    playerstat health -= 8
+                    var timer = 30
+                }
+            }
+        }
+        on_exit {
+            wtflag 2 0
+            var timer = -1
+            msg "The heat falls away behind you."
+        }
+    }
+}

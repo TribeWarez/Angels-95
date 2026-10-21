@@ -1,0 +1,15 @@
+// Aethelgard_Ruins - ambience chamber (name=engine_sound in World.ozone).
+//
+// IMPORTANT: Main.cpp deliberately skips ZONE_GAMEPLAY_SOUND (and ZONE_SKY) when
+// dispatching LightningScript on_enter/on_exit, so this def's message never
+// fires. That is not a data bug. Note also that ZoneNode::soundProfile is not
+// populated from world data at all today, so this zone is currently silent - the
+// def is kept so the world round-trips and so the profile has somewhere to live
+// once authoring exists.
+entity "engine_sound" : skyzone {
+    actions {
+        on_enter {
+            say "Entered the ambience chamber"
+        }
+    }
+}

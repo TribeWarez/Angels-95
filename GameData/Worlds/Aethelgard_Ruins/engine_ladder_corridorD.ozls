@@ -1,0 +1,18 @@
+// Aethelgard_Ruins - pyramid ladder (name=arena_ladder in World.ozone).
+//
+// RE-KEYED: the EngineTest original declared entity "engine_ladder" while the
+// world zone is named "arena_ladder", so the def never bound and this zone had
+// no script at all. The entity name now matches the zone. The routing that makes
+// it work is unchanged: PlayerController sends ZONE_LADDER to
+// PlayerPhysics::UpdateLadderVertical, which suspends gravity (previously
+// gravity=18 beat ladderSpeed and the player sank).
+entity "arena_ladder" : skyzone {
+    actions {
+        on_enter {
+            say "The pyramid ladder - press W/S to climb"
+        }
+        on_exit {
+            say "Off the ladder"
+        }
+    }
+}
