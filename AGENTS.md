@@ -579,6 +579,14 @@ World/
   only close. Never call `CloseWindow()` from inside a frame or menu callback.
 - **Pause settings keep the game paused.** `Escape` closes Settings first; the
   pause menu uses the same metrics/style and draws the frozen `Target` frame.
+- **The pause TOGGLE owns Escape; the pause OVERLAY must not.** `Main.cpp`'s
+  "Pause menu state" block flips `g_gamePaused` on the bindable `GameAction::Pause`
+  and runs *before* the `if (g_gamePaused)` branch that calls `DrawPauseMenu`, so
+  on the opening frame `IsKeyPressed(KEY_ESCAPE)` is still true. `DrawPauseMenu`
+  returning `Resume` on that same press closed the menu on the frame it opened -
+  toggle on, draw, toggle off, one frame - which read as "Escape does nothing in
+  game". Do not reintroduce a key check in the overlay: the toggle is the single
+  owner, and it is also the only form that honours a rebound Pause action.
 - **`--menu-shot`** is the headless visual check (`Wiki/Menu-System.md`). Pure
   rules live in `tests/Menu.test.cpp`; LAN/profile wire rules in
   `tests/Network.test.cpp`.

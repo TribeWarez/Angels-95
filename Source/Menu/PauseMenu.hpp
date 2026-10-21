@@ -56,7 +56,12 @@ inline PauseAction DrawPauseMenu(const MenuMetrics& m, float dt) {
     // Keyboard navigation.
     if (IsKeyPressed(KEY_DOWN)) focus = (focus + 1) % count;
     if (IsKeyPressed(KEY_UP)) focus = (focus + count - 1) % count;
-    if (IsKeyPressed(KEY_ESCAPE)) return PauseAction::Resume;
+    // NO Escape handling here. The caller owns the pause toggle and runs it
+    // BEFORE this function (Main.cpp "Pause menu state"), so on the frame the
+    // menu opens IsKeyPressed(ESCAPE) is still true: returning Resume here closed
+    // the menu on its own opening frame - toggle on, draw, toggle off, all in one
+    // frame - which read as "Escape does nothing in game". The toggle also honours
+    // a rebound Pause action, which a hard-coded KEY_ESCAPE check never could.
 
     PauseAction chosen = PauseAction::None;
     float y = panel.y + titleH;
