@@ -15,7 +15,12 @@ env:
 
 jobs:
   linux:
-    runs-on: ubuntu-latest
+    # PINNED, not ubuntu-latest. The release binaries run inside the
+    # `ubuntu:24.04` Docker images (glibc 2.39); a newer runner (glibc 2.43)
+    # versions sqrtf/atan2f at GLIBC_2.43, and every AngelServ container then
+    # dies with "version `GLIBC_2.43' not found". b99 shipped exactly that and
+    # took the public fleet down. Bump this and the Docker base together.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -127,6 +132,25 @@ jobs:
 
       - name: Build master server (AngelMaster)
         run: make AngelMaster
+
+      - name: Check glibc compatibility (ubuntu:24.04 image)
+        run: |
+          # The release binaries run inside the ubuntu:24.04 Docker images
+          # (glibc 2.39). A newer runner silently versions sqrtf/atan2f at
+          # GLIBC_2.43; the containers then die at exec with
+          # "version `GLIBC_2.43' not found" - which is exactly how b99 took
+          # the public fleet down. Make it a build failure here instead.
+          max=$(objdump -T AngelServ AngelMaster \
+                | grep -oP 'GLIBC_\K[0-9.]+' | sort -V | tail -1)
+          echo "max GLIBC requirement: ${max:-unknown}"
+          if [ -z "$max" ]; then
+            echo "::error::could not read GLIBC symbol versions"
+            exit 1
+          fi
+          if [ "$(printf '%s\n' 2.39 "$max" | sort -V | tail -1)" != "2.39" ]; then
+            echo "::error::binary requires GLIBC_$max but ubuntu:24.04 provides 2.39"
+            exit 1
+          fi
 
       - name: Smoke test server
         run: |
