@@ -7,6 +7,12 @@ on:
   pull_request:
     branches: [ "*" ]
 
+env:
+  # The release tag (or branch) stamped into the binary. The Makefile turns
+  # this into -DOZ_BUILD_VERSION="...", which Source/Version.hpp exposes. The
+  # build id used to be the hand-edited "b58" literal in Server.cpp.
+  BUILD_VERSION: ${{ github.ref_name }}
+
 jobs:
   linux:
     runs-on: ubuntu-latest

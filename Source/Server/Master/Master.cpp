@@ -13,6 +13,7 @@
 #include "../../Network/MasterProtocol.hpp"
 
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <csignal>
 #include <cstdarg>
@@ -54,6 +55,7 @@
 // Log.hpp after the platform headers: on Windows, <windows.h> defines an
 // ERROR macro that would otherwise mangle LogLevel::ERROR.
 #include "../../Log.hpp"
+#include "../../Version.hpp"
 
 using namespace master;
 
@@ -61,7 +63,7 @@ static std::atomic<bool> g_running{true};
 static std::mutex g_state_mutex;
 static std::mutex g_print_mutex;
 static std::unordered_map<std::string, ServerEntry> g_servers;   // key: ip:port
-static std::unordered_map<std::string, long long> g_last_accept_ms; // key: source ip
+static HeartbeatLimiter g_limiter;   // keyed by ip:port, coarse cap by source
 static int g_max_servers = MAX_SERVERS;
 static std::string g_gamename = GAMENAME;
 // Bind address for the UDP heartbeat + HTTP API. Default loopback; a VPS build
@@ -97,23 +99,8 @@ static bool init_winsock() {
     return true;
 }
 
-// LAN/private ranges: a self-reported public_ip is only trusted when the
-// heartbeat itself arrived from a non-private source (anti-spoof).
-static bool is_valid_ipv4(const std::string& ip) {
-    struct in_addr a4;
-    return inet_pton(AF_INET, ip.c_str(), &a4) == 1;
-}
-
-static bool is_private_ipv4(const std::string& ip) {
-    unsigned a = 0, b = 0, c = 0, d = 0;
-    if (sscanf(ip.c_str(), "%u.%u.%u.%u", &a, &b, &c, &d) != 4) return false;
-    if (a == 10) return true;                       // 10.0.0.0/8
-    if (a == 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
-    if (a == 192 && b == 168) return true;          // 192.168.0.0/16
-    if (a == 127) return true;                      // loopback
-    if (a == 169 && b == 254) return true;          // link-local
-    return false;
-}
+// LAN/private-range policy lives in MasterProtocol.hpp (ResolveAnnouncedIp)
+// so the wire-level rule is covered by tests/Master.test.cpp.
 
 static std::string resolve_bind_address(const std::string& bind_ip) {
     return ResolveBindAddress(bind_ip);
@@ -126,54 +113,70 @@ static std::string heartbeat_key(const std::string& ip, uint16_t port) {
     return ip + ":" + std::to_string(port);
 }
 
-// Returns false when rate-limited or invalid.
+// Returns false when rate-limited, invalid or over capacity.
 static bool apply_heartbeat(const Heartbeat& hb, const std::string& source_ip,
                             bool from_http) {
     if (hb.port == 0) return false;
-    // Prefer a self-reported public_ip when it is valid AND plausible: only
-    // trust it when the heartbeat itself came from a non-private source, so a
-    // spoofed public_ip from a LAN client cannot hijack a listing. Otherwise
-    // use the address the packet actually arrived from.
-    std::string ip = source_ip;
-    if (!hb.public_ip.empty() && is_valid_ipv4(hb.public_ip) &&
-        !is_private_ipv4(source_ip)) {
-        ip = hb.public_ip;
-    }
+
+    // A claimed public_ip is only trusted from a private (LAN) source; a public
+    // source already IS the address that must be listed. See
+    // master::ResolveAnnouncedIp for the full rule (and tests/Master.test.cpp).
+    const std::string ip = ResolveAnnouncedIp(source_ip, hb.public_ip);
     if (ip.empty()) return false;
 
-    // Rate limit per source IP (1.5s). The public_ip field is client-supplied
-    // and cannot be used to bypass the per-source limit.
-    long long now = now_ms();
+    const std::string key = heartbeat_key(ip, hb.port);
+    const long long now = now_ms();
+    bool is_new = false, accepted = false, full = false, limited = false;
+    ServerEntry snapshot;
+
     {
         std::lock_guard<std::mutex> lock(g_state_mutex);
-        auto it = g_last_accept_ms.find(source_ip);
-        if (it != g_last_accept_ms.end() && now - it->second < 1500) return false;
-        g_last_accept_ms[source_ip] = now;
+        auto it = g_servers.find(key);
+        is_new = (it == g_servers.end());
+        if (is_new && (int)g_servers.size() >= g_max_servers) {
+            full = true;
+        } else if (!g_limiter.Accept(key, source_ip, now)) {
+            // Per-(ip,port) limit (1.5 s) with a coarse per-source cap. This
+            // is what lets several servers behind one public IP all stay
+            // listed: the old limiter keyed only on the source address.
+            limited = true;
+        } else {
+            ServerEntry& e = g_servers[key];
+            e.ip = ip;
+            e.port = hb.port;
+            e.http_port = hb.http_port;
+            e.name = hb.host.empty() ? ("Angels95 Server " + ip) : hb.host;
+            e.map = hb.map;
+            e.gamever = hb.gamever.empty() ? GAMEVER_DEFAULT : hb.gamever;
+            e.gamename = hb.gamename;
+            e.protocol = hb.protocol;
+            e.players = hb.players;
+            e.maxplayers = hb.maxplayers ? hb.maxplayers : 32;
+            e.password = hb.password;
+            e.last_seen = (double)now_epoch();
+            snapshot = e;
+            accepted = true;
+        }
     }
 
-    std::string key = heartbeat_key(ip, hb.port);
-    std::lock_guard<std::mutex> lock(g_state_mutex);
-    auto it = g_servers.find(key);
-    bool is_new = (it == g_servers.end());
-    if (is_new && (int)g_servers.size() >= g_max_servers) return false;
-
-    ServerEntry& e = g_servers[key];
-    e.ip = ip;
-    e.port = hb.port;
-    e.http_port = hb.http_port;
-    e.name = hb.host.empty() ? ("Angels95 Server " + ip) : hb.host;
-    e.map = hb.map;
-    e.gamever = hb.gamever.empty() ? GAMEVER_DEFAULT : hb.gamever;
-    e.gamename = GAMENAME;
-    e.players = hb.players;
-    e.maxplayers = hb.maxplayers ? hb.maxplayers : 32;
-    e.password = hb.password;
-    e.last_seen = (double)now_epoch();
-
-    log_line(LogLevel::INFO, "Master: %s heartbeat %s:%u (%u/%u, map=%s)%s",
-             is_new ? "new" : "update", ip.c_str(), (unsigned)e.port,
-             e.players, e.maxplayers, e.map.c_str(), from_http ? " [http]" : "");
-    return true;
+    if (full) {
+        log_line(LogLevel::WARN, "Master: rejected %s:%u from %s (server cap %d)",
+                 ip.c_str(), (unsigned)hb.port, source_ip.c_str(), g_max_servers);
+    } else if (limited) {
+        // Visible on purpose: the old code returned false silently, which is
+        // why a permanently-starved server looked like it was never announcing.
+        log_line(LogLevel::INFO, "Master: rate-limited %s:%u from %s%s",
+                 ip.c_str(), (unsigned)hb.port, source_ip.c_str(),
+                 from_http ? " [http]" : "");
+    } else if (accepted) {
+        log_line(LogLevel::INFO,
+                 "Master: %s heartbeat %s:%u (%u/%u, map=%s, %s, proto=%u)%s",
+                 is_new ? "new" : "update", snapshot.ip.c_str(),
+                 (unsigned)snapshot.port, snapshot.players, snapshot.maxplayers,
+                 snapshot.map.c_str(), snapshot.gamever.c_str(),
+                 (unsigned)snapshot.protocol, from_http ? " [http]" : "");
+    }
+    return accepted;
 }
 
 static void prune_expired_locked() {
@@ -187,6 +190,9 @@ static void prune_expired_locked() {
             ++it;
         }
     }
+    // The limiter maps are keyed by announced ip:port and by source address;
+    // without this they grow forever under a spoofed-source flood.
+    g_limiter.Prune(now_ms());
 }
 
 static std::vector<ServerEntry> snapshot_servers(const std::string& gamename) {
@@ -207,7 +213,7 @@ static std::vector<ServerEntry> snapshot_servers(const std::string& gamename) {
 // ---------------------------------------------------------------------------
 // HTTP server
 // ---------------------------------------------------------------------------
-static int http_listen(int port) {
+static int http_listen(int port, const std::string& bind_ip) {
     int fd = (int)socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) return -1;
     int yes = 1;
@@ -215,7 +221,15 @@ static int http_listen(int port) {
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = INADDR_ANY;   // API is public; gate via firewall/token if needed
+    // --bind applies to BOTH listeners (the help/docs always said so). This
+    // used to be INADDR_ANY unconditionally, so --bind 127.0.0.1 left the API
+    // exposed on every interface.
+    if (bind_ip.empty() || bind_ip == "0.0.0.0") {
+        addr.sin_addr.s_addr = INADDR_ANY;
+    } else if (inet_pton(AF_INET, bind_ip.c_str(), &addr.sin_addr) != 1) {
+        MCLOSE(fd);
+        return -1;
+    }
     addr.sin_port = htons((u_short)port);
     if (bind(MSOCK(fd), (struct sockaddr*)&addr, sizeof(addr)) < 0) { MCLOSE(fd); return -1; }
     if (listen(MSOCK(fd), 16) < 0) { MCLOSE(fd); return -1; }
@@ -263,14 +277,60 @@ static std::string get_query_param(const char* path, const char* key) {
     return "";
 }
 
+// Content-Length from the header block, case-insensitive, 0 when absent.
+static size_t header_content_length(const std::string& req, size_t header_end) {
+    static const char kKey[] = "content-length:";
+    const size_t kLen = sizeof(kKey) - 1;
+    size_t pos = 0;
+    while (pos < header_end) {
+        size_t eol = req.find('\n', pos);
+        if (eol == std::string::npos || eol > header_end) eol = header_end;
+        std::string line = req.substr(pos, eol - pos);
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+        if (line.size() >= kLen) {
+            bool match = true;
+            for (size_t i = 0; i < kLen; ++i) {
+                if (std::tolower((unsigned char)line[i]) != kKey[i]) { match = false; break; }
+            }
+            if (match) {
+                const char* p = line.c_str() + kLen;
+                while (*p == ' ' || *p == '\t') ++p;
+                return (size_t)strtoul(p, nullptr, 10);
+            }
+        }
+        pos = eol + 1;
+    }
+    return 0;
+}
+
 static void handle_http_client(int cfd, const std::string& client_ip) {
-    char req[8192];
-    int n = (int)recv(MSOCK(cfd), req, sizeof(req) - 1, 0);
-    if (n <= 0) { MCLOSE(cfd); return; }
-    req[n] = '\0';
+    // Read the WHOLE request, not just the first segment. A POST body split
+    // across TCP segments used to be truncated, which silently dropped the
+    // optional tail (publicip/proto) of an HTTP heartbeat.
+    std::string req;
+    char buf[4096];
+    size_t header_end = std::string::npos;
+    size_t want = 0;
+    while (req.size() < 8192) {
+        int n = (int)recv(MSOCK(cfd), buf, sizeof(buf), 0);
+        if (n <= 0) break;
+        req.append(buf, (size_t)n);
+        if (header_end == std::string::npos) {
+            header_end = req.find("\r\n\r\n");
+            size_t skip = 4;
+            if (header_end == std::string::npos) {
+                header_end = req.find("\n\n");
+                skip = 2;
+            }
+            if (header_end != std::string::npos)
+                want = header_end + skip + header_content_length(req, header_end);
+        }
+        if (header_end != std::string::npos && req.size() >= want) break;
+    }
+    if (req.empty()) { MCLOSE(cfd); return; }
 
     char method[16] = {0}, path[1024] = {0};
-    sscanf(req, "%15s %1023s", method, path);
+    sscanf(req.c_str(), "%15s %1023s", method, path);
 
     if (strcmp(method, "GET") == 0 &&
         (strcmp(path, "/api/servers") == 0 || strncmp(path, "/api/servers?", 12) == 0)) {
@@ -297,8 +357,14 @@ static void handle_http_client(int cfd, const std::string& client_ip) {
 
     if (strcmp(method, "POST") == 0 && strcmp(path, "/api/heartbeat") == 0) {
         // Body is the same key=value payload as the UDP heartbeat.
-        const char* body = strstr(req, "\r\n\r\n");
-        body = body ? body + 4 : (strstr(req, "\n\n") ? strstr(req, "\n\n") + 2 : "");
+        std::string body;
+        if (header_end != std::string::npos) {
+            size_t skip = (req.compare(header_end, 4, "\r\n\r\n") == 0) ? 4 : 2;
+            size_t body_pos = header_end + skip;
+            size_t end = (want > body_pos) ? want : req.size();
+            if (end > req.size()) end = req.size();
+            if (body_pos < end) body = req.substr(body_pos, end - body_pos);
+        }
         Heartbeat hb;
         if (DecodeHeartbeat(body, hb) && apply_heartbeat(hb, client_ip, true)) {
             http_response(cfd, 200, "OK", "{\"ok\":true}", "application/json");
@@ -316,10 +382,11 @@ static void handle_http_client(int cfd, const std::string& client_ip) {
     MCLOSE(cfd);
 }
 
-static void http_server_thread(int port) {
-    int lfd = http_listen(port);
+static void http_server_thread(int port, std::string bind_ip) {
+    int lfd = http_listen(port, bind_ip);
     if (lfd < 0) {
-        log_line(LogLevel::ERROR, "Master: HTTP listen failed on port %d", port);
+        log_line(LogLevel::ERROR, "Master: HTTP listen failed on %s:%d",
+                 bind_ip.empty() ? "0.0.0.0" : bind_ip.c_str(), port);
         return;
     }
     log_line(LogLevel::INFO, "Master: HTTP server on port %d (/api/servers, /api/heartbeat)", port);
@@ -359,8 +426,12 @@ int main(int argc, char** argv) {
     else if (strcmp(argv[i], "--max-servers") == 0 && i + 1 < argc) g_max_servers = atoi(argv[++i]);
     else if (strcmp(argv[i], "--gamename") == 0 && i + 1 < argc) g_gamename = argv[++i];
     else if (strcmp(argv[i], "--bind") == 0 && i + 1 < argc) g_bind_ip = argv[++i];
+    else if (strcmp(argv[i], "--version") == 0) {
+        printf("AngelMaster %s\n", oz::kBuildVersion);
+        return 0;
+    }
     else if (strcmp(argv[i], "--help") == 0) {
-        printf("AngelMaster -- Angels95 master server\n");
+        printf("AngelMaster %s -- Angels95 master server\n", oz::kBuildVersion);
         printf("Usage: AngelMaster [--port P] [--http-port P] [--max-servers N]"
                " [--gamename NAME] [--bind IP|HOST|0.0.0.0]\n");
         printf("  --bind  Interface to bind UDP+HTTP to (default 127.0.0.1).\n");
@@ -415,7 +486,7 @@ int main(int argc, char** argv) {
     printf("Master UDP:  %d\n", udp_port);
     printf("Master HTTP: %d\n", http_port);
 
-    std::thread http_thread(http_server_thread, http_port);
+    std::thread http_thread(http_server_thread, http_port, resolved_bind);
 
     long long last_prune = 0;
     while (g_running) {

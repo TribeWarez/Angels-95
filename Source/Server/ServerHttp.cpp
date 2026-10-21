@@ -1,6 +1,7 @@
 // AngelServ - HTTP map API (extracted from Server.cpp).
 #include "ServerInternal.hpp"
 #include "../Network/MasterProtocol.hpp"
+#include "../Version.hpp"
 
 #include <cstring>
 #include <cstdio>
@@ -386,7 +387,10 @@ static void handle_http_client(int cfd) {
             json += ",\"players\":";
             json += std::to_string(g_game_server->player_count());
             json += ",\"max_players\":";
-            json += std::to_string(net::MAX_PLAYERS);
+            // The WORLD's cap (levelinfo maxPlayers), not net::MAX_PLAYERS.
+            // The two differ on every shipped level (8 vs 32), so the browser
+            // used to advertise 24 slots the server refuses.
+            json += std::to_string(g_game_state.max_players());
             json += ",\"uptime_seconds\":";
             json += std::to_string(elapsed);
             json += ",\"worlds\":";
@@ -394,7 +398,9 @@ static void handle_http_client(int cfd) {
             json += ",\"map\":";
             json += json_escape(current_map_name());
             json += ",\"gamever\":";
-            json += json_escape(master::GAMEVER_DEFAULT);
+            json += json_escape(oz::kBuildVersion);
+            json += ",\"proto\":";
+            json += std::to_string((unsigned)net::PROTOCOL_VERSION);
             json += ",\"password\":false}";
             http_respond_json(cfd, json.c_str());
             close_sock(cfd);

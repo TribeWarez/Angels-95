@@ -2,6 +2,7 @@
 
 #ifdef _WIN32
 #include "../WindowsCompat.hpp"
+#include "../Version.hpp"
 #include "raylib.h"
 
 namespace oz::ui {
@@ -68,7 +69,8 @@ void CreateNativeMenuBar(const MenuBarCallbacks& callbacks) {
 
 void ShowAboutDialog() {
     MessageBoxA(NULL,
-        "Angels95 v0.2.1\nOmegaTech Engine (OzWorld)\nraylib 5.5  //  C++20\nTribeWarez 2026",
+        TextFormat("Angels95 %s\nOmegaTech Engine (OzWorld)\nraylib 5.5  //  C++20\nTribeWarez 2026",
+                   oz::kBuildVersion),
         "About Angels95", MB_OK | MB_ICONINFORMATION);
 }
 

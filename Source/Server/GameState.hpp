@@ -412,6 +412,17 @@ public:
     }
     int world_count() const { return (int)m_worlds.size(); }
 
+    // Effective slot cap / friendly-fire rule, resolved from world 0's
+    // levelinfo. The heartbeat and /status MUST report this rather than
+    // net::MAX_PLAYERS: the shipped levels author maxPlayers=8 while the
+    // network layer accepts 32, and add_player enforces the former.
+    uint32_t max_players() const { return m_max_players; }
+    bool friendly_fire() const { return m_friendly_fire; }
+    // Team score (TDM/CTF); -1/out-of-range reads as 0.
+    int team_score(int team) const {
+        return (team >= 0 && team < 8) ? m_match.teamScores[team] : 0;
+    }
+
     // XP
     void add_xp(uint32_t player_id, int amount);
     int xp_needed_for_level(int level) const;

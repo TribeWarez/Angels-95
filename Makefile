@@ -97,7 +97,14 @@ endif
 # are no longer load-bearing.
 DEPFLAGS := -MMD -MP
 
-CFLAGS := $(OPTFLAGS) --std=c++20 $(PIC) $(RAYLIB_INC) $(DEPFLAGS)
+# Build identity: the release tag, not a hand-edited literal. CI passes
+# BUILD_VERSION=${GITHUB_REF_NAME}; a local build says "dev" so it can never be
+# mistaken for a release. The quoted define is deliberately escaped: the shell
+# must hand g++ `-DOZ_BUILD_VERSION="b97"` (a string literal), not `b97`.
+BUILD_VERSION ?= dev
+BUILD_VERSION_DEFINE := -DOZ_BUILD_VERSION=\"$(BUILD_VERSION)\"
+
+CFLAGS := $(OPTFLAGS) --std=c++20 $(PIC) $(RAYLIB_INC) $(DEPFLAGS) $(BUILD_VERSION_DEFINE)
 COMP := $(CCACHE_PREFIX) g++
 CC := $(CCACHE_PREFIX) gcc
 SERVER_CXX := $(CCACHE_PREFIX) g++
@@ -106,7 +113,7 @@ SERVER_CXX := $(CCACHE_PREFIX) g++
 # defaults to -no-pie with strict relocation checks rejects it. Also carries $(RAYLIB_INC)
 # because LightningEntityRegistry.cpp includes PackageAssetLoader.hpp, which pulls
 # raylib.h - see the note there on why that include has not been removed yet.
-SERVER_FLAGS := $(OPTFLAGS) --std=c++20 $(PIC) $(RAYLIB_INC) $(DEPFLAGS)
+SERVER_FLAGS := $(OPTFLAGS) --std=c++20 $(PIC) $(RAYLIB_INC) $(DEPFLAGS) $(BUILD_VERSION_DEFINE)
 
 BUILD_DIR := build
 

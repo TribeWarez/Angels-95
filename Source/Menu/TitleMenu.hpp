@@ -33,6 +33,7 @@
 #include "../Client/JoinUri.hpp"
 #include "../Audio/SoundManager.hpp"
 #include "../GameplayFlags.hpp"
+#include "../Version.hpp"
 #include "../Input/Keybinds.hpp"
 #include "../Game/GameManager.hpp"
 #include "../PlayerProfile.hpp"
@@ -745,6 +746,7 @@ private:
             r.key = {s.ip, s.port};
             r.name = s.name;
             r.map = s.map;
+            r.version = s.version;
             r.players = (int)s.cur_players;
             r.maxPlayers = (int)s.max_players;
             r.password = s.password;
@@ -760,6 +762,7 @@ private:
             r.name = os.entry.name.empty() ? "server" : os.entry.name;
             r.map = os.entry.map;
             r.version = os.entry.gamever;
+            r.protocol = (int)os.entry.protocol;
             r.players = (int)os.entry.players;
             r.maxPlayers = (int)os.entry.maxplayers;
             r.pingMs = os.ping_ms;
@@ -799,6 +802,19 @@ private:
         int port = row ? row->key.port : std::atoi(m_joinPort);
         if (ip.empty() || port <= 0 || port > 65535) {
             m_error = "Enter a valid server address and port.";
+            return;
+        }
+        // A non-zero protocol that differs is a hard wire mismatch: the server
+        // drops CLIENT_AUTH and the player only sees a generic timeout. Say
+        // why instead of letting them retry forever. 0 = legacy/unknown
+        // (a master that predates the `proto` field) and is still allowed.
+        if (row && row->protocol > 0 &&
+            row->protocol != (int)net::PROTOCOL_VERSION) {
+            m_error = "Server " + (row->version.empty() ? std::string("(unknown build)")
+                                                       : row->version) +
+                      " speaks protocol " + std::to_string(row->protocol) +
+                      "; this client speaks " +
+                      std::to_string((int)net::PROTOCOL_VERSION) + ".";
             return;
         }
         std::string host;
@@ -1077,7 +1093,8 @@ private:
         DrawText(help, (int)(fb.x + FS(12)),
                  (int)(fb.y + (fb.h - FS(11)) * 0.5f), FS(11),
                  (Color){150, 180, 210, 220});
-        const char* version = "b0.2.1  |  F1 About  |  Esc Back";
+        const char* version = TextFormat("%s  |  F1 About  |  Esc Back",
+                                         oz::kBuildVersion);
         int vw = MeasureText(version, FS(10));
         DrawText(version, (int)(fb.Right() - vw - FS(12)),
                  (int)(fb.y + (fb.h - FS(10)) * 0.5f), FS(10),
@@ -1646,6 +1663,17 @@ private:
         DrawText(TextFormat("Ping: %s", r->pingMs >= 0 ? TextFormat("%dms", r->pingMs) : "-"),
                  (int)x, (int)y, FS(11), angelsui::kTextDim);
         y += FS(18);
+        DrawText(TextFormat("Build: %s", r->version.empty() ? "unknown" : r->version.c_str()),
+                 (int)x, (int)y, FS(11), angelsui::kTextDim);
+        y += FS(18);
+        const bool incompatible =
+            r->protocol > 0 && r->protocol != (int)net::PROTOCOL_VERSION;
+        const std::string protoLine = std::string("Protocol: ") +
+            (r->protocol > 0 ? std::to_string(r->protocol) : std::string("unknown")) +
+            (incompatible ? "  (INCOMPATIBLE)" : "");
+        DrawText(protoLine.c_str(), (int)x, (int)y, FS(11),
+                 incompatible ? (Color){235, 130, 120, 230} : angelsui::kTextDim);
+        y += FS(18);
         DrawText(TextFormat("Source: %s", r->lan && r->internet ? "LAN + Internet" : (r->lan ? "LAN" : "Internet")),
                  (int)x, (int)y, FS(11), angelsui::kTextDim);
         if (r->password) {
@@ -1658,7 +1686,7 @@ private:
             m_browser.SaveState(kBrowserStatePath);
         }
         if (Button({x, right.Bottom() - FS(42), right.w - FS(24), FS(30)},
-                   "Join Server", true)) {
+                   "Join Server", true, !incompatible)) {
             ConnectToSelectedOrTyped();
         }
     }

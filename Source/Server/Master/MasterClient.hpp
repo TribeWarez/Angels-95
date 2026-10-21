@@ -9,6 +9,7 @@
 #include "../../Network/MasterProtocol.hpp"
 #include "../../Network/MasterHttp.hpp"
 #include "../../Log.hpp"
+#include "../../Version.hpp"
 
 // Platform socket headers (Windows: winsock2; POSIX: sys/socket). On Windows the
 // PCH pulls in windows.h, whose CloseWindow/etc. clash with raylib — rename them
@@ -49,6 +50,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <random>
 #include <string>
 #include <thread>
 #include <vector>
@@ -91,7 +93,7 @@ public:
 
     void SetStatus(const std::string& name, uint16_t game_port, uint16_t http_port,
                    const std::string& map, uint32_t players, uint32_t maxplayers,
-                   bool password) {
+                   bool password, uint32_t protocol = 0) {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_status.host = name;
         m_status.port = game_port;
@@ -100,7 +102,11 @@ public:
         m_status.players = players;
         m_status.maxplayers = maxplayers;
         m_status.password = password;
-        m_status.gamever = GAMEVER_DEFAULT;
+        // The build id, not a constant: the browser and /status must be able to
+        // tell b94 from b97. GAMEVER_DEFAULT is only the fallback an old peer
+        // (or a malformed heartbeat) gets on the master side.
+        m_status.gamever = oz::kBuildVersion;
+        m_status.protocol = protocol;
         m_status.gamename = GAMENAME;
     }
 
@@ -123,12 +129,25 @@ public:
 
 private:
     void Loop() {
-        long long last_send = 0; // 0 => send immediately on first pass
+        // Jitter the schedule. Several dedicated servers on one host start
+        // together and would otherwise heartbeat in lockstep forever; against
+        // a per-source-IP limiter that permanently starves all but one of
+        // them. A random first delay plus +/-5 s per cycle turns a permanent
+        // collision into an occasional one (an entry survives 3 missed beats).
+        std::mt19937 rng(std::random_device{}() ^
+                         (uint32_t)(uintptr_t)this ^
+                         (uint32_t)uplink_now_ms());
+        std::uniform_int_distribution<int> jitter(-5000, 5000);
+        std::uniform_int_distribution<int> first_delay(0, 3000);
+
+        const long long start = uplink_now_ms();
+        long long next_at = start + first_delay(rng);
         while (m_running) {
             long long now = uplink_now_ms();
-            if (last_send == 0 || now - last_send >= (long long)HEARTBEAT_INTERVAL_S * 1000) {
+            if (now >= next_at) {
                 SendAll();
-                last_send = uplink_now_ms();
+                next_at = uplink_now_ms() +
+                          (long long)HEARTBEAT_INTERVAL_S * 1000 + jitter(rng);
             }
             for (int i = 0; i < 10 && m_running; ++i)
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -191,10 +210,18 @@ private:
         for (const auto& url : targets) {
             std::string resp;
             int status = 0;
-            if (HttpRequest("POST", url, line, "text/plain", 4000, resp, &status))
+            if (!HttpRequest("POST", url, line, "text/plain", 4000, resp, &status)) {
+                OZ_WARN("Master uplink: HTTP heartbeat transport failed -> %s", url.c_str());
+            } else if (status < 200 || status >= 300) {
+                // HttpRequest returns true for ANY complete HTTP response, so a
+                // 400 (rate-limited/invalid) used to be logged at INFO and read
+                // like a success. It is the one signal that explains a server
+                // missing from the list.
+                OZ_WARN("Master uplink: HTTP heartbeat REJECTED -> %s (status %d: %.200s)",
+                        url.c_str(), status, resp.c_str());
+            } else {
                 OZ_INFO("Master uplink: HTTP heartbeat -> %s (status %d)", url.c_str(), status);
-            else
-                OZ_WARN("Master uplink: HTTP heartbeat failed -> %s", url.c_str());
+            }
         }
     }
 

@@ -530,7 +530,11 @@ public:
     NetworkServer(NetworkServer&&) = delete;
     NetworkServer& operator=(NetworkServer&&) = delete;
 
-    bool init(uint16_t port, uint32_t max_players = MAX_PLAYERS);
+    // bind_ip: literal IPv4 to bind the GAME socket to, or nullptr/"" for all
+    // interfaces. AngelServ's --bind used to reach only the HTTP listener,
+    // leaving the UDP game port open on every interface.
+    bool init(uint16_t port, uint32_t max_players = MAX_PLAYERS,
+              const char* bind_ip = nullptr);
     bool start();
     void stop();
     void update();

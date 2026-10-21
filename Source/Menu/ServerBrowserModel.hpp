@@ -34,7 +34,8 @@ struct ServerRow {
     ServerKey key;
     std::string name;
     std::string map;
-    std::string version;
+    std::string version;       // build id (b94, b97, dev...)
+    int protocol = 0;          // wire protocol; 0 = unknown (legacy master)
     int players = 0;
     int maxPlayers = 0;
     int pingMs = -1;          // -1 = unknown
@@ -269,6 +270,7 @@ private:
                 if (r.name.empty()) r.name = in.name;
                 if (r.map.empty()) r.map = in.map;
                 if (r.version.empty()) r.version = in.version;
+                if (r.protocol == 0) r.protocol = in.protocol;
                 if (in.live) {
                     r.live = true;
                     if (in.players > 0) r.players = in.players;

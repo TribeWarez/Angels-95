@@ -1264,6 +1264,21 @@ void GameState::register_kill(uint32_t killer_id, uint32_t victim_id,
     }
     ServerPlayer* killer = get_player(killer_id);
     if (!killer) return;
+
+    // Team games: a same-team kill earns NOTHING. The projectile PvP loop
+    // already refuses to damage a teammate, but this is the scoring choke
+    // point, so it must not depend on that one caller. Before this, a TDM
+    // server with friendlyFire=1 (the deployed mode worlds) awarded killScore
+    // to the killer's own team for killing a teammate.
+    if (m_gameTypeInfo.teamBased) {
+        ServerPlayer* victim = get_player(victim_id);
+        if (victim && victim->team == killer->team) {
+            OZ_WARN("Team kill ignored for scoring: %u -> %u (team %d)",
+                    killer_id, victim_id, killer->team);
+            return;
+        }
+    }
+
     killer->score += m_gameTypeInfo.killScore;
     oz::gametype::MatchState::WinReason r;
     oz::gametype::ApplyScoreEvent(m_gameTypeInfo, m_match, killer->team,
@@ -1333,10 +1348,16 @@ void GameState::tick_projectiles(WorldState& ws, float dt) {
 
         // Check collision with players (skip owner). Projectiles are the only
         // PvP path — gated by the world's friendlyFire levelinfo rule.
+        // In a team mode friendlyFire applies to ENEMIES only: same-team
+        // projectiles pass through, otherwise TDM is all-vs-all (the old
+        // behaviour, and it also fed rewarded team kills into register_kill).
+        ServerPlayer* attacker = get_player(p.owner_id);
         for (auto& player : m_players) {
             if (!player.connected) continue;
             if (player.id == p.owner_id) continue;
             if (!m_friendly_fire) continue;
+            if (m_gameTypeInfo.teamBased && attacker &&
+                player.team == attacker->team) continue;
             float dx = p.position.x - player.position.x;
             float dy = p.position.y - player.position.y;
             float dz = p.position.z - player.position.z;

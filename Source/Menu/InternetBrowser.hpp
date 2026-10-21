@@ -135,6 +135,14 @@ private:
             std::string smap;
             if (JsonGetString(body, "map", smap) && !smap.empty())
                 os.entry.map = smap;
+            // The /status probe is authoritative and fresher than the master
+            // entry (an old master does not know `proto` at all). Without this
+            // the browser cannot tell a b94 server from a b97 one.
+            std::string sver;
+            if (JsonGetString(body, "gamever", sver) && !sver.empty())
+                os.entry.gamever = sver;
+            uint32_t proto = 0;
+            if (JsonGetUInt(body, "proto", proto)) os.entry.protocol = proto;
         }
     }
 

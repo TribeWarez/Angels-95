@@ -12,6 +12,7 @@
 #include "../Script/LightningEntityRegistry.hpp"
 #include "../Log.hpp"
 #include "../IniConfig.hpp"
+#include "../Version.hpp"
 #include "Master/MasterClient.hpp"
 #include "ServerInternal.hpp"
 
@@ -272,13 +273,29 @@ static void on_player_join(net::NetworkPlayer& player) {
     // so it is safe to use as a persistent identity key.
     g_game_state.add_player(player.id, player.name,
                             player.profile.team, player.profile.requestedTeam);
+
+    // add_player refuses at the world's maxPlayers (which is 8 on the shipped
+    // levels, NOT net::MAX_PLAYERS=32). The return used to be discarded, so a
+    // player over the cap stayed connected at the network layer with no
+    // ServerPlayer: a ghost that received broadcasts but whose own updates
+    // were all dropped. Reject with a visible message and close the session.
+    ServerPlayer* joined = g_game_state.get_player(player.id);
+    if (!joined) {
+        OZ_WARN("Rejecting %s (id=%u): server full (%d/%u)",
+                player.name, player.id, g_game_state.player_count(),
+                g_game_state.max_players());
+        send_syschat(player, "[server] Server is full.");
+        g_game_server->kick_player(player.id);
+        return;
+    }
     if (g_discovery)
-        g_discovery->set_player_count((uint32_t)g_game_state.player_count(), net::MAX_PLAYERS);
+        g_discovery->set_player_count((uint32_t)g_game_state.player_count(),
+                                      g_game_state.max_players());
 
     // Placement already happened in add_player; both messages below must name
     // THAT world — the scene handshake's active_world drives the client's
     // first LoadWorld, WORLD_CHANGE is its authoritative view.
-    ServerPlayer* sp = g_game_state.get_player(player.id);
+    ServerPlayer* sp = joined;
     const int wi = sp ? sp->world_index : 0;
 
     // Cosmetic profile: the auth payload's modelPath is a roster id (legacy
@@ -316,7 +333,8 @@ static void on_player_leave(net::NetworkPlayer& player) {
     printf("Player %s left\n", player.name);
     g_game_state.remove_player(player.id);
     if (g_discovery)
-        g_discovery->set_player_count((uint32_t)g_game_state.player_count(), net::MAX_PLAYERS);
+        g_discovery->set_player_count((uint32_t)g_game_state.player_count(),
+                                      g_game_state.max_players());
 
     // Broadcast departure to remaining clients
     net::NetworkMessage leave;
@@ -1081,8 +1099,14 @@ int main(int argc, char** argv) {
             // Implying it matches the client, which sends both together.
             g_campaign = true;
         }
+        else if (strcmp(argv[i], "--version") == 0) {
+            printf("AngelServ %s (protocol %u)\n", oz::kBuildVersion,
+                   (unsigned)net::PROTOCOL_VERSION);
+            return 0;
+        }
         else if (strcmp(argv[i], "--help") == 0) {
-            printf("AngelServ -- OzWorld/OmegaTech dedicated server\n");
+            printf("AngelServ %s (protocol %u) -- OzWorld/OmegaTech dedicated server\n",
+                   oz::kBuildVersion, (unsigned)net::PROTOCOL_VERSION);
             printf("Usage: AngelServ [--port P] [--http-port P] [--dir GameData]"
                    " [--bind IP|HOST] [--auth-token T] [--admin-token T]\n");
             printf("                  [--server-name NAME] [--master host[:port]]"
@@ -1131,7 +1155,8 @@ int main(int argc, char** argv) {
     // (~56 years). Do not move this write after the thread spawns.
     g_server_start_time = std::chrono::steady_clock::now();
 
-    OZ_INFO("AngelServ build b58 starting");
+    OZ_INFO("AngelServ %s starting (proto %u)", oz::kBuildVersion,
+            (unsigned)net::PROTOCOL_VERSION);
     OZ_INFO("Game port: UDP %d",  game_port);
     OZ_INFO("HTTP port: %d",     http_port);
     printf("Data dir:  %s\n",     g_gamedata_dir.c_str());
@@ -1215,7 +1240,8 @@ int main(int argc, char** argv) {
     net::NetworkServer game_server;
     g_game_server = &game_server;
 
-    if (!game_server.init(static_cast<uint16_t>(game_port))) {
+    if (!game_server.init(static_cast<uint16_t>(game_port), net::MAX_PLAYERS,
+                          g_bind_ip.c_str())) {
         fprintf(stderr, "Failed to create game server\n");
         return 1;
     }
@@ -1236,7 +1262,8 @@ int main(int argc, char** argv) {
 
     // LAN discovery
     net::NetworkDiscovery discovery;
-    discovery.init(g_server_name.c_str(), "0.2.1", static_cast<uint16_t>(game_port));
+    discovery.init(g_server_name.c_str(), oz::kBuildVersion,
+                   static_cast<uint16_t>(game_port));
     discovery.set_server_info(static_cast<uint16_t>(http_port), current_map_name().c_str(), false);
     discovery.start();
     g_discovery = &discovery;
@@ -1247,7 +1274,8 @@ int main(int argc, char** argv) {
         master_uplink.SetMasters(g_master_udp, g_master_http, g_public_ip);
         master_uplink.SetStatus(g_server_name, static_cast<uint16_t>(game_port),
                                 static_cast<uint16_t>(http_port), current_map_name(),
-                                0, net::MAX_PLAYERS, false);
+                                0, g_game_state.max_players(), false,
+                                net::PROTOCOL_VERSION);
         master_uplink.Start();
         OZ_INFO("Master uplink: %zu UDP / %zu HTTP target(s)",
                 g_master_udp.size(), g_master_http.size());
@@ -1278,7 +1306,8 @@ int main(int argc, char** argv) {
             master_uplink.SetStatus(g_server_name, static_cast<uint16_t>(game_port),
                                     static_cast<uint16_t>(http_port), current_map_name(),
                                     static_cast<uint32_t>(g_game_state.player_count()),
-                                    net::MAX_PLAYERS, false);
+                                    g_game_state.max_players(), false,
+                                    net::PROTOCOL_VERSION);
         }
 
         auto now = std::chrono::steady_clock::now();

@@ -27,7 +27,7 @@ LAN discovery (UDP 27100) is unchanged and still works alongside this.
 | `--http-port` | `27950` | HTTP list/API port |
 | `--max-servers` | `4096` | Cap on tracked servers |
 | `--gamename` | `angels95` | Filter default for list queries |
-| `--bind` | `127.0.0.1` | Interface to bind (use `0.0.0.0` on a VPS) |
+| `--bind` | `127.0.0.1` | Interface to bind **both** the UDP heartbeat and the HTTP API (use `0.0.0.0` on a VPS) |
 
 ### HTTP API
 
@@ -45,17 +45,25 @@ Example response:
 ```json
 {"ok":true,"gamename":"angels95","count":1,"servers":[
   {"ip":"159.195.20.100","port":27015,"httpport":8080,"name":"Etherrealm EU",
-   "map":"world_ether","gamever":"0.2.1","players":3,"maxplayers":16,
+   "map":"world_ether","gamever":"b97","proto":2,"players":3,"maxplayers":8,
    "password":false,"lastseen":1790551982}]}
 ```
 
 Entries expire after **90 s** (3 × the 30 s heartbeat). Heartbeats are
-rate-limited to one per source IP per 1.5 s, the server cap is enforced, and
-display strings are sanitized — but heartbeats are unauthenticated by design
-(like classic masters). Since b65, a self-reported `publicip` is **only
-trusted when the heartbeat arrives from a non-private source** (anti-spoof);
-otherwise the real remote address is used. Run the master on a trusted host /
-behind a reverse proxy if you need stronger guarantees.
+rate-limited **per announced server (`ip:port`)** to one per 1.5 s, with a
+coarse per-source-IP cap (10/s) so one host cannot flood the list. That is what
+lets several dedicated servers behind one public IP / host networking all stay
+listed; the old per-source-only limit silently dropped all but one of them
+every cycle. The server cap is enforced and display strings are sanitized, but
+heartbeats are unauthenticated by design (like classic masters).
+
+A self-reported `publicip` is trusted **only from a private (LAN) source**. A
+public source already *is* the address that must be listed, so honouring a
+claimed value there would let any internet host announce an arbitrary
+`ip:port` and poison the list. A private source (a server on the master's own
+LAN, or a local reverse proxy) may announce its public address. Rate-limited
+heartbeats are logged (`Master: rate-limited …`) instead of being dropped
+silently.
 
 ---
 
@@ -71,14 +79,18 @@ behind a reverse proxy if you need stronger guarantees.
 
 | Flag | Meaning |
 |---|---|
+| `--bind IP\|HOST` | Interface for the game UDP socket **and** the HTTP API (default all interfaces) |
 | `--server-name NAME` | Display name announced to masters (default `Angels95 Server`) |
 | `--master host[:port]` | UDP heartbeat target, repeatable (default port `27900`) |
 | `--master-http http://host:port` | HTTP heartbeat URL, repeatable |
 | `--public-ip IP` | Public IP to announce when behind NAT (optional) |
 
-- Heartbeats are sent immediately on start and then every **30 s**.
+- The first heartbeat is delayed by 0–3 s and the 30 s cadence carries ±5 s of
+  jitter, so several servers on one host do not heartbeat in lockstep.
 - Payload: `gamename`, `gamever`, `host`, `map`, `port`, `httpport`, `players`,
-  `maxplayers`, `password` (and optional `publicip`).
+  `maxplayers`, `password`, `proto` (and optional `publicip`). `maxplayers` is
+  the world's `levelinfo maxPlayers` (8 on the shipped levels), **not**
+  `net::MAX_PLAYERS` (32); the server refuses the 9th joiner.
 - The uplink runs on a background thread, so the 10 Hz game tick is never
   blocked by DNS or HTTP.
 - Without any `--master`/`--master-http`, the server logs a warning and only
@@ -88,13 +100,37 @@ The dedicated server also exposes live status (used by the client's direct
 RTT/status query) at `GET /status`:
 
 ```json
-{"ok":true,"server_name":"Etherrealm EU","players":0,"max_players":32,
- "uptime_seconds":42,"worlds":3,"map":"Dessert_Dreams","gamever":"0.2.1",
- "password":false}
+{"ok":true,"server_name":"Etherrealm EU","players":0,"max_players":8,
+ "uptime_seconds":42,"worlds":3,"map":"Dessert_Dreams","gamever":"b97",
+ "proto":2,"password":false}
 ```
 
 If `--auth-token` is set, `/status` is protected by the same Bearer gate as the
 other HTTP endpoints (see `Wiki/Engine-Overview.md`).
+
+### Build identity vs wire compatibility
+
+Two numbers answer different questions and must not be conflated:
+
+| Field | Example | Meaning | Enforced? |
+|---|---|---|---|
+| `gamever` | `b97` | Build id: the release tag (or `dev` locally) | No — display only |
+| `proto` | `2` | `net::PROTOCOL_VERSION`, the wire contract | **Yes** — a mismatch is rejected at `CLIENT_AUTH` |
+
+`gamever` used to be the hand-edited literal `0.2.1` in three places, so every
+build claimed the same version and the browser could not tell b94 from b97.
+It is now `oz::kBuildVersion` from `Source/Version.hpp`, stamped by the build:
+
+```bash
+make BUILD_VERSION=b97 AngelServ        # local
+# CI sets BUILD_VERSION=${GITHUB_REF_NAME} for every job
+```
+
+`AngelServ --version` and `AngelMaster --version` print the stamped id, which is
+the reliable way to fingerprint a deployed binary. The master stores and
+returns `proto`; the client browser shows both `Build:` and `Protocol:` and
+disables **Join** when a non-zero protocol differs (a legacy master that omits
+`proto` reports 0 = unknown and is still allowed).
 
 ---
 
@@ -173,7 +209,8 @@ units for `AngelServ` and `AngelMaster`.
 
 | Piece | File |
 |---|---|
-| Shared wire codec (heartbeat + JSON list) | `Source/Network/MasterProtocol.hpp` |
+| Build identity (`oz::kBuildVersion`, `--version`) | `Source/Version.hpp` |
+| Shared wire codec (heartbeat + JSON list + limiter) | `Source/Network/MasterProtocol.hpp` |
 | Minimal HTTP(S) client (WinHTTP on Windows, curl on POSIX — no vendored crypto) | `Source/Network/MasterHttp.hpp` |
 | Server → master uplink thread | `Source/Server/Master/MasterClient.hpp` |
 | Master daemon | `Source/Server/Master/Master.cpp` |

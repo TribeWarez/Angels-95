@@ -1446,6 +1446,79 @@ static int test_campaign_gates_objective_seeding() {
     PASS(); return 0; END_TEST();
 }
 
+// TDM: friendly fire is ENEMY-only, and a same-team kill earns no score.
+// The deployed TDM mode world authors friendlyFire=1; before this gate the
+// projectile loop damaged teammates and register_kill awarded killScore to the
+// killer's own team.
+static int test_tdm_team_friendly_fire_and_scoring() {
+    TEST("TDM: friendly fire is enemy-only and team kills do not score");
+    namespace fs = std::filesystem;
+    const fs::path worldDir = fs::path("build_test_gamedata") / "Worlds" / "TdmTeamTest";
+    fs::create_directories(worldDir);
+    {
+        std::ofstream out((worldDir / "World.ozone").string());
+        out << "levelinfo 3 8 5 0 10 50 1 GameData/Tex/Global/Sky/sky_noon.png\n";
+        out << "playerstart 0 0 0 0\n";
+        // A pickup keeps seed_world_entities from adding the procedural NPC
+        // ring, which could otherwise sit in the projectile's path.
+        out << "pickup HealthVial 50 50 0\n";
+    }
+
+    GameState gs;
+    gs.init_worlds("build_test_gamedata", {"TdmTeamTest"});
+    CHECK_EQ((int)gs.gametype_id(), (int)oz::gametype::GameType::ANGEL_TEAM_GAME);
+    CHECK_EQ(gs.max_players(), (uint32_t)8);
+    CHECK(gs.friendly_fire());
+
+    uint32_t a = gs.add_player(1, "BlueA");
+    uint32_t b = gs.add_player(2, "BlueB");
+    ServerPlayer* pa = gs.get_player(a);
+    ServerPlayer* pb = gs.get_player(b);
+    CHECK(pa != nullptr && pb != nullptr);
+    pa->team = 0; pb->team = 0;
+    pa->connected = pb->connected = true;
+    pa->position = {0, 0, 0};
+    pb->position = {10, 0, 0};
+    pa->health = pb->health = 100;
+
+    WorldState* ws = gs.get_world(0);
+    CHECK(ws != nullptr);
+
+    // Same team: the projectile passes through, no damage, no score.
+    gs.spawn_projectile(*ws, a, {0, 0, 0}, {1, 0, 0}, 20.0f, 50.0f, 5.0f);
+    gs.tick_projectiles(*ws, 0.5f);
+    CHECK_EQ(pb->health, 100);
+    CHECK_EQ(pa->score, 0);
+
+    // Enemy team: damage, death, kill credit and a team point.
+    pb->team = 1;
+    pb->health = 10;
+    gs.spawn_projectile(*ws, a, {0, 0, 0}, {1, 0, 0}, 20.0f, 50.0f, 5.0f);
+    gs.tick_projectiles(*ws, 0.5f);
+    CHECK_EQ(pb->health, 0);
+    CHECK(pb->dead);
+    CHECK_EQ(pa->score, 1);
+    CHECK_EQ(gs.team_score(0), 1);
+
+    // Defense in depth: a direct same-team kill must not score either (the
+    // scoring choke point must not depend on the projectile caller).
+    uint32_t c = gs.add_player(3, "BlueC");
+    ServerPlayer* pc = gs.get_player(c);
+    CHECK(pc != nullptr);
+    pc->team = 0;
+    pc->connected = true;
+    pc->health = 10;
+    const int scoreBefore = pa->score;
+    const int teamBefore = gs.team_score(0);
+    gs.damage_player(*pc, 100, a, oz::gametype::DamageSource::PLAYER);
+    CHECK(pc->dead);
+    CHECK_EQ(pa->score, scoreBefore);
+    CHECK_EQ(gs.team_score(0), teamBefore);
+
+    fs::remove_all(worldDir);
+    PASS(); return 0; END_TEST();
+}
+
 int main() {
     // Unbuffered: when a suite dies without a summary line, a piped stdout keeps
     // the last "TEST:" line in the log, which is what names the culprit (the
@@ -1465,6 +1538,7 @@ int main() {
     failures += test_projectile_hits_partition_npc();
     failures += test_projectile_avoids_owner();
     failures += test_projectile_hits_other_player();
+    failures += test_tdm_team_friendly_fire_and_scoring();
     failures += test_ammo_pickup_grants_ammo();
     failures += test_ammo_pickup_no_xp_granted();
     failures += test_collect_pickup_rejects_foreign_world();

@@ -17,6 +17,7 @@
 #include <cstring>
 #include <cctype>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <algorithm>
 
@@ -96,6 +97,7 @@ struct Heartbeat {
     uint32_t    players = 0;
     uint32_t    maxplayers = 0;
     bool        password = false;
+    uint32_t    protocol = 0;         // net::PROTOCOL_VERSION; 0 = legacy/unknown
     std::string public_ip;            // optional, for NAT
 };
 
@@ -111,6 +113,7 @@ struct ServerEntry {
     uint32_t    players = 0;
     uint32_t    maxplayers = 0;
     bool        password = false;
+    uint32_t    protocol = 0;         // 0 = a master predating the proto field
     double      last_seen = 0.0;      // monotonic seconds (master) or epoch (json)
 };
 
@@ -128,6 +131,10 @@ inline std::string EncodeHeartbeat(const Heartbeat& hb) {
              (unsigned)h.port, (unsigned)h.http_port,
              (unsigned)h.players, (unsigned)h.maxplayers, h.password ? 1 : 0);
     std::string line(buf);
+    // Optional tail: an old master's ParseKV ignores unknown keys, so adding
+    // this does not need a protocol bump. `proto` is the wire-compatibility
+    // id (net::PROTOCOL_VERSION), distinct from the human build id in gamever.
+    if (h.protocol > 0) line += ";proto=" + std::to_string((unsigned)h.protocol);
     if (!h.public_ip.empty()) {
         std::string ip;
         for (char c : h.public_ip) {
@@ -182,6 +189,10 @@ inline bool DecodeHeartbeat(const std::string& data, Heartbeat& out) {
     if (ParseKV(body, "players", v))    out.players = (uint32_t)strtoul(v.c_str(), nullptr, 10);
     if (ParseKV(body, "maxplayers", v)) out.maxplayers = (uint32_t)strtoul(v.c_str(), nullptr, 10);
     if (ParseKV(body, "password", v))   out.password = (v == "1" || v == "true");
+    if (ParseKV(body, "proto", v)) {
+        unsigned long p = strtoul(v.c_str(), nullptr, 10);
+        if (p <= 0xFFFFFFFFul) out.protocol = (uint32_t)p;
+    }
     if (ParseKV(body, "publicip", v)) {
         if (v.find_first_not_of("0123456789.abcdefABCDEF:") == std::string::npos)
             out.public_ip = v;
@@ -313,6 +324,7 @@ inline std::string BuildServerListJson(const std::vector<ServerEntry>& servers,
         json += ",\"name\":\"" + JsonEscape(s.name) + "\"";
         json += ",\"map\":\"" + JsonEscape(s.map) + "\"";
         json += ",\"gamever\":\"" + JsonEscape(s.gamever) + "\"";
+        json += ",\"proto\":" + std::to_string(s.protocol);
         json += ",\"players\":" + std::to_string(s.players);
         json += ",\"maxplayers\":" + std::to_string(s.maxplayers);
         json += std::string(",\"password\":") + (s.password ? "true" : "false");
@@ -343,11 +355,99 @@ inline bool ParseServerListJson(const std::string& json,
         JsonGetString(obj, "name", e.name);
         JsonGetString(obj, "map", e.map);
         JsonGetString(obj, "gamever", e.gamever);
+        if (JsonGetUInt(obj, "proto", n)) e.protocol = n;
         JsonGetBool(obj, "password", e.password);
         out.push_back(std::move(e));
     }
     return true;
 }
+
+// ---------------------------------------------------------------------------
+// Announced-address policy and heartbeat rate limiting.
+//
+// These live here (rather than in Master.cpp) so tests/Master.test.cpp can pin
+// them without opening a socket. Pure data in, pure data out.
+// ---------------------------------------------------------------------------
+inline bool IsValidIpv4(const std::string& ip) {
+    // Deliberately NOT inet_pton: MasterProtocol.hpp is the one header the
+    // socket-free test_master target includes, and it does not link ws2_32.
+    unsigned a = 0, b = 0, c = 0, d = 0;
+    char extra = 0;
+    if (sscanf(ip.c_str(), "%u.%u.%u.%u%c", &a, &b, &c, &d, &extra) != 4)
+        return false;
+    return a <= 255 && b <= 255 && c <= 255 && d <= 255;
+}
+
+inline bool IsPrivateIpv4(const std::string& ip) {
+    unsigned a = 0, b = 0, c = 0, d = 0;
+    if (sscanf(ip.c_str(), "%u.%u.%u.%u", &a, &b, &c, &d) != 4) return false;
+    if (a == 10) return true;                        // 10.0.0.0/8
+    if (a == 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+    if (a == 192 && b == 168) return true;           // 192.168.0.0/16
+    if (a == 127) return true;                       // loopback
+    if (a == 169 && b == 254) return true;           // link-local
+    return false;
+}
+
+// Decide which address the master lists for a heartbeat.
+//
+// A self-reported `public_ip` is trusted ONLY from a private source (a server
+// on the master's own LAN, which is the one case the master cannot observe).
+// A public source IS already the address that must be listed, so trusting a
+// claimed value there lets any internet host announce an arbitrary ip:port and
+// poison the list. The old rule trusted exactly the public case and ignored
+// the private one - backwards for both NAT and spoofing.
+inline std::string ResolveAnnouncedIp(const std::string& source_ip,
+                                      const std::string& claimed_public_ip) {
+    if (claimed_public_ip.empty() || !IsValidIpv4(claimed_public_ip)) return source_ip;
+    if (IsPrivateIpv4(source_ip)) return claimed_public_ip;
+    return source_ip;
+}
+
+// Heartbeat admission control. The key is the announced server identity
+// (`ip:port`), NOT the source address: several dedicated servers legitimately
+// share one public IP (host networking / NAT), and the old per-source-only
+// limit silently dropped all but one of them every cycle.
+//
+// A coarse per-source cap (default 10/s) still bounds a hostile host rotating
+// ports or claimed addresses.
+class HeartbeatLimiter {
+public:
+    bool Accept(const std::string& server_key, const std::string& source_ip,
+                long long now_ms,
+                long long per_server_ms = 1500,
+                long long per_source_ms = 100) {
+        auto sit = m_by_source.find(source_ip);
+        if (sit != m_by_source.end() && now_ms - sit->second < per_source_ms)
+            return false;
+        auto it = m_by_server.find(server_key);
+        if (it != m_by_server.end() && now_ms - it->second < per_server_ms)
+            return false;
+        m_by_server[server_key] = now_ms;
+        m_by_source[source_ip] = now_ms;
+        return true;
+    }
+
+    // Drop stale keys so a stream of spoofed sources cannot grow the maps
+    // without bound. Called from the master's periodic prune.
+    void Prune(long long now_ms, long long keep_ms = 60000) {
+        for (auto it = m_by_server.begin(); it != m_by_server.end();) {
+            if (now_ms - it->second > keep_ms) it = m_by_server.erase(it);
+            else ++it;
+        }
+        for (auto it = m_by_source.begin(); it != m_by_source.end();) {
+            if (now_ms - it->second > keep_ms) it = m_by_source.erase(it);
+            else ++it;
+        }
+    }
+
+    size_t server_keys() const { return m_by_server.size(); }
+    size_t source_keys() const { return m_by_source.size(); }
+
+private:
+    std::unordered_map<std::string, long long> m_by_server;
+    std::unordered_map<std::string, long long> m_by_source;
+};
 
 // ---------------------------------------------------------------------------
 // ResolveBindAddress — accepts a literal IPv4 ("0.0.0.0", "1.2.3.4") or a

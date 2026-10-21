@@ -73,10 +73,53 @@ static void test_heartbeat_public_ip() {
     expect(ok, "public_ip round-trip", out.public_ip);
 }
 
+static void test_heartbeat_protocol() {
+    Heartbeat hb;
+    hb.port = 27015;
+    hb.protocol = 2;
+    Heartbeat out;
+    bool ok = DecodeHeartbeat(EncodeHeartbeat(hb), out) && out.protocol == 2;
+    expect(ok, "protocol round-trips in the heartbeat", std::to_string(out.protocol));
+}
+
+static void test_announced_ip_policy() {
+    expect(ResolveAnnouncedIp("159.195.10.230", "1.2.3.4") == "159.195.10.230",
+           "public source cannot claim a different ip");
+    expect(ResolveAnnouncedIp("192.168.1.9", "203.0.113.7") == "203.0.113.7",
+           "private/LAN source may announce its public ip");
+    expect(ResolveAnnouncedIp("159.195.10.230", "not-an-ip") == "159.195.10.230",
+           "invalid claimed ip is ignored");
+    expect(ResolveAnnouncedIp("159.195.10.230", "") == "159.195.10.230",
+           "empty claimed ip uses the source");
+}
+
+static void test_heartbeat_limiter() {
+    HeartbeatLimiter lim;
+    const std::string ip = "159.195.10.230";
+    // Two dedicated servers behind one public IP must both be admitted: the
+    // limiter keys on ip:port, not on the source address.
+    const bool a = lim.Accept(ip + ":27015", ip, 0);
+    const bool b = lim.Accept(ip + ":27016", ip, 200);
+    const bool again = lim.Accept(ip + ":27015", ip, 400);   // inside per-key 1.5s
+    const bool later = lim.Accept(ip + ":27015", ip, 1600);  // after per-key window
+    const bool burst = lim.Accept(ip + ":27017", ip, 1650);  // inside per-source 100ms
+    const bool burst_ok = lim.Accept(ip + ":27017", ip, 1750);
+    expect(a && b, "limiter admits two servers behind one public ip");
+    expect(!again, "limiter rejects the same ip:port inside 1.5s");
+    expect(later, "limiter admits the same ip:port after 1.5s");
+    expect(!burst, "per-source cap rejects a >10/s burst");
+    expect(burst_ok, "per-source cap admits after 100ms");
+
+    lim.Prune(70000);
+    expect(lim.server_keys() == 0 && lim.source_keys() == 0,
+           "limiter prunes stale keys");
+}
+
 static void test_server_list_roundtrip() {
     std::vector<ServerEntry> in(2);
     in[0].ip = "159.195.20.100"; in[0].port = 27015; in[0].http_port = 8080;
     in[0].name = "Ether \"One\""; in[0].map = "world_ether"; in[0].gamever = "0.2.1";
+    in[0].protocol = 2;
     in[0].players = 3; in[0].maxplayers = 16;
     in[1].ip = "10.0.0.7"; in[1].port = 28001; in[1].name = "LAN";
     in[1].players = 0; in[1].maxplayers = 8; in[1].password = true;
@@ -85,7 +128,7 @@ static void test_server_list_roundtrip() {
     std::vector<ServerEntry> out;
     bool ok = ParseServerListJson(json, out) && out.size() == 2 &&
               out[0].ip == "159.195.20.100" && out[0].name == "Ether \"One\"" &&
-              out[0].players == 3 && out[1].password;
+              out[0].players == 3 && out[0].protocol == 2 && out[1].password;
     expect(ok, "server list JSON round-trip", json);
 }
 
@@ -122,6 +165,9 @@ int main() {
     test_heartbeat_rejects_missing_port();
     test_heartbeat_sanitizes_injection();
     test_heartbeat_public_ip();
+    test_heartbeat_protocol();
+    test_announced_ip_policy();
+    test_heartbeat_limiter();
     test_server_list_roundtrip();
     test_server_list_skips_malformed();
     test_server_list_brace_in_string();

@@ -125,6 +125,54 @@ lists internet master URLs (http:// or https://), read by
   Covered by `tests/Network.test.cpp` (profile round-trip and de-duplication run
   over a real loopback socket).
 
+## Build identity, master listing and TDM teams
+
+- **`Source/Version.hpp` is the ONE build identity.** `OZ_BUILD_VERSION` is
+  injected by the build (`make BUILD_VERSION=b97`, CI sets it to
+  `${{ github.ref_name }}`) and falls back to `"dev"`. It feeds the AngelServ
+  startup log, `--version`, the heartbeat `gamever`, `/status`, LAN discovery,
+  the title footer and About. The old `"build b58"` literal and the `"0.2.1"`
+  heartbeat/`/status` constants were hand-edited and never changed: every build
+  claimed the same version. **`gamever` is a build id; `proto` is the enforced
+  wire id (`net::PROTOCOL_VERSION`).** Do not put the protocol number only in
+  `gamever` — a client cannot compare a string.
+- **`proto` is an optional heartbeat/JSON field** (`MasterProtocol.hpp`) and is
+  in `/status` too; 0 means a legacy master that omitted it. The browser shows
+  `Build:`/`Protocol:` and refuses a non-zero mismatch with the real reason
+  (the server drops a mismatched `CLIENT_AUTH` and the client would only see a
+  timeout).
+- **The heartbeat limiter keys on the announced `ip:port`, not the source IP.**
+  `HeartbeatLimiter` (`MasterProtocol.hpp`, unit-tested) also has a coarse
+  per-source cap (10/s) and is pruned. The old per-source-only limit meant four
+  servers on one `network_mode: host` VPS could never all be listed; the
+  membership was decided by phase drift. `MasterUplink` also jitters its first
+  send and its 30 s cadence, and logs a non-2xx HTTP heartbeat at **WARN**
+  (`HttpRequest` returns true for a 400, so rate limiting used to log as INFO).
+- **`publicip` is trusted only from a PRIVATE source** (`ResolveAnnouncedIp`).
+  A public source already is the listed address; trusting its claim lets any
+  host poison the list. The private case is the LAN / local reverse-proxy /
+  Docker-DNAT case, where the claimed public address is the only usable one.
+- **The advertised `maxplayers` is the world's `levelinfo maxPlayers`**
+  (`GameState::max_players()`), not `net::MAX_PLAYERS` (32). The shipped levels
+  author 8; the browser used to show 24 phantom slots. `on_player_join` now
+  acts on `add_player` returning nothing: it sends "server is full" and kicks,
+  instead of leaving a ghost connected at the network layer.
+- **TDM friendly fire is enemy-only.** The projectile PvP loop skips a
+  same-team target when `m_gameTypeInfo.teamBased`, and `register_kill` refuses
+  to score a team kill even if a future caller reaches it directly. With
+  `friendlyFire=1` (the deployed mode worlds) the old code was all-vs-all AND
+  awarded the killer's team a point for a teammate kill.
+- **`--bind` now binds both sockets on both daemons.** `NetworkServer::init`
+  takes the bind address (AngelServ's game UDP used to be INADDR_ANY while only
+  the HTTP listener honoured `--bind`), and AngelMaster's `http_listen` uses
+  the resolved `--bind` too. The master also reads the full HTTP request body
+  (Content-Length) instead of one `recv`.
+- **Release pipeline:** b95/b96 exist as git tags but have **no GitHub
+  Releases** because the CI b95/b96 runs fail at `make test`; the infra
+  auto-updater polls `releases/latest`, so it stayed on b94. Fixing the Linux
+  `make test` job is what unblocks the infra, not a master rebuild alone
+  (`Master.cpp` is unchanged since b77).
+
 ## Networked pickups (`PickupPawns` + `PawnSystem::ApplyPickupNetState`)
 Three lists exist and confusing any two of them is what made pickups look broken:
 1. the **server's** `ServerPickup` (authoritative, `GameState::m_worlds`),

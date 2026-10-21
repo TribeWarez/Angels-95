@@ -1,4 +1,5 @@
 #include "Network.hpp"
+#include "../Version.hpp"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -236,7 +237,7 @@ uint16_t find_free_port() {
 NetworkServer::NetworkServer() {}
 NetworkServer::~NetworkServer() { stop(); }
 
-bool NetworkServer::init(uint16_t port, uint32_t max_players) {
+bool NetworkServer::init(uint16_t port, uint32_t max_players, const char* bind_ip) {
     if (!winsock_init()) return false;
 
     static_assert(sizeof(NetworkPlayer) <= MAX_MESSAGE_SIZE);
@@ -256,6 +257,16 @@ bool NetworkServer::init(uint16_t port, uint32_t max_players) {
     memset(&m_address, 0, sizeof(m_address));
     m_address.sin_family = AF_INET;
     m_address.sin_addr.s_addr = INADDR_ANY;
+    if (bind_ip && *bind_ip) {
+        if (inet_pton(AF_INET, bind_ip, &m_address.sin_addr) != 1) {
+            // Server.cpp resolves --bind before this call; a value that still
+            // fails to parse is treated as "all interfaces" with a warning
+            // rather than leaving the socket unbound.
+            fprintf(stderr, "Server: invalid bind address '%s' - using 0.0.0.0\n",
+                    bind_ip);
+            m_address.sin_addr.s_addr = INADDR_ANY;
+        }
+    }
     m_address.sin_port = htons(port);
 
     int opt = 1;
@@ -974,7 +985,7 @@ bool NetworkDiscovery::init(const char* game_name, const char* game_version,
     if (!winsock_init()) return false;
 
     m_game_name = game_name ? game_name : "Angels95";
-    m_game_version = game_version ? game_version : "0.1.0";
+    m_game_version = game_version ? game_version : oz::kBuildVersion;
     m_game_port = port;
     return true;
 }
