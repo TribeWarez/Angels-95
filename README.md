@@ -7,6 +7,8 @@ began life as the OmegaTech Engine. It is a persistent, server-authoritative rea
 where players explore partitioned worlds, collect power-ups, level up, and fight
 NPCs alongside other connected players.
 
+**Repository:** [github.com/TribeWarez/Angels-95](https://github.com/TribeWarez/Angels-95)
+
 Built on [raylib](https://www.raylib.com/) 5.5 with PS1-inspired retro
 aesthetics, a custom **OZONE** world format, a
 **LightningScript** entity-scripting language, a Win32-native level editor
@@ -433,6 +435,7 @@ See also [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md),
 
 | Repository | What it is |
 |---|---|
+| [TribeWarez/Angels-95](https://github.com/TribeWarez/Angels-95) | **This repository** — the game, the AngelTech engine, the AngelEd editor, `AngelServ` and `AngelMaster`. |
 | [TribeWarez/angels95-master-server](https://github.com/TribeWarez/angels95-master-server) | The hosted master server: heartbeat intake and the public server list behind `angels95.tribewarez.com`. The in-repo `AngelMaster` is the same protocol; the hosted deployment lives there. |
 | [paganswrath/OmegaTech](https://github.com/paganswrath/OmegaTech) | The engine Angels95 was originally built on top of. |
 | [paganswrath/OTEditor](https://github.com/paganswrath/OTEditor) | The original OmegaTech level editor. |

@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 $ErrorActionPreference = 'Stop'
 
-$Repo = 'odelyzid/angels-95-omega-tech'
+$Repo = 'TribeWarez/Angels-95'
 $Token = $env:GITHUB_TOKEN
 if (-not $Token) { throw 'GITHUB_TOKEN env var is empty' }
 
@@ -166,4 +166,4 @@ foreach ($pair in $Tags) {
 }
 
 Write-Host ''
-Write-Host 'Done. Drafts are in releases/*.md; live bodies are at https://github.com/odelyzid/angels-95-omega-tech/releases'
+Write-Host 'Done. Drafts are in releases/*.md; live bodies are at https://github.com/TribeWarez/Angels-95/releases'

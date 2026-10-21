@@ -49,6 +49,8 @@ b101 are at the end):
 
 ## Related repositories
 
+- [**Angels-95**](https://github.com/TribeWarez/Angels-95) — this repository: the game client, the
+  AngelTech engine, the AngelEd editor, the dedicated server and the master server.
 - [**angels95-master-server**](https://github.com/TribeWarez/angels95-master-server) — the hosted master
   server (heartbeat intake and the public server list). The in-repo `AngelMaster` implements the same
   protocol; this is the deployed service.
