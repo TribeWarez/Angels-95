@@ -1,0 +1,58 @@
+name: Sync wiki
+
+# The published documentation is the GitHub wiki
+# (https://github.com/<owner>/<repo>/wiki). This repository has no Pages site
+# and no gh-pages branch; the wiki is a SEPARATE git repository
+# (<repo>.wiki.git), so it cannot be updated by pushing the tracked Wiki/ folder
+# to master. This workflow republishes it whenever Wiki/ changes.
+#
+# The sync itself lives in tools/sync-wiki.ps1 so it can be run by hand with the
+# same behaviour. It clones the wiki, replaces every page with the tracked ones,
+# rewrites `../GameData/` image paths to raw.githubusercontent.com URLs (the wiki
+# has no GameData/ beside it), turns `Page.md` links into bare `Page` links, and
+# regenerates _Sidebar.md and _Footer.md.
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'Wiki/**'
+      - 'tools/sync-wiki.ps1'
+      - '.github/workflows/wiki-sync.yml'
+  workflow_dispatch:
+
+# GITHUB_TOKEN is scoped to THIS repository. The wiki is a sibling repository, so
+# a fine-grained PAT with "Contents: read and write" on this repo is the reliable
+# token - store it as the WIKI_TOKEN secret. The job falls back to GITHUB_TOKEN,
+# which works when the repository grants it wiki write access. Do not make this
+# silent: a failed push is the only signal that the docs are stale.
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish Wiki/ to the GitHub wiki
+        env:
+          WIKI_TOKEN: ${{ secrets.WIKI_TOKEN }}
+          FALLBACK_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TOKEN="${WIKI_TOKEN:-$FALLBACK_TOKEN}"
+          if [ -z "$TOKEN" ]; then
+            echo "::error::No token available. Add a WIKI_TOKEN secret (fine-grained PAT, Contents: read and write)."
+            exit 1
+          fi
+          URL="https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git"
+          pwsh -NoProfile -File tools/sync-wiki.ps1 \
+            -WikiUrl "$URL" \
+            -RepoSlug "$GITHUB_REPOSITORY" \
+            -Message "docs: sync wiki from ${GITHUB_SHA:0:7}"
+
+      - name: Report
+        if: always()
+        run: |
+          echo "Wiki: https://github.com/${GITHUB_REPOSITORY}/wiki"

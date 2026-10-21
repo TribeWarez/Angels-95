@@ -221,3 +221,31 @@ systemctl enable --now angels95-serv
 ```
 
 Run both daemons with `--bind 0.0.0.0` so they listen on the public interface.
+
+## Wiki deployment
+
+The published documentation is the **GitHub wiki** at
+<https://github.com/TribeWarez/Angels-95/wiki>. It is a *separate* git
+repository (`Angels-95.wiki.git`), not a GitHub Pages site — there is no
+`gh-pages` branch and no `docs/` folder, so pushing `Wiki/` to `master` does not
+publish anything by itself.
+
+`Wiki/` is the single source of truth, and `tools/sync-wiki.ps1` republishes it:
+
+```bash
+pwsh tools/sync-wiki.ps1            # sync + push
+pwsh tools/sync-wiki.ps1 -DryRun    # build the commit in a temp clone, no push
+```
+
+It clones the wiki, **replaces** every page (so a page deleted here disappears
+there — that is how the dead `World-Format-WDL` was removed), rewrites
+`../GameData/...` images to `raw.githubusercontent.com` URLs, turns `Page.md`
+links into the bare `Page` form the wiki resolves, and regenerates `_Sidebar.md`
+from this folder's `Home.md` Contents table plus `_Footer.md`.
+
+**Automation:** `.github/workflows/wiki-sync.yml` runs it on any push to
+`master` that touches `Wiki/**` (and on manual dispatch). Because the wiki is a
+sibling repository, `GITHUB_TOKEN` may not have write access to it: add a
+fine-grained PAT with **Contents: read and write** as the `WIKI_TOKEN` secret.
+The workflow falls back to `GITHUB_TOKEN` when the repository grants it wiki
+access, and fails loudly rather than leaving the docs silently stale.
