@@ -38,6 +38,7 @@ b101 are at the end):
 |---|---|
 | [Core Game](Core-Game) | Gameplay mechanics, controls, HUD, inventory, save system |
 | [Engine Overview](Engine-Overview) | Architecture, source tree, key classes, package system |
+| [Engine & Game Limits](Constraints) | Hard limits: movement, collision, lights, network, authoring |
 | [Editor Usage](Editor-Usage) | AngelEd panels, toolbar, CSG, workflow, known gaps |
 | [LightningScript](LightningScript) | Scripting language reference, opcodes, entity definitions |
 | [World Format (OZONE)](World-Format-OZONE) | OZONE syntax and world directory layout |
