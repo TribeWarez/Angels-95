@@ -83,14 +83,44 @@ One benign warning per world: `multiple playerstarts; only #1 is ever used` — 
 second `playerstart` for parity with the other worlds; `PawnSystem::GetFirstPlayerStart` only
 reads #1.
 
+## Sky: the seam fix
+
+Two independent defects, both measured rather than guessed:
+
+1. **Cap band.** The skybox draws top/bottom faces with a *different texture* (`useCap`) on a horizontal quad, so every wall top met an unrelated image. The band was a 50-level (day) / 24-level (dusk) tonal step.
+2. **Corner panels.** The six quads are separate planes and the four wall quads **do not agree on their V mapping**. Measured at a cube corner: adjacent walls differed by 33-40 colour levels at the same screen row, and the outer panels ramped horizontally *within* a row while the wall facing the camera was flat. That is a per-face V *offset*, so no texture can fix it — a vertically symmetric texture only cancels a flip (it took the step from 41 to 33).
+
+The fix, in three parts:
+
+- `tools/gen_sky_textures.ps1` generates **horizontally periodic, vertically symmetric** gradients (`sky_grad_day.png`, `sky_grad_dusk.png`): every horizontal variation is a sum of `sin(2*pi*k*u)` with integer k and the last column is overwritten with column 0, so corners match by construction; and `colour(y) == colour(h-1-y)`, so a V flip is invisible.
+- **`Sky.fs` samples V from WORLD ELEVATION**, not from the quad's texcoord: `elevV = clamp(dirW.y * 0.5 + 0.5, 0, 1)`. Elevation is a property of the view ray, so every quad — walls and cap alike — agrees by construction. This is what actually removed the corners.
+- Both worlds pass the **same gradient as cap and sides** (`levelinfo <grad> <grad>`); with a separate cap image the elevation V made the cap's flat zenith meet the walls' 91%-to-zenith row, leaving a faint trapezoid.
+
+Measured on the same cameras (largest adjacent-pixel step in the sky):
+
+| | before | after |
+|---|---|---|
+| SilentPines, seam column x=215 at rows 20 / 60 / 120 | 33 / 28 / 20 | **1 / 1 / 1** |
+| KryoArchipel, seam column x=215 | 40 / 36 / 25 | **5 / 4 / 3** |
+| SilentPines, cap band | 50 levels | **1** |
+| KryoArchipel, cap band | 24 levels | **1** |
+| EngineTest (legacy panorama), hard straight band | 16.06 lum | **2.13 lum** |
+
+Residuals: a ≤5-level step at the **U** face boundary (each face still supplies its own `fragTexCoord.x`), and a faint trapezoid when looking steeply up at the zenith. Both are shading-level, not the hard panels of before.
+
+**Behaviour change to know about:** because V now tracks elevation, a wall samples only V ≥ 0.5. Legacy panorama skies therefore show only the **upper half** of their image on the walls — `sky_noon.png` / `sky_day.png` now display their top half, which also moved that art's own baked 26-31 level wrap seam onto a constant elevation contour. Legacy worlds measured *better* (EngineTest's band fell 16.06 → 2.13), but the change is visible and is not confined to the two outdoor maps.
+
+
+
 ## Known visual limitations (engine-level, not content bugs)
 
-1. **Skybox cube seams.** The skybox is a six-quad cube with direction-projected UVs; the top
-   face reads as a bright band across the horizon and the cube edges are visible. Every shipped
-   outdoor world has this.
+1. **Sky box cube seams - fixed (see above).** The hard panels, the cap band and the corner
+   tonals are gone. What remains is a <=5-level step at each U face boundary (each face still
+   supplies its own `fragTexCoord.x`) and a faint trapezoid when looking steeply up at the zenith.
 2. **Water is still a scrolling texture, not a simulation.** No foam sheet, refraction or depth
-   term exists; `waterfall_streaks.png` and `water_pool.png` are paint, and the motion comes from
-   the pan. The look is now deliberate rather than accidental, but it is 1998, not 2004.
+   term exists; `waterfall_streaks.png`, `water_pool.png` and `foam.png` are paint, and the motion
+   comes from the pan. Foam now reads at the cascade impacts (an impact band, a 3.4x faster churn
+   wall, and shore strips), but it is 1998, not 2004.
 3. **Outdoor scale reads arena-like.** With no terrain and AABB-only collision, a wide valley is
    a floor plate between tall boxes. Dusk Falls was tightened for this reason (depth 168 -> 102,
    pools 27x24/44x24/38x28 -> 20x18/26x18/26x22, aqueduct narrowed, seven ruin fragments added);

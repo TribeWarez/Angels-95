@@ -132,9 +132,58 @@ $fall.Save($fallPath, [System.Drawing.Imaging.ImageFormat]::Png)
 $fall.Dispose()
 
 # ---------------------------------------------------------------------------
+# foam.png - 64x64, wrap-safe bubble field (used for impact/shore foam)
+#
+# Drawn 9 times per bubble (offset by +/-64 in both axes) so the texture TILES:
+# foam strips scroll with panU, and a non-tiling bubble field would pop a seam
+# every 64 units along the strip.
+# ---------------------------------------------------------------------------
+$mw = 64; $mh = 64
+$foam = New-Object System.Drawing.Bitmap($mw, $mh, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+$gfx2 = [System.Drawing.Graphics]::FromImage($foam)
+$gfx2.Clear([System.Drawing.Color]::FromArgb(0, 0, 0, 0))
+$gfx2.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+
+$rng2 = New-Object System.Random(777)
+
+for ($i = 0; $i -lt 140; $i++) {
+    $bx = $rng2.Next(0, $mw)
+    $by = $rng2.Next(0, $mh)
+    $br = $rng2.Next(1, 4)
+    $ba = $rng2.Next(140, 246)
+    $col = [System.Drawing.Color]::FromArgb($ba, 245, 250, 255)
+    $brush = New-Object System.Drawing.SolidBrush($col)
+    foreach ($ox in @(-$mw, 0, $mw)) {
+        foreach ($oy in @(-$mh, 0, $mh)) {
+            $gfx2.FillEllipse($brush, ($bx + $ox - $br), ($by + $oy - $br), (2 * $br), (2 * $br))
+        }
+    }
+    $brush.Dispose()
+}
+
+# Bright cores on a few bubbles so the field has contrast rather than flat noise.
+for ($i = 0; $i -lt 26; $i++) {
+    $bx = $rng2.Next(0, $mw)
+    $by = $rng2.Next(0, $mh)
+    $col = [System.Drawing.Color]::FromArgb(240, 255, 255, 255)
+    $brush = New-Object System.Drawing.SolidBrush($col)
+    foreach ($ox in @(-$mw, 0, $mw)) {
+        foreach ($oy in @(-$mh, 0, $mh)) {
+            $gfx2.FillEllipse($brush, ($bx + $ox), ($by + $oy), 2, 2)
+        }
+    }
+    $brush.Dispose()
+}
+
+$gfx2.Dispose()
+$foamPath = Join-Path $OutDir "foam.png"
+$foam.Save($foamPath, [System.Drawing.Imaging.ImageFormat]::Png)
+$foam.Dispose()
+
+# ---------------------------------------------------------------------------
 # Report
 # ---------------------------------------------------------------------------
-foreach ($p in @($poolPath, $fallPath)) {
+foreach ($p in @($poolPath, $fallPath, $foamPath)) {
     $img = [System.Drawing.Image]::FromFile((Resolve-Path $p))
     $size = (Get-Item $p).Length
     Write-Host ("{0}  {1}x{2}  {3} bytes" -f $p, $img.Width, $img.Height, $size)

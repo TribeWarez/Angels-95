@@ -9,12 +9,14 @@
 # Box arg order is  x y z  w h d  rot  where h is the VERTICAL size (Z).
 #
 # UV NOTE: BuildBox multiplies generated UVs by 16 (h >= 1.0) or 8 (thin), so an
-# authored texScale is a MULTIPLIER on top. Keep values near 1 or the surfaces
-# turn into moire noise.
+# authored texScale is a MULTIPLIER on top. Keep values near 1.
 #
-# SCALE NOTE: depth is 102 (y -56..46), not 168. The first cut was wide enough
-# that each terrace read as an empty plain; tightening the run and adding ruin
-# fragments is what makes the terraces read as authored space.
+# SHELVES: each terrace has one 0.9-high shelf. 0.9 is walkable without a step,
+# which is why the relief is a shelf and not a staircase.
+#
+# POOLS: both receiving pools sit UNDER their cascade (x -29..-3 at the foot of
+# cascade 1, x 31..57 under cascade 2). They used to start 10-18 units east of
+# the falls, which left the water landing on dry stone.
 #
 # Zone names are the lookup keys for the sibling .ozls defs in this directory.
 
@@ -22,6 +24,11 @@
 add box -60 -5 7 60 18 102 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/02_floor_snow_a3_32.png texScaleU=1 texScaleV=1
 add box 0 -5 3 60 10 102 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/04_floor_snow_a5_32.png texScaleU=1 texScaleV=1
 add box 60 -5 -1 60 2 102 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/03_floor_snow_a4_32.png texScaleU=1 texScaleV=1
+
+# --- 0.9 shelves: west third of T1, south aprons on T2 and T3 ---
+add box -74 -5 16.45 32 0.9 102 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/03_floor_snow_a4_32.png texScaleU=1 texScaleV=1
+add box -10 -43 8.45 40 0.9 26 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/02_floor_snow_a3_32.png texScaleU=1 texScaleV=1
+add box 50 -43 0.45 40 0.9 26 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/04_floor_snow_a5_32.png texScaleU=1 texScaleV=1
 
 # --- North strip: a floor at each terrace level so the stairs never open onto void ---
 add box -60 52 7.5 60 17 12 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/02_floor_snow_a3_32.png texScaleU=1 texScaleV=1
@@ -49,29 +56,36 @@ add box 49.5 52 0.85 3 1.7 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_
 add box 52.5 52 0.4 3 0.8 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
 
 # --- Cascade sheets: 0.1 clear of the terrace face, scrolling downward.
-# waterfall_streaks.png carries its own alpha; the gaps are what make it read as
-# falling water instead of a pale panel.
+# waterfall_streaks.png carries its own alpha; the gaps read as falling water.
 # flags = UNLIT 2048 | TRANSLUCENT 128 | TWO_SIDED 1024 | PAN_V 524288 | NO_BSP_CUTS 268435456
 add box -29.9 0 12.15 0.2 8.3 16 0 texPath=GameData/Tex/Global/EFX/waterfall_streaks.png texScaleU=1 texScaleV=1 flags=268962944 surfAlpha=0.9 panV=-0.35
 add box 30.1 0 4.15 0.2 8.3 16 0 texPath=GameData/Tex/Global/EFX/waterfall_streaks.png texScaleU=1 texScaleV=1 flags=268962944 surfAlpha=0.9 panV=-0.35
 
-# --- Upper pool (T1), tighter: 20 x 18, rims on three sides, open to the lip ---
+# --- Impact foam: fast band on the receiving water, churn wall, faster than the drop
+add box -27 0 8.45 3 0.2 14 0 texPath=GameData/Tex/Global/EFX/foam.png texScaleU=1 texScaleV=2 flags=788480 surfAlpha=0.9 panU=0.5
+add box -29.6 0 9.4 0.3 2.4 12 0 texPath=GameData/Tex/Global/EFX/waterfall_streaks.png texScaleU=1 texScaleV=1 flags=268962944 surfAlpha=0.55 panV=-1.2
+add box 33 0 0.45 3 0.2 14 0 texPath=GameData/Tex/Global/EFX/foam.png texScaleU=1 texScaleV=2 flags=788480 surfAlpha=0.9 panU=0.5
+add box 30.4 0 1.4 0.3 2.4 12 0 texPath=GameData/Tex/Global/EFX/waterfall_streaks.png texScaleU=1 texScaleV=1 flags=268962944 surfAlpha=0.55 panV=-1.2
+
+# --- Upper pool (T1): 20 x 18, rims on three sides, open to the lip ---
 add box -44 0 16.2 20 0.3 18 0 texPath=GameData/Tex/Global/EFX/water_pool.png texScaleU=1.5 texScaleV=1.5 flags=264320 surfAlpha=0.8 panU=0.04 panV=0.02
 add box -44 9.8 16.3 22 0.6 0.8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=0.5
 add box -44 -9.8 16.3 22 0.6 0.8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=0.5
 add box -54.8 0 16.3 0.8 0.6 19.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.5 texScaleV=1
 
-# --- Middle pool (T2): 26 x 18 ---
-add box 1 0 8.2 26 0.3 18 0 texPath=GameData/Tex/Global/EFX/water_pool.png texScaleU=1.5 texScaleV=1.5 flags=264320 surfAlpha=0.8 panU=0.05 panV=0.03
-add box 1 9.8 8.3 28 0.6 0.8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=0.5
-add box 1 -9.8 8.3 28 0.6 0.8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=0.5
-add box -12.8 0 8.3 0.8 0.6 19.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.5 texScaleV=1
+# --- Middle pool (T2), directly under cascade 1: x -29..-3 ---
+add box -16 0 8.2 26 0.3 18 0 texPath=GameData/Tex/Global/EFX/water_pool.png texScaleU=1.5 texScaleV=1.5 flags=264320 surfAlpha=0.8 panU=0.05 panV=0.03
+add box -16 9.8 8.3 28 0.6 0.8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=0.5
+add box -16 -9.8 8.3 28 0.6 0.8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=0.5
+add box -2.6 0 8.3 0.8 0.6 19.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.5 texScaleV=1
+add box -3.2 0 8.35 0.8 0.2 18 0 texPath=GameData/Tex/Global/EFX/foam.png texScaleU=1 texScaleV=6 flags=788480 surfAlpha=0.6 panU=0.2
 
-# --- Lower basin (T3): 26 x 22 ---
-add box 51 0 0.2 26 0.3 22 0 texPath=GameData/Tex/Global/EFX/water_pool.png texScaleU=1.5 texScaleV=1.5 flags=264320 surfAlpha=0.8 panU=0.06 panV=0.02
-add box 51 11.8 0.3 28 0.6 0.8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=0.5
-add box 51 -11.8 0.3 28 0.6 0.8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=0.5
-add box 64.8 0 0.3 0.8 0.6 23.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.5 texScaleV=1
+# --- Lower basin (T3), directly under cascade 2: x 31..57 ---
+add box 44 0 0.2 26 0.3 22 0 texPath=GameData/Tex/Global/EFX/water_pool.png texScaleU=1.5 texScaleV=1.5 flags=264320 surfAlpha=0.8 panU=0.06 panV=0.02
+add box 44 11.8 0.3 28 0.6 0.8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=0.5
+add box 44 -11.8 0.3 28 0.6 0.8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=0.5
+add box 57.4 0 0.3 0.8 0.6 23.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.5 texScaleV=1
+add box 56.8 0 0.35 0.8 0.2 22 0 texPath=GameData/Tex/Global/EFX/foam.png texScaleU=1 texScaleV=6 flags=788480 surfAlpha=0.6 panU=0.2
 
 # --- Ruined aqueduct over the upper cascade (walkable from T1) ---
 add box -24 -12 13 1.4 10 1.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1
@@ -83,12 +97,12 @@ add box -28.5 0 12.9 1 9.8 4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_0
 add box -27.5 0 13.3 1 10.6 4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1
 
 # --- Stepping stones through the basin (top 0.9, gaps 1.8) ---
-add box 40 0 0.45 2.2 0.9 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=1 texScaleV=1
-add box 44 0 0.45 2.2 0.9 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=1 texScaleV=1
-add box 48 0 0.45 2.2 0.9 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=1 texScaleV=1
-add box 52 0 0.45 2.2 0.9 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=1 texScaleV=1
-add box 56 0 0.45 2.2 0.9 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=1 texScaleV=1
-add box 60 0 0.45 2.2 0.9 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=1 texScaleV=1
+add box 33 0 0.45 2.2 0.9 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=1 texScaleV=1
+add box 37 0 0.45 2.2 0.9 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=1 texScaleV=1
+add box 41 0 0.45 2.2 0.9 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=1 texScaleV=1
+add box 45 0 0.45 2.2 0.9 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=1 texScaleV=1
+add box 49 0 0.45 2.2 0.9 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=1 texScaleV=1
+add box 53 0 0.45 2.2 0.9 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=1 texScaleV=1
 
 # --- Lookout platform + steps + parapet ---
 add box 84 0 1 8 2 20 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1
@@ -101,17 +115,33 @@ add box 87.5 0 2.5 0.6 1 18 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02
 # --- Braziers ---
 add cyl -24 -22 8.6 0.55 0.4 0.6 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
 add cyl -24 22 8.6 0.55 0.4 0.6 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
-add cyl 34 -16 0.6 0.55 0.4 0.6 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
-add cyl 34 16 0.6 0.55 0.4 0.6 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
+add cyl 64 -16 0.6 0.55 0.4 0.6 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
+add cyl 64 16 0.6 0.55 0.4 0.6 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
 
 # --- Ruin fragments: broken walls that give each terrace a silhouette ---
-add box -78 -20 17 14 2 4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
+add box -78 -20 17.35 14 2 4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
 add box -62 34 17.5 10 3 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
 add box -40 -44 16.8 8 1.6 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
 add box -8 34 9 12 2 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
-add box 18 -40 8.7 8 1.4 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
+add box 18 -40 9.35 8 1.4 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
 add box 38 34 0.9 10 1.8 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
-add box 66 -34 0.7 8 1.4 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
+add box 66 -34 1.35 8 1.4 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
+
+# --- Snow drifts (low, wide) near the shelf edges ---
+add box -70 -46 16.35 18 0.7 10 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/04_floor_snow_a5_32.png texScaleU=1 texScaleV=1
+add box -44 40 16.35 14 0.7 8 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/02_floor_snow_a3_32.png texScaleU=1 texScaleV=1
+add box -14 -47 8.35 14 0.7 8 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/03_floor_snow_a4_32.png texScaleU=1 texScaleV=1
+add box 46 -47 0.35 16 0.7 8 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/04_floor_snow_a5_32.png texScaleU=1 texScaleV=1
+add box 70 40 0.35 12 0.7 8 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/02_floor_snow_a3_32.png texScaleU=1 texScaleV=1
+
+# --- Ground decals: 10x10 patches, NO_BSP_CUTS so they never become collision ---
+add pln -80 -20 16.96 0 0 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.6 texScaleV=0.6 flags=268435456
+add pln -64 25 16.96 0 0 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.6 texScaleV=0.6 flags=268435456
+add pln -45 30 16.06 0 0 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.6 texScaleV=0.6 flags=268435456
+add pln -10 -43 8.96 0 0 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.6 texScaleV=0.6 flags=268435456
+add pln 18 -30 8.06 0 0 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.6 texScaleV=0.6 flags=268435456
+add pln 50 -43 0.96 0 0 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.6 texScaleV=0.6 flags=268435456
+add pln 70 -20 0.06 0 0 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.6 texScaleV=0.6 flags=268435456
 
 # --- End ridges: low rock (12 tall) so the sky stays open above the terraces ---
 add box 0 59 5 190 12 2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=2 texScaleV=1
@@ -123,8 +153,8 @@ add box 91 0 5 2 12 118 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png
 playerstart -84 0 16 90
 playerstart 70 0 0 0
 pickup HealthVial -48 0 16.5 30
-pickup ManaVial 1 0 8.4 30
-pickup rifle_01 48 0 1.5 30
+pickup ManaVial -16 0 8.4 30
+pickup rifle_01 62 0 0.7 30
 pickup Ammo 0 25 8.4 30
 pickup Medkit 84 0 2.7 30
 npc Skaarj -70 20 16
@@ -141,14 +171,14 @@ light directional 80 30 25 205 190 215 0.72
 light directional -40 -50 60 105 135 200 0.58
 light point -24 -22 9.4 255 170 70 0.7 12 effect=2
 light point -24 22 9.4 255 170 70 0.7 12 effect=2
-light point 34 -16 1.4 255 170 70 0.7 12 effect=2
-light point 34 16 1.4 255 170 70 0.7 12 effect=2
+light point 64 -16 1.4 255 170 70 0.7 12 effect=2
+light point 64 16 1.4 255 170 70 0.7 12 effect=2
 
 # Zones: names must match the sibling .ozls entity names exactly.
 zone sky -93 -59 -6 93 59 50 1 name=duskfalls_sky gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
 zone water -54 -9 15 -34 9 18 1 name=duskfalls_upper gravity=18 jump=9 terminal=60 water_gravity=7 water_drag=0.92 swim_up=4.5 ladder_speed=6 fly_mult=1.5
-zone water -12 -9 7 14 9 10 1 name=duskfalls_middle gravity=18 jump=9 terminal=60 water_gravity=7 water_drag=0.92 swim_up=4.5 ladder_speed=6 fly_mult=1.5
-zone water 38 -11 -1 64 11 3 1 name=duskfalls_basin gravity=18 jump=9 terminal=60 water_gravity=7 water_drag=0.92 swim_up=4.5 ladder_speed=6 fly_mult=1.5
+zone water -29 -9 7 -3 9 10 1 name=duskfalls_middle gravity=18 jump=9 terminal=60 water_gravity=7 water_drag=0.92 swim_up=4.5 ladder_speed=6 fly_mult=1.5
+zone water 31 -11 -1 57 11 3 1 name=duskfalls_basin gravity=18 jump=9 terminal=60 water_gravity=7 water_drag=0.92 swim_up=4.5 ladder_speed=6 fly_mult=1.5
 zone reverb -27 -13 17 -21 13 22 1 name=duskfalls_aqueduct gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
 
 # Threshold at the upper cascade lip (off both playerstarts).
@@ -163,11 +193,11 @@ ParticleEmitter mist 31 6 0.2 18 2.5 1.8 22 0.2 1.8 230 235 240 190 200 215 -0.5
 ParticleEmitter mist 31 -6 0.2 18 2.5 1.8 22 0.2 1.8 230 235 240 190 200 215 -0.5 8 0 0 1 0
 ParticleEmitter fire -24 -22 8.9 26 0.8 2.6 10 0.35 0.05 255 175 70 255 60 0 -2 5 0 0 1 0
 ParticleEmitter fire -24 22 8.9 26 0.8 2.6 10 0.35 0.05 255 175 70 255 60 0 -2 5 0 0 1 0
-ParticleEmitter fire 34 -16 0.9 26 0.8 2.6 10 0.35 0.05 255 175 70 255 60 0 -2 5 0 0 1 0
-ParticleEmitter fire 34 16 0.9 26 0.8 2.6 10 0.35 0.05 255 175 70 255 60 0 -2 5 0 0 1 0
+ParticleEmitter fire 64 -16 0.9 26 0.8 2.6 10 0.35 0.05 255 175 70 255 60 0 -2 5 0 0 1 0
+ParticleEmitter fire 64 16 0.9 26 0.8 2.6 10 0.35 0.05 255 175 70 255 60 0 -2 5 0 0 1 0
 # Fireflies over the pools
 ParticleEmitter fly -44 0 17.2 2 4 0.3 20 0.1 0.1 255 220 120 255 180 60 0.05 12 0 0 1 0
-ParticleEmitter fly 1 0 9.2 2 4 0.3 20 0.1 0.1 255 220 120 255 180 60 0.05 12 0 0 1 0
+ParticleEmitter fly -16 0 9.2 2 4 0.3 20 0.1 0.1 255 220 120 255 180 60 0.05 12 0 0 1 0
 
 # --- Dressing: pine silhouettes, reeds, rocks ---
 Mesh.Static GameData/Worlds/World_endless_snow/Models/forest/forest_pine_1.glb -80 30 16 20 scale=1.5 tex=GameData/Tex/Global/EFX/tree_pine_needles.png wind=1
@@ -179,30 +209,34 @@ Mesh.Static GameData/Worlds/World_endless_snow/Models/bushes/bush_tall_winter.gl
 Mesh.Static GameData/Worlds/World_endless_snow/Models/bushes/bush_long_winter.glb -40 -15 16 120 scale=1.1 wind=1
 Mesh.Static GameData/Worlds/World_endless_snow/Models/bushes/bush_overgrown_winter.glb 0 15 8 210 scale=1.25 wind=1
 Mesh.Static GameData/Worlds/World_endless_snow/Models/bushes/bush_tall_single_winter.glb 10 -15 8 300 scale=1.15 wind=1
-Mesh.Static GameData/Worlds/World_endless_snow/Models/bushes/bush_long_single_winter.glb 45 14 0 45 scale=1.1 wind=1
-Mesh.Static GameData/Worlds/World_endless_snow/Models/bushes/bush_tall_overgrown_winter.glb 55 -14 0 90 scale=1.2 wind=1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/bushes/bush_long_single_winter.glb 45 18 0 45 scale=1.1 wind=1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/bushes/bush_tall_overgrown_winter.glb 55 -18 0 90 scale=1.2 wind=1
 Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_2m_0.glb -85 -25 16 15 scale=1.1
 Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_4m_1.glb -35 40 16 160 scale=0.9
 Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_2m_2.glb -5 -30 8 95 scale=1.0
 Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_4m_3.glb 25 35 8 40 scale=0.85
-Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_4m_5.glb 50 30 0 220 scale=0.8
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_4m_5.glb 60 30 0 220 scale=0.8
 Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_8m_1.glb 75 -25 0 300 scale=0.7
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_2m_1.glb -88 10 16 60 scale=1.0
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_2m_3.glb -60 -50 16 130 scale=0.95
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_4m_0.glb 30 -50 0 200 scale=0.9
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_2m_4.glb 80 35 0 30 scale=1.0
 
 # NPC patrol loops (server-authoritative on --campaign).
 PathNode t1_a -80 0 16.5 radius=4 next=t1_b
 PathNode t1_b -40 0 16.5 radius=4 next=t1_c
 PathNode t1_c -40 30 16.5 radius=4 next=t1_d
 PathNode t1_d -80 30 16.5 radius=4 next=t1_a
-PathNode t2_a -20 0 8.5 radius=4 next=t2_b
+PathNode t2_a 5 0 8.5 radius=4 next=t2_b
 PathNode t2_b 20 0 8.5 radius=4 next=t2_c
 PathNode t2_c 20 -30 8.5 radius=4 next=t2_d
-PathNode t2_d -20 -30 8.5 radius=4 next=t2_a
-PathNode t3_a 40 0 0.5 radius=4 next=t3_b
-PathNode t3_b 60 0 0.5 radius=4 next=t3_c
-PathNode t3_c 70 -25 0.5 radius=4 next=t3_d
-PathNode t3_d 45 -25 0.5 radius=4 next=t3_a
+PathNode t2_d 5 -30 8.5 radius=4 next=t2_a
+PathNode t3_a 60 0 0.5 radius=4 next=t3_b
+PathNode t3_b 70 0 0.5 radius=4 next=t3_c
+PathNode t3_c 72 -25 0.5 radius=4 next=t3_d
+PathNode t3_d 60 -25 0.5 radius=4 next=t3_a
 
 WindZone -30 -40 8 90 40 26 1 0 0.2 5 0.5
-levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_evening.png GameData/Tex/Global/Sky/sky_evening.png
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_grad_dusk.png GameData/Tex/Global/Sky/sky_grad_dusk.png
 
 # End of OZONE export – KryoArchipel_Severny (Dusk Falls)

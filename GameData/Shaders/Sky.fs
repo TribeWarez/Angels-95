@@ -76,10 +76,28 @@ float fogFactorAt(float dist) {
 
 void main()
 {
-    vec4 sky = texture(texture0, fragTexCoord) * colDiffuse;
-
+    // V COMES FROM WORLD ELEVATION, NOT FROM THE QUAD'S TEXCOORD.
+    //
+    // The six skybox quads do NOT agree on their V mapping. Measured in-client:
+    // at a cube corner the two adjacent walls differ by 33-40 colour levels at the
+    // same screen row, and the outer panels ramp horizontally within a single row
+    // while the wall facing the camera is flat. That is a per-face V offset, which
+    // no texture can fix - a vertically symmetric texture only cancels a flip, not
+    // an offset (tried; it took the step from 41 to 33 levels).
+    //
+    // Elevation is a property of the VIEW RAY, not of any face, so every face (and
+    // the cap) samples the same V for the same direction. That removes the corner
+    // steps and the cap/wall tonal step together, by construction.
+    //
+    // The gradient textures are authored for this: row 0 and row 255 are the
+    // zenith colour, row h/2 is the horizon colour (tools/gen_sky_textures.ps1).
+    // up = +1 (zenith) -> V = 1 -> last row; up = 0 (eye line) -> V = 0.5.
     vec3 toFrag = fragWorldPos - uCamPos;
     float dist = length(toFrag);
+    vec3 dirW = toFrag / max(dist, 0.0001);
+
+    float elevV = clamp(dirW.y * 0.5 + 0.5, 0.0, 1.0);
+    vec4 sky = texture(texture0, vec2(fragTexCoord.x, elevV)) * colDiffuse;
 
     // Term 1: the world's own fog, at this fragment, on the same curve the
     // geometry around it uses. This is the half that guarantees the seam closes.
@@ -100,7 +118,7 @@ void main()
     // Term 2: elevation falloff. 1.0 straight up, 0.0 at the horizon, negative
     // below it (where the fog is total, since you are looking through the most
     // atmosphere). clamp() floors it at 0 rather than letting blend exceed 1.
-    float up = normalize(toFrag).y;
+    float up = dirW.y;
     float clear = clamp(up / max(uSkyHorizonBlend, 0.001), 0.0, 1.0);
 
     finalColor = vec4(mix(sky.rgb, fogColor, fog * (1.0 - clear)), 1.0);

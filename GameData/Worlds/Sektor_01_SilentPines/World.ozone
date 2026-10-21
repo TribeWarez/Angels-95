@@ -51,6 +51,12 @@ add box 85.9 0 11 0.2 22 12 0 texPath=GameData/Tex/Global/EFX/waterfall_streaks.
 add box 80 0 -2.6 12 2 24 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1.5 texScaleV=1.5
 add box 80 0 -0.55 12 0.3 24 0 texPath=GameData/Tex/Global/EFX/water_pool.png texScaleU=1.5 texScaleV=1.5 flags=264320 surfAlpha=0.8 panU=0.05 panV=0.03
 
+# --- Impact foam: fast band on the pool surface, churn wall, shore foam ---
+add box 84 0 -0.28 4 0.25 13 0 texPath=GameData/Tex/Global/EFX/foam.png texScaleU=1 texScaleV=2 flags=788480 surfAlpha=0.9 panU=0.5
+add box 85.6 0 1 0.3 2.4 12 0 texPath=GameData/Tex/Global/EFX/waterfall_streaks.png texScaleU=1 texScaleV=1 flags=268962944 surfAlpha=0.55 panV=-1.2
+add box 80 -11.6 -0.3 12 0.2 0.8 0 texPath=GameData/Tex/Global/EFX/foam.png texScaleU=6 texScaleV=1 flags=788480 surfAlpha=0.75 panU=0.2
+add box 80 11.6 -0.3 12 0.2 0.8 0 texPath=GameData/Tex/Global/EFX/foam.png texScaleU=6 texScaleV=1 flags=788480 surfAlpha=0.75 panU=0.2
+
 # --- Descent: 19 solid columns, 0.9 drop each, from the plateau edge to the floor ---
 add box -68.5 0 8.55 3 17.1 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
 add box -65.5 0 8.1 3 16.2 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
@@ -102,6 +108,13 @@ add box 63 -44 1.8 0.6 3.6 10 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall
 # painted ring at the bounds turned every sightline into a courtyard wall.
 add box 0 72 5 224 12 2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=2 texScaleV=1
 add box 0 -72 5 224 12 2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=2 texScaleV=1
+
+# --- Dirt decals on the valley floor (NO_BSP_CUTS: cosmetic, never collision) ---
+# PNG, not the Jungle .jpg: raylib cannot decode those EXIF JPEGs (they load at
+# the FILEIO layer and then fail with "Data format not supported", silently
+# falling back to a flat colour).
+add pln -40 10 0.06 0 0 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.5 texScaleV=0.5 flags=268435456
+add pln 20 -25 0.06 0 0 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.5 texScaleV=0.5 flags=268435456
 
 # Entities
 playerstart -80 0 18 90
@@ -206,6 +219,6 @@ PathNode east_b 70 -20 1 radius=4 next=east_c
 PathNode east_c 70 20 1 radius=4 next=east_a
 
 WindZone -70 -70 0 86 70 30 1 0 0.25 7 0.5
-levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_day.png GameData/Tex/Global/Sky/sky_day.png
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_grad_day.png GameData/Tex/Global/Sky/sky_grad_day.png
 
 # End of OZONE export – Sektor_01_SilentPines (Terran Prime)
