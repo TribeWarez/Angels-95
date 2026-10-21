@@ -19,7 +19,7 @@ Only the latest tagged release (`b*` tags) is supported for security fixes.
 
 To report privately:
 
-1. Go to **https://github.com/odelyzid/angels-95-omega-tech/security** and
+1. Go to **https://github.com/TribeWarez/Angels-95/security** and
    click **Report a vulnerability**, or
 2. Open a GitHub issue with a `[SECURITY]` prefix and *request it be made
    private* if you are unable to use the Security tab.
