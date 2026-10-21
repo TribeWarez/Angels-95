@@ -1,0 +1,12 @@
+// KryoArchipel_Severny - middle terrace pool (name=duskfalls_middle).
+entity "duskfalls_middle" : skyzone {
+    actions {
+        on_enter {
+            play_sound "GameData/Audio/Sounds/Entities/land.wav"
+            say "The middle terrace - the aqueduct leans over the fall above you"
+        }
+        on_exit {
+            say "Out of the middle pool"
+        }
+    }
+}

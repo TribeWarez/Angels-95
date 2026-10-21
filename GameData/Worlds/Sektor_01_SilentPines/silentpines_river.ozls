@@ -1,0 +1,13 @@
+// Sektor_01_SilentPines - the river crossing (name=silentpines_river).
+// Physics come from the OZONE zone line; this def carries feedback only.
+entity "silentpines_river" : skyzone {
+    actions {
+        on_enter {
+            play_sound "GameData/Audio/Sounds/Entities/land.wav"
+            say "Cold, fast water - the current wants to take your legs"
+        }
+        on_exit {
+            say "Out of the river"
+        }
+    }
+}

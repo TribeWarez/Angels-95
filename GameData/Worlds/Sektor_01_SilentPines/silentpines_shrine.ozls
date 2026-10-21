@@ -1,0 +1,15 @@
+// Sektor_01_SilentPines - the shrine ruins (name=silentpines_shrine).
+// reverb_mix / reverb_decay are decorative today: reverb is driven by
+// ZoneEnvOverrides and SoundManager::UpdateReverb, not by these def stats.
+entity "silentpines_shrine" : skyzone {
+    reverb_mix = 0.30
+    reverb_decay = 1.8
+    actions {
+        on_enter {
+            say "The shrine still holds its echo"
+        }
+        on_exit {
+            say "Out of the shrine"
+        }
+    }
+}

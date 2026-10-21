@@ -1,0 +1,15 @@
+// KryoArchipel_Severny - the ruined aqueduct deck (name=duskfalls_aqueduct).
+// reverb_mix / reverb_decay are decorative today: reverb is driven by
+// ZoneEnvOverrides and SoundManager::UpdateReverb, not by these def stats.
+entity "duskfalls_aqueduct" : skyzone {
+    reverb_mix = 0.35
+    reverb_decay = 2.0
+    actions {
+        on_enter {
+            say "Up on the broken aqueduct - the whole valley is water and dusk"
+        }
+        on_exit {
+            say "Down off the aqueduct"
+        }
+    }
+}

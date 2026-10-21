@@ -1,0 +1,13 @@
+// KryoArchipel_Severny - upper terrace pool (name=duskfalls_upper).
+// Physics come from the OZONE zone line; this def carries feedback only.
+entity "duskfalls_upper" : skyzone {
+    actions {
+        on_enter {
+            play_sound "GameData/Audio/Sounds/Entities/land.wav"
+            say "The upper pool is meltwater - cold enough to stop your breath"
+        }
+        on_exit {
+            say "Out of the upper pool"
+        }
+    }
+}

@@ -1,0 +1,12 @@
+// KryoArchipel_Severny - lower basin (name=duskfalls_basin).
+entity "duskfalls_basin" : skyzone {
+    actions {
+        on_enter {
+            play_sound "GameData/Audio/Sounds/Entities/land.wav"
+            say "The basin roars - cross on the stones or not at all"
+        }
+        on_exit {
+            say "Out of the basin"
+        }
+    }
+}

@@ -1,0 +1,12 @@
+// Sektor_01_SilentPines - the plunge pool under the falls (name=silentpines_pool).
+entity "silentpines_pool" : skyzone {
+    actions {
+        on_enter {
+            play_sound "GameData/Audio/Sounds/Entities/land.wav"
+            say "Spray and thunder - the falls land here"
+        }
+        on_exit {
+            say "Clear of the spray"
+        }
+    }
+}

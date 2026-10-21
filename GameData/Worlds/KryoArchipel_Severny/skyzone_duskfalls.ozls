@@ -1,0 +1,21 @@
+// KryoArchipel_Severny / Dusk Falls - world sky zone (name=duskfalls_sky).
+// Dusk palette: warm low sun meets cold ambient, amber-violet haze.
+entity "duskfalls_sky" : skyzone {
+    fog_color = (0.42, 0.30, 0.38)
+    fog_density = 0.0065
+    ambient_light = (0.30, 0.30, 0.46)
+    skybox = "GameData/Tex/Global/Sky/sky_evening.png"
+    actions {
+        on_enter {
+            set_fog 0.42 0.30 0.38 0.0065
+            set_ambient 0.30 0.30 0.46
+            set_skybox "GameData/Tex/Global/Sky/sky_evening.png"
+            say "Dusk Falls - the terraces go down into the haze"
+        }
+        on_exit {
+            restore_fog
+            restore_skybox
+            say "The falls fade behind you"
+        }
+    }
+}

@@ -1,0 +1,22 @@
+// Sektor_01_SilentPines - world sky zone (name=silentpines_sky in World.ozone).
+// The entity name must match the OZONE zone's name= exactly: the registry scopes
+// world defs by name and the zone.enter event is dispatched by that same key.
+entity "silentpines_sky" : skyzone {
+    fog_color = (0.70, 0.76, 0.70)
+    fog_density = 0.0035
+    ambient_light = (0.55, 0.58, 0.55)
+    skybox = "GameData/Tex/Global/Sky/sky_day.png"
+    actions {
+        on_enter {
+            set_fog 0.70 0.76 0.70 0.0035
+            set_ambient 0.55 0.58 0.55
+            set_skybox "GameData/Tex/Global/Sky/sky_day.png"
+            say "Silent Pines - the gorge opens below the falls"
+        }
+        on_exit {
+            restore_fog
+            restore_skybox
+            say "You leave the gorge behind"
+        }
+    }
+}
