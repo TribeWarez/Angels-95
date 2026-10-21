@@ -128,7 +128,7 @@ lists internet master URLs (http:// or https://), read by
 ## Build identity, master listing and TDM teams
 
 - **`Source/Version.hpp` is the ONE build identity.** `OZ_BUILD_VERSION` is
-  injected by the build (`make BUILD_VERSION=b98`, CI sets it to
+  injected by the build (`make BUILD_VERSION=b99`, CI sets it to
   `${{ github.ref_name }}`) and falls back to `"dev"`. It feeds the AngelServ
   startup log, `--version`, the heartbeat `gamever`, `/status`, LAN discovery,
   the title footer and About. The old `"build b58"` literal and the `"0.2.1"`
@@ -174,10 +174,11 @@ lists internet master URLs (http:// or https://), read by
   a fresh checkout had no `: game` defs and `test_game`/`test_game_state`
   failed at `gm.Loaded()`. `.gitignore` now anchors the root binaries
   (`/Angels95`, `/AngelServ`, …) and the 25 hierarchy files are tracked.
-  **b97 was tagged before that fix and also failed; b98 is the first release
-  that contains the hierarchy + master/versioning/TDM fixes.** Do not rewrite
-  the pushed b97 tag. Fixing the Linux `make test` job is what unblocks the
-  infra, not a master rebuild alone (`Master.cpp` is unchanged since b77).
+  **b97 was tagged before that fix and also failed; b98 carried the fixes but
+  its Linux job then failed at miniz (`ftello`/`fseeko` under `-std=c99`), so
+  its release is Windows-only; b99 is the first COMPLETE release.** Do not
+  rewrite the pushed b97 tag. Fixing the Linux `make test` job is what unblocks
+  the infra, not a master rebuild alone (`Master.cpp` is unchanged since b77).
 
 ## Networked pickups (`PickupPawns` + `PawnSystem::ApplyPickupNetState`)
 Three lists exist and confusing any two of them is what made pickups look broken:

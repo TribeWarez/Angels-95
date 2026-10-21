@@ -45,7 +45,7 @@ Example response:
 ```json
 {"ok":true,"gamename":"angels95","count":1,"servers":[
   {"ip":"159.195.20.100","port":27015,"httpport":8080,"name":"Etherrealm EU",
-   "map":"world_ether","gamever":"b98","proto":2,"players":3,"maxplayers":8,
+   "map":"world_ether","gamever":"b99","proto":2,"players":3,"maxplayers":8,
    "password":false,"lastseen":1790551982}]}
 ```
 
@@ -101,7 +101,7 @@ RTT/status query) at `GET /status`:
 
 ```json
 {"ok":true,"server_name":"Etherrealm EU","players":0,"max_players":8,
- "uptime_seconds":42,"worlds":3,"map":"Dessert_Dreams","gamever":"b98",
+ "uptime_seconds":42,"worlds":3,"map":"Dessert_Dreams","gamever":"b99",
  "proto":2,"password":false}
 ```
 
@@ -114,15 +114,15 @@ Two numbers answer different questions and must not be conflated:
 
 | Field | Example | Meaning | Enforced? |
 |---|---|---|---|
-| `gamever` | `b98` | Build id: the release tag (or `dev` locally) | No — display only |
+| `gamever` | `b99` | Build id: the release tag (or `dev` locally) | No — display only |
 | `proto` | `2` | `net::PROTOCOL_VERSION`, the wire contract | **Yes** — a mismatch is rejected at `CLIENT_AUTH` |
 
 `gamever` used to be the hand-edited literal `0.2.1` in three places, so every
-build claimed the same version and the browser could not tell b94 from b98.
+build claimed the same version and the browser could not tell b94 from b99.
 It is now `oz::kBuildVersion` from `Source/Version.hpp`, stamped by the build:
 
 ```bash
-make BUILD_VERSION=b98 AngelServ        # local
+make BUILD_VERSION=b99 AngelServ        # local
 # CI sets BUILD_VERSION=${GITHUB_REF_NAME} for every job
 ```
 

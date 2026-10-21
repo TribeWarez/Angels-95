@@ -3,12 +3,12 @@
 // Version.hpp — the ONE build-identity definition.
 //
 // The release tag is injected at compile time by the build:
-//   make BUILD_VERSION=b98 ...
+//   make BUILD_VERSION=b99 ...
 //   CI: env BUILD_VERSION=${{ github.ref_name }}
 // The fallback is "dev" so a local build is honestly labelled and can never be
 // mistaken for a release.
 //
-// `gamever` on the wire and in /status is this build id (e.g. "b98"), NOT the
+// `gamever` on the wire and in /status is this build id (e.g. "b99"), NOT the
 // long-lived marketing version. The wire COMPATIBILITY gate is
 // net::PROTOCOL_VERSION in Source/Network/Network.hpp and is reported
 // separately as `proto` in the heartbeat / server list / /status. Keeping the
