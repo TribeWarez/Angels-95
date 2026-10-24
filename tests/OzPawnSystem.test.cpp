@@ -102,6 +102,53 @@ static int test_despawn_all() {
     PASS(); return 0; END_TEST();
 }
 
+static int test_despawn_all_zeroes_stale_handles() {
+    TEST("DespawnAll zeroes released handles, so a smaller next world cannot double-free");
+    // The crash shape: one world loads 14 NPCs, the next loads 12. DespawnAll
+    // walks every slot of the growing m_pawns vector, so the two slots the new
+    // world did not reuse still hold the previous world's handles. Without the
+    // zeroing, the NEXT world change unloads those handles again - and raylib's
+    // UnloadSound frees the AudioBuffer the stale pointer names, a double free.
+    reset_pawn_system();
+    auto& ps = PawnSystem::Instance();
+    PawnDef def;
+    def.name = "StaleSlotBot";
+    def.maxHealth = 10;
+    ps.RegisterDef(def);
+
+    for (int i = 0; i < 14; ++i)
+        CHECK(ps.Spawn({(float)i, 0.0f, 0.0f}, "StaleSlotBot") >= 0);
+    ps.DespawnAll();
+    for (const auto& p : ps.GetPawns()) {
+        CHECK_EQ(p.sprite.id, 0);
+        CHECK_EQ(p.scream.frameCount, 0);
+        CHECK(p.mesh == nullptr);
+    }
+
+    for (int i = 0; i < 12; ++i)
+        CHECK(ps.Spawn({(float)i, 0.0f, 0.0f}, "StaleSlotBot") >= 0);
+    // Simulate the two stale slots a real session has: a non-zero frameCount
+    // with a null buffer is safe to pass to UnloadSound (it null-checks), but it
+    // proves the release path ZEROED the slot afterwards.
+    int stale = 0;
+    for (size_t i = 0; i < ps.GetPawns().size(); ++i) {
+        const Pawn& slot = ps.GetPawns()[i];
+        if (slot.active) continue;
+        Pawn& m = const_cast<Pawn&>(slot);
+        m.scream.stream.buffer = nullptr;
+        m.scream.frameCount = 1;
+        ++stale;
+    }
+    CHECK_EQ(stale, 2);
+
+    ps.DespawnAll();
+    for (const auto& p : ps.GetPawns()) CHECK_EQ(p.scream.frameCount, 0);
+    // A second world load is the one that used to crash; it must be a no-op.
+    ps.DespawnAll();
+    for (const auto& p : ps.GetPawns()) CHECK_EQ(p.scream.frameCount, 0);
+    PASS(); return 0; END_TEST();
+}
+
 static int test_player_starts() {
     TEST("AddPlayerStart and GetFirstPlayerStart");
     auto& ps = PawnSystem::Instance();
@@ -1057,6 +1104,7 @@ int main() {
     failures += test_spawn_unknown_def();
     failures += test_despawn();
     failures += test_despawn_all();
+    failures += test_despawn_all_zeroes_stale_handles();
     failures += test_player_starts();
     failures += test_pickup_crud();
     failures += test_pickup_unlisted_item_no_crash();

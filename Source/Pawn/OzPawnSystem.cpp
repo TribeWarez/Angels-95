@@ -137,6 +137,10 @@ int PawnSystem::Spawn(Vector3 pos, const char* defName) {
     p.forcedClip = -1;
     p.forcedClipTimer = 0.0f;
     p.mesh.reset();
+    // Slots are recycled from m_freeIds. If LEM::Spawn below fails, this must
+    // not keep pointing at the previous occupant's script entity — Spawn() is
+    // the only writer, so an inherited index is silently wrong forever.
+    p.scriptInstanceIndex = -1;
 
     // Load sprite and scream using def paths or convention (with package fallback)
     {
@@ -173,8 +177,20 @@ void PawnSystem::Despawn(int id) {
             if (m_pawns[i].scriptInstanceIndex >= 0)
                 LightningEntityManager::Instance().Despawn(m_pawns[i].scriptInstanceIndex);
 #endif
-            if (m_pawns[i].sprite.id != 0) UnloadTexture(m_pawns[i].sprite);
-            if (m_pawns[i].scream.frameCount != 0) UnloadSound(m_pawns[i].scream);
+            m_pawns[i].scriptInstanceIndex = -1;
+            // ZERO the handles after unloading them. raylib takes the Sound/
+            // Texture2D by value, so its own `frameCount`/`id` reset only touches
+            // the copy — the slot keeps the dead handle. UnloadSound frees the
+            // AudioBuffer it points at, so a second pass over the same slot is a
+            // double free (see DespawnAll).
+            if (m_pawns[i].sprite.id != 0) {
+                UnloadTexture(m_pawns[i].sprite);
+                m_pawns[i].sprite = Texture2D{0};
+            }
+            if (m_pawns[i].scream.frameCount != 0) {
+                UnloadSound(m_pawns[i].scream);
+                m_pawns[i].scream = Sound{0};
+            }
             m_pawns[i].mesh.reset();
             m_pawns[i].active = false;
             m_freeIds.push_back((int)i);
@@ -188,8 +204,23 @@ void PawnSystem::Despawn(int id) {
 // ---------------------------------------------------------------------------
 void PawnSystem::DespawnAll() {
     for (auto& p : m_pawns) {
-        if (p.sprite.id != 0) UnloadTexture(p.sprite);
-        if (p.scream.frameCount != 0) UnloadSound(p.scream);
+        // ZERO every released handle. `m_pawns` is a GROWING vector and this
+        // function walks EVERY slot, including ones the next world does not
+        // reuse: a 14-NPC world followed by a 12-NPC world leaves two slots
+        // holding handles that were already unloaded. UnloadSound frees the
+        // AudioBuffer the stale pointer names, so the next world change freed it
+        // a second time — the crash was a portal transition after a campaign
+        // launch that had first loaded a different (bigger) world. raylib takes
+        // the struct by value, so its internal reset never reaches this slot.
+        if (p.sprite.id != 0) {
+            UnloadTexture(p.sprite);
+            p.sprite = Texture2D{0};
+        }
+        if (p.scream.frameCount != 0) {
+            UnloadSound(p.scream);
+            p.scream = Sound{0};
+        }
+        p.mesh.reset();
         p.active = false;
     }
     m_freeIds.clear();

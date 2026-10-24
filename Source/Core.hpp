@@ -329,6 +329,11 @@ auto LoadWorld()
         PawnSystem::Instance().ClearParticleEmitters();
         PawnSystem::Instance().ClearPathNodes();
         PawnSystem::Instance().ClearWindZones();
+        // Sky zones are per-world too. This call was missing, so every transition
+        // kept the previous world's zones (all worlds are authored near the
+        // origin, so the old zone matched first and won) and leaked its sky
+        // texture. It is also the only in-source caller of ClearSkyZones.
+        PawnSystem::Instance().ClearSkyZones();
         PawnSystem::Instance().DespawnAll();
         OzParticleSimulationManager::Instance().Clear();
         // Reset level metadata so stale settings never leak across worlds
