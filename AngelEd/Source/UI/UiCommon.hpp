@@ -78,6 +78,8 @@ static const wchar_t* CLASS_PROPSPANEL = L"OzPropsPanel";
 static const wchar_t* CLASS_STATSSIDEBAR = L"OzStatsSidebar";
 static const wchar_t* CLASS_LEVELLIST = L"OzLevelList";
 static const wchar_t* CLASS_ANIMPANEL  = L"OzAnimPanel";
+static const wchar_t* CLASS_MATERIALPANEL = L"OzMaterialPanel";
+static const wchar_t* CLASS_MATERIALCANVAS = L"OzMaterialCanvas";
 static const wchar_t* CLASS_KEYMAP    = L"OzKeymap";
 static const int STATS_SIDEBAR_W = 200;
 

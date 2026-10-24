@@ -1,6 +1,7 @@
 entity "automag" : weapon {
     mesh = "automag_lvl1.obj"
     texture = "automag_lvl1_texture.png"
+    icon = "automag_icon.png"
     stats {
         damage = 15
         fire_rate = 0.4
@@ -13,6 +14,13 @@ entity "automag" : weapon {
         // Sound stats: quote-free, space-free asset paths.
         fire_sound = GameData/Audio/Sounds/Guns/machgf3b.wav
         fire_volume = 0.95
+        // The source OBJs are authored muzzle toward +Z (the grip and stock sit
+        // at -Z, the barrel tip at +Z). The view-model's forward is -Z, so the
+        // default rotation pointed the gun back at the camera. A 180 deg yaw is
+        // the whole difference; the offsets are the stock hand position.
+        viewmodel_offset = (0.22, -0.18, 0.45)
+        viewmodel_rot = (0, 180, 0)
+        viewmodel_scale = 1.0
     }
     actions {
         on_fire {

@@ -5,7 +5,8 @@ param(
     [switch]$SkipData,
     [switch]$SkipClean,
     [switch]$Fast,      # incremental rebuild: keep build/ objects (implies -SkipClean)
-    [switch]$Debug      # MODE=debug: -O0 -g for fast compiles + symbols
+    [switch]$Debug,     # MODE=debug: -O0 -g for fast compiles + symbols
+    [switch]$ResetConfig # discard System/*.ini and restore the shipped templates
 )
 
 # -Fast is sugar for -SkipClean (iterate without recompiling the world).
@@ -99,11 +100,26 @@ Write-Step "AngelEd.exe built."
 
 # --- 5. Assemble System/ release ---
 Write-Step "Assembling System/ release..."
-# Ensure clean system directory structure
-if (Test-Path $OUT_DIR) { Remove-Item -Recurse -Force "$OUT_DIR\*" -ErrorAction SilentlyContinue }
+# The .ini files in System/ are USER data, not build output: the player's
+# settings, the editor's window layout and the server's auth tokens. Wiping the
+# directory used to destroy all three on every rebuild. They are skipped by the
+# clean below, restored config files are kept as-is, and a template is only
+# written when one is genuinely missing (fresh checkout). -ResetConfig throws
+# them away and starts from the templates again.
+$ConfigFiles = @('Angels95.ini', 'AngelEd.ini', 'OzServer.ini')
+if (Test-Path $OUT_DIR) {
+    Get-ChildItem -Force $OUT_DIR |
+        Where-Object { $ConfigFiles -notcontains $_.Name } |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+}
 New-Item -ItemType Directory -Force -Path $OUT_DIR | Out-Null
 New-Item -ItemType Directory -Force -Path "$OUT_DIR\Data" | Out-Null
 New-Item -ItemType Directory -Force -Path "$OUT_DIR\Cache" | Out-Null
+if ($ResetConfig) {
+    foreach ($cfg in $ConfigFiles) {
+        Remove-Item "$OUT_DIR\$cfg" -Force -ErrorAction SilentlyContinue
+    }
+}
 
 # Move EXEs (they build to repo root or AngelEd/ subdir)
 if (Test-Path "$PSScriptRoot\Angels95.exe")  { Move-Item -Force "$PSScriptRoot\Angels95.exe"  "$OUT_DIR\Angels95.exe" }  else { Fail "Angels95.exe not found" }
@@ -118,26 +134,32 @@ if (Test-Path $raylibDll) {
     Copy-Item -Force $raylibDll "$OUT_DIR\libraylib.dll"
 }
 
-# Always recreate INI files
+# Create INI templates only when missing, so a rebuild keeps the live files.
+if (-not (Test-Path "$OUT_DIR\Angels95.ini")) {
 @"
-[Video]
-Width=1280
-Height=720
-Fullscreen=0
-VSync=1
+; Angels95 client settings - grouped by concern. The client fills in any key it
+; does not find here and rewrites this file on exit.
+[AngelTech.Window]
+window_width=1280
+window_height=720
+borderless=1
 
-[Settings]
+[AngelTech.Render]
+vsync=1
+msaa=0
+
+[AngelTech.Audio]
 audio_volume=100.000000
+music_volume=100.000000
+sfx_volume=100.000000
 mute=False
-
-[Game]
-ServerIP=127.0.0.1
-ServerPort=27015
 
 [MasterServers]
 Master=http://127.0.0.1:27950
 "@ | Set-Content "$OUT_DIR\Angels95.ini" -Encoding UTF8
+}
 
+if (-not (Test-Path "$OUT_DIR\AngelEd.ini")) {
 @"
 [Editor]
 GridSize=1.0
@@ -148,8 +170,10 @@ ShowGrid=1
 Width=1600
 Height=900
 "@ | Set-Content "$OUT_DIR\AngelEd.ini" -Encoding UTF8
+}
 
- # Create OzServer.ini (AngelServ reads [Server]/[Auth]/[MasterServers])
+# AngelServ reads [Server]/[Auth]/[MasterServers] from System/OzServer.ini.
+if (-not (Test-Path "$OUT_DIR\OzServer.ini")) {
 @"
 ; AngelServ config. CLI flags and env vars override these values.
 [Server]
@@ -172,6 +196,7 @@ public-ip=
 ; UDP heartbeat targets (host[:port], default 27900) and/or http:// URLs
 ; Master=your-master.example.com:27900
 "@ | Set-Content "$OUT_DIR\OzServer.ini" -Encoding UTF8
+}
 
 # Create run scripts
 @"

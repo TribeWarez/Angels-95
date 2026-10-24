@@ -391,8 +391,13 @@ model's loaded skeleton, so a `boneIds`-with-no-skeleton mesh stays static),
 and per-weapon `projectile_mesh` /
 `projectile_submesh` / `projectile_scale` / `projectile_color` for drawn
 tracers. `play_clip` also reaches the view-model when the command matches the
-held weapon def. FBX art is converted via `tools/convert_fbx.ps1` (FBX2glTF) and
-`tools/merge_glb_anims.py` folds Fire/Reload/Idle clips into one `.glb`.
+held weapon def. FBX art is converted via `tools/convert_fbx.ps1` (FBX2glTF).
+Weapons that have sibling animation GLBs (Pistol_01, Rifle_01) take the
+**animated** path: `tools/merge_glb_skins.py` collapses FBX2glTF's one-skin-per-
+mesh-part output into a single skin (raylib supports one), then
+`tools/merge_glb_anims.py` merges the Fire/Reload clips and synthesizes Idle.
+Everything else is flattened to a static mesh. `-NoAnimated` forces the old
+flatten-everything behaviour and strips the clips.
 
 Pickup types come from the LightningScript entity registry (`.ozls` definitions).
 

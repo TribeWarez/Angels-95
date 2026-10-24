@@ -32,6 +32,7 @@ void Mesh::Unload() {
     }
     m_ownedTextures.clear();
     m_baseShaders.clear();
+    m_baseDiffuse.clear();
     m_model = Model{0};
     m_valid = false;
 }
@@ -81,14 +82,46 @@ bool Mesh::Load(const std::string& meshPath, const std::string& texPath,
     }
 
     m_baseShaders.assign((size_t)(m_model.materialCount > 0 ? m_model.materialCount : 0), Shader{0});
-    for (int i = 0; i < m_model.materialCount; i++)
+    m_baseDiffuse.resize((size_t)(m_model.materialCount > 0 ? m_model.materialCount : 0));
+    for (int i = 0; i < m_model.materialCount; i++) {
         m_baseShaders[(size_t)i] = m_model.materials[i].shader;
+        m_baseDiffuse[(size_t)i] = m_model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture;
+    }
 
     m_bounds = GetModelBoundingBox(m_model);
     m_valid = true;
     OZ_INFO("Mesh: loaded '%s' (%d meshes, %d materials)",
             meshResolved.c_str(), m_model.meshCount, m_model.materialCount);
     return true;
+}
+
+void Mesh::BindMaterial(Shader shader) const {
+    if (shader.id == 0) return;
+    const int hasNormal = (m_material.normal.id > 0) ? 1 : 0;
+    const int hasEmissive = (m_material.emissive.id > 0) ? 1 : 0;
+    const float strength = m_material.normalStrength;
+    const float emissiveScale = m_material.emissiveScale;
+    // 1 only on a GPU-skinning build; the CPU path already posed the vertices.
+    const int skinning = NeedsShaderSkinning() ? 1 : 0;
+
+    SetShaderValue(shader, GetShaderLocation(shader, "uHasNormalMap"), &hasNormal, SHADER_UNIFORM_INT);
+    SetShaderValue(shader, GetShaderLocation(shader, "uNormalStrength"), &strength, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(shader, GetShaderLocation(shader, "uHasEmissive"), &hasEmissive, SHADER_UNIFORM_INT);
+    SetShaderValue(shader, GetShaderLocation(shader, "uEmissiveScale"), &emissiveScale, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(shader, GetShaderLocation(shader, "uSkinning"), &skinning, SHADER_UNIFORM_INT);
+    if (hasNormal)
+        SetShaderValueTexture(shader, GetShaderLocation(shader, "normalMap"), m_material.normal);
+    if (hasEmissive)
+        SetShaderValueTexture(shader, GetShaderLocation(shader, "emissiveMap"), m_material.emissive);
+}
+
+void Mesh::ApplyMaterialMaps() {
+    for (int i = 0; i < m_model.materialCount; i++) {
+        const size_t si = (size_t)i;
+        Texture2D tex = m_material.diffuse;
+        if (tex.id == 0 && si < m_baseDiffuse.size()) tex = m_baseDiffuse[si];
+        if (tex.id > 0) m_model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = tex;
+    }
 }
 
 void Mesh::Draw(const MeshTransform& t, Shader litShader) {
@@ -101,6 +134,8 @@ void Mesh::Draw(const MeshTransform& t, Shader litShader) {
             m_model.materials[i].shader = m_baseShaders[(size_t)i];
         }
     }
+    ApplyMaterialMaps();
+    if (litShader.id > 0) BindMaterial(litShader);
 
     DrawModelEx(m_model, t.position, {0.0f, 1.0f, 0.0f}, t.yaw, t.scale, WHITE);
 }
@@ -120,8 +155,15 @@ void Mesh::DrawSubmesh(int index, const MeshTransform& t, Shader litShader, Colo
 
     if (litShader.id > 0) {
         mat.shader = litShader;
+        BindMaterial(litShader);
     } else if ((size_t)matIdx < m_baseShaders.size()) {
         mat.shader = m_baseShaders[(size_t)matIdx];
+    }
+    // Material diffuse for this one slot.
+    {
+        Texture2D tex = m_material.diffuse;
+        if (tex.id == 0 && (size_t)matIdx < m_baseDiffuse.size()) tex = m_baseDiffuse[(size_t)matIdx];
+        if (tex.id > 0) mat.maps[MATERIAL_MAP_DIFFUSE].texture = tex;
     }
     mat.maps[MATERIAL_MAP_DIFFUSE].color = tint;
 
@@ -132,12 +174,36 @@ void Mesh::DrawSubmesh(int index, const MeshTransform& t, Shader litShader, Colo
     DrawMesh(m_model.meshes[index], mat, transform);
 }
 
+void Mesh::DrawSubmeshMatrix(int index, const Matrix& transform, Shader litShader,
+                             Color tint) {
+    if (!m_valid || index < 0 || index >= m_model.meshCount || m_model.materialCount <= 0) return;
+    int matIdx = 0;
+    if (m_model.meshMaterial && index < m_model.meshCount) matIdx = m_model.meshMaterial[index];
+    if (matIdx < 0 || matIdx >= m_model.materialCount) matIdx = 0;
+    Material& mat = m_model.materials[matIdx];
+    if (litShader.id > 0) {
+        mat.shader = litShader;
+        BindMaterial(litShader);
+    } else if ((size_t)matIdx < m_baseShaders.size()) {
+        mat.shader = m_baseShaders[(size_t)matIdx];
+    }
+    {
+        Texture2D tex = m_material.diffuse;
+        if (tex.id == 0 && (size_t)matIdx < m_baseDiffuse.size()) tex = m_baseDiffuse[(size_t)matIdx];
+        if (tex.id > 0) mat.maps[MATERIAL_MAP_DIFFUSE].texture = tex;
+    }
+    mat.maps[MATERIAL_MAP_DIFFUSE].color = tint;
+    DrawMesh(m_model.meshes[index], mat, transform);
+}
+
 void Mesh::DrawMatrix(const Matrix& transform, Shader litShader) {
     if (!m_valid || m_model.meshCount <= 0 || m_model.materialCount <= 0) return;
     for (int i = 0; i < m_model.materialCount; i++) {
         if (litShader.id > 0) m_model.materials[i].shader = litShader;
         else if ((size_t)i < m_baseShaders.size()) m_model.materials[i].shader = m_baseShaders[(size_t)i];
     }
+    if (litShader.id > 0) BindMaterial(litShader);
+    ApplyMaterialMaps();
     for (int i = 0; i < m_model.meshCount; i++) {
         int mi = m_model.meshMaterial ? m_model.meshMaterial[i] : 0;
         if (mi < 0 || mi >= m_model.materialCount) mi = 0;

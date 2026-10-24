@@ -46,6 +46,7 @@ static void CreateEditorMenuBar() {
     AppendMenuA(hView, MF_STRING, IDM_TEXTURE_MGR, menuLabel("&Texture Manager", EdAction::TextureManager).c_str());
     AppendMenuA(hView, MF_STRING, IDM_PAWN_MGR, menuLabel("&Pawn Manager", EdAction::PawnManager).c_str());
     AppendMenuA(hView, MF_STRING, IDM_SCRIPT_MGR, menuLabel("&Script Manager", EdAction::ScriptManager).c_str());
+    AppendMenuA(hView, MF_STRING, IDM_MATERIAL_GRAPH, "Material &Graph Explorer");
     AppendMenuA(hView, MF_SEPARATOR, 0, NULL);
     // No Zone Properties / Light Properties entries. Their per-zone rows live in
     // Entity Properties (right-click a zone or light) and their level-state rows
@@ -58,6 +59,14 @@ static void CreateEditorMenuBar() {
     AppendMenuA(hView, MF_STRING, IDM_WORLD_GRAPH, menuLabel("World &Hierarchy", EdAction::Hierarchy).c_str());
     AppendMenuA(hView, MF_STRING, IDM_LEVEL_LIST, "Level &List / Campaign");
     AppendMenuA(hMenu, MF_POPUP, (UINT_PTR)hView, "&View");
+
+    // Tools. The material graph is authored as text today; these two make the
+    // bake pipeline usable end-to-end from the editor. The node canvas lands in
+    // its own panel next to them.
+    HMENU hTools = CreatePopupMenu();
+    AppendMenuA(hTools, MF_STRING, IDM_BAKE_MATERIALS, "&Bake All Materials");
+    AppendMenuA(hTools, MF_STRING, IDM_RELOAD_MATERIALS, "&Reload Material Textures");
+    AppendMenuA(hMenu, MF_POPUP, (UINT_PTR)hTools, "&Tools");
 
     HMENU hCam = CreatePopupMenu();
     AppendMenuA(hCam, MF_STRING, IDM_RESET_CAM, "&Reset Camera\tHome");

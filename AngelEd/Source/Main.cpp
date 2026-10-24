@@ -141,6 +141,7 @@ int main(int argc, char **argv){
 
     // Initialize package-based asset loading
     PackageAssetLoader::Instance().Init();
+    ozmat::MaterialRegistry::Instance().Init();
 
     // Initialize LightningScript entity registry (loads .ozls pickup defs)
     LightningEntityRegistry::Instance().Init();
@@ -197,8 +198,11 @@ int main(int argc, char **argv){
                 std::string name, sp, sc;
                 std::string modelPath, modelTex, meshType;
                 std::string animIdle, animPatrol, animChase, animReturn, animDeath;
+                std::string animFile;
                 float speed = 1.5f, aggroRange = 6.0f, attackRange = 1.5f, damage = 10.0f;
-                float animSpeed = 1.0f, modelScale = 1.0f;
+                float animSpeed = 1.0f, modelScale = 1.0f, modelYOffset = 0.0f;
+                float hoverAmplitude = 0.35f, hoverSpeed = 1.6f;
+                bool hover = false;
                 int maxHealth = 100;
                 std::string line;
                 while (std::getline(f, line)) {
@@ -235,6 +239,12 @@ int main(int argc, char **argv){
                     else if (key == "anim_return") animReturn = val;
                     else if (key == "anim_death") animDeath = val;
                     else if (key == "anim_speed") animSpeed = std::stof(val);
+                    // Keep in step with Core.hpp: animfile/model_y_offset/hover.
+                    else if (key == "animfile" || key == "anim_file") animFile = val;
+                    else if (key == "model_y_offset") modelYOffset = std::stof(val);
+                    else if (key == "hover") hover = (val == "1" || val == "true" || val == "True" || val == "yes");
+                    else if (key == "hover_amplitude") hoverAmplitude = std::stof(val);
+                    else if (key == "hover_speed") hoverSpeed = std::stof(val);
                 }
                 if (!name.empty()) {
                     PawnDef def;
@@ -256,6 +266,11 @@ int main(int argc, char **argv){
                     def.anim_return = animReturn;
                     def.anim_death = animDeath;
                     def.anim_speed = animSpeed;
+                    def.anim_file = animFile;
+                    def.model_y_offset = modelYOffset;
+                    def.hover = hover;
+                    def.hover_amplitude = hoverAmplitude;
+                    def.hover_speed = hoverSpeed;
                     def.baseDir = std::string(defsDir) + "/";
                     ps.RegisterDef(def);
                     if (!sp.empty())
@@ -2590,6 +2605,7 @@ AngelTechEditor.DrawModel = false;
     if (g_editorLog) fclose(g_editorLog);
     StopSoundPreview();
     OzoneLoader::Instance().Unload();
+    ozmat::MaterialRegistry::Instance().Shutdown();
     UnloadRenderTexture(g_previewRT);
 #ifdef _WIN32
     DestroyAllEditorWindows();

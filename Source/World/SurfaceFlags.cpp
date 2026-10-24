@@ -49,6 +49,7 @@ SurfaceFace FaceFromNormal(float nx, float ny, float nz) {
 bool SurfaceProps::IsNonDefault() const {
     if (flags != 0) return true;
     if (texSlot != 0 || !texPath.empty()) return true;
+    if (!material.empty()) return true;
     if (uvScaleU != 1.0f || uvScaleV != 1.0f) return true;
     if (uvOffsetU != 0.0f || uvOffsetV != 0.0f) return true;
     if (panU != 0.0f || panV != 0.0f) return true;

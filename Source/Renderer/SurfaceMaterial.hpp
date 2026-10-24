@@ -69,6 +69,12 @@ public:
     // brackets the draw with BeginSurfaceState/EndSurfaceState.
     void ApplyUniforms(const surface::SurfaceProps& p);
 
+    // Baked material maps for the face about to be drawn. Applied inside the
+    // next ApplyUniforms call; pass zeroed maps to clear. Surface.fs declares the
+    // same normal/emissive uniforms as LitFog.fs.
+    void SetMaterialMaps(Texture2D diffuse, Texture2D normal, Texture2D emissive,
+                         float normalStrength, float emissiveScale);
+
     // Gain for the full-bright branch (UNLIT / FAKE_LIT / FAKEBACKDROP).
     //
     // This is a PASS-wide setting, not a per-face one, because it exists only to
@@ -116,6 +122,20 @@ private:
     int m_fogDensityLoc = -1;
     int m_fogColorLoc = -1;
     int m_fogIntensityLoc = -1;
+
+    // Material maps (baked .ozmat). Cached here because this program carries its
+    // own copy of every uniform it reads.
+    int m_hasNormalLoc = -1;
+    int m_normalStrengthLoc = -1;
+    int m_normalMapLoc = -1;
+    int m_hasEmissiveLoc = -1;
+    int m_emissiveScaleLoc = -1;
+    int m_emissiveMapLoc = -1;
+    Texture2D m_faceDiffuse{0};
+    Texture2D m_faceNormal{0};
+    Texture2D m_faceEmissive{0};
+    float m_faceNormalStrength = 1.0f;
+    float m_faceEmissiveScale = 1.0f;
 
     float m_fogColor[3] = {0.7f, 0.7f, 0.8f};   // matches Surface.fs's defaults
     float m_fogStart = 10.0f;

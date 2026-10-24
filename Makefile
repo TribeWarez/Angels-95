@@ -149,6 +149,7 @@ OBJS := $(addprefix $(BUILD_DIR)/, \
           LightningScriptContext.o LightningScriptParser.o \
           LightningEntityRegistry.o LightningEntityManager.o \
           LitLightning.o SurfaceMaterial.o Mesh.o SkeletalMesh.o MeshCache.o AnimatedMesh.o OzAnimFormat.o \
+          OzMaterial.o MaterialRegistry.o \
           ViewModel.o PlayerModel.o OzParticleSimulationManager.o rlights.o UiHandler.o \
           PlayerProfile.o \
           EventBus.o TriggerSystem.o ObjectiveSystem.o BoxedTypeRegistry.o \
@@ -247,6 +248,15 @@ $(BUILD_DIR)/OzAnimFormat.o: Source/Package/Anim/OzAnimFormat.cpp Source/Package
 
 $(BUILD_DIR)/AnimatedMesh.o: Source/Renderer/Mesh/AnimatedMesh.cpp Source/Renderer/Mesh/AnimatedMesh.hpp Source/Package/Anim/OzAnimFormat.hpp | $(BUILD_DIR)
 	$(COMP) $(CFLAGS) -c Source/Renderer/Mesh/AnimatedMesh.cpp -o $@
+
+# 5d-mat. Material graph (raylib-free parser/evaluator) + the registry that
+# loads the BAKED maps. Split in two so tests/Material.test.cpp can link the
+# graph without raylib.
+$(BUILD_DIR)/OzMaterial.o: Source/Material/OzMaterial.cpp Source/Material/OzMaterial.hpp | $(BUILD_DIR)
+	$(COMP) $(CFLAGS) -c Source/Material/OzMaterial.cpp -o $@
+
+$(BUILD_DIR)/MaterialRegistry.o: Source/Material/MaterialRegistry.cpp Source/Material/MaterialRegistry.hpp Source/Material/OzMaterial.hpp | $(BUILD_DIR)
+	$(COMP) $(CFLAGS) -c Source/Material/MaterialRegistry.cpp -o $@
 
 $(BUILD_DIR)/ViewModel.o: Source/Renderer/ViewModel.cpp Source/Renderer/ViewModel.hpp | $(BUILD_DIR)
 	$(COMP) $(CFLAGS) -c Source/Renderer/ViewModel.cpp -o $@
@@ -403,7 +413,7 @@ test_entity_manager: tests/LightningEntityManager.test.cpp Source/Script/Lightni
 # OMEGA_PAWNSYSTEM_TEST opts LightningEntityManager.cpp back into the real
 # PawnSystem/raylib melee path (test_pawn_system links raylib + OzPawnSystem.cpp).
 # Without it the file compiles headless and the melee resolution is stubbed out.
-test_pawn_system: tests/OzPawnSystem.test.cpp Source/Pawn/OzPawnSystem.cpp Source/World/ZoneManager.cpp Source/Audio/SoundManager.cpp Source/Physics/OzBsp.cpp Source/Physics/WorldChunk.cpp Source/Physics/PlayerPhysics.cpp Source/Log.cpp Source/Renderer/OzAssetMapper.cpp Source/Script/LightningEntityManager.cpp Source/Script/LightningEntityRegistry.cpp Source/Script/LightningScriptContext.cpp Source/Script/LightningScriptParser.cpp Source/Events/EventBus.cpp Source/Events/ObjectiveSystem.cpp Source/Renderer/Mesh/Mesh.cpp Source/Renderer/Mesh/SkeletalMesh.cpp Source/Renderer/Mesh/MeshCache.cpp Source/Renderer/Mesh/AnimatedMesh.cpp Source/Package/Anim/OzAnimFormat.cpp Source/Particle/OzParticleSimulationManager.cpp Source/Renderer/LitLightning.cpp Source/Renderer/rlights/rlights.cpp
+test_pawn_system: tests/OzPawnSystem.test.cpp Source/Pawn/OzPawnSystem.cpp Source/World/ZoneManager.cpp Source/Audio/SoundManager.cpp Source/Physics/OzBsp.cpp Source/Physics/WorldChunk.cpp Source/Physics/PlayerPhysics.cpp Source/Log.cpp Source/Renderer/OzAssetMapper.cpp Source/Script/LightningEntityManager.cpp Source/Script/LightningEntityRegistry.cpp Source/Script/LightningScriptContext.cpp Source/Script/LightningScriptParser.cpp Source/Events/EventBus.cpp Source/Events/ObjectiveSystem.cpp Source/Renderer/Mesh/Mesh.cpp Source/Renderer/Mesh/SkeletalMesh.cpp Source/Renderer/Mesh/MeshCache.cpp Source/Renderer/Mesh/AnimatedMesh.cpp Source/Package/Anim/OzAnimFormat.cpp Source/Material/OzMaterial.cpp Source/Material/MaterialRegistry.cpp Source/Particle/OzParticleSimulationManager.cpp Source/Renderer/LitLightning.cpp Source/Renderer/rlights/rlights.cpp
 	$(COMP) $(TEST_FLAGS) -DOMEGA_PAWNSYSTEM_TEST $(RAYLIB_INC) -ISource $^ $(BUILD_DIR)/miniz.o -o $@ $(LDFLAGS) $(LDEXTRA)
 
 test_ozone_parser: tests/OzoneParser.test.cpp Source/World/OzoneParser.cpp Source/World/SurfaceFlags.cpp Source/Log.cpp
@@ -472,6 +482,21 @@ test_menu: tests/Menu.test.cpp Source/Menu/MenuMetrics.hpp \
            Source/IniConfig.hpp
 	$(SERVER_CXX) $(TEST_FLAGS) -ISource tests/Menu.test.cpp -o $@
 
+# Client settings INI schema + legacy migration. Raylib-free: it covers the
+# section names ClientSettings.hpp's Load/Save must agree on, the per-key
+# fallback from the old flat [Settings] block, and IniConfig::SaveOrdered's
+# deterministic layout. The raylib-backed statics in Settings.hpp are not
+# touched (they need a window/GL build).
+test_clientsettings: tests/ClientSettings.test.cpp Source/ClientSettingsSchema.hpp Source/IniConfig.hpp
+	$(SERVER_CXX) $(TEST_FLAGS) -ISource tests/ClientSettings.test.cpp -o $@
+
+# Material graph: parse/serialize/hash/evaluate. Raylib-free: textures are
+# decoded through an injected loader, so the graph is testable with synthetic
+# pixels and no GL context. The baker and the runtime registry are covered by
+# building them, not by this suite.
+test_material: tests/Material.test.cpp Source/Material/OzMaterial.cpp Source/Material/OzMaterial.hpp
+	$(SERVER_CXX) $(TEST_FLAGS) -ISource $^ -o $@
+
 # Static auditor for .ozone worlds: it links OzoneParser from the exact
 # single-source-of-truth source, then checks geometry bounds, lighting, mesh
 # scale, asset references, playerstart sanity and zone naming. Pass a world
@@ -525,7 +550,7 @@ TEST_SUITES := test_parser test_context test_registry test_entity_manager \
                test_network test_game_state test_ozanim test_ozls_writer \
                test_autoconvex test_csg test_brushmesh test_surface test_gametype \
                test_editorbus test_assetscope test_events test_game test_gizmomath \
-               test_keybinds test_menu
+               test_keybinds test_menu test_clientsettings test_material
 
 # The editor is built twice from two hand-maintained object lists - AngelEd/Makefile
 # and the inline `g++` list in ci.yml - because CI does not use the Makefile. They
@@ -583,4 +608,4 @@ test: check-editor-objects $(TEST_SUITES) worldcheck
 	@echo "All suites passed."
 
 clean:
-	rm -rf $(BUILD_DIR) *.exe AngelServ Angels95 AngelMaster OzPack *.o AngelEd/*.o AngelEd/Source/*.o test_context test_parser test_registry test_ozone_parser test_join_uri test_master test_network test_game_state test_ozanim test_ozls_writer test_autoconvex test_csg test_brushmesh test_surface test_gametype test_editorbus test_assetscope test_events test_game test_gizmomath test_keybinds test_menu worldcheck
+	rm -rf $(BUILD_DIR) *.exe AngelServ Angels95 AngelMaster OzPack *.o AngelEd/*.o AngelEd/Source/*.o test_context test_parser test_registry test_ozone_parser test_join_uri test_master test_network test_game_state test_ozanim test_ozls_writer test_autoconvex test_csg test_brushmesh test_surface test_gametype test_editorbus test_assetscope test_events test_game test_gizmomath test_keybinds test_menu test_clientsettings worldcheck

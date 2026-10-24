@@ -45,6 +45,7 @@
 #include "Panels/PropsPanel.cpp"
 #include "Panels/StatsSidebar.cpp"
 #include "Panels/AnimPanel.cpp"
+#include "Panels/MaterialPanel.cpp"
 #include "Panels/SurfacePropsPanel.cpp"
 #include "Panels/KeymapPanel.cpp"
 
@@ -78,6 +79,7 @@ static PanelLayoutBinding kLayoutBindings[] = {
     {"props",    &g_editorPanels.hPropsPanel,     &g_editorPanels.propsPanelPos},
     {"level",    &g_editorPanels.hLevelList,      &g_editorPanels.levelListPos},
     {"anim",     &g_editorPanels.hAnimPanel,      &g_editorPanels.animPanelPos},
+    {"material", &g_editorPanels.hMaterialPanel,  &g_editorPanels.materialPanelPos},
     {"surface",  &g_editorPanels.hSurfaceProps,   &g_editorPanels.surfacePropsPos},
     {"keymap",   &g_editorPanels.hKeymap,         &g_editorPanels.keymapPos},
 };
@@ -214,6 +216,19 @@ void CreateAllEditorWindows(void* hInst, void* hRaylibWnd) {
         RegisterClassEx(&wc);
     }
 
+    // Material graph canvas (GDI node/edge drawing).
+    {
+        WNDCLASSEX wc = {};
+        wc.cbSize = sizeof(WNDCLASSEX);
+        wc.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
+        wc.lpfnWndProc = MatCanvasProc;
+        wc.hInstance = (HINSTANCE)hInst;
+        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+        wc.lpszClassName = CLASS_MATERIALCANVAS;
+        RegisterClassEx(&wc);
+    }
+
     RegisterPanelClass(CLASS_PAWNNMGR, PawnMgrProc, (HINSTANCE)hInst);
     RegisterPanelClass(CLASS_SCRIPTMGR, ScriptMgrProc, (HINSTANCE)hInst);
     RegisterPanelClass(CLASS_MODELBRW, ModelBrwProc, (HINSTANCE)hInst);
@@ -223,6 +238,7 @@ void CreateAllEditorWindows(void* hInst, void* hRaylibWnd) {
     RegisterPanelClass(CLASS_WORLDGRAPH, WorldGraphProc, (HINSTANCE)hInst);
     RegisterPanelClass(CLASS_PROPSPANEL, PropsPanelProc, (HINSTANCE)hInst);
     RegisterPanelClass(CLASS_ANIMPANEL, AnimPanelProc, (HINSTANCE)hInst);
+    RegisterPanelClass(CLASS_MATERIALPANEL, MaterialPanelProc, (HINSTANCE)hInst);
     RegisterPanelClass(CLASS_LEVELLIST, LevelListProc, (HINSTANCE)hInst);
     RegisterPanelClass(CLASS_KEYMAP, KeymapProc, (HINSTANCE)hInst);
     RegisterPanelClass(CLASS_SURFACEPROPS, SurfacePropsProc, (HINSTANCE)hInst);
@@ -262,6 +278,7 @@ void CreateAllEditorWindows(void* hInst, void* hRaylibWnd) {
     create(CLASS_WORLDGRAPH,  L"World Hierarchy",      g_editorPanels.worldGraphPos,       g_editorPanels.hWorldGraph);
     create(CLASS_PROPSPANEL,  L"Entity Properties",    g_editorPanels.propsPanelPos,        g_editorPanels.hPropsPanel);
     create(CLASS_ANIMPANEL,   L"Animation",            g_editorPanels.animPanelPos,         g_editorPanels.hAnimPanel);
+    create(CLASS_MATERIALPANEL,L"Material Graph",       g_editorPanels.materialPanelPos,     g_editorPanels.hMaterialPanel);
     create(CLASS_LEVELLIST,   L"Level List / Campaign",g_editorPanels.levelListPos,         g_editorPanels.hLevelList);
     create(CLASS_KEYMAP,      L"Keyboard Shortcuts",   g_editorPanels.keymapPos,            g_editorPanels.hKeymap);
     create(CLASS_SURFACEPROPS,L"Surface Properties",    g_editorPanels.surfacePropsPos,     g_editorPanels.hSurfaceProps);
@@ -314,6 +331,7 @@ void DestroyAllEditorWindows() {
     destroy(g_editorPanels.hTextureMgr);
     destroy(g_editorPanels.hPawnMgr);
     destroy(g_editorPanels.hAnimPanel);
+    destroy(g_editorPanels.hMaterialPanel);
     destroy(g_editorPanels.hScriptMgr);
     destroy(g_editorPanels.hModelBrowser);
     destroy(g_editorPanels.hPickupPanel);
@@ -355,6 +373,7 @@ static bool EditorUi_IsPanel(HWND h) {
         g_editorPanels.hScriptMgr, g_editorPanels.hModelBrowser, g_editorPanels.hPickupPanel,
         g_editorPanels.hNodePanel, g_editorPanels.hHeightmapEditor, g_editorPanels.hWorldGraph,
         g_editorPanels.hPropsPanel, g_editorPanels.hLevelList, g_editorPanels.hAnimPanel,
+        g_editorPanels.hMaterialPanel,
         g_editorPanels.hSurfaceProps, g_editorPanels.hKeymap, g_editorPanels.hStatsSidebar,
     };
     for (void* p : panels)

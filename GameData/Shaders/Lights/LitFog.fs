@@ -13,6 +13,16 @@ uniform sampler2D DetailTexture;
 uniform vec2 DetailScale = vec2(16.0);
 uniform float DetailBlend = 0.3;
 
+// --- baked material maps (Material/OzMaterial.hpp) --------------------------
+// Defaults keep every existing draw identical: no material = no normal/emissive
+// sampling at all. The C++ uploads these per draw in oz::Mesh::BindMaterial.
+uniform sampler2D normalMap;
+uniform int   uHasNormalMap = 0;
+uniform float uNormalStrength = 1.0;
+uniform sampler2D emissiveMap;
+uniform int   uHasEmissive = 0;
+uniform float uEmissiveScale = 1.0;
+
 out vec4 finalColor;
 
 #define MAX_LIGHTS 32
@@ -149,6 +159,29 @@ float fogFactorAt(float dist) {
     return min(expo, ramp);
 }
 
+// Tangent-space normal map. raylib's glTF loader does not give the engine a
+// tangent attribute, so build a TBN from screen-space derivatives of the world
+// position and UV. Returns the geometric normal unchanged when no material is
+// bound or the derivatives degenerate (flat/degenerate UVs), which is what keeps
+// every non-material surface pixel-identical to before.
+vec3 applyNormalMap(vec3 N, vec2 uv) {
+    if (uHasNormalMap == 0) return N;
+    vec3 dp1 = dFdx(fragWorldPos);
+    vec3 dp2 = dFdy(fragWorldPos);
+    vec2 duv1 = dFdx(uv);
+    vec2 duv2 = dFdy(uv);
+    vec3 dp2perp = cross(dp2, N);
+    vec3 dp1perp = cross(N, dp1);
+    vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+    vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+    float m = max(dot(T, T), dot(B, B));
+    if (m < 1e-10) return N;
+    float inv = inversesqrt(m);
+    vec3 n = texture(normalMap, uv).xyz * 2.0 - 1.0;
+    n.xy *= uNormalStrength;
+    return normalize(mat3(T * inv, B * inv, N) * n);
+}
+
 void main()
 {
     vec4 baseColor = texture(texture0, fragTexCoord);
@@ -160,7 +193,7 @@ void main()
         baseColor.rgb = mix(baseColor.rgb, baseColor.rgb * detailColor.rgb, DetailBlend);
     }
 
-    vec3 normal = normalize(fragNormal);
+    vec3 normal = applyNormalMap(normalize(fragNormal), fragTexCoord);
     vec3 viewDir = normalize(viewPos - fragPosition);
     vec3 lightAccum = vec3(0.0);
     vec3 specAccum = vec3(0.0);
@@ -210,6 +243,11 @@ void main()
 
     vec3 litColor = baseColor.rgb * ((colDiffuse.rgb + specAccum) * lightAccum);
     litColor += baseColor.rgb * (ambient.rgb / 10.0) * colDiffuse.rgb;
+
+    // Baked emissive gate: added BEFORE gamma so an authored glow is an additive
+    // light contribution rather than a washed-out overlay.
+    if (uHasEmissive == 1)
+        litColor += texture(emissiveMap, fragTexCoord).rgb * uEmissiveScale;
 
     // Gamma
     litColor = pow(litColor, vec3(1.0 / 2.2));

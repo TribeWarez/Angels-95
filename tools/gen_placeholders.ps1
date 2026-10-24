@@ -215,6 +215,49 @@ $gfx.Dispose(); $bmp.Dispose()
 Write-Host '  etheral_waver_icon.png'
 }
 
+# ------------------------------------------------------------------ automag icon
+# Same shape of bug as etheral_waver: the automag def shipped no `icon` and the
+# folder carried no icon asset, so the hotbar/slotbar cell for it was blank. A
+# compact SMG silhouette (the def's mesh is a 2.7-unit submachine gun).
+$autoDir = Ensure 'GameData\Tex\Global\Gun\automag'
+$autoIcon = Join-Path $autoDir 'automag_icon.png'
+if (Test-Path $autoIcon) { Write-Host "  (exists) $autoIcon" } else {
+$bmp = New-Object System.Drawing.Bitmap(128, 64)
+$gfx = [System.Drawing.Graphics]::FromImage($bmp)
+$gfx.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+$gfx.Clear([System.Drawing.Color]::Transparent)
+$sil = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(240, 245, 245, 255))
+# Receiver + barrel.
+$gfx.FillRectangle($sil, 30, 21, 62, 15)
+$gfx.FillRectangle($sil, 92, 25, 26, 6)
+# Front sight and rear sight.
+$gfx.FillRectangle($sil, 112, 21, 4, 4)
+$gfx.FillRectangle($sil, 96, 18, 6, 4)
+# Stock behind the receiver.
+$stock = @(
+    (New-Object System.Drawing.Point(30, 24)),
+    (New-Object System.Drawing.Point(12, 30)),
+    (New-Object System.Drawing.Point(12, 36)),
+    (New-Object System.Drawing.Point(30, 36))
+)
+$gfx.FillPolygon($sil, $stock)
+# Pistol grip and magazine.
+$grip = @(
+    (New-Object System.Drawing.Point(58, 36)),
+    (New-Object System.Drawing.Point(74, 36)),
+    (New-Object System.Drawing.Point(68, 58)),
+    (New-Object System.Drawing.Point(50, 58))
+)
+$gfx.FillPolygon($sil, $grip)
+$gfx.FillRectangle($sil, 78, 36, 12, 20)
+# Trigger guard.
+$guard = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(240, 245, 245, 255), 3)
+$gfx.DrawArc($guard, 70, 34, 16, 14, 0, 180)
+$bmp.Save($autoIcon, [System.Drawing.Imaging.ImageFormat]::Png)
+$gfx.Dispose(); $bmp.Dispose(); $sil.Dispose(); $guard.Dispose()
+Write-Host '  automag_icon.png'
+}
+
 # ------------------------------------------------------------------- spell icons
 $skills = Ensure 'GameData\Tex\Global\Skills'
 $spells = @(

@@ -696,7 +696,7 @@ struct PickupTestServer {
     std::vector<std::string> log;
 
     void send_snapshot(const net::NetworkPlayer& player, int world_index) {
-        gs.for_each_active_pickup(world_index, [&](WorldState&, ServerPickup& p) {
+        gs.for_each_pickup(world_index, [&](WorldState&, ServerPickup& p) {
             net::PickupRespawnData prd{};
             prd.pickup_id = p.id;
             prd.world_index = world_index;
@@ -704,6 +704,7 @@ struct PickupTestServer {
             prd.type = static_cast<int>(p.type);
             prd.value = p.value;
             strncpy(prd.typeName, p.typeName, sizeof(prd.typeName) - 1);
+            prd.active = p.active ? 1 : 0;
             net::NetworkMessage m{};
             m.magic = net::MAGIC;
             m.type = static_cast<uint32_t>(net::MessageType::PICKUP_RESPAWN);
@@ -987,6 +988,89 @@ static int test_pickup_respawn_tail_is_optional() {
         CHECK_EQ(p[0].value, 7);
         // Absent tail reads as empty, never as garbage or an over-read.
         CHECK_STR(p[0].typeName, "");
+        // ...and an absent `active` tail means ACTIVE (a legacy server only ever
+        // sent live pickups), never hidden.
+        CHECK(p[0].active);
+    }
+    client.disconnect();
+    server.stop();
+    PASS(); return 0; END_TEST();
+}
+
+static int test_pickup_snapshot_carries_inactive_state() {
+    TEST("pickup snapshot includes consumed entries so they are hidden, not uncollectable");
+    // The server contract: for_each_pickup walks consumed entries too. Sending
+    // active ones only is why a rifle another player had already taken stayed
+    // DRAWN on a joiner's screen forever (the client renders its own World.ozone
+    // copy) while every walk-over was refused NOT_FOUND.
+    {
+        GameState gs;
+        WorldState ws = make_test_world(0);
+        ServerPickup live{};
+        live.id = 1;
+        live.type = PickupType::COIN;
+        live.value = 1;
+        live.active = true;
+        ServerPickup taken{};
+        taken.id = 2;
+        taken.type = PickupType::WEAPON;
+        taken.active = false;
+        strncpy(taken.typeName, "rifle_01", sizeof(taken.typeName) - 1);
+        ws.global_pickups.push_back(live);
+        ws.global_pickups.push_back(taken);
+        gs.worlds().push_back(ws);
+
+        int seen = 0, inactive = 0;
+        gs.for_each_pickup(0, [&](WorldState&, ServerPickup& p) {
+            seen++;
+            if (!p.active) inactive++;
+        });
+        CHECK_EQ(seen, 2);
+        CHECK_EQ(inactive, 1);
+    }
+
+    // The wire contract: the optional trailing `active` byte is honoured, and 0
+    // reaches the client as "hidden". Without it the client keeps the node live.
+    const uint16_t port = find_free_port_for_test();
+    CHECK(port != 0);
+
+    net::NetworkServer server;
+    int seed = 0;
+    net::ServerCallbacks scb;
+    scb.on_player_join = [&server, &seed](net::NetworkPlayer& pl) {
+        net::PickupRespawnData prd{};
+        prd.pickup_id = 9;
+        prd.world_index = 0;
+        prd.position = {4.0f, 5.0f, 6.0f};
+        prd.type = static_cast<int>(PickupType::WEAPON);
+        prd.value = 1;
+        strncpy(prd.typeName, "rifle_01", sizeof(prd.typeName) - 1);
+        prd.active = 0;   // already collected by someone else
+        net::NetworkMessage m{};
+        m.magic = net::MAGIC;
+        m.type = static_cast<uint32_t>(net::MessageType::PICKUP_RESPAWN);
+        m.size = sizeof(prd);
+        m.sequence = 0;
+        m.timestamp = 0;
+        memcpy(m.payload, &prd, sizeof(prd));
+        server.send_message(const_cast<net::NetworkPlayer&>(pl), m);
+        ++seed;
+    };
+    server.set_callbacks(scb);
+    CHECK(server.init(port));
+    CHECK(server.start());
+
+    OmegaClient client;
+    CHECK(client.connect("127.0.0.1", port));
+    CHECK(pump_until(server, client, [&] {
+        return seed > 0 && !client.pickups().empty();
+    }));
+    {
+        auto p = client.pickups();
+        CHECK_EQ(p.size(), (size_t)1);
+        CHECK_EQ(p[0].id, 9);
+        CHECK(!p[0].active);
+        CHECK_STR(p[0].typeName, "rifle_01");
     }
     client.disconnect();
     server.stop();
@@ -1552,6 +1636,7 @@ int main() {
     failures += test_seed_pickup_ids_are_file_order();
     failures += test_collect_pickup_reject_reasons();
     failures += test_pickup_respawn_tail_is_optional();
+    failures += test_pickup_snapshot_carries_inactive_state();
     failures += test_pickup_net_state_is_world_scoped();
     failures += test_pickup_loopback_roundtrip();
     failures += test_pickup_state_cleared_on_disconnect();

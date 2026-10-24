@@ -1,0 +1,28 @@
+# angels95-master.service - the in-repo master/listing server (AngelMaster).
+#
+# The PUBLIC listing at angels95.tribewarez.com is served by the separate
+# TribeWarez/angels95-master-server repository. This unit deploys the same
+# protocol from this tree, which is what the CI deploy job ships alongside
+# AngelServ; point clients at it with `--master-http http://<host>:27950/api/heartbeat`
+# (or put an HTTPS reverse proxy in front of the HTTP port).
+#
+#   sudo cp System/angels95-master.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now angels95-master
+#
+# The deploy workflow renders /srv/angels95 to the configured install root, so
+# do not hand-edit the path here without changing DEPLOY_PATH too.
+[Unit]
+Description=Angels95 master server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/angels95
+# No game data dependency: this process only stores heartbeats.
+ExecStart=/srv/angels95/System/AngelMaster --bind 0.0.0.0 --port 27900 --http-port 27950
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

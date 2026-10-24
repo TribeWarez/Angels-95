@@ -7,6 +7,9 @@
 // single TU for AngelEd's core layer. See Wiki/Editor-Architecture-Refactor.md.
 // =============================================================================
 
+#include "../Resources/MaterialBake.hpp"
+#include "../../../Source/Material/MaterialRegistry.hpp"
+
 // ---------------------------------------------------------------------------
 // Accessors for WorldGraph panel (called from Win32Dialogs.cpp)
 // ---------------------------------------------------------------------------
@@ -88,6 +91,19 @@ static LRESULT CALLBACK EditorWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             case IDM_VIEW_PERSPECTIVE: SetViewPerspective(); return 0;
             case IDM_WORLD_GRAPH:   ToggleWorldGraph(); return 0;
             case IDM_LEVEL_LIST:    ShowLevelList(!g_editorPanels.showLevelList); RefreshLevelList(); return 0;
+            case IDM_MATERIAL_GRAPH: ShowMaterialGraph(!g_editorPanels.showMaterialPanel); return 0;
+            case IDM_BAKE_MATERIALS: {
+                std::string log;
+                const int n = BakeAllMaterials(&log);
+                ozmat::MaterialRegistry::Instance().Reload();
+                EditorLog("Material bake: %d file(s) from %s\n%s", n, MaterialBakeDir(), log.c_str());
+                MessageBoxA(NULL, log.empty() ? "No .ozmat files found." : log.c_str(),
+                            "Bake All Materials", MB_OK | MB_ICONINFORMATION);
+            } return 0;
+            case IDM_RELOAD_MATERIALS:
+                ozmat::MaterialRegistry::Instance().Reload();
+                EditorLog("Materials reloaded (%d)", (int)ozmat::MaterialRegistry::Instance().All().size());
+                return 0;
             case IDM_KEYMAP:        ShowKeymapPanel(!g_editorPanels.showKeymap); return 0;
             case IDM_ABOUT:         MessageBoxA(NULL, "AngelEd v1.0\nOzWorld Editor\nBased on OmegaTech\nTribeWarez 2026", "About AngelEd", MB_OK | MB_ICONINFORMATION); return 0;
             case IDM_UNDO:          HistoryUndo(); return 0;

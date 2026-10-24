@@ -43,6 +43,7 @@ void ApplySurfaceEdits(const std::vector<ed::Event>& events) {
                 // the one field the payload did not carry was the one field that
                 // could be applied to faces other than the ones on screen.
                 p.texPath    = se.texPath;
+                p.material   = se.material;
 
                 // A flag with no companion value is inert: Masked without a cutoff,
                 // Glow without a colour, a pan flag with zero speed. Surface.fs

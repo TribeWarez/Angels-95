@@ -155,6 +155,9 @@ static bool ParseSurfaceField(const std::string& key, const std::string& val,
     if (numI("texSlot", p.texSlot))   return true;
     if (numI("surfTexSlot", p.texSlot)) return true;
     if (f("tex") || f("surfTex"))         { p.texPath = val; return true; }
+    // Baked material graph: brush-wide `surfMaterial=` / `material=`, or
+    // per-face `face<name>_material=`. Value is a material NAME, not a path.
+    if (f("material") || f("surfMaterial")) { p.material = val; return true; }
     if (numF("panU", p.panU))         return true;
     if (numF("panV", p.panV))         return true;
     if (f("pan")) {
@@ -508,6 +511,7 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
                         continue;
                     }
                     if (s.rfind("tex=", 0) == 0) { prim.texPath = s.substr(4); continue; }
+                    if (s.rfind("material=", 0) == 0) { prim.materialName = s.substr(9); continue; }
                     if (s.rfind("animfile=", 0) == 0) { prim.animFile = s.substr(9); continue; }
                     if (s.rfind("anim=", 0) == 0) { prim.animClip = s.substr(5); continue; }
                     if (s.rfind("speed=", 0) == 0) {

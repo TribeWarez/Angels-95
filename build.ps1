@@ -8,7 +8,8 @@ param(
     [switch]$SkipData,
     [switch]$SkipClean,
     [switch]$Fast,      # incremental rebuild: keep build/ objects (implies -SkipClean)
-    [switch]$Debug      # MODE=debug: -O0 -g for fast compiles + symbols
+    [switch]$Debug,     # MODE=debug: -O0 -g for fast compiles + symbols
+    [switch]$ResetConfig # discard System/*.ini and restore the shipped templates
 )
 
 # -Fast is sugar for -SkipClean (iterate without recompiling the world).
@@ -146,22 +147,33 @@ Move-Item -Force "$PSScriptRoot\OzPack.exe"    "$OUT_DIR\OzPack.exe"
 Move-Item -Force "$PSScriptRoot\AngelMaster.exe" "$OUT_DIR\AngelMaster.exe"
 Move-Item -Force "$PSScriptRoot\AngelEd\AngelEd.exe" "$OUT_DIR\AngelEd.exe"
 
-# Copy/create INI files
+# Copy/create INI files.
+# These are USER data - player settings, the editor's window layout and the
+# server's auth tokens - not build output, so a template is written only when
+# the file is missing. -ResetConfig deletes them first to restore defaults.
+if ($ResetConfig) {
+    foreach ($cfg in @('Angels95.ini', 'AngelEd.ini', 'OzServer.ini')) {
+        Remove-Item "$OUT_DIR\$cfg" -Force -ErrorAction SilentlyContinue
+    }
+}
 if (-not (Test-Path "$OUT_DIR\Angels95.ini")) {
     @"
-[Video]
-Width=1280
-Height=720
-Fullscreen=0
-VSync=1
+; Angels95 client settings - grouped by concern. The client fills in any key it
+; does not find here and rewrites this file on exit.
+[AngelTech.Window]
+window_width=1280
+window_height=720
+borderless=1
 
-[Settings]
+[AngelTech.Render]
+vsync=1
+msaa=0
+
+[AngelTech.Audio]
 audio_volume=100.000000
+music_volume=100.000000
+sfx_volume=100.000000
 mute=False
-
-[Game]
-ServerIP=127.0.0.1
-ServerPort=27015
 
 [MasterServers]
 Master=http://127.0.0.1:27950

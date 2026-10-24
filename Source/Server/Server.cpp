@@ -106,6 +106,10 @@ static net::PickupRespawnData make_pickup_respawn(const ServerPickup& p, int wor
     // and ship stack garbage on the wire.
     strncpy(prd.weapon_def_name, p.weapon_def_name, sizeof(prd.weapon_def_name) - 1);
     strncpy(prd.typeName, p.typeName, sizeof(prd.typeName) - 1);
+    // Optional tail: tells the client whether this pickup is still on the floor.
+    // The snapshot sends inactive entries too (see for_each_pickup) so a pickup
+    // someone else consumed is HIDDEN instead of staying drawn and uncollectable.
+    prd.active = p.active ? 1 : 0;
     return prd;
 }
 
@@ -122,24 +126,32 @@ static void send_pickup_respawn_msg(const net::NetworkPlayer& player,
     g_game_server->send_message(const_cast<net::NetworkPlayer&>(player), msg);
 }
 
-// Re-send every ACTIVE pickup in one world to a single player. This is the
-// self-heal path: pickups are otherwise only sent on join and on respawn, so a
-// single lost UDP datagram left a pickup drawn on the floor that could never be
+// Re-send EVERY pickup in one world to a single player, active or not. This is
+// the self-heal path: pickups are otherwise only sent on join and on respawn, so
+// a single lost UDP datagram left a pickup drawn on the floor that could never be
 // collected again for the rest of the session.
 //
 // Scoped to ONE world on purpose — the join snapshot walked every loaded world
 // (all shipped worlds are authored near the origin), which is a lot of traffic
 // for state the client cannot use. Each player gets the world it is standing in.
+//
+// Inactive entries must be included, not skipped: the client draws its own copy
+// of every `pickup` line in World.ozone, so a pickup another player already took
+// is only removed from the client's screen if the server tells it the id is
+// consumed. Sending active ones only is why a rifle someone else had collected
+// stayed drawn and could never be picked up (the collect was refused NOT_FOUND
+// on every walk-over, and each refusal re-sent the same active-only snapshot).
 static void send_pickup_snapshot(const net::NetworkPlayer& player, int world_index) {
-    int synced = 0;
-    g_game_state.for_each_active_pickup(world_index, [&](WorldState& ws, ServerPickup& p) {
+    int synced = 0, inactive = 0;
+    g_game_state.for_each_pickup(world_index, [&](WorldState& ws, ServerPickup& p) {
         (void)ws;
         send_pickup_respawn_msg(player, world_index, p);
         synced++;
+        if (!p.active) inactive++;
     });
     if (synced)
-        OZ_INFO("Re-synced %d pickup(s) in world %d to player %s",
-                synced, world_index, player.name);
+        OZ_INFO("Re-synced %d pickup(s) in world %d to player %s (%d inactive)",
+                synced, world_index, player.name, inactive);
 }
 
 // World-list JSON for a joining player, clamped to the network payload size so
@@ -1182,6 +1194,18 @@ int main(int argc, char** argv) {
 
     // Scan worlds
     scan_worlds(g_gamedata_dir + "/Worlds");
+
+    // The scan order is the FILESYSTEM's, and "world 0" is what every plain
+    // co-op joiner is placed in (add_player -> world_index 0). Windows'
+    // FindFirstFile returns names in index order, but Linux/readdir returns
+    // directory-hash order, so a server built from the same archive started in a
+    // different world depending on the host — the deployed fleet kept landing in
+    // Dessert_Dreams while a local Windows build landed in Aethelgard_Ruins, and
+    // since the client's scene handshake follows `active_world`, every join was
+    // yanked into that arbitrary world. Sort once, here, so the list is a
+    // stable, documented order on every platform and the map a server reports
+    // (current_map_name) is the map players actually get.
+    std::sort(g_world_list.begin(), g_world_list.end());
 
     // Load the game hierarchy and the world state BEFORE binding anything. The
     // hierarchy is needed by GameManager (and therefore by --mission

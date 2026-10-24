@@ -149,6 +149,7 @@ void ExportToOzone(std::ostream& output) {
             if (d.texSlot > 0) output << " surfTexSlot=" << d.texSlot;
             if (!d.texPath.empty() && r->texPath.empty())
                 output << " surfTex=" << MakeWorldRelativePath(d.texPath);
+            if (!d.material.empty()) output << " surfMaterial=" << d.material;
             if (d.panU != 0.0f) output << " panU=" << d.panU;
             if (d.panV != 0.0f) output << " panV=" << d.panV;
             if (d.alpha != 1.0f) output << " surfAlpha=" << d.alpha;
@@ -169,6 +170,8 @@ void ExportToOzone(std::ostream& output) {
                 if (p.texSlot != d.texSlot)  output << " " << pfx << "texSlot=" << p.texSlot;
                 if (p.texPath != d.texPath)
                     output << " " << pfx << "tex=" << MakeWorldRelativePath(p.texPath);
+                if (p.material != d.material)
+                    output << " " << pfx << "material=" << p.material;
                 if (p.uvScaleU != d.uvScaleU)  output << " " << pfx << "uvScaleU=" << p.uvScaleU;
                 if (p.uvScaleV != d.uvScaleV)  output << " " << pfx << "uvScaleV=" << p.uvScaleV;
                 if (p.uvOffsetU != d.uvOffsetU) output << " " << pfx << "uvOffsetU=" << p.uvOffsetU;
@@ -363,6 +366,7 @@ void ExportToOzone(std::ostream& output) {
         if (!m.texturePath.empty()) output << " tex=" << m.texturePath;
         if (m.skeletal && !m.animClip.empty()) output << " anim=" << m.animClip;
         if (m.skeletal && !m.animFile.empty()) output << " animfile=" << m.animFile;
+        if (!m.materialName.empty()) output << " material=" << m.materialName;
         if (m.animSpeed != 1.0f) output << " speed=" << m.animSpeed;
         if (m.windAffected) output << " wind=1";
         output << "\n";

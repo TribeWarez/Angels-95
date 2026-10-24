@@ -8,6 +8,7 @@ REM
 REM Args: fast      incremental rebuild (keep build/ objects, skip clean)
 REM       debug     MODE=debug (-O0 -g, much faster compiles + symbols)
 REM       skipdata  skip asset packaging
+REM       resetconfig  discard System\*.ini and restore the shipped templates
 REM   e.g.  build.cmd fast debug
 REM ============================================================================
 
@@ -15,6 +16,7 @@ REM --- Parse optional args ---
 set FAST=0
 set DEBUG=0
 set SKIPDATA=0
+set RESETCFG=0
 :parse_args
 if "%~1"=="" goto args_done
 if /i "%~1"=="fast"      set FAST=1
@@ -23,6 +25,8 @@ if /i "%~1"=="debug"     set DEBUG=1
 if /i "%~1"=="-debug"    set DEBUG=1
 if /i "%~1"=="skipdata"  set SKIPDATA=1
 if /i "%~1"=="-skipdata" set SKIPDATA=1
+if /i "%~1"=="resetconfig"  set RESETCFG=1
+if /i "%~1"=="-resetconfig" set RESETCFG=1
 shift
 goto parse_args
 :args_done
@@ -129,12 +133,27 @@ REM --- 5. Assemble System/ directory ---
 echo.
 echo === Assembling System/ release ===
 
+REM The .ini files in System\ are USER data, not build output: player settings,
+REM the editor's window layout and the server's auth tokens. This script
+REM re-assembles System\ from scratch, so stash them first and put them back.
+REM Templates are written only for files that are still missing.
+REM `build.cmd resetconfig` discards them instead.
+set "CFG_TMP=%TEMP%\angels95-cfg-%RANDOM%%RANDOM%"
+set "CFG_FILES=Angels95.ini AngelEd.ini OzServer.ini"
+if "%RESETCFG%"=="0" (
+    mkdir "%CFG_TMP%" 2>nul
+    for %%F in (%CFG_FILES%) do if exist "%OUT_DIR%\%%F" copy /y "%OUT_DIR%\%%F" "%CFG_TMP%\%%F" >nul
+)
 if exist "%OUT_DIR%" (
     rmdir /s /q "%OUT_DIR%" 2>nul
 )
 mkdir "%OUT_DIR%" 2>nul
 mkdir "%OUT_DIR%\Data" 2>nul
 mkdir "%OUT_DIR%\Cache" 2>nul
+if "%RESETCFG%"=="0" (
+    for %%F in (%CFG_FILES%) do if exist "%CFG_TMP%\%%F" copy /y "%CFG_TMP%\%%F" "%OUT_DIR%\%%F" >nul
+    rmdir /s /q "%CFG_TMP%" 2>nul
+)
 
 REM Move EXEs from build locations into System/ (fail if any missing)
 if not exist "%ROOT%Angels95.exe"  echo ERROR: Angels95.exe missing & exit /b 1
@@ -155,41 +174,50 @@ if exist "%RAYLIB_LIB%\libraylib.dll" (
     copy /y "%W64DEVKIT%\bin\libraylib.dll" "%OUT_DIR%\libraylib.dll" >nul
 )
 
-REM Create INI files
-echo [Video] > "%OUT_DIR%\Angels95.ini"
-echo Width=1280 >> "%OUT_DIR%\Angels95.ini"
-echo Height=720 >> "%OUT_DIR%\Angels95.ini"
-echo Fullscreen=0 >> "%OUT_DIR%\Angels95.ini"
-echo VSync=1 >> "%OUT_DIR%\Angels95.ini"
-echo. >> "%OUT_DIR%\Angels95.ini"
-echo [Settings] >> "%OUT_DIR%\Angels95.ini"
-echo audio_volume=100.000000 >> "%OUT_DIR%\Angels95.ini"
-echo mute=False >> "%OUT_DIR%\Angels95.ini"
-echo. >> "%OUT_DIR%\Angels95.ini"
-echo [Game] >> "%OUT_DIR%\Angels95.ini"
-echo ServerIP=127.0.0.1 >> "%OUT_DIR%\Angels95.ini"
-echo ServerPort=27015 >> "%OUT_DIR%\Angels95.ini"
-echo. >> "%OUT_DIR%\Angels95.ini"
-echo [MasterServers] >> "%OUT_DIR%\Angels95.ini"
-echo Master=http://127.0.0.1:27950 >> "%OUT_DIR%\Angels95.ini"
+REM Create INI templates only when missing, so a rebuild keeps the live files
+if not exist "%OUT_DIR%\Angels95.ini" (
+    echo ; Angels95 client settings - grouped by concern. > "%OUT_DIR%\Angels95.ini"
+    echo ; The client fills in any key it does not find and rewrites this on exit. >> "%OUT_DIR%\Angels95.ini"
+    echo [AngelTech.Window] >> "%OUT_DIR%\Angels95.ini"
+    echo window_width=1280 >> "%OUT_DIR%\Angels95.ini"
+    echo window_height=720 >> "%OUT_DIR%\Angels95.ini"
+    echo borderless=1 >> "%OUT_DIR%\Angels95.ini"
+    echo. >> "%OUT_DIR%\Angels95.ini"
+    echo [AngelTech.Render] >> "%OUT_DIR%\Angels95.ini"
+    echo vsync=1 >> "%OUT_DIR%\Angels95.ini"
+    echo msaa=0 >> "%OUT_DIR%\Angels95.ini"
+    echo. >> "%OUT_DIR%\Angels95.ini"
+    echo [AngelTech.Audio] >> "%OUT_DIR%\Angels95.ini"
+    echo audio_volume=100.000000 >> "%OUT_DIR%\Angels95.ini"
+    echo music_volume=100.000000 >> "%OUT_DIR%\Angels95.ini"
+    echo sfx_volume=100.000000 >> "%OUT_DIR%\Angels95.ini"
+    echo mute=False >> "%OUT_DIR%\Angels95.ini"
+    echo. >> "%OUT_DIR%\Angels95.ini"
+    echo [MasterServers] >> "%OUT_DIR%\Angels95.ini"
+    echo Master=http://127.0.0.1:27950 >> "%OUT_DIR%\Angels95.ini"
+)
 
-echo [Editor] > "%OUT_DIR%\AngelEd.ini"
-echo GridSize=1.0 >> "%OUT_DIR%\AngelEd.ini"
-echo SnapToGrid=1 >> "%OUT_DIR%\AngelEd.ini"
-echo ShowGrid=1 >> "%OUT_DIR%\AngelEd.ini"
-echo. >> "%OUT_DIR%\AngelEd.ini"
-echo [Video] >> "%OUT_DIR%\AngelEd.ini"
-echo Width=1600 >> "%OUT_DIR%\AngelEd.ini"
-echo Height=900 >> "%OUT_DIR%\AngelEd.ini"
+if not exist "%OUT_DIR%\AngelEd.ini" (
+    echo [Editor] > "%OUT_DIR%\AngelEd.ini"
+    echo GridSize=1.0 >> "%OUT_DIR%\AngelEd.ini"
+    echo SnapToGrid=1 >> "%OUT_DIR%\AngelEd.ini"
+    echo ShowGrid=1 >> "%OUT_DIR%\AngelEd.ini"
+    echo. >> "%OUT_DIR%\AngelEd.ini"
+    echo [Video] >> "%OUT_DIR%\AngelEd.ini"
+    echo Width=1600 >> "%OUT_DIR%\AngelEd.ini"
+    echo Height=900 >> "%OUT_DIR%\AngelEd.ini"
+)
 
-echo [Server] > "%OUT_DIR%\OzServer.ini"
-echo Port=27015 >> "%OUT_DIR%\OzServer.ini"
-echo HttpPort=8080 >> "%OUT_DIR%\OzServer.ini"
-echo MaxPlayers=16 >> "%OUT_DIR%\OzServer.ini"
-echo WorldDir=GameData >> "%OUT_DIR%\OzServer.ini"
-echo. >> "%OUT_DIR%\OzServer.ini"
-echo [Game] >> "%OUT_DIR%\OzServer.ini"
-echo ServerName=Angels95 Server >> "%OUT_DIR%\OzServer.ini"
+if not exist "%OUT_DIR%\OzServer.ini" (
+    echo [Server] > "%OUT_DIR%\OzServer.ini"
+    echo Port=27015 >> "%OUT_DIR%\OzServer.ini"
+    echo HttpPort=8080 >> "%OUT_DIR%\OzServer.ini"
+    echo MaxPlayers=16 >> "%OUT_DIR%\OzServer.ini"
+    echo WorldDir=GameData >> "%OUT_DIR%\OzServer.ini"
+    echo. >> "%OUT_DIR%\OzServer.ini"
+    echo [Game] >> "%OUT_DIR%\OzServer.ini"
+    echo ServerName=Angels95 Server >> "%OUT_DIR%\OzServer.ini"
+)
 
 REM Run scripts
 echo @echo off > "%OUT_DIR%\run.bat"

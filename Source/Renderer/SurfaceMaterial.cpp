@@ -60,6 +60,23 @@ void SurfaceMaterial::CacheLocations() {
     m_fogDensityLoc   = GetShaderLocation(m_shader, "fogDensity");
     m_fogColorLoc     = GetShaderLocation(m_shader, "fogColor");
     m_fogIntensityLoc = GetShaderLocation(m_shader, "fogIntensity");
+    // Material maps (baked .ozmat), same four uniforms Surface.fs shares with
+    // LitFog.fs. Cached like every other uniform on this program.
+    m_hasNormalLoc      = GetShaderLocation(m_shader, "uHasNormalMap");
+    m_normalStrengthLoc = GetShaderLocation(m_shader, "uNormalStrength");
+    m_normalMapLoc      = GetShaderLocation(m_shader, "normalMap");
+    m_hasEmissiveLoc    = GetShaderLocation(m_shader, "uHasEmissive");
+    m_emissiveScaleLoc  = GetShaderLocation(m_shader, "uEmissiveScale");
+    m_emissiveMapLoc    = GetShaderLocation(m_shader, "emissiveMap");
+}
+
+void SurfaceMaterial::SetMaterialMaps(Texture2D diffuse, Texture2D normal, Texture2D emissive,
+                                      float normalStrength, float emissiveScale) {
+    m_faceDiffuse = diffuse;
+    m_faceNormal = normal;
+    m_faceEmissive = emissive;
+    m_faceNormalStrength = normalStrength;
+    m_faceEmissiveScale = emissiveScale;
 }
 
 void SurfaceMaterial::SetFog(const float color[3], float start, float end,
@@ -157,6 +174,23 @@ void SurfaceMaterial::ApplyUniforms(const surface::SurfaceProps& p) {
     }
     if (m_glowScaleLoc >= 0)
         SetShaderValue(m_shader, m_glowScaleLoc, &p.glowScale, SHADER_UNIFORM_FLOAT);
+
+    // Material maps. Uploaded on EVERY face (including zeros) so a material can
+    // never leak onto the next face, exactly like oz::Mesh::BindMaterial.
+    const int hasNormal = (m_faceNormal.id > 0) ? 1 : 0;
+    const int hasEmissive = (m_faceEmissive.id > 0) ? 1 : 0;
+    if (m_hasNormalLoc >= 0)
+        SetShaderValue(m_shader, m_hasNormalLoc, &hasNormal, SHADER_UNIFORM_INT);
+    if (m_normalStrengthLoc >= 0)
+        SetShaderValue(m_shader, m_normalStrengthLoc, &m_faceNormalStrength, SHADER_UNIFORM_FLOAT);
+    if (m_hasEmissiveLoc >= 0)
+        SetShaderValue(m_shader, m_hasEmissiveLoc, &hasEmissive, SHADER_UNIFORM_INT);
+    if (m_emissiveScaleLoc >= 0)
+        SetShaderValue(m_shader, m_emissiveScaleLoc, &m_faceEmissiveScale, SHADER_UNIFORM_FLOAT);
+    if (hasNormal && m_normalMapLoc >= 0)
+        SetShaderValueTexture(m_shader, m_normalMapLoc, m_faceNormal);
+    if (hasEmissive && m_emissiveMapLoc >= 0)
+        SetShaderValueTexture(m_shader, m_emissiveMapLoc, m_faceEmissive);
 }
 
 void SurfaceMaterial::BeginSurfaceState(const surface::SurfaceProps& p) {

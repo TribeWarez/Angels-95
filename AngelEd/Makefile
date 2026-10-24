@@ -195,6 +195,14 @@ $(BUILD_DIR)/LitLightning.o: ../Source/Renderer/LitLightning.cpp ../Source/Rende
 $(BUILD_DIR)/Mesh.o: ../Source/Renderer/Mesh/Mesh.cpp ../Source/Renderer/Mesh/Mesh.hpp | $(BUILD_DIR)
 	$(COMP) $(CFLAGS) -c ../Source/Renderer/Mesh/Mesh.cpp -o $@
 
+# Material graph + registry. Same two objects the client links; the editor also
+# needs them because it resolves `material=` props in its viewport.
+$(BUILD_DIR)/OzMaterial.o: ../Source/Material/OzMaterial.cpp ../Source/Material/OzMaterial.hpp | $(BUILD_DIR)
+	$(COMP) $(CFLAGS) -c ../Source/Material/OzMaterial.cpp -o $@
+
+$(BUILD_DIR)/MaterialRegistry.o: ../Source/Material/MaterialRegistry.cpp ../Source/Material/MaterialRegistry.hpp ../Source/Material/OzMaterial.hpp | $(BUILD_DIR)
+	$(COMP) $(CFLAGS) -c ../Source/Material/MaterialRegistry.cpp -o $@
+
 $(BUILD_DIR)/SkeletalMesh.o: ../Source/Renderer/Mesh/SkeletalMesh.cpp ../Source/Renderer/Mesh/SkeletalMesh.hpp | $(BUILD_DIR)
 	$(COMP) $(CFLAGS) -c ../Source/Renderer/Mesh/SkeletalMesh.cpp -o $@
 
@@ -228,7 +236,7 @@ $(BUILD_DIR)/rlights.o: ../Source/Renderer/rlights/rlights.cpp ../Source/Rendere
 # objects. Diff the two lists when changing either; they must agree apart from
 # OTCustom_stub.o, which exists only because CI links a stub where the Makefile links
 # -l:Custom.so.
-RESOURCES_OBJS := $(BUILD_DIR)/AssetScope.o $(BUILD_DIR)/PackageIO.o $(BUILD_DIR)/AssetScan.o
+RESOURCES_OBJS := $(BUILD_DIR)/AssetScope.o $(BUILD_DIR)/PackageIO.o $(BUILD_DIR)/AssetScan.o $(BUILD_DIR)/MaterialBake.o
 
 # Subsystems/ promoted to REAL translation units in Phase F. These used to be unity
 # fragments included by Main.cpp, which meant they inherited its include order and
@@ -267,6 +275,12 @@ $(BUILD_DIR)/PackageIO.o: Source/Resources/PackageIO.cpp Source/Resources/Packag
 $(BUILD_DIR)/AssetScan.o: Source/Resources/AssetScan.cpp Source/Resources/AssetScan.hpp Source/Resources/AssetScope.hpp | $(BUILD_DIR)
 	$(COMP) $(CFLAGS) -c Source/Resources/AssetScan.cpp -o $@
 
+# Material baker: evaluates a .ozmat graph and writes the PNGs. Editor-only (it
+# decodes/encodes images through raylib) but shared by the Tools menu and the
+# material panel, so it is a real Resources/ object.
+$(BUILD_DIR)/MaterialBake.o: Source/Resources/MaterialBake.cpp Source/Resources/MaterialBake.hpp ../Source/Material/OzMaterial.hpp ../Source/Package/PackageAssetLoader.hpp | $(BUILD_DIR)
+	$(COMP) $(CFLAGS) -c Source/Resources/MaterialBake.cpp -o $@
+
 # Game-hierarchy engine objects the editor links because its own objects call
 # them: OzPawnSystem emits EventBus facts (pickup.collect / zone.enter / entity.*),
 # OzOzoneLoader injects trigger volumes into TriggerSystem and world entities
@@ -299,6 +313,7 @@ CORE_OBJS := $(BUILD_DIR)/OzPawnSystem.o $(BUILD_DIR)/OzOzoneLoader.o $(BUILD_DI
              $(BUILD_DIR)/SurfaceFlags.o $(BUILD_DIR)/SurfaceMaterial.o $(BUILD_DIR)/Log.o $(BUILD_DIR)/OzAssetMapper.o \
              $(BUILD_DIR)/WorldChunk.o $(BUILD_DIR)/LitLightning.o $(BUILD_DIR)/Mesh.o $(BUILD_DIR)/SkeletalMesh.o \
              $(BUILD_DIR)/MeshCache.o $(BUILD_DIR)/AnimatedMesh.o $(BUILD_DIR)/OzAnimFormat.o \
+             $(BUILD_DIR)/OzMaterial.o $(BUILD_DIR)/MaterialRegistry.o \
              $(BUILD_DIR)/OzParticleSimulationManager.o $(BUILD_DIR)/rlights.o $(BUILD_DIR)/miniz.o \
              $(BUILD_DIR)/EventBus.o $(BUILD_DIR)/TriggerSystem.o $(BUILD_DIR)/ObjectiveSystem.o \
              $(BUILD_DIR)/BoxedTypeRegistry.o \

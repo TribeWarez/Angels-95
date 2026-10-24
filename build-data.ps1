@@ -176,6 +176,14 @@ if (Test-Path $engineArtDir) {
     Run-OzPack "OZPK" $engineArtDir "$OUT\engine.ozpak"
 }
 
+# --- Materials: the .ozmat graphs are text and the baked PNGs sit beside them,
+#     so one generic package carries both. The registry loads loose files first,
+#     then the packaged copies (basename fallback).
+$matDir = "$GAMEDATA\Materials"
+if (Test-Path $matDir) {
+    Run-OzPack "OZPK" $matDir "$OUT\materials.ozpak"
+}
+
 # --- Game hierarchy (GameData/Game: : game / : campaign / : sector / : mission
 #     / : objective / : trigger / : event defs). One package PER GAME, so a
 #     second game added under GameData/Game/<OtherGame>/ never shares a

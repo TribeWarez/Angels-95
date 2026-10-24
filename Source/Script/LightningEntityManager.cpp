@@ -765,7 +765,16 @@ void LightningEntityManager::Init() {
     m_selectedSlot = 0;
     m_playerEntityIndex = -1;
     m_stamina = GetPlayerMaxStamina();
+    // Init is re-runnable ("New Game"): every cached model/texture belongs to the
+    // session that just ended. Clearing the vector without unloading leaked the
+    // whole resource set — including the automag/model GLBs — on every session
+    // change. Drop the instances FIRST so no live iconIdx/modelIdx can dangle,
+    // then unload before dropping the index space.
     m_instances.clear();
+    for (auto& r : m_resources) {
+        if (r.type == 1) UnloadModel(r.model);
+        else if (r.type == 2) UnloadTexture(r.texture);
+    }
     m_resources.clear();
     m_pendingFog = false;
     m_pendingSkybox.clear();

@@ -73,6 +73,17 @@ uniform float uGlowScale    = 1.0;
 // it is uploaded once per pass instead of once per draw.
 uniform float uFullBright   = 1.0;
 
+// --- baked material maps (Material/OzMaterial.hpp) --------------------------
+// Same four uniforms as LitFog.fs; the two programs are hand-maintained copies
+// and MUST stay in step or a surface-flagged brush disagrees with the room
+// around it (see the ambient-leak note in AGENTS.md).
+uniform sampler2D normalMap;
+uniform int   uHasNormalMap = 0;
+uniform float uNormalStrength = 1.0;
+uniform sampler2D emissiveMap;
+uniform int   uHasEmissive = 0;
+uniform float uEmissiveScale = 1.0;
+
 uniform float fogStart = 10.0;
 uniform float fogEnd = 100.0;
 uniform float fogDensity = 1.0;
@@ -195,6 +206,25 @@ float fogFactorAt(float dist) {
     return min(expo, ramp);
 }
 
+// See LitFog.fs's applyNormalMap: derivative TBN, identical body on purpose.
+vec3 applyNormalMap(vec3 N, vec2 uv) {
+    if (uHasNormalMap == 0) return N;
+    vec3 dp1 = dFdx(fragWorldPos);
+    vec3 dp2 = dFdy(fragWorldPos);
+    vec2 duv1 = dFdx(uv);
+    vec2 duv2 = dFdy(uv);
+    vec3 dp2perp = cross(dp2, N);
+    vec3 dp1perp = cross(N, dp1);
+    vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+    vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+    float m = max(dot(T, T), dot(B, B));
+    if (m < 1e-10) return N;
+    float inv = inversesqrt(m);
+    vec3 n = texture(normalMap, uv).xyz * 2.0 - 1.0;
+    n.xy *= uNormalStrength;
+    return normalize(mat3(T * inv, B * inv, N) * n);
+}
+
 void main()
 {
     // U/V pan. The speed lives in the flag, not in the value, so a zero speed is
@@ -219,7 +249,7 @@ void main()
 
     float alpha = baseColor.a * uAlpha;
 
-    vec3 normal = normalize(fragNormal);
+    vec3 normal = applyNormalMap(normalize(fragNormal), uv);
     if (HasFlag(SF_NO_SMOOTH)) normal = normal;   // reserved: flat shading hook
 
     vec3 viewDir = normalize(viewPos - fragPosition);
@@ -303,6 +333,10 @@ void main()
     // Self-illumination. Added AFTER lighting so a glowing surface stays bright
     // in an unlit room, which is the whole point of the flag.
     if (HasFlag(SF_GLOW)) lit += uGlow * uGlowScale;
+
+    // Baked emissive gate, same placement/order as LitFog.fs.
+    if (uHasEmissive == 1)
+        lit += texture(emissiveMap, uv).rgb * uEmissiveScale;
 
     lit = pow(max(lit, vec3(0.0)), vec3(1.0 / 2.2));
 

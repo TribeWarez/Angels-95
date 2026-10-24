@@ -8,6 +8,7 @@
 #include "../Audio/SoundManager.hpp"
 #include "../Script/LightningEntityManager.hpp"
 #include "../Script/LightningEntityRegistry.hpp"
+#include "../Material/MaterialRegistry.hpp"
 #include "PlayerMovement.hpp"
 #include "Items.hpp"
 #include "../DebugFlags.hpp"
@@ -125,6 +126,17 @@ int PawnSystem::Spawn(Vector3 pos, const char* defName) {
     p.patrolTimer = 0.0f;
     p.stateTimer = 0.0f;
     p.defName = defName;
+    // Slots are recycled, so every piece of per-instance state must be reset or
+    // a respawned pawn inherits the previous one's hover phase / patrol waypoint
+    // / mesh (the mesh is per-DEF, so a recycled slot must not keep the old one).
+    p.hoverPhase = 0.0f;
+    p.pathTarget = 0;
+    p.onGround = false;
+    p.animClip = -1;
+    p.animTime = 0.0f;
+    p.forcedClip = -1;
+    p.forcedClipTimer = 0.0f;
+    p.mesh.reset();
 
     // Load sprite and scream using def paths or convention (with package fallback)
     {
@@ -882,6 +894,9 @@ void PawnSystem::Update(Vector3 playerPos, float dt,
         float distToPlayer = sqrtf(dx * dx + dz * dz);
         p.stateTimer += dt;
 
+        PawnDef* def = FindDef(p.defName.c_str());
+        const bool hover = def && def->hover;
+
         switch (p.state) {
             case PawnState::IDLE:
                 if (distToPlayer < p.aggroRange) TransitionState(p, PawnState::CHASE);
@@ -901,11 +916,29 @@ void PawnSystem::Update(Vector3 playerPos, float dt,
                 break;
         }
 
+        // Face the direction of travel (shortest-angle smoothing) so a 3D model
+        // turns instead of snapping, and a static model is not glued to the
+        // camera. Billboards still face the camera in DrawAll - that branch only
+        // runs when no model could be loaded.
+        const float vx = p.velocity.x, vz = p.velocity.z;
+        if (vx * vx + vz * vz > 0.0025f) {
+            const float target = atan2f(vx, vz) * RAD2DEG;
+            float d = target - p.yaw;
+            while (d > 180.0f)  d -= 360.0f;
+            while (d < -180.0f) d += 360.0f;
+            p.yaw += d * fminf(1.0f, dt * 8.0f);
+        }
+        if (hover) {
+            const float speed = (def->hover_speed > 0.0f) ? def->hover_speed : 1.6f;
+            p.hoverPhase += dt * speed;
+        }
+
         // Vertical + collision integration. The FSM above only ever moved x/z;
         // without this the pawn kept its spawn Y forever (floating) and walked
         // straight through walls and floors. Skipped when no world query was
-        // injected, so tests/editor keep the old behaviour.
-        if (collision) {
+        // injected, so tests/editor keep the old behaviour. Hovering defs keep
+        // their authored height and are never snapped to the floor.
+        if (collision && !hover) {
             p.velocity.y -= kPawnGravity * dt;
             if (p.velocity.y < -kPawnTerminal) p.velocity.y = -kPawnTerminal;
             p.position.y += p.velocity.y * dt;
@@ -952,29 +985,60 @@ void PawnSystem::DrawAll(Camera3D& camera, Shader litShader) {
         if (!p.active || p.state == PawnState::DEAD) continue;
 
         // Prefer a real 3D model when the pawn def provides one (billboard as
-        // fallback keeps old sprite-only defs working). Static props still face
-        // the viewer; skeletal pawns track their movement yaw.
+        // fallback keeps old sprite-only defs working). A loaded model uses the
+        // FSM's smoothed yaw; the camera-facing fallback is only for billboards.
         PawnDef* def = FindDef(p.defName.c_str());
         if (def) {
             if (!p.mesh) p.mesh = EnsurePawnMesh(*def);
             if (p.mesh && p.mesh->Valid()) {
                 auto* skel = dynamic_cast<oz::SkeletalMesh*>(p.mesh.get());
-                const bool animated = skel && skel->ClipCount() > 0;
+                auto* vmesh = dynamic_cast<oz::AnimatedMesh*>(p.mesh.get());
+                bool animated = skel && skel->ClipCount() > 0;
 
                 if (animated) {
                     SyncPawnAnim(p, def, dt);
                     if (p.animClip >= 0) skel->ApplyPose(p.animClip, p.animTime);
-                    float vx = p.velocity.x, vz = p.velocity.z;
-                    if (vx * vx + vz * vz > 0.0001f)
-                        p.yaw = atan2f(vx, vz) * RAD2DEG;
+                } else if (vmesh && vmesh->ClipCount() > 0) {
+                    // Vertex-keyframe clip (.ozanim): the shipped enemy GLBs are
+                    // unrigged, so this is what lets them walk at all.
+                    const std::string* clipName = nullptr;
+                    switch (p.state) {
+                        case PawnState::IDLE:   clipName = &def->anim_idle;   break;
+                        case PawnState::PATROL: clipName = &def->anim_patrol; break;
+                        case PawnState::CHASE:  clipName = &def->anim_chase;  break;
+                        case PawnState::RETURN: clipName = &def->anim_return; break;
+                        case PawnState::DEAD:   clipName = &def->anim_death;  break;
+                    }
+                    int wanted = (clipName && !clipName->empty()) ? vmesh->FindClip(*clipName) : -1;
+                    if (wanted < 0) wanted = 0;
+                    if (wanted != p.animClip) { p.animClip = wanted; p.animTime = 0.0f; }
+                    p.animTime += dt * (def->anim_speed > 0.0f ? def->anim_speed : 1.0f);
+                    vmesh->ApplyVertexPose(p.animClip, p.animTime);
+                    animated = true;
+                }
+
+                // Put the model's LOWEST point on the pawn's feet. A GLB whose
+                // pivot is centred (most of the un-rigged enemy library) used to
+                // be drawn with its origin at the feet, i.e. hovering by half its
+                // height - the "air floating" enemy bug.
+                const float offset = (def->model_y_offset != 0.0f)
+                                         ? def->model_y_offset
+                                         : def->auto_ground_offset;
+                float bob = def->hover ? sinf(p.hoverPhase) * def->hover_amplitude : 0.0f;
+                // A static, walking model has no step cycle of its own; a small
+                // vertical bob is the cheapest honest substitute (the `.ozanim`
+                // path above replaces it when an authored clip exists).
+                if (!animated && !def->hover) {
+                    const float vx = p.velocity.x, vz = p.velocity.z;
+                    if (vx * vx + vz * vz > 0.02f) {
+                        p.animTime += dt * 8.0f * (def->anim_speed > 0.0f ? def->anim_speed : 1.0f);
+                        bob += fabsf(sinf(p.animTime)) * 0.06f;
+                    }
                 }
 
                 oz::MeshTransform t;
-                t.position = p.position;
-                t.yaw = animated
-                    ? p.yaw
-                    : atan2f(camera.position.x - p.position.x,
-                             camera.position.z - p.position.z) * RAD2DEG;
+                t.position = {p.position.x, p.position.y + offset + bob, p.position.z};
+                t.yaw = p.yaw;
                 t.scale = {def->model_scale, def->model_scale, def->model_scale};
                 p.mesh->Draw(t, litShader);
                 continue;
@@ -1186,9 +1250,23 @@ std::shared_ptr<oz::Mesh> PawnSystem::EnsurePawnMesh(PawnDef& def) {
     std::string meshPath = ResolveDefAsset(def.baseDir, def.model_path);
     std::string texPath  = ResolveDefAsset(def.baseDir, def.model_texture);
     const bool pointFilter = true; // PS1 look
-    if (def.mesh_type == "skeletal")
-        return oz::MeshCache::Instance().GetSkeletal(meshPath, texPath, def.baseDir, pointFilter);
-    return oz::MeshCache::Instance().GetStatic(meshPath, texPath, def.baseDir, pointFilter);
+    std::shared_ptr<oz::Mesh> mesh;
+    if (!def.anim_file.empty() && def.mesh_type != "skeletal")
+        mesh = oz::MeshCache::Instance().GetAnimated(meshPath, texPath, def.anim_file,
+                                                     def.baseDir, pointFilter);
+    else if (def.mesh_type == "skeletal")
+        mesh = oz::MeshCache::Instance().GetSkeletal(meshPath, texPath, def.baseDir, pointFilter);
+    else
+        mesh = oz::MeshCache::Instance().GetStatic(meshPath, texPath, def.baseDir, pointFilter);
+
+    // Ground offset from the asset's own bounds: world_y = scale * min.y + pos.y,
+    // so -scale * min.y puts the lowest point exactly on pos.y (the feet).
+    if (mesh && mesh->Valid() && !def.ground_offset_resolved) {
+        const float s = (def.model_scale > 0.0f) ? def.model_scale : 1.0f;
+        def.auto_ground_offset = -mesh->Bounds().min.y * s;
+        def.ground_offset_resolved = true;
+    }
+    return mesh;
 }
 
 // Map the pawn FSM state to its animation clip and advance playback time.
@@ -1441,11 +1519,27 @@ void PawnSystem::DrawEntities(Camera3D& camera, Shader litShader, Shader windSha
             }
         }
 
+        // Baked material graph, if this prop names one. Bound per draw and
+        // cleared afterwards because the Mesh is cached and shared.
+        oz::MeshMaterial meshMat;
+        if (!n.materialName.empty()) {
+            if (const ozmat::MaterialAsset* asset =
+                    ozmat::MaterialRegistry::Instance().Find(n.materialName)) {
+                meshMat.diffuse = asset->diffuse;
+                meshMat.normal = asset->normal;
+                meshMat.emissive = asset->emissive;
+                meshMat.normalStrength = asset->normalStrength;
+                meshMat.emissiveScale = asset->emissiveScale;
+                n.mesh->SetMaterial(meshMat);
+            }
+        }
+
         oz::MeshTransform t;
         t.position = n.position;
         t.yaw = n.yaw;
         t.scale = {n.scale, n.scale, n.scale};
         n.mesh->Draw(t, shader);
+        n.mesh->ClearMaterial();
     }
 
     // Zone billboards at center of bounding box (volumes live in ZoneManager),
@@ -1529,6 +1623,40 @@ void PawnSystem::DrawEntities(Camera3D& camera, Shader litShader, Shader windSha
 // FSM tick helpers
 // ---------------------------------------------------------------------------
 void PawnSystem::TickPatrol(Pawn& p, float dt) {
+    // Follow the authored PathNode graph when the world has one. The server has
+    // always done this; the client walked a slow arc regardless, so an NPC never
+    // visited the waypoints the author placed.
+    if (!m_pathNodes.empty()) {
+        if (p.pathTarget < 0 || p.pathTarget >= (int)m_pathNodes.size()) p.pathTarget = 0;
+        const PathNode& node = m_pathNodes[(size_t)p.pathTarget];
+        Vector3 dir = {node.position.x - p.position.x, 0.0f,
+                       node.position.z - p.position.z};
+        const float dist = sqrtf(dir.x * dir.x + dir.z * dir.z);
+        const float arrive = (node.radius > 0.0f ? node.radius : 1.0f) + 0.25f;
+        if (dist <= arrive) {
+            // Advance along `next` (links are by NAME so they survive reordering),
+            // else wrap/step so a linear chain still progresses.
+            int nextIdx = -1;
+            for (const std::string& name : node.next) {
+                for (int i = 0; i < (int)m_pathNodes.size(); ++i) {
+                    if (m_pathNodes[(size_t)i].name == name) { nextIdx = i; break; }
+                }
+                if (nextIdx >= 0) break;
+            }
+            if (nextIdx < 0)
+                nextIdx = node.loop ? 0 : (p.pathTarget + 1) % (int)m_pathNodes.size();
+            p.pathTarget = nextIdx;
+            p.velocity.x = p.velocity.z = 0.0f;
+        } else {
+            const float speed = p.speed * 0.5f;
+            p.velocity.x = (dir.x / dist) * speed;
+            p.velocity.z = (dir.z / dist) * speed;
+            p.position.x += p.velocity.x * dt;
+            p.position.z += p.velocity.z * dt;
+        }
+        return;
+    }
+
     p.patrolTimer += dt;
     if (p.patrolTimer > 2.0f) {
         // Random direction change

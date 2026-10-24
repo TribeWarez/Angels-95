@@ -380,6 +380,8 @@ struct DefStatRow {
 
     // Animation / vertex-keyframe tool
     bool showAnimPanel = false;
+    // Material Graph Explorer
+    bool showMaterialPanel = false;
     int animTargetMesh = -1;        // MeshObjectNode id (set by Main.cpp from selection)
     std::string animClipName;       // selected clip name
     float animTime = 0.0f;          // scrub time (seconds)
@@ -424,6 +426,7 @@ struct DefStatRow {
     void* hStatsSidebar = nullptr;
     void* hLevelList = nullptr;
     void* hAnimPanel = nullptr;
+    void* hMaterialPanel = nullptr;
     void* hSurfaceProps = nullptr;
     void* hKeymap = nullptr;
 
@@ -447,6 +450,7 @@ struct DefStatRow {
 WinPos propsPanelPos = {300, 120, 540, 560};
     WinPos levelListPos = {200, 120, 560, 420};
     WinPos animPanelPos  = {430, 180, 380, 390};
+    WinPos materialPanelPos = {260, 140, 720, 460};
     WinPos surfacePropsPos = {760, 140, 520, 440};
     WinPos keymapPos = {420, 240, 520, 420};
 #endif

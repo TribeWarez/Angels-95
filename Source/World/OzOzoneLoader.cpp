@@ -11,6 +11,7 @@
 #include "OzoneParser.hpp"
 #include "../Log.hpp"
 #include "../Package/PackageAssetLoader.hpp"
+#include "../Material/MaterialRegistry.hpp"
 #include "../Physics/OzBsp.hpp"
 #include "../Physics/AutoConvex.hpp"
 #include <cstdio>
@@ -308,6 +309,7 @@ static bool ParseOzoneEntity(const OzonePrimitive& prim,
                 node.animClip = StripQuotes(prim.animClip);
                 node.animFile = StripQuotes(prim.animFile);
                 node.animSpeed = prim.animSpeed;
+                node.materialName = StripQuotes(prim.materialName);
                 node.baseDir = worldDir.empty() ? std::string() : (worldDir + "/");
                 out.meshObjects.push_back(node);
             }
@@ -1546,6 +1548,18 @@ void OzoneLoader::DrawSurface(OzoneRenderable& r, SurfacePass pass) {
         MaterialMap* diff = &mat.maps[MATERIAL_MAP_DIFFUSE];
         const MaterialMap saved = *diff;
         if (faceTex.id > 0) diff->texture = faceTex;
+
+        // Baked material graph for this face. Its diffuse REPLACES the face
+        // texture (that is what the graph bakes); normal/emissive ride the
+        // uniforms uploaded by ApplyUniforms. Empty material name = none.
+        const ozmat::MaterialAsset* asset =
+            p.material.empty() ? nullptr : ozmat::MaterialRegistry::Instance().Find(p.material);
+        if (asset && asset->diffuse.id > 0) diff->texture = asset->diffuse;
+        sm.SetMaterialMaps(asset ? asset->diffuse : Texture2D{0},
+                           asset ? asset->normal : Texture2D{0},
+                           asset ? asset->emissive : Texture2D{0},
+                           asset ? asset->normalStrength : 1.0f,
+                           asset ? asset->emissiveScale : 1.0f);
 
         mat.shader = sm.Get();
         sm.ApplyUniforms(p);

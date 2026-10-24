@@ -30,6 +30,9 @@ public:
     // No-op when the clip index is invalid or the skeleton does not match.
     void ApplyPose(int clipIndex, float timeSeconds, float fps = 30.0f) const;
 
+    // See oz::Mesh: true only on a GPU-skinning raylib build.
+    bool NeedsShaderSkinning() const override;
+
 private:
     ModelAnimation* m_anims = nullptr;
     int m_animCount = 0;

@@ -4,6 +4,13 @@
 # Shell scripts must stay LF
 *.sh text eol=lf
 
+# systemd units are installed on Linux (CRLF makes systemd reject the file)
+*.service text eol=lf
+
+# GitHub Actions / YAML config
+*.yml text eol=lf
+*.yaml text eol=lf
+
 # PowerShell scripts — LF is conventional in git even on Windows
 *.ps1 text eol=lf
 

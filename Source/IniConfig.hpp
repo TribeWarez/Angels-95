@@ -33,7 +33,19 @@ public:
 private:
     bool ParseStream(std::istream& f) {
         std::string line, currentSection;
+        bool first = true;
         while (std::getline(f, line)) {
+            // Strip a UTF-8 BOM. Windows PowerShell's `Set-Content -Encoding UTF8`
+            // writes one, and so does Notepad's "UTF-8 with BOM" - and the BOM's
+            // bytes are not in the trim set below, so the first section header
+            // failed to parse and EVERY key in it was silently dropped. That was
+            // cosmetic while the first section was the unused [Video] template
+            // block; it is not once it holds real settings.
+            if (first && line.size() >= 3 &&
+                (unsigned char)line[0] == 0xEF && (unsigned char)line[1] == 0xBB &&
+                (unsigned char)line[2] == 0xBF)
+                line.erase(0, 3);
+            first = false;
             // Trim
             line.erase(0, line.find_first_not_of(" \t\r\n"));
             size_t end = line.find_last_not_of(" \t\r\n");
@@ -76,11 +88,53 @@ public:
         return true;
     }
 
+    // Deterministic, hand-editable variant of Save().
+    //
+    // Save() walks two unordered_maps, so the section order and the key order
+    // inside a section change from run to run. That is fine for a file only the
+    // program reads, but System/Angels95.ini is documented as hand-editable, and
+    // a file that reshuffles itself on every exit is not.
+    //
+    // `sectionOrder` lists the sections to write first, in that order. Keys are
+    // written alphabetically inside every section. Any section NOT named is
+    // appended afterwards (also sorted) rather than dropped, so a caller that
+    // only owns part of the file cannot silently delete the rest of it - the
+    // exact bug that used to wipe [MasterServers] on every client exit.
+    bool SaveOrdered(const char* path,
+                     const std::vector<std::string>& sectionOrder,
+                     const char* header = nullptr) {
+        std::ofstream f(path);
+        if (!f.is_open()) return false;
+        if (header && *header) f << header;
+        for (const std::string& section : sectionOrder) {
+            auto it = data.find(section);
+            if (it != data.end()) WriteSection(f, it->first, it->second);
+        }
+        std::vector<std::string> rest;
+        for (const auto& [section, kv] : data) {
+            if (std::find(sectionOrder.begin(), sectionOrder.end(), section) == sectionOrder.end())
+                rest.push_back(section);
+        }
+        std::sort(rest.begin(), rest.end());
+        for (const std::string& section : rest)
+            WriteSection(f, section, data.at(section));
+        return true;
+    }
+
     // Getters with default
     std::string Get(const char* section, const char* key, const char* def = "") {
         if (data.count(section) && data[section].count(key))
             return data[section][key];
         return def;
+    }
+
+    // True when the key is PRESENT, even if its value is empty. Get()/GetInt()
+    // return the caller's default for both cases, which is not enough when a
+    // setting has a legacy fallback section: `key=` present must still win over
+    // the old location, rather than silently reading the fallback.
+    bool Has(const char* section, const char* key) const {
+        auto s = data.find(section);
+        return s != data.end() && s->second.find(key) != s->second.end();
     }
 
     // std::stoi / std::stof THROW std::invalid_argument on a non-numeric string and
@@ -133,5 +187,18 @@ public:
 
     void SetBool(const char* section, const char* key, bool val) {
         data[section][key] = val ? "True" : "False";
+    }
+
+private:
+    static void WriteSection(std::ostream& f, const std::string& name,
+                             const Section& kv) {
+        f << "[" << name << "]\n";
+        std::vector<std::string> keys;
+        keys.reserve(kv.size());
+        for (const auto& [key, val] : kv) keys.push_back(key);
+        std::sort(keys.begin(), keys.end());
+        for (const std::string& key : keys)
+            f << key << "=" << kv.at(key) << "\n";
+        f << "\n";
     }
 };

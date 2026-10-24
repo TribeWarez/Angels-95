@@ -1,5 +1,5 @@
 # convert_fbx.ps1 — convert FBX source art to binary glTF (.glb) for the engine,
-# then fold any sibling animation GLBs into the base model GLB with named clips.
+# then strip skinning/animation so raylib can load it safely.
 #
 # raylib can load .obj/.glb/.gltf/.iqm but NOT .fbx, so weapon/projectile art is
 # authored in Blender and exported to FBX, then converted here.
@@ -10,18 +10,37 @@
 # skin per model and its multi-skin handling is unreliable (heap corruption /
 # crashes), so tools/flatten_glb.py strips the skins and animations from every
 # produced .glb, yielding plain static models. Animation-only .glb files are
-# then deleted (clips are not used).
+# then deleted (clips are not used by the shipped weapons).
+#
+# `-NoFlatten` keeps skins/animations for a manual experiment. Nothing in the
+# build calls tools/merge_glb_anims.py, so `-NoFlatten` output is unverified
+# against raylib; the view-model's reload uses the rigid magazine in
+# `<mesh>_AdditionalMeshes.glb` plus procedural motion instead.
 #
 # Usage (from the repo root):
 #   powershell -ExecutionPolicy Bypass -File tools/convert_fbx.ps1
 #   powershell ... -File tools/convert_fbx.ps1 -Root "GameData/Tex/Global/Gun/Pistol_01"
 #   powershell ... -File tools/convert_fbx.ps1 -NoFlatten
+#   powershell ... -File tools/convert_fbx.ps1 -Animated
+#
+# -Animated is the DEFAULT: for every base model that has sibling
+# Animations/<Name>_Fire.glb or _Reload.glb, collapse the duplicate skins into
+# one (merge_glb_skins.py) and merge the clips (merge_glb_anims.py) instead of
+# flattening. That is how the shipped Pistol_01/Rifle_01 reload clips are
+# produced. Pass -NoAnimated to force the old flatten-everything behaviour (it
+# STRIPS the reload clips, so only use it for static-only art).
 
 param(
     [string]$Root = "GameData/Tex/Global/Gun",
     [string]$Fbx2gltf = "",
-    [switch]$NoFlatten
+    [switch]$NoFlatten,
+    [switch]$Animated,     # accepted for older invocations; default is on
+    [switch]$NoAnimated    # opt out: flatten even models with animation GLBs
 )
+
+# Animated models are the default: otherwise a plain re-run of this script would
+# silently strip the weapon reload clips that -Animated produced.
+$Animated = -not $NoAnimated
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -65,18 +84,49 @@ try {
     Write-Host ""
     Write-Host "Converted: $ok ok, $fail failed."
 
-    if ($NoFlatten) { return }
+    if ($NoFlatten -and -not $Animated) { return }
 
-    # --- flatten every .glb: strip skins + animations -------------------------
-    # raylib's multi-skin glTF handling corrupts memory (one skin per mesh part
-    # in the FBX exports), so the models are reduced to plain static meshes.
-    $glbs = Get-ChildItem -Path $Root -Recurse -File -Filter *.glb -ErrorAction SilentlyContinue
-    if ($glbs -and $glbs.Count -gt 0) {
-        $paths = @($glbs | ForEach-Object { $_.FullName })
-        & python tools/flatten_glb.py @paths
+    # --- animated models: collapse duplicate skins, then merge clips ----------
+    # FBX2glTF writes ONE skin per mesh part even though every part is bound to
+    # the same armature. raylib supports a single skin, so instead of stripping
+    # the rig (flatten) an ANIMATED model gets its duplicate skin records
+    # collapsed into one by tools/merge_glb_skins.py. The script refuses if the
+    # skins are not equivalent. Clips are then merged by name (Fire/Reload) and
+    # an Idle clip is synthesized from the bind pose.
+    $animated = @()
+    if ($Animated) {
+        $bases = Get-ChildItem -Path $Root -Recurse -File -Filter *.glb -ErrorAction SilentlyContinue |
+                 Where-Object { $_.DirectoryName -notlike "*Animations*" }
+        foreach ($g in $bases) {
+            $animDir = Join-Path $g.DirectoryName 'Animations'
+            $fire   = Join-Path $animDir ($g.BaseName + '_Fire.glb')
+            $reload = Join-Path $animDir ($g.BaseName + '_Reload.glb')
+            if (-not (Test-Path $fire) -and -not (Test-Path $reload)) { continue }
+            Write-Host "Animating $($g.Name)"
+            & python tools/merge_glb_skins.py $g.FullName
+            if ($LASTEXITCODE -ne 0) { Write-Warning "  skin merge failed for $($g.Name)"; continue }
+            $mergeArgs = @("tools/merge_glb_anims.py", $g.FullName)
+            if (Test-Path $fire)   { $mergeArgs += ("Fire="   + (Resolve-Path $fire).Path) }
+            if (Test-Path $reload) { $mergeArgs += ("Reload=" + (Resolve-Path $reload).Path) }
+            & python @mergeArgs
+            if ($LASTEXITCODE -ne 0) { Write-Warning "  clip merge failed for $($g.Name)"; continue }
+            $animated += $g.FullName
+        }
     }
 
-    # Remove animation-only GLBs now that clips are unused.
+    if (-not $NoFlatten) {
+        # --- flatten everything that is NOT an animated model ------------------
+        # Static props keep the old treatment: strip skins/animations so raylib
+        # can never meet a multi-skin model (its handling corrupts memory).
+        $glbs = Get-ChildItem -Path $Root -Recurse -File -Filter *.glb -ErrorAction SilentlyContinue |
+                Where-Object { $animated -notcontains $_.FullName }
+        if ($glbs -and $glbs.Count -gt 0) {
+            $paths = @($glbs | ForEach-Object { $_.FullName })
+            & python tools/flatten_glb.py @paths
+        }
+    }
+
+    # Remove animation-only GLBs: their clips now live in the model GLB.
     Get-ChildItem -Path $Root -Recurse -File -Filter *.glb |
         Where-Object { $_.BaseName -match '_(Fire|Reload|BasePose|EmptyMagazine)$' } |
         Remove-Item -Force -ErrorAction SilentlyContinue

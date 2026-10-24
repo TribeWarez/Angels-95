@@ -71,7 +71,23 @@ private:
     SkeletalMesh* m_skel = nullptr; // alias into m_mesh when it has clips
     int m_clipIdle = -1, m_clipFire = -1, m_clipReload = -1, m_active = -1;
     float m_time = 0.0f;
-    bool m_loop = true;
+    float m_loop = true;
+    // One-shot playback rate. A reload clip is stretched/squeezed to the
+    // authored `reload_time`, so the animation ends exactly when ammo returns.
+    float m_clipRate = 1.0f;
+    // Sample rate for the clips. raylib has no fps field, so this is the only
+    // way to turn keyframe counts into seconds; `viewmodel_anim_fps` overrides
+    // the 30 default for assets exported at another rate.
+    float m_clipFps = 30.0f;
+
+    // Rigid attachment (the detachable magazine). The shipped weapon GLBs are
+    // flattened to single-skin static meshes, so real skinned clips cannot play
+    // on them; the magazine lives in a sibling `_AdditionalMeshes.glb` and is
+    // drawn with the weapon transform, then moved for the reload.
+    std::shared_ptr<Mesh> m_attach;
+    int m_magMesh = -1;
+    Vector3 m_attachCenter{0.0f, 0.0f, 0.0f};
+    float m_magDrop = 0.0f;          // 0..1 drop/reinsert phase from the reload timer
 
     float m_recoil = 0.0f;       // 0..1 impulse
     float m_recoilMax = 1.0f;

@@ -349,10 +349,15 @@ void OmegaClient::handle_message(const net::NetworkMessage& msg) {
             // Stop at the first NUL so a truncated/unterminated tail cannot run
             // off the struct (same rule as the CHAT payload read).
             prd.typeName[sizeof(prd.typeName) - 1] = '\0';
+            // Optional tail #2. A message that stops before it is from a server
+            // that predates the field, and such a server only ever sent ACTIVE
+            // pickups — so absent means active, never inactive.
+            const bool hasActiveTail = msg.size >= net::kPickupRespawnSizeWithActive;
+            const bool isActive = hasActiveTail ? (prd.active != 0) : true;
             bool found = false;
             for (auto& p : m_pickups) {
                 if (p.id == prd.pickup_id && p.world_index == prd.world_index) {
-                    p.active = true;
+                    p.active = isActive;
                     p.position = prd.position;
                     p.type = prd.type;
                     p.value = prd.value;
@@ -371,7 +376,7 @@ void OmegaClient::handle_message(const net::NetworkMessage& msg) {
                 cp.position = prd.position;
                 cp.type = prd.type;
                 cp.value = prd.value;
-                cp.active = true;
+                cp.active = isActive;
                 strncpy(cp.weapon_def_name, prd.weapon_def_name, sizeof(cp.weapon_def_name) - 1);
                 cp.weapon_def_name[sizeof(cp.weapon_def_name) - 1] = '\0';
                 strncpy(cp.typeName, prd.typeName, sizeof(cp.typeName) - 1);

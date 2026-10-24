@@ -168,6 +168,9 @@ struct SurfaceEdit {
     // precisely the hazard the comment above describes, and it worked only
     // because the drain happens in the same frame.
     std::string texPath;
+    // Baked material graph name (GameData/Materials/<name>.ozmat), or empty.
+    // Travels on the event like every other applyable field.
+    std::string material;
 
     // Write BrushSurface::def (the brush-wide default) instead of the faces in
     // faceMask. Brush-wide is what makes `flags=8` on a whole brush - the form

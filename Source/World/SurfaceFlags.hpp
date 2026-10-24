@@ -176,6 +176,11 @@ struct SurfaceProps {
     float glowR = 0.0f, glowG = 0.0f, glowB = 0.0f;
     float glowScale = 1.0f;
 
+    // Baked material graph (GameData/Materials/<name>.ozmat). Empty = use the
+    // face texture only. A non-empty material is the PER-FACE layer: it is
+    // resolved by DrawSurface, which binds its diffuse/normal/emissive maps.
+    std::string material;
+
     constexpr bool Has(uint32_t bit) const { return (flags & bit) != 0; }
     constexpr void Set(uint32_t bit, bool on) {
         if (on) flags |= bit; else flags &= ~bit;

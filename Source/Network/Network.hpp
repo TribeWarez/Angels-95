@@ -290,15 +290,19 @@ struct PickupCollectData {
     char weapon_def_name[64]; // for weapon pickups
 };
 
-// Server -> client: a pickup is present and active. Also used as the re-sync
-// answer to a rejected collect and for the periodic full snapshot.
+// Server -> client: a pickup's state. Also used as the re-sync answer to a
+// rejected collect and for the periodic full snapshot. The join snapshot sends
+// EVERY pickup in the world, including consumed ones (`active == 0`), so the
+// client hides a pickup another player already took instead of drawing it
+// forever and getting NOT_FOUND on every walk-over.
 //
-// FORWARD COMPATIBILITY: `typeName` is an optional trailing field, following the
-// same pattern as ClientAuthPayload::structSize. A reader MUST accept a message
-// whose `size` stops before it and treat the name as empty, and must never
-// require it. That is why the client checks against kPickupRespawnSizeBase
-// rather than sizeof(): bumping PROTOCOL_VERSION is for changes that would make
-// an older peer MISPARSE a message, and an unread tail does not.
+// FORWARD COMPATIBILITY: `typeName` and `active` are optional trailing fields,
+// following the same pattern as ClientAuthPayload::structSize. A reader MUST
+// accept a message whose `size` stops before them (missing name = empty;
+// missing `active` = active) and must never require them. That is why the client
+// checks against kPickupRespawnSizeBase / kPickupRespawnSizeWithActive rather
+// than sizeof(): bumping PROTOCOL_VERSION is for changes that would make an
+// older peer MISPARSE a message, and an unread tail does not.
 struct PickupRespawnData {
     int pickup_id;
     int world_index;
@@ -308,10 +312,21 @@ struct PickupRespawnData {
     char weapon_def_name[64]; // for weapon pickups
     // --- optional tail; may be absent on an older peer ---
     char typeName[64];        // authored World.ozone pickup name, "" if unknown
+    // --- optional tail #2; absent on a peer that predates it ---
+    // 0 = the server has this pickup consumed/inactive. The join snapshot and
+    // every re-sync send INACTIVE pickups too, so a client learns that a pickup
+    // another player already took must not be drawn (and therefore not walked
+    // into forever — the server would answer NOT_FOUND every time). A legacy
+    // reader ignores this byte and keeps the old "present means active" rule.
+    uint8_t active;
 };
 
 // Bytes a reader must see before it can use everything except `typeName`.
 constexpr uint32_t kPickupRespawnSizeBase = offsetof(PickupRespawnData, typeName);
+// Bytes a reader must see before it can trust `active` (everything before it,
+// inclusive). Shorter messages are treated as active, never as inactive.
+constexpr uint32_t kPickupRespawnSizeWithActive =
+    offsetof(PickupRespawnData, active) + sizeof(uint8_t);
 
 struct NpcStateUpdateData {
     int world_index;

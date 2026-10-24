@@ -3,12 +3,34 @@
 // Client settings persistence. Reads the REAL config file
 // System/Angels95.ini at startup (before window creation so window size,
 // VSync and MSAA take effect in InitWindow) and writes it back on exit.
-// The ini is a plain [Settings] key=value file written by SaveClientSettings.
+//
+// The file is grouped by CONCERN - one [AngelTech.*] section each - instead of
+// the single flat [Settings] block it used to be:
+//
+//   [AngelTech.Window]    window size, borderless
+//   [AngelTech.Render]    vsync / msaa / filter / pixel / jitter / fog / fps
+//   [AngelTech.Audio]     master / music / sfx volume, mute
+//   [AngelTech.Gameplay]  head bob, gore, weapon hand
+//   [AngelTech.Input]     mouse sensitivity, invert-Y  (bindings: [Keybinds])
+//   [AngelTech.HUD]       UI scale, crosshair
+//   [AngelTech.Debug]     debug toggle
+//   [Keybinds]            the action table (Input/Keybinds.hpp)
+//   [MasterServers]       master URL list (Client/MasterList.hpp, hand-edited)
+//
+// The names are named constants because Load and Save must not drift: a
+// mismatched pair reads defaults and then OVERWRITES the player's file with
+// them, which looks like "my settings reset for no reason".
+//
+// A legacy flat [Settings] block is still read, per key, so an existing install
+// migrates on its first save instead of losing every option.
 
 #include "Settings.hpp"
 #include "GameplayFlags.hpp"
 #include "Input/Keybinds.hpp"
 #include "IniConfig.hpp"
+#include "ClientSettingsSchema.hpp"
+#include <string>
+#include <vector>
 
 static const char* kClientIniPath = "System/Angels95.ini";
 
@@ -19,99 +41,140 @@ static inline float CfgClampF(float v, float lo, float hi) { return v < lo ? lo 
 static inline void LoadClientSettings() {
     IniConfig cfg;
     if (!cfg.Load(kClientIniPath)) return; // missing/malformed -> defaults
-    const char* S = "Settings";
-    ConfigWindowWidth  = CfgClampI(cfg.GetInt(S, "window_width",  ConfigWindowWidth),  320, 7680);
-    ConfigWindowHeight = CfgClampI(cfg.GetInt(S, "window_height", ConfigWindowHeight), 200, 4320);
-    VSYNCToggle        = cfg.GetBool(S, "vsync",  VSYNCToggle);
-    MXAAToggle         = cfg.GetBool(S, "msaa",   MXAAToggle);
-    ResolutionScale    = CfgClampF(cfg.GetFloat(S, "resolution_scale",  ResolutionScale),  0.25f, 4.0f);
-    UiScale            = CfgClampF(cfg.GetFloat(S, "ui_scale", UiScale), 0.75f, 2.0f);
-    TextureFilterMode  = CfgClampI(cfg.GetInt(S,  "texture_filter",    TextureFilterMode), 0, 5);
-    PixelSize          = CfgClampF(cfg.GetFloat(S, "pixel_size", PixelSize), 1.0f, 32.0f);
-    JitterEnabled      = cfg.GetBool(S, "jitter",      JitterEnabled);
-    JitterIntensity    = CfgClampF(cfg.GetFloat(S, "jitter_intensity", JitterIntensity), 0.0f, 10.0f);
-    FogEnabled         = cfg.GetBool(S, "fog",         FogEnabled);
-    FogIntensity       = CfgClampF(cfg.GetFloat(S, "fog_intensity", FogIntensity), 0.0f, 1.0f);
-    int fr = CfgClampI(cfg.GetInt(S, "fog_tint_r", FogTint.r), 0, 255);
-    int fg = CfgClampI(cfg.GetInt(S, "fog_tint_g", FogTint.g), 0, 255);
-    int fb = CfgClampI(cfg.GetInt(S, "fog_tint_b", FogTint.b), 0, 255);
+    using namespace clientcfg;
+
+    const char* W = kWindow;
+    ConfigWindowWidth  = CfgClampI(Int(cfg, W, "window_width",  ConfigWindowWidth),  320, 7680);
+    ConfigWindowHeight = CfgClampI(Int(cfg, W, "window_height", ConfigWindowHeight), 200, 4320);
+    BorderlessWindow   = Bool(cfg, W, "borderless", BorderlessWindow);
+
+    const char* R = kRender;
+    VSYNCToggle        = Bool(cfg, R, "vsync",  VSYNCToggle);
+    MXAAToggle         = Bool(cfg, R, "msaa",   MXAAToggle);
+    ResolutionScale    = CfgClampF(Float(cfg, R, "resolution_scale",  ResolutionScale),  0.25f, 4.0f);
+    TextureFilterMode  = CfgClampI(Int(cfg, R,  "texture_filter",    TextureFilterMode), 0, 5);
+    PixelSize          = CfgClampF(Float(cfg, R, "pixel_size", PixelSize), 1.0f, 32.0f);
+    PixelShader        = Bool(cfg, R, "pixel_shader",  PixelShader);
+    JitterEnabled      = Bool(cfg, R, "jitter",      JitterEnabled);
+    JitterIntensity    = CfgClampF(Float(cfg, R, "jitter_intensity", JitterIntensity), 0.0f, 10.0f);
+    FogEnabled         = Bool(cfg, R, "fog",         FogEnabled);
+    FogIntensity       = CfgClampF(Float(cfg, R, "fog_intensity", FogIntensity), 0.0f, 1.0f);
+    int fr = CfgClampI(Int(cfg, R, "fog_tint_r", FogTint.r), 0, 255);
+    int fg = CfgClampI(Int(cfg, R, "fog_tint_g", FogTint.g), 0, 255);
+    int fb = CfgClampI(Int(cfg, R, "fog_tint_b", FogTint.b), 0, 255);
     FogTint = (Color){(unsigned char)fr, (unsigned char)fg, (unsigned char)fb, 255};
-    PixelShader      = cfg.GetBool(S, "pixel_shader",  PixelShader);
-    ParticlesEnabled = cfg.GetBool(S, "particles",    ParticlesEnabled);
-    FPSEnabled       = cfg.GetBool(S, "fps",          FPSEnabled);
-    HeadBob          = cfg.GetBool(S, "head_bob",     HeadBob);
-    Debug            = cfg.GetBool(S, "debug",        Debug);
-    g_debugEnabled   = Debug;   // mirror into the cross-TU flag (see Settings.hpp)
-    MuteToggle       = cfg.GetBool(S, "mute",         MuteToggle);
-    AudioSlider      = CfgClampF(cfg.GetFloat(S, "audio_volume", AudioSlider), 0.0f, 100.0f);
-    MusicVolume      = CfgClampF(cfg.GetFloat(S, "music_volume", MusicVolume), 0.0f, 100.0f);
-    SfxVolume        = CfgClampF(cfg.GetFloat(S, "sfx_volume",   SfxVolume),   0.0f, 100.0f);
+    ParticlesEnabled = Bool(cfg, R, "particles",    ParticlesEnabled);
+    FPSEnabled       = Bool(cfg, R, "fps",          FPSEnabled);
+
+    const char* A = kAudio;
+    MuteToggle  = Bool(cfg, A, "mute",         MuteToggle);
+    AudioSlider = CfgClampF(Float(cfg, A, "audio_volume", AudioSlider), 0.0f, 100.0f);
+    MusicVolume = CfgClampF(Float(cfg, A, "music_volume", MusicVolume), 0.0f, 100.0f);
+    SfxVolume   = CfgClampF(Float(cfg, A, "sfx_volume",   SfxVolume),   0.0f, 100.0f);
 
     // Gameplay. Mirror the cross-TU flags gameplay code actually reads
     // (GameplayFlags.hpp); the statics above are this TU's persisted UI state.
-    GoreEnabled      = cfg.GetBool(S, "gore", GoreEnabled);
-    WeaponHand       = CfgClampI(cfg.GetInt(S, "weapon_hand", WeaponHand), 0, 1);
-    g_goreEnabled    = GoreEnabled;
-    g_weaponHand     = WeaponHand;
-    g_mouseSensitivity = CfgClampF(cfg.GetFloat(S, "mouse_sensitivity", g_mouseSensitivity), 0.1f, 5.0f);
-    g_invertY        = cfg.GetBool(S, "invert_y", g_invertY);
-    Keybinds::Load(cfg);
-    BorderlessWindow = cfg.GetBool(S, "borderless", BorderlessWindow);
+    const char* G = kGameplay;
+    HeadBob     = Bool(cfg, G, "head_bob", HeadBob);
+    GoreEnabled = Bool(cfg, G, "gore", GoreEnabled);
+    WeaponHand  = CfgClampI(Int(cfg, G, "weapon_hand", WeaponHand), 0, 1);
+    g_goreEnabled = GoreEnabled;
+    g_weaponHand  = WeaponHand;
 
-    CrosshairStyleSel = CfgClampI(cfg.GetInt(S, "crosshair_style", CrosshairStyleSel),
-                                  0, CROSSHAIR_STYLE_COUNT - 1);
-    CrosshairVisible  = cfg.GetBool(S, "crosshair_visible", CrosshairVisible);
-    CrosshairSize     = CfgClampI(cfg.GetInt(S, "crosshair_size", CrosshairSize), 2, 48);
-    CrosshairGap      = CfgClampI(cfg.GetInt(S, "crosshair_gap",  CrosshairGap),  0, 48);
-    CrosshairThickness = CfgClampF(cfg.GetFloat(S, "crosshair_thickness", CrosshairThickness), 1.0f, 6.0f);
-    CrosshairR = CfgClampI(cfg.GetInt(S, "crosshair_r", CrosshairR), 0, 255);
-    CrosshairG = CfgClampI(cfg.GetInt(S, "crosshair_g", CrosshairG), 0, 255);
-    CrosshairB = CfgClampI(cfg.GetInt(S, "crosshair_b", CrosshairB), 0, 255);
-    CrosshairA = CfgClampI(cfg.GetInt(S, "crosshair_a", CrosshairA), 0, 255);
+    const char* I = kInput;
+    g_mouseSensitivity = CfgClampF(Float(cfg, I, "mouse_sensitivity", g_mouseSensitivity), 0.1f, 5.0f);
+    g_invertY          = Bool(cfg, I, "invert_y", g_invertY);
+    Keybinds::Load(cfg);   // [Keybinds] - unchanged by the scoping pass
+
+    const char* H = kHud;
+    UiScale            = CfgClampF(Float(cfg, H, "ui_scale", UiScale), 0.75f, 2.0f);
+    CrosshairStyleSel  = CfgClampI(Int(cfg, H, "crosshair_style", CrosshairStyleSel),
+                                   0, CROSSHAIR_STYLE_COUNT - 1);
+    CrosshairVisible   = Bool(cfg, H, "crosshair_visible", CrosshairVisible);
+    CrosshairSize      = CfgClampI(Int(cfg, H, "crosshair_size", CrosshairSize), 2, 48);
+    CrosshairGap       = CfgClampI(Int(cfg, H, "crosshair_gap",  CrosshairGap),  0, 48);
+    CrosshairThickness = CfgClampF(Float(cfg, H, "crosshair_thickness", CrosshairThickness), 1.0f, 6.0f);
+    CrosshairR = CfgClampI(Int(cfg, H, "crosshair_r", CrosshairR), 0, 255);
+    CrosshairG = CfgClampI(Int(cfg, H, "crosshair_g", CrosshairG), 0, 255);
+    CrosshairB = CfgClampI(Int(cfg, H, "crosshair_b", CrosshairB), 0, 255);
+    CrosshairA = CfgClampI(Int(cfg, H, "crosshair_a", CrosshairA), 0, 255);
+
+    Debug          = Bool(cfg, kDebug, "debug", Debug);
+    g_debugEnabled = Debug;   // mirror into the cross-TU flag (see DebugFlags.hpp)
 }
 
 // Write all settings back to System/Angels95.ini.
 static inline void SaveClientSettings() {
     IniConfig cfg;
-    const char* S = "Settings";
-    cfg.SetInt(S, "window_width",  ConfigWindowWidth);
-    cfg.SetInt(S, "window_height", ConfigWindowHeight);
-    cfg.SetBool(S, "vsync",  VSYNCToggle);
-    cfg.SetBool(S, "msaa",   MXAAToggle);
-    cfg.SetFloat(S, "resolution_scale",  ResolutionScale);
-    cfg.SetFloat(S, "ui_scale",          UiScale);
-    cfg.SetInt(S,   "texture_filter",    TextureFilterMode);
-    cfg.SetFloat(S, "pixel_size",        PixelSize);
-    cfg.SetBool(S, "jitter",             JitterEnabled);
-    cfg.SetFloat(S, "jitter_intensity",  JitterIntensity);
-    cfg.SetBool(S, "fog",                FogEnabled);
-    cfg.SetFloat(S, "fog_intensity",     FogIntensity);
-    cfg.SetInt(S, "fog_tint_r", FogTint.r);
-    cfg.SetInt(S, "fog_tint_g", FogTint.g);
-    cfg.SetInt(S, "fog_tint_b", FogTint.b);
-    cfg.SetBool(S, "pixel_shader",  PixelShader);
-    cfg.SetBool(S, "particles",     ParticlesEnabled);
-    cfg.SetBool(S, "fps",           FPSEnabled);
-    cfg.SetBool(S, "head_bob",      HeadBob);
-    cfg.SetBool(S, "debug",         Debug);
-    cfg.SetBool(S, "mute",          MuteToggle);
-    cfg.SetFloat(S, "audio_volume", AudioSlider);
-    cfg.SetFloat(S, "music_volume", MusicVolume);
-    cfg.SetFloat(S, "sfx_volume",   SfxVolume);
-    cfg.SetBool(S, "gore",          GoreEnabled);
-    cfg.SetInt(S,  "weapon_hand",   WeaponHand);
-    cfg.SetFloat(S, "mouse_sensitivity", g_mouseSensitivity);
-    cfg.SetBool(S,  "invert_y",     g_invertY);
-    Keybinds::Save(cfg);
-    cfg.SetBool(S, "borderless",    BorderlessWindow);
-    cfg.SetInt(S,   "crosshair_style",     CrosshairStyleSel);
-    cfg.SetBool(S,  "crosshair_visible",   CrosshairVisible);
-    cfg.SetInt(S,   "crosshair_size",      CrosshairSize);
-    cfg.SetInt(S,   "crosshair_gap",       CrosshairGap);
-    cfg.SetFloat(S, "crosshair_thickness", CrosshairThickness);
-    cfg.SetInt(S,   "crosshair_r", CrosshairR);
-    cfg.SetInt(S,   "crosshair_g", CrosshairG);
-    cfg.SetInt(S,   "crosshair_b", CrosshairB);
-    cfg.SetInt(S,   "crosshair_a", CrosshairA);
-    cfg.Save(kClientIniPath);
+    // Load FIRST: this file also carries sections the client only READS
+    // ([MasterServers], and whatever a later feature adds). Starting from an
+    // empty IniConfig and calling Save() writes just this function's keys, so
+    // every other section was truncated on each exit - which is why the master
+    // URL list kept disappearing from a file that is documented as editable.
+    cfg.Load(kClientIniPath);   // missing file is fine: we write a fresh one
+    // The legacy block has just been migrated into the scoped sections below.
+    // Leaving it behind would keep a stale second copy of every setting.
+    cfg.data.erase(clientcfg::kLegacy);
+
+    using namespace clientcfg;
+
+    const char* W = kWindow;
+    cfg.SetInt(W, "window_width",  ConfigWindowWidth);
+    cfg.SetInt(W, "window_height", ConfigWindowHeight);
+    cfg.SetBool(W, "borderless",   BorderlessWindow);
+
+    const char* R = kRender;
+    cfg.SetBool(R,  "vsync",  VSYNCToggle);
+    cfg.SetBool(R,  "msaa",   MXAAToggle);
+    cfg.SetFloat(R, "resolution_scale",  ResolutionScale);
+    cfg.SetInt(R,   "texture_filter",    TextureFilterMode);
+    cfg.SetFloat(R, "pixel_size",        PixelSize);
+    cfg.SetBool(R,  "pixel_shader",  PixelShader);
+    cfg.SetBool(R,  "jitter",             JitterEnabled);
+    cfg.SetFloat(R, "jitter_intensity",  JitterIntensity);
+    cfg.SetBool(R,  "fog",                FogEnabled);
+    cfg.SetFloat(R, "fog_intensity",     FogIntensity);
+    cfg.SetInt(R,   "fog_tint_r", FogTint.r);
+    cfg.SetInt(R,   "fog_tint_g", FogTint.g);
+    cfg.SetInt(R,   "fog_tint_b", FogTint.b);
+    cfg.SetBool(R,  "particles",     ParticlesEnabled);
+    cfg.SetBool(R,  "fps",           FPSEnabled);
+
+    const char* A = kAudio;
+    cfg.SetBool(A,  "mute",         MuteToggle);
+    cfg.SetFloat(A, "audio_volume", AudioSlider);
+    cfg.SetFloat(A, "music_volume", MusicVolume);
+    cfg.SetFloat(A, "sfx_volume",   SfxVolume);
+
+    const char* G = kGameplay;
+    cfg.SetBool(G, "head_bob",    HeadBob);
+    cfg.SetBool(G, "gore",        GoreEnabled);
+    cfg.SetInt(G,  "weapon_hand", WeaponHand);
+
+    const char* I = kInput;
+    cfg.SetFloat(I, "mouse_sensitivity", g_mouseSensitivity);
+    cfg.SetBool(I,  "invert_y",          g_invertY);
+    Keybinds::Save(cfg);   // [Keybinds]
+
+    const char* H = kHud;
+    cfg.SetFloat(H, "ui_scale",            UiScale);
+    cfg.SetInt(H,   "crosshair_style",     CrosshairStyleSel);
+    cfg.SetBool(H,  "crosshair_visible",   CrosshairVisible);
+    cfg.SetInt(H,   "crosshair_size",      CrosshairSize);
+    cfg.SetInt(H,   "crosshair_gap",       CrosshairGap);
+    cfg.SetFloat(H, "crosshair_thickness", CrosshairThickness);
+    cfg.SetInt(H,   "crosshair_r", CrosshairR);
+    cfg.SetInt(H,   "crosshair_g", CrosshairG);
+    cfg.SetInt(H,   "crosshair_b", CrosshairB);
+    cfg.SetInt(H,   "crosshair_a", CrosshairA);
+
+    cfg.SetBool(kDebug, "debug", Debug);
+
+    // Fixed section order = a stable, diffable, hand-editable file. SaveOrdered
+    // appends anything not named here, so unknown sections survive the round
+    // trip instead of being deleted.
+    cfg.SaveOrdered(kClientIniPath, clientcfg::kSectionOrder,
+                    "; Angels95 client settings - written by the game on exit; safe to hand-edit.\n"
+                    "; Grouped by concern; a legacy flat [Settings] block is migrated here on save.\n"
+                    "\n");
 }

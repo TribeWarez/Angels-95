@@ -23,8 +23,8 @@ click through it.
 `MenuMetrics::Compute(w, h, dpi, uiScale)` returns the frame, title bar, nav bar,
 content and footer rectangles plus every text/row size. Pages must use those
 values; a hardcoded rect is a bug. `UiScale` is persisted in
-`System/Angels95.ini` as `ui_scale`. The menu draws directly to the screen, not
-into the game's `Target`, so resizing cannot leave it stretched.
+`System/Angels95.ini` as `[AngelTech.HUD] ui_scale`. The menu draws directly to
+the screen, not into the game's `Target`, so resizing cannot leave it stretched.
 
 Breakpoints: `compact` below 1100px, `wide` from 1150px. The character page uses
 two columns whenever the body is at least 700px wide. Long lists scroll with the

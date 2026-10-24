@@ -118,6 +118,8 @@ void ShowSurfacePropsScoped(bool show, int renderable, uint32_t faceMask,
 void ShowPropertiesPanel(bool show);
 void ShowAnimPanel(bool show);
 void RefreshAnimPanel();
+void ShowMaterialGraph(bool show);
+void RefreshMaterialGraph();
 void ShowLevelList(bool show);
 void RefreshLevelList();
 void RefreshWorldGraph();
@@ -148,6 +150,8 @@ inline void ShowScriptManager(bool) {}
 inline void ShowModelBrowser(bool) {}
 inline void ShowAnimPanel(bool) {}
 inline void RefreshAnimPanel() {}
+inline void ShowMaterialGraph(bool) {}
+inline void RefreshMaterialGraph() {}
 inline void ShowPickupPanel(bool) {}
 inline void ShowNodePanel(bool) {}
 inline void ShowHeightmapEditor(bool) {}

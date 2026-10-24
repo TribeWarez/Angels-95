@@ -4,10 +4,13 @@
 #include <rlgl.h>
 #include "../Script/LightningEntityManager.hpp"
 #include "../Script/LightningEntityDef.hpp"
+#include "../Package/PackageAssetLoader.hpp"
 #include "../GameplayFlags.hpp"
 #include "../Log.hpp"
 #include <cmath>
 #include <cstdlib>
+#include <cctype>
+#include <vector>
 
 namespace oz {
 
@@ -76,12 +79,42 @@ static Vector3 VmStatVec3(const EntityDef* d, const char* k, Vector3 def) {
     return def;
 }
 
+// Does an asset exist on disk OR in a loaded package? Mesh::Load warns loudly on
+// a miss, so probe first rather than logging a warning for every weapon that has
+// no attachments.
+static bool VmAssetExists(const std::string& resolved) {
+    if (resolved.empty()) return false;
+    if (IsPathFile(resolved.c_str())) return true;
+    std::vector<uint8_t> tmp;
+    return PackageAssetLoader::Instance().ReadInto(resolved.c_str(), tmp);
+}
+
+// `<dir>/<stem>_AdditionalMeshes.glb` beside the weapon model. Both shipped
+// animated-ready weapons (Pistol_01, Rifle_01) put their detachable magazine
+// there, which is why the rifle used to fire with no magazine in the view-model:
+// only the base model was ever loaded.
+static std::string SiblingAdditionalMeshes(const std::string& mesh) {
+    const size_t dot = mesh.find_last_of('.');
+    const size_t slash = mesh.find_last_of("/\\");
+    if (dot == std::string::npos) return "";
+    if (slash != std::string::npos && dot < slash) return "";
+    std::string ext = mesh.substr(dot);
+    for (auto& c : ext) c = (char)tolower((unsigned char)c);
+    if (ext != ".glb" && ext != ".gltf") return "";
+    return mesh.substr(0, dot) + "_AdditionalMeshes" + mesh.substr(dot);
+}
+
 void ViewModel::Clear() {
     m_mesh.reset();
     m_skel = nullptr;
     m_clipIdle = m_clipFire = m_clipReload = m_active = -1;
     m_time = 0.0f;
+    m_clipRate = 1.0f;
     m_recoil = m_reloadT = 0.0f;
+    m_attach.reset();
+    m_magMesh = -1;
+    m_magDrop = 0.0f;
+    m_attachCenter = {0.0f, 0.0f, 0.0f};
     m_key.clear();
 }
 
@@ -114,19 +147,34 @@ void ViewModel::SetWeapon(const EntityDef* def, int variantIndex) {
     }
 
     // Transform params refresh cheaply each call.
-    m_offset   = VmStatVec3(def, "viewmodel_offset", m_offset);
-    m_rot      = VmStatVec3(def, "viewmodel_rot", m_rot);
-    m_scale    = VmStatFloat(def, "viewmodel_scale", m_scale);
-    m_recoilMax = VmStatFloat(def, "recoil", m_recoilMax);
+    //
+    // The fallbacks are the DEFAULTS, not the current members. They used to be
+    // `m_offset`/`m_rot`/`m_scale`/`m_recoilMax`, so a weapon whose def does not
+    // author a key silently inherited whatever the PREVIOUS weapon had set: pick
+    // up the rifle (rot.y = 90, scale 1.3) and then a weapon with no
+    // viewmodel_rot rendered sideways at the rifle's offset. A transform is a
+    // property of the weapon, exactly like its mesh; it must not carry over.
+    m_offset   = VmStatVec3(def, "viewmodel_offset", {0.22f, -0.18f, 0.45f});
+    m_rot      = VmStatVec3(def, "viewmodel_rot", {0.0f, 0.0f, 0.0f});
+    m_scale    = VmStatFloat(def, "viewmodel_scale", 1.0f);
+    m_recoilMax = VmStatFloat(def, "recoil", 1.0f);
     m_reloadSeconds = VmStatFloat(def, "reload_time", 1.2f);
+    m_clipFps = VmStatFloat(def, "viewmodel_anim_fps", 30.0f);
+    if (m_clipFps <= 0.0f) m_clipFps = 30.0f;
 
-    std::string key = def->name + "|" + mesh + "|" + tex;
+    std::string key = def->name + "|" + mesh + "|" + tex + "|" +
+                      VmStatStr(def, "viewmodel_attachment", SiblingAdditionalMeshes(mesh));
     if (key == m_key) return;
     m_key = key;
     m_mesh.reset();
     m_skel = nullptr;
     m_clipIdle = m_clipFire = m_clipReload = m_active = -1;
     m_time = 0.0f;
+    m_clipRate = 1.0f;
+    m_attach.reset();
+    m_magMesh = -1;
+    m_magDrop = 0.0f;
+    m_attachCenter = {0.0f, 0.0f, 0.0f};
 
     if (mesh.empty()) {
         OZ_WARN("[CHAIN] VM::SetWeapon mesh empty for '%s'", def->name.c_str());
@@ -165,6 +213,30 @@ void ViewModel::SetWeapon(const EntityDef* def, int variantIndex) {
             ComputeFitScale(m_mesh->Bounds()));
     auto* sk = dynamic_cast<SkeletalMesh*>(m_mesh.get());
     const bool hazard = (sk != nullptr) && !BoneIdsFitSkeleton(sk->GetModel());
+
+    // Rigid attachment (detachable magazine). The shipped weapon GLBs are
+    // flattened to single-skin static meshes, so a reload CLIP cannot play on
+    // them; the magazine is a separate model (`_AdditionalMeshes.glb`) and is
+    // animated by moving it during the reload below. Loading only the base model
+    // is why the rifle fired with no magazine attached.
+    {
+        std::string attachPath = VmStatStr(def, "viewmodel_attachment", SiblingAdditionalMeshes(mesh));
+        if (!attachPath.empty() &&
+            VmAssetExists(ResolveMeshAsset(baseDir, attachPath))) {
+            auto a = MeshCache::Instance().GetStatic(attachPath, "", baseDir, true);
+            if (a && a->Valid() && a->MeshCount() > 0) {
+                m_attach = a;
+                m_attachCenter = ComputeCenter(a->Bounds());
+                int idx = (int)VmStatFloat(def, "viewmodel_attachment_mesh", -1.0f);
+                if (idx < 0 || idx >= a->MeshCount())
+                    idx = (a->MeshCount() > 1) ? 1 : 0; // [Separated, Full/2+Bullets, OneBullet]
+                m_magMesh = idx;
+                OZ_INFO("ViewModel: '%s' attachment='%s' mesh %d/%d", def->name.c_str(),
+                        attachPath.c_str(), idx, a->MeshCount());
+            }
+        }
+    }
+
     if (sk && (skelMode > 0.0f || !hazard)) {
         m_skel = sk;
         m_clipIdle   = sk->FindClip("Idle");
@@ -198,6 +270,7 @@ bool ViewModel::PlayClip(const std::string& name) {
     if (idx < 0) return false;
     m_active = idx;
     m_time = 0.0f;
+    m_clipRate = 1.0f;
     // An explicit Idle request just keeps looping; every other clip is
     // one-shot and Update() returns to the Idle loop when it ends.
     m_loop = (idx == m_clipIdle);
@@ -210,6 +283,7 @@ void ViewModel::TriggerFire() {
     if (m_skel && m_clipFire >= 0) {
         m_active = m_clipFire;
         m_time = 0.0f;
+        m_clipRate = 1.0f;
         m_loop = false;
     }
 }
@@ -217,10 +291,15 @@ void ViewModel::TriggerFire() {
 void ViewModel::TriggerReload() {
     OZ_INFO("[CHAIN] VM::TriggerReload key='%s'", m_key.c_str());
     m_reloadT = m_reloadSeconds;
+    m_magDrop = 0.0f;
     if (m_skel && m_clipReload >= 0) {
         m_active = m_clipReload;
         m_time = 0.0f;
         m_loop = false;
+        // Stretch/squeeze the clip so it finishes when the magazine is actually
+        // back in (reload_time), instead of running at its authored rate.
+        const float dur = m_skel->ClipSeconds(m_clipReload, m_clipFps);
+        m_clipRate = (dur > 0.0f && m_reloadSeconds > 0.0f) ? (dur / m_reloadSeconds) : 1.0f;
     }
 }
 
@@ -228,13 +307,30 @@ void ViewModel::Update(float dt) {
     if (m_recoil > 0.0f) m_recoil = fmaxf(0.0f, m_recoil - dt * 7.0f);
     if (m_reloadT > 0.0f) m_reloadT = fmaxf(0.0f, m_reloadT - dt);
 
+    // Magazine motion for the reload. Phases: drop (0-30%), out (30-45%),
+    // insert (45-80%), seated. Driven by the same timer as the dip, so the
+    // magazine is home exactly when ammo returns. The attachment is a SEPARATE
+    // unskinned model, so it is animated even when the gun body has a Reload
+    // clip (the clip's Magazine joint has no geometry bound to it).
+    if (m_attach && m_magMesh >= 0 && m_reloadSeconds > 0.0f) {
+        const float p = 1.0f - (m_reloadT / m_reloadSeconds);   // 0..1
+        if (p <= 0.0f) m_magDrop = 0.0f;
+        else if (p < 0.30f) m_magDrop = p / 0.30f;
+        else if (p < 0.45f) m_magDrop = 1.0f;
+        else if (p < 0.80f) m_magDrop = 1.0f - (p - 0.45f) / 0.35f;
+        else m_magDrop = 0.0f;
+    } else {
+        m_magDrop = 0.0f;
+    }
+
     if (!m_skel || m_active < 0) return;
-    m_time += dt;
+    m_time += dt * m_clipRate;
     if (!m_loop) {
-        float dur = m_skel->ClipSeconds(m_active);
+        float dur = m_skel->ClipSeconds(m_active, m_clipFps);
         if (dur > 0.0f && m_time >= dur) {
             m_active = m_clipIdle;
             m_time = 0.0f;
+            m_clipRate = 1.0f;
             m_loop = true;
         }
     }
@@ -261,9 +357,11 @@ void ViewModel::Draw(Camera3D& camera, Shader litShader) {
     float kick = m_recoil * 0.05f * (m_recoilMax > 0.0f ? m_recoilMax : 1.0f);
     float rpitch = -m_recoil * 9.0f;
 
-    // Reload dip / tilt.
+    // Reload dip / tilt. A skeletal Reload clip owns the motion when present, so
+    // the procedural dip is skipped then (it used to run on top of the clip).
     float dip = 0.0f, rtilt = 0.0f;
-    if (m_reloadT > 0.0f && m_reloadSeconds > 0.0f) {
+    const bool reloadClipOwnsMotion = (m_skel && m_clipReload >= 0);
+    if (m_reloadT > 0.0f && m_reloadSeconds > 0.0f && !reloadClipOwnsMotion) {
         float p = fminf(1.0f, m_reloadT / m_reloadSeconds);
         dip = -0.09f * p;
         rtilt = 28.0f * p;
@@ -306,17 +404,22 @@ void ViewModel::Draw(Camera3D& camera, Shader litShader) {
     // Fit normalises wildly different source scales into a usable held size;
     // viewmodel_scale stays a relative tuning multiplier on top of that.
     const float fitScale = m_scale * ComputeFitScale(m_mesh->Bounds());
-    Matrix local = MatrixMultiply(
-        MatrixMultiply(
-            MatrixTranslate(-m_center.x, -m_center.y, -m_center.z),
-            MatrixRotateXYZ({rotDeg.x * DEG2RAD, rotDeg.y * DEG2RAD, rotDeg.z * DEG2RAD})),
-        MatrixMultiply(
-            MatrixScale(fitScale, fitScale, fitScale),
-            MatrixTranslate(off.x, off.y, off.z)));
-    Matrix world = MatrixMultiply(local, camWorld);
+    // `center` is the model's own bounds midpoint (base and attachment differ),
+    // so both copies of the weapon spin/drop about their own centre while
+    // sharing the camera-space offset, rotation and scale.
+    auto buildLocal = [&](const Vector3& center, const Vector3& pivotOff, float scaleMul) {
+        return MatrixMultiply(
+            MatrixMultiply(
+                MatrixTranslate(-center.x, -center.y, -center.z),
+                MatrixRotateXYZ({rotDeg.x * DEG2RAD, rotDeg.y * DEG2RAD, rotDeg.z * DEG2RAD})),
+            MatrixMultiply(
+                MatrixScale(fitScale * scaleMul, fitScale * scaleMul, fitScale * scaleMul),
+                MatrixTranslate(pivotOff.x, pivotOff.y, pivotOff.z)));
+    };
+    Matrix world = MatrixMultiply(buildLocal(m_center, off, 1.0f), camWorld);
 
     if (m_skel && m_active >= 0)
-        m_skel->ApplyPose(m_active, m_time);
+        m_skel->ApplyPose(m_active, m_time, m_clipFps);
 
     if (s_trace)
         OZ_INFO("[CHAIN] VM::Draw pre-DrawMatrix key='%s' recoil=%.2f reloadT=%.2f",
@@ -352,6 +455,21 @@ void ViewModel::Draw(Camera3D& camera, Shader litShader) {
     // level, which read as "occlusion missing".
     rlDrawRenderBatchActive();
     m_mesh->DrawMatrix(world, litShader);
+
+    // Detachable magazine (sibling `_AdditionalMeshes.glb`). Drawn with the same
+    // transform; during a reload it drops out of the well and is reinserted, so
+    // the gun is never seen firing with an empty mag well.
+    if (m_attach && m_attach->Valid() && m_magMesh >= 0) {
+        // Camera-space nudge/scale so an attachment authored in a different
+        // pivot can be corrected without re-exporting the asset.
+        const EntityDef* wdef = ent ? ent->def : nullptr;
+        const Vector3 adj = VmStatVec3(wdef, "viewmodel_attachment_offset", {0.0f, 0.0f, 0.0f});
+        const float magScale = VmStatFloat(wdef, "viewmodel_attachment_scale", 1.0f);
+        const float drop = 0.12f * m_magDrop;
+        Vector3 magOff = {off.x + adj.x, off.y + adj.y - drop, off.z + adj.z};
+        Matrix magWorld = MatrixMultiply(buildLocal(m_attachCenter, magOff, magScale), camWorld);
+        m_attach->DrawSubmeshMatrix(m_magMesh, magWorld, litShader);
+    }
 
     if (s_trace) OZ_INFO("[CHAIN] VM::Draw post-DrawMatrix");
 }

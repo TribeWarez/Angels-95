@@ -1,0 +1,16 @@
+ozmat 1
+material "RustyMetal"
+
+node base texture "GameData/Worlds/Dust_Ravine/oztex/xtMetalRusty.png"
+node rust texture "GameData/Worlds/Dust_Ravine/oztex/xtCoal.png"
+node mix multiply base rust
+node bump normal rust 2
+
+output diffuse mix
+output alpha -
+output normal bump
+output emissive -
+
+bake 256 256
+hash 1df05febbf353f6f
+baked "GameData/Materials/RustyMetal/albedo.png" "GameData/Materials/RustyMetal/normal.png" -

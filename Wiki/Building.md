@@ -212,15 +212,111 @@ runtime, except `AngelServ` now also accepts an optional
 
 ### VPS deployment
 
-`System/angels95-serv.service` ships **systemd units** for `AngelServ` and
-`AngelMaster` — copy the unit into `/etc/systemd/system/`, then:
+`System/angels95-serv.service` and `System/angels95-master.service` ship
+**systemd units** for `AngelServ` and `AngelMaster` — copy them into
+`/etc/systemd/system/`, then:
 
 ```bash
 systemctl daemon-reload
-systemctl enable --now angels95-serv
+systemctl enable --now angels95-serv angels95-master
 ```
 
 Run both daemons with `--bind 0.0.0.0` so they listen on the public interface.
+
+### Automatic server deployment (GitHub Actions)
+
+Pushing a `b*` tag deploys the servers, after the Linux CI job (`make test`,
+worldchecks, the GLIBC 2.39 gate) passes. The `deploy` job in
+`.github/workflows/ci.yml`:
+
+1. downloads the `AngelServ`/`AngelMaster` binaries built by that run,
+2. assembles a self-contained bundle (the binaries, the unit files,
+   `deploy-remote.sh`, and the whole `GameData/` tree minus `Saves/` and
+   `Screenshots/`, plus a `System/BUILD_VERSION` stamp),
+3. smoke-tests the binaries on the runner,
+4. rsyncs `GameData/` with `--delete` (a world removed upstream disappears from
+   the server's world list) and `System/` without `--delete` (the host's
+   `OzServer.ini`, logs and cache are never touched),
+5. runs `System/deploy-remote.sh` over SSH, which validates the binaries,
+   renders/installs the unit files present in `System/`, restarts them and fails
+   with journal output if one does not become active.
+
+Deploys are gated on the `production` GitHub environment, so the repository can
+require a reviewer before a rollout. By default both `AngelServ` and
+`AngelMaster` are shipped; set the repository variable `DEPLOY_MASTER` to
+`false` when the public listing is the separate
+[`TribeWarez/angels95-master-server`](https://github.com/TribeWarez/angels95-master-server)
+deployment and this host should run only the game server. The deploy only
+manages units it is given, so if a host previously ran `angels95-master` and you
+then switch `DEPLOY_MASTER` off, stop it once by hand
+(`sudo systemctl disable --now angels95-master`).
+
+#### One-time VPS setup
+
+```bash
+# deploy user + install root
+sudo useradd -m -s /bin/bash deploy
+sudo mkdir -p /srv/angels95 && sudo chown deploy:deploy /srv/angels95
+
+# the workflow needs rsync on both ends; curl is the HTTPS master uplink
+sudo apt-get install -y rsync curl ca-certificates
+
+# the remote script installs the units and restarts the services
+echo 'deploy ALL=(root) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/angels95-deploy
+sudo chmod 440 /etc/sudoers.d/angels95-deploy
+```
+
+The deploy user can write the binaries the units execute as root, so a tighter
+sudoers rule than `NOPASSWD:ALL` is not a security boundary. Use a dedicated,
+key-only account and restrict it at the SSH/firewall level instead.
+
+The binaries are built on `ubuntu-24.04` and CI verifies they require no symbol
+newer than `GLIBC_2.39`, so the VPS must provide at least that (Ubuntu 24.04 or
+a newer compatible distro). `deploy-remote.sh` runs `--version` on both binaries
+before restarting, so a mismatched host fails the deploy instead of the fleet.
+
+Create `System/OzServer.ini` once with the host's `[Server]`/`[Auth]` tokens —
+the deploy never writes that file. Open the ports you actually use:
+`27015/udp` + `8080/tcp` for `AngelServ`, `27900/udp` + `27950/tcp` for
+`AngelMaster` (put an HTTPS reverse proxy in front of the master if it is
+public).
+
+#### Repository configuration
+
+Secrets:
+
+| Secret | Meaning |
+|---|---|
+| `DEPLOY_HOST` | VPS hostname or IP |
+| `DEPLOY_USER` | SSH user that owns the install root (e.g. `deploy`) |
+| `DEPLOY_SSH_KEY` | private key for that user, no passphrase |
+| `DEPLOY_KNOWN_HOSTS` | optional pinned `known_hosts` line; when absent the job falls back to `ssh-keyscan` (TOFU) |
+
+Variables:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DEPLOY_PORT` | `22` | SSH port |
+| `DEPLOY_PATH` | `/srv/angels95` | install root; holds `System/` and `GameData/` |
+| `DEPLOY_MASTER` | `true` | ship `AngelMaster` too; set `false` for a game-server-only host |
+
+#### Rollback and manual redeploy
+
+Every deploy keeps the previous binaries as `System/AngelServ.prev` and (when
+the master is shipped) `System/AngelMaster.prev`:
+
+```bash
+cd /srv/angels95/System
+cp -f AngelServ.prev AngelServ
+sudo systemctl restart angels95-serv
+# only when DEPLOY_MASTER is true:
+cp -f AngelMaster.prev AngelMaster && sudo systemctl restart angels95-master
+```
+
+To redeploy an existing tag without re-tagging, open that tag's **Build**
+workflow run (or a failed run) and use **Re-run all jobs** — the `linux` and
+`deploy` jobs run again and the deploy is idempotent.
+
 
 ## Wiki deployment
 

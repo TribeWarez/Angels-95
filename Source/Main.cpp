@@ -762,6 +762,22 @@ ShowSpellbook = false;
 
     // Outer loop: return to menu after gameplay
     while (!WindowShouldClose() && !shotRunComplete && !g_quitRequested) {
+    // EVERY pass through this loop is a new session: the previous one ended when
+    // the inner loop broke (menu/quit). Reset all cross-session state HERE, before
+    // the menu can restore a save, so campaign -> practice and -> multiplayer
+    // start clean. Doing it inside LoadWorld() would be wrong: portals and
+    // campaign world transitions intentionally keep the player's gear.
+    if (g_client.is_connected()) g_client.disconnect();
+    g_network_enabled = false;
+    g_network_world_index = -1;
+    g_serverWorldNames.clear();
+    // UI overlays are Main.cpp statics, so the reset cannot live in Core.hpp.
+    ShowInventory = false;
+    ShowSkillTree = false;
+    ShowSpellbook = false;
+    ShowSettings = false;
+    g_consoleOpen = false;
+    ResetSessionState();
     PlayHomeScreen();
     if (WindowShouldClose() || g_quitRequested) break;
     g_gamePaused = false;
@@ -1537,5 +1553,8 @@ ShowSpellbook = false;
     // the manager is an intentionally-leaked singleton, so without this its GL
     // objects would outlive the context.
     OzParticleSimulationManager::Instance().Shutdown();
+    // Baked material textures are owned by the registry; release them while the
+    // GL context is still alive.
+    ozmat::MaterialRegistry::Instance().Shutdown();
     CloseWindow();
 }

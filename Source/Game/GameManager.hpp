@@ -51,6 +51,12 @@ public:
     // mission's world ("" if unknown).
     std::string SetActiveMission(const std::string& mission);
 
+    // Drop the active mission and clear the objective/flag store. A NEW SESSION
+    // starts with no campaign context; without this a practice match (or a
+    // multiplayer join) inherited the previous session's campaign mission, and
+    // SaveGame then wrote it into Campaign.sav as if it had been played.
+    void ClearActiveMission();
+
     const std::string& ActiveMission() const { return m_activeMission; }
     std::string ActiveSector() const;
 

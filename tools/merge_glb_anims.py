@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Merge glTF animations from separate .glb files into a model .glb.
 
+Called by `tools/convert_fbx.ps1` on its animated path, AFTER
+`merge_glb_skins.py` has collapsed FBX2glTF's one-skin-per-part output into a
+single skin (raylib supports one skin per model).
+
 FBX2glTF exports each FBX independently, so a rig's animations end up in their
 own .glb files with no skin. raylib's LoadModelAnimations() validates the
 animation against the model's skeleton, so the clips must live in the model GLB.

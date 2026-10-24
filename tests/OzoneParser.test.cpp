@@ -429,6 +429,35 @@ static void test_collision_proxy_flag_roundtrip() {
                 p.size() ? p[0].surfaceFlags : -1);
 }
 
+// Brush material graph name. `surfMaterial=` is brush-wide, `face<name>_material=`
+// is the per-face override; both are plain strings (a material NAME, not a path)
+// and a material-only face must count as non-default so it takes the per-face
+// draw path that binds the material.
+static void test_surface_material_kwarg() {
+    using namespace oz::surface;
+    test_count++;
+    printf("  TEST brush surfMaterial= and facepy_material=... ");
+    auto e = OzoneParser::parse_string(
+        "add box 0 0 0 8 8 8 0 surfMaterial=RustyMetal facepy_material=GlowSign\n");
+    bool ok = e.size() == 1
+        && e[0].surface.def.material == "RustyMetal"
+        && e[0].surface.IsFaceOverridden(FACE_PY)
+        && e[0].surface.Resolve(FACE_PY).material == "GlowSign"
+        && e[0].surface.def.IsNonDefault();
+    if (ok) { pass_count++; printf("PASS\n"); }
+    else printf("FAIL: def='%s' faceOverridden=%d face='%s'\n",
+                e.size() ? e[0].surface.def.material.c_str() : "",
+                e.size() ? (int)e[0].surface.IsFaceOverridden(FACE_PY) : -1,
+                e.size() ? e[0].surface.Resolve(FACE_PY).material.c_str() : "");
+
+    test_count++;
+    printf("  TEST surfMaterial= aliases material=... ");
+    auto a = OzoneParser::parse_string("add box 0 0 0 8 8 8 0 material=Stone\n");
+    bool ok2 = a.size() == 1 && a[0].surface.def.material == "Stone";
+    if (ok2) { pass_count++; printf("PASS\n"); }
+    else printf("FAIL: def='%s'\n", a.size() ? a[0].surface.def.material.c_str() : "");
+}
+
 // ---------------------------------------------------------------------------
 // Surface properties
 // ---------------------------------------------------------------------------
@@ -647,6 +676,7 @@ int main() {
     test_texpath_quoted_then_flags();
     test_surface_brush_flags();
     test_collision_proxy_flag_roundtrip();
+    test_surface_material_kwarg();
     test_surface_per_face_kwargs();
     test_surface_face_inherits_default();
     test_surface_uv_kwargs_still_derive();

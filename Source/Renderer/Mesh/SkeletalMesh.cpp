@@ -78,6 +78,14 @@ void SkeletalMesh::ApplyPose(int clipIndex, float timeSeconds, float fps) const 
     UpdateModelAnimation(m_model, anim, frame);
 }
 
+bool SkeletalMesh::NeedsShaderSkinning() const {
+    if (!m_valid || m_model.meshCount <= 0) return false;
+    if (OZ_MODEL_BONE_COUNT(m_model) <= 0) return false;
+    // CPU-skinning builds allocate animVertices and upload the posed positions,
+    // so the shader must leave them alone. GPU builds leave it null.
+    return m_model.meshes[0].animVertices == nullptr;
+}
+
 bool BoneIdsFitSkeleton(const ::Model& model) {
     // No skeleton loaded: no vertex may legally reference a bone, so any
     // bone indices at all (the multi-skin case where the skin was dropped)

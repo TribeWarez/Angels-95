@@ -11,6 +11,7 @@
 #include "Pawn/OzPawnSystem.hpp"
 #include "Pawn/CombatMath.hpp"
 #include "Package/PackageAssetLoader.hpp"
+#include "Material/MaterialRegistry.hpp"
 #include "Client/MasterList.hpp"
 #include "Renderer/EngineBillboard.hpp"
 #include "Renderer/ViewModel.hpp"
@@ -655,6 +656,9 @@ void AngelTechInit()
 
     // Initialize package-based asset loading
     PackageAssetLoader::Instance().Init();
+    // Baked material graphs (GameData/Materials/*.ozmat). Must follow the package
+    // loader because a released install may carry them inside a .ozpak.
+    ozmat::MaterialRegistry::Instance().Init();
 
     // Initialize LightningScript entity system
     LightningEntityRegistry::Instance().Init();
@@ -745,8 +749,11 @@ void AngelTechInit()
                 std::istringstream f(cf.second);
                 std::string name, sp, sc, modelPath, modelTex;
                 std::string meshType, animIdle, animPatrol, animChase, animReturn, animDeath;
+                std::string animFile;
                 float speed = 1.5f, aggroRange = 6.0f, attackRange = 1.5f, damage = 10.0f;
-                float animSpeed = 1.0f, modelScale = 1.0f;
+                float animSpeed = 1.0f, modelScale = 1.0f, modelYOffset = 0.0f;
+                float hoverAmplitude = 0.35f, hoverSpeed = 1.6f;
+                bool hover = false;
                 int maxHealth = 100;
                 std::string line;
                 while (std::getline(f, line)) {
@@ -778,6 +785,14 @@ void AngelTechInit()
                     else if (key == "anim_return") animReturn = val;
                     else if (key == "anim_death") animDeath = val;
                     else if (key == "anim_speed") animSpeed = std::stof(val);
+                    // Vertex-keyframe clip for an UNRIGGED model (.ozanim), plus
+                    // vertical placement / hovering. Kept in step with the editor's
+                    // parser in AngelEd/Source/Main.cpp.
+                    else if (key == "animfile" || key == "anim_file") animFile = val;
+                    else if (key == "model_y_offset") modelYOffset = std::stof(val);
+                    else if (key == "hover") hover = (val == "1" || val == "true" || val == "True" || val == "yes");
+                    else if (key == "hover_amplitude") hoverAmplitude = std::stof(val);
+                    else if (key == "hover_speed") hoverSpeed = std::stof(val);
                 }
                 if (!name.empty()) {
                     PawnDef def;
@@ -799,6 +814,11 @@ void AngelTechInit()
                     def.anim_return = animReturn;
                     def.anim_death = animDeath;
                     def.anim_speed = animSpeed;
+                    def.anim_file = animFile;
+                    def.model_y_offset = modelYOffset;
+                    def.hover = hover;
+                    def.hover_amplitude = hoverAmplitude;
+                    def.hover_speed = hoverSpeed;
                     def.baseDir = std::string(defsDir) + "/";
                     if (!def.baseDir.empty()) def.baseDir += "/";
                     ps.RegisterDef(def);
@@ -1084,6 +1104,49 @@ bool LaunchHostedServer(int serverPort, const char* missionOrNull,
     }
     OZ_ERROR("Failed to launch %s (see System/HostedServer.log)", exeName);
     return false;
+}
+
+// Start a brand-new session.
+//
+// LoadWorld() deliberately preserves the player's gear across a world change: a
+// portal, a campaign transition and a server-driven mission move all reload the
+// level around a character who keeps what they carry. A session chosen from the
+// title menu is the opposite — nothing about the previous world, mode or server
+// may leak into it. Without this reset, a campaign's hotbar/backpack followed the
+// player into a practice match and into multiplayer, and SaveGame() then wrote the
+// stale loadout into POS.sav so the next Continue resurrected it as well.
+//
+// Called once per outer-loop iteration, BEFORE PlayHomeScreen(). A Continue
+// inside the menu overwrites this with the saved state through LoadSave().
+void ResetSessionState()
+{
+    // Hotbar, equipment, spell bar, the entity instances and every cached
+    // model/texture. This also re-spawns the Player entity, so health/mana/
+    // stamina/XP/level start from the defs instead of the previous session.
+    LightningEntityManager::Instance().Init();
+    // Backpack + coins are a plain global with no owner to reset them.
+    gInventory = InventorySystem{};
+    // Campaign mission + objectives + world flags (a practice match is not the
+    // previous campaign's next mission).
+    oz::game::GameManager::Instance().ClearActiveMission();
+    oz::ViewModel::Instance().Clear();
+    PawnSystem::Instance().m_pickupFeedback = PawnSystem::PickupFeedback{};
+
+    // Per-world latches that are not owned by LoadWorld's clear block.
+    g_activeEnvZone.clear();
+    g_damageCooldown = 0.0f;
+    g_savedWorldName.clear();
+    // A "Continue" from the previous session must not pin the next spawn.
+    SetCameraFlag = false;
+    // The game-over overlay counts deaths within a session.
+    AngelTechData.Deaths = 1;
+    // A queued portal/transition would otherwise fire on the first frame of the
+    // new session's world, teleporting the player to the previous one's target.
+    g_portalTransitionPending = false;
+    g_portalCooldown = 0.0f;
+    g_portalHasReturn = false;
+    g_portalReturnWorld.clear();
+    g_returnPortalId = -1;
 }
 
 void PlayHomeScreen()
@@ -1505,9 +1568,19 @@ void SaveGame()
 
     // Campaign state (active mission). Its own file so the fragile TF.sav colon
     // format is untouched.
+    //
+    // Only write it when a campaign mission is active. A practice match or a
+    // multiplayer join has none, and SaveGame() runs from LoadWorld on every
+    // session start — writing the empty serialisation used to TRUNCATE
+    // Campaign.sav to 0 bytes, so playing a practice match erased the campaign
+    // the player could have continued.
     {
-        std::ofstream cf("GameData/Saves/Campaign.sav");
-        if (cf) cf << oz::game::GameManager::Instance().SerializeState();
+        const std::string campaignState =
+            oz::game::GameManager::Instance().SerializeState();
+        if (!campaignState.empty()) {
+            std::ofstream cf("GameData/Saves/Campaign.sav");
+            if (cf) cf << campaignState;
+        }
     }
 }
 

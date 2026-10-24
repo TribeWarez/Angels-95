@@ -89,6 +89,7 @@ static const int ID_SPF_SCOPESEL   = 706;   // "Selected faces" / "Whole brush"
 static const int ID_SPF_FLAG_BASE  = 710;   // + i
 static const int ID_SPF_F_BASE     = 760;   // + i  (float fields)
 static const int ID_SPF_TEXPATH    = 800;   // the one free-text field
+static const int ID_SPF_MATERIAL   = 801;   // baked material name
 
 // Scope choices, kept in the same order as the combo's entries.
 enum SpfScope { SPF_SCOPE_FACES = 0, SPF_SCOPE_BRUSH = 1 };
@@ -258,6 +259,16 @@ static void SpfBuildAlignPage(HWND hwnd) {
     }
     y += kSpfRowH + 6;
 
+    CreateLabel(hwnd, L"Material (optional):", x, y, 200, 20, 0);
+    y += kSpfRowH - 2;
+    {
+        std::wstring wm(s_spfEdit.material.begin(), s_spfEdit.material.end());
+        CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", wm.c_str(),
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
+            x, y, 440, 22, hwnd, (HMENU)(INT_PTR)ID_SPF_MATERIAL, g_hInst, nullptr);
+    }
+    y += kSpfRowH + 6;
+
     for (int i = SPF_UV_SCALE_U; i <= SPF_PAN_V; i++) {
         CreateLabel(hwnd, kSpfFieldLabel[i], x, y, 100, 20, 0);
         SpfFloatRow(hwnd, x, y, ID_SPF_F_BASE + i, SpfGetField((SpfField)i));
@@ -338,6 +349,13 @@ static void SpfReadControls(HWND hwnd) {
         WideCharToMultiByte(CP_UTF8, 0, buf, -1, out, 512, nullptr, nullptr);
         s_spfEdit.texPath = out;
     }
+    if (HWND c = SpfFindControl(hwnd, ID_SPF_MATERIAL)) {
+        wchar_t buf[256];
+        GetWindowTextW(c, buf, 256);
+        char out[256] = {0};
+        WideCharToMultiByte(CP_UTF8, 0, buf, -1, out, 256, nullptr, nullptr);
+        s_spfEdit.material = out;
+    }
     // The Scope combo lives on the Flags page, so it is read here too - otherwise
     // switching to the Stats tab and pressing Apply would silently discard it,
     // exactly like the texPath field used to.
@@ -373,6 +391,7 @@ static ed::SurfaceEdit SpfBuildEdit() {
     ev.panV        = s_spfEdit.panV;
     ev.texSlot     = s_spfEdit.texSlot;
     ev.texPath     = s_spfEdit.texPath;
+    ev.material    = s_spfEdit.material;
     return ev;
 }
 

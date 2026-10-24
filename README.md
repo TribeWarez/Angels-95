@@ -223,6 +223,16 @@ It accepts UDP heartbeats and `POST /api/heartbeat`, and serves
 `System/Angels95.ini` and browse via **Multiplayer → Join → Source: Internet**.
 See [`Wiki/Master-Server.md`](Wiki/Master-Server.md) for the full protocol.
 
+### Deployment
+
+Tagging a build (`b*`) deploys both servers to a VPS over SSH + systemd, after
+the Linux CI job (tests, worldchecks, GLIBC gate) passes. CI ships the two
+binaries, the systemd units and a self-contained `GameData/` tree; the host's
+`System/OzServer.ini` and `GameData/Saves/` are preserved, and the previous
+binaries stay beside the new ones for a one-step rollback. Setup (secrets,
+`DEPLOY_PATH`, sudoers, firewall, rollback) is documented in
+[`Wiki/Building.md`](Wiki/Building.md#automatic-server-deployment-github-actions).
+
 ### Client
 
 Launch the client from the repo root (it expects repo-relative asset paths) or
@@ -234,9 +244,15 @@ from a `System/` release folder:
 ./Angels95 --world-dir GameData/Worlds
 ```
 
-> Note: `System/Angels95.ini` **is read at runtime** by the client (`[Settings]`,
-> `[MasterServers]`); `System/OzServer.ini` is a template written by the build
-> scripts, and `AngelServ` also reads it at runtime (`[Server]`/`[Auth]`/
+> Note: `System/Angels95.ini` **is read at runtime** by the client (settings are
+> grouped under `[AngelTech.Window]`, `[AngelTech.Render]`, `[AngelTech.Audio]`,
+> `[AngelTech.Gameplay]`, `[AngelTech.Input]`, `[AngelTech.HUD]` and
+> `[AngelTech.Debug]`; bindings live in `[Keybinds]` and master URLs in
+> `[MasterServers]`). Rebuilding does **not** overwrite it — the build scripts
+> only write a template when the file is missing; `build.cmd resetconfig` /
+> `-ResetConfig` (either PowerShell script) restores the defaults.
+> `System/OzServer.ini` is a template written by the build scripts, and
+> `AngelServ` also reads it at runtime (`[Server]`/`[Auth]`/
 > `[MasterServers]`) — CLI flags and env (`OZ_AUTH_TOKEN`, `OZ_ADMIN_TOKEN`)
 > override it.
 

@@ -56,6 +56,7 @@ struct OzonePrimitive {
     float texOffsetU = 0.0f;        // texture shift U
     float texOffsetV = 0.0f;        // texture shift V
     std::string meshPath;           // GameEngine.Mesh.*: model path (mesh=Skeletal/default)
+    std::string materialName;       // GameEngine.Mesh.*: baked material graph name
     std::string animClip;           // GameEngine.Mesh.Skeletal: embedded clip name
     std::string animFile;           // GameEngine.Mesh.Skeletal: external .ozanim file
     float animSpeed = 1.0f;         // GameEngine.Mesh.Skeletal: playback speed

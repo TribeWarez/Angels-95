@@ -103,7 +103,7 @@ inline Color CrosshairColor() {
 
 
 bool MuteToggle = false;
-float AudioSlider = 100.0f; // persisted as 0..100 in [Settings] audio_volume
+float AudioSlider = 100.0f; // persisted as 0..100 in [AngelTech.Audio] audio_volume
 
 // raylib/miniaudio expects the master volume as a linear 0..1 factor; values
 // above 1.0 amplify and clip (miniaudio does NOT clamp). AudioSlider is stored

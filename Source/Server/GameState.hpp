@@ -410,6 +410,21 @@ public:
         for (auto& p : ws->global_pickups)
             if (p.active) fn(*ws, p);
     }
+
+    // Enumerate EVERY pickup, active or not. The join snapshot and the re-sync
+    // answer use this: `for_each_active_pickup` made a pickup another player had
+    // already taken vanish from the snapshot entirely, so a joining client kept
+    // DRAWING its own copy from World.ozone (the file lists it). Walking into it
+    // then sent a collect the server answered NOT_FOUND, forever, because the
+    // client was never told it was consumed.
+    template<typename Fn>
+    void for_each_pickup(int world_index, Fn&& fn) {
+        WorldState* ws = get_world(world_index);
+        if (!ws) return;
+        for (auto& part : ws->partitions)
+            for (auto& p : part.pickups) fn(*ws, p);
+        for (auto& p : ws->global_pickups) fn(*ws, p);
+    }
     int world_count() const { return (int)m_worlds.size(); }
 
     // Effective slot cap / friendly-fire rule, resolved from world 0's

@@ -269,6 +269,18 @@ const StatSpec kWeaponStats[] = {
     // playback, -1 = force static + procedural. Consumed by
     // ViewModel::SetWeapon; see the gate comment there.
     {"viewmodel_skeletal",     0, "Viewmodel Skeletal", "Viewmodel"},
+    // Detachable magazine / attachment model. Empty = probe the sibling
+    // `<mesh>_AdditionalMeshes.glb`; the index selects which mesh in it (the
+    // shipped files order [Separated, Full/2+Bullets, OneBullet], so 1 is the
+    // inserted magazine). Missing it left the rifle firing with no magazine.
+    {"viewmodel_attachment",      1, "Viewmodel Attachment", "Viewmodel"},
+    {"viewmodel_attachment_mesh", 0, "Attachment Mesh Idx", "Viewmodel"},
+    {"viewmodel_attachment_offset", 2, "Attachment Pos", "Viewmodel"},
+    {"viewmodel_attachment_scale",  0, "Attachment Scale", "Viewmodel"},
+    // Clip sample rate. raylib has no fps field: keyframe count / fps is the only
+    // way to get seconds, so an asset exported at 24/60 needs this or one-shots
+    // return to Idle at the wrong time.
+    {"viewmodel_anim_fps",        0, "Viewmodel Anim FPS", "Viewmodel"},
     // Data-driven audio. Volume/pitch default to 1.0 in the runtime, so an
     // omitted row plays the authored sound at unity.
     {"fire_sound",             3, "Fire Sound", "Audio"},

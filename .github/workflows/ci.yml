@@ -220,7 +220,10 @@ jobs:
             - `AngelServ` reads loose world files, so it needs a game-data checkout
               (`--dir <GameData>` containing `Worlds/<Name>/World.ozone`); the zip's
               packaged data serves the client and the editor's asset browser.
-            - For VPS systemd units see `System/angels95-serv.service`; config lives in
+            - For VPS deployment the bundle carries `System/angels95-serv.service`,
+              `System/angels95-master.service` and `System/deploy-remote.sh`; a
+              `b*` tag also deploys both daemons over SSH to the configured host
+              (see `Wiki/Building.md` -> "Automatic server deployment"). Config lives in
               `System/OzServer.ini` (`--bind 0.0.0.0` to accept remote clients).
           files: release/*
 
@@ -322,6 +325,9 @@ jobs:
           g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/Renderer/Mesh/MeshCache.cpp -o MeshCache.o
           g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/Package/Anim/OzAnimFormat.cpp -o OzAnimFormat.o
           g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/Renderer/Mesh/AnimatedMesh.cpp -o AnimatedMesh.o
+          # Material graph (raylib-free) + baked-map registry.
+          g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/Material/OzMaterial.cpp -o OzMaterial.o
+          g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/Material/MaterialRegistry.cpp -o MaterialRegistry.o
           g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/Particle/OzParticleSimulationManager.cpp -o OzParticleSimulationManager.o
           g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/Renderer/rlights/rlights.cpp -o rlights.o
           g++ $EDITOR_FLAGS $EDITOR_INC -c ../Source/Script/LightningScriptContext.cpp -o LightningScriptContext.o
@@ -348,6 +354,7 @@ jobs:
           # filesystem and PackageAssetLoader. Its policy lives in AssetScope.cpp so
           # that part stays covered.
           g++ $EDITOR_FLAGS $EDITOR_INC -c Source/Resources/AssetScan.cpp -o AssetScan.o
+          g++ $EDITOR_FLAGS $EDITOR_INC -c Source/Resources/MaterialBake.cpp -o MaterialBake.o
           # Subsystems/ promoted to REAL translation units in Phase F (SurfaceOps first).
           # These used to be unity fragments included by Main.cpp, so they inherited its
           # include order and could not be compiled standalone. A new subsystem needs a
@@ -359,7 +366,7 @@ jobs:
           g++ $EDITOR_FLAGS $EDITOR_INC -c Source/Subsystems/History.cpp -o History.o
           echo 'int main_custom() { return 0; }' | g++ $EDITOR_FLAGS $EDITOR_INC -x c++ -c - -o OTCustom_stub.o
           
-          g++ Main.o UiShell.o EditorEventBus.o OzPawnSystem.o OzAssetMapper.o OzOzoneLoader.o EventBus.o TriggerSystem.o ObjectiveSystem.o BoxedTypeRegistry.o OzoneFrustum.o OzoneHeightmap.o OzoneParser.o ZoneManager.o GameType.o SurfaceFlags.o SurfaceMaterial.o SoundManager.o Log.o OzBsp.o AutoConvex.o WorldChunk.o LightningScriptContext.o LightningScriptParser.o LightningEntityRegistry.o LightningEntityManager.o OzlsWriter.o EditorIcons.o AssetScope.o PackageIO.o AssetScan.o SurfaceOps.o Placement.o PropsApply.o LevelState.o History.o LitLightning.o Mesh.o SkeletalMesh.o MeshCache.o AnimatedMesh.o OzAnimFormat.o OzParticleSimulationManager.o rlights.o miniz.o raygui.o OTCustom_stub.o -o AngelEd.exe $EDITOR_FLAGS $EDITOR_INC $EDITOR_LIBS
+          g++ Main.o UiShell.o EditorEventBus.o OzPawnSystem.o OzAssetMapper.o OzOzoneLoader.o EventBus.o TriggerSystem.o ObjectiveSystem.o BoxedTypeRegistry.o OzoneFrustum.o OzoneHeightmap.o OzoneParser.o ZoneManager.o GameType.o SurfaceFlags.o SurfaceMaterial.o SoundManager.o Log.o OzBsp.o AutoConvex.o WorldChunk.o LightningScriptContext.o LightningScriptParser.o LightningEntityRegistry.o LightningEntityManager.o OzlsWriter.o EditorIcons.o AssetScope.o PackageIO.o AssetScan.o SurfaceOps.o Placement.o PropsApply.o LevelState.o History.o LitLightning.o Mesh.o SkeletalMesh.o MeshCache.o AnimatedMesh.o OzAnimFormat.o OzMaterial.o MaterialRegistry.o MaterialBake.o OzParticleSimulationManager.o rlights.o miniz.o raygui.o OTCustom_stub.o -o AngelEd.exe $EDITOR_FLAGS $EDITOR_INC $EDITOR_LIBS
           cd ..
 
       - name: Assemble System/ release
@@ -381,19 +388,22 @@ jobs:
           
           # Create INI files
           @"
-          [Video]
-          Width=1280
-          Height=720
-          Fullscreen=0
-          VSync=1
-          
-          [Settings]
+          ; Angels95 client settings - grouped by concern. The client fills in any key
+          ; it does not find here and rewrites this file on exit.
+          [AngelTech.Window]
+          window_width=1280
+          window_height=720
+          borderless=1
+
+          [AngelTech.Render]
+          vsync=1
+          msaa=0
+
+          [AngelTech.Audio]
           audio_volume=100.000000
+          music_volume=100.000000
+          sfx_volume=100.000000
           mute=False
-          
-          [Game]
-          ServerIP=127.0.0.1
-          ServerPort=27015
           "@ | Set-Content System\Angels95.ini -Encoding UTF8
           
           @"
@@ -430,8 +440,12 @@ jobs:
           & "`$PSScriptRoot\Angels95.exe"
           "@ | Set-Content System\run.ps1 -Encoding UTF8
 
-          # VPS systemd unit; the release notes point at System\angels95-serv.service.
+          # VPS systemd units; the release notes point at these. Both are shipped
+          # (game server + master/listing server), and the tag deploy installs
+          # rendered copies of the same files over SSH.
           Copy-Item tools\angels95-serv.service System\angels95-serv.service -Force
+          Copy-Item tools\angels95-master.service System\angels95-master.service -Force
+          Copy-Item tools\deploy-remote.sh System\deploy-remote.sh -Force
 
       - name: Package assets
         shell: msys2 {0}
@@ -478,6 +492,14 @@ jobs:
             Write-Error "System\angels95-serv.service missing (referenced by the release notes)"
             exit 1
           }
+          if (-not (Test-Path "System\angels95-master.service")) {
+            Write-Error "System\angels95-master.service missing (release/tag deploy dependency)"
+            exit 1
+          }
+          if (-not (Test-Path "System\deploy-remote.sh")) {
+            Write-Error "System\deploy-remote.sh missing (tag deploy dependency)"
+            exit 1
+          }
 
       - name: Upload System/ artifact
         uses: actions/upload-artifact@v4
@@ -515,3 +537,177 @@ jobs:
           files: |
             System-${{ github.ref_name }}.zip
             release/*.exe
+
+  # ---------------------------------------------------------------------------
+  # Deploy the dedicated servers to the VPS over SSH + systemd.
+  #
+  # Gated three ways:
+  #   * tags only (the same `b*` gate the release uses),
+  #   * `needs: linux`, so the full `make test` suite, the worldchecks and the
+  #     GLIBC 2.39 gate must have passed on the exact tag being shipped,
+  #   * `environment: production`, so the repository can require a reviewer
+  #     before the rollout and keep the SSH secrets scoped to this job.
+  #
+  # Required repository secrets:
+  #   DEPLOY_HOST          hostname or IP of the VPS
+  #   DEPLOY_USER          SSH user that owns the install root
+  #   DEPLOY_SSH_KEY       private key for that user (no passphrase)
+  #   DEPLOY_KNOWN_HOSTS   OPTIONAL pinned known_hosts line; when absent the job
+  #                        falls back to ssh-keyscan (TOFU, not pinned)
+  # Optional repository variables:
+  #   DEPLOY_PORT          SSH port, default 22
+  #   DEPLOY_PATH          install root, default /srv/angels95
+  #   DEPLOY_MASTER        true (default) ships both daemons; false ships only
+  #                        AngelServ, for hosts whose public listing is the
+  #                        separate TribeWarez/angels95-master-server deployment
+  #
+  # The VPS needs: rsync, curl (HTTPS master uplink) and passwordless sudo for
+  # `bash <DEPLOY_PATH>/System/deploy-remote.sh`, which installs/restarts the
+  # units. Firewall: 27015/udp + 8080/tcp (AngelServ), 27900/udp + 27950/tcp
+  # (AngelMaster). See Wiki/Building.md -> "Automatic server deployment".
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy to VPS
+    if: startsWith(github.ref, 'refs/tags/b')
+    needs: [linux]
+    runs-on: ubuntu-24.04
+    environment: production
+    concurrency:
+      group: angels95-server-deploy
+      cancel-in-progress: false
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/srv/angels95' }}
+      # Set the DEPLOY_MASTER repository variable to false when the public
+      # listing is served elsewhere (the hosted master lives in
+      # TribeWarez/angels95-master-server); the job then ships only AngelServ.
+      DEPLOY_MASTER: ${{ vars.DEPLOY_MASTER || 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the tested Linux binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: AngelServ-linux
+          path: stage/System
+      - uses: actions/download-artifact@v4
+        with:
+          name: AngelMaster-linux
+          path: stage/System
+
+      - name: Assemble the deployment bundle
+        run: |
+          set -euo pipefail
+          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USER" ]; then
+            echo "::error::DEPLOY_HOST / DEPLOY_USER secrets are not configured"
+            exit 1
+          fi
+          case "$DEPLOY_PATH" in
+            /*) ;;
+            *) echo "::error::DEPLOY_PATH must be an absolute path (got '$DEPLOY_PATH')"; exit 1 ;;
+          esac
+          # Normalise once; the unit renderer substitutes this string verbatim.
+          DEPLOY_PATH="${DEPLOY_PATH%/}"
+          echo "DEPLOY_PATH=$DEPLOY_PATH" >> "$GITHUB_ENV"
+          case "$DEPLOY_PORT" in
+            ''|*[!0-9]*) echo "::error::DEPLOY_PORT must be numeric (got '$DEPLOY_PORT')"; exit 1 ;;
+          esac
+          mkdir -p stage/System
+          cp tools/angels95-serv.service tools/deploy-remote.sh stage/System/
+          chmod +x stage/System/AngelServ stage/System/deploy-remote.sh
+          # The public listing may live in the separate master repo; then only
+          # the game server is shipped (leave the binary out too, so the host
+          # cannot accidentally start a second master on 27900/27950).
+          if [ "${DEPLOY_MASTER,,}" = "true" ] || [ "${DEPLOY_MASTER,,}" = "1" ] || [ "${DEPLOY_MASTER,,}" = "yes" ]; then
+            cp tools/angels95-master.service stage/System/
+            chmod +x stage/System/AngelMaster
+          else
+            echo "DEPLOY_MASTER is off - shipping AngelServ only"
+            rm -f stage/System/AngelMaster
+          fi
+          # Self-contained content: worlds, defs, missions and assets travel with
+          # the binary, so a content fix (world order, missions) reaches the
+          # fleet. Server saves and screenshots stay on the VPS and are excluded
+          # from the remote rsync as well.
+          rsync -a --exclude '/Saves/' --exclude '/Screenshots/' \
+            GameData/ stage/GameData/
+          printf '%s\n' "${GITHUB_REF_NAME}" > stage/System/BUILD_VERSION
+          du -sh stage/GameData stage/System
+          # Smoke-test on the runner before anything is copied: same glibc base
+          # as the VPS (ubuntu:24.04), and it catches a truncated artifact.
+          ./stage/System/AngelServ --version
+          [ -f stage/System/AngelMaster ] && ./stage/System/AngelMaster --version
+
+      - name: Install the SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Trust the host key
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          if [ -n "$DEPLOY_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            echo "::warning::DEPLOY_KNOWN_HOSTS is not set - trusting the scanned host key (TOFU)"
+            ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Keep the previous binaries for a one-step rollback
+        run: |
+          set -euo pipefail
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "mkdir -p '$DEPLOY_PATH/System' '$DEPLOY_PATH/GameData' && \
+             cd '$DEPLOY_PATH/System' && \
+             for b in AngelServ AngelMaster; do \
+               [ -f \"\$b\" ] && cp -f \"\$b\" \"\$b.prev\" || true; \
+             done"
+
+      - name: Sync content and binaries
+        run: |
+          set -euo pipefail
+          SSH_OPTS="ssh -p $DEPLOY_PORT -o BatchMode=yes"
+          # GameData is MIRRORED: a world removed upstream must leave the
+          # server's world list, or world indices drift from the client's. The
+          # persistent dirs are excluded on both ends; without --delete-excluded
+          # rsync leaves them alone.
+          rsync -az --delete \
+            --exclude '/Saves/' --exclude '/Screenshots/' \
+            -e "$SSH_OPTS" \
+            stage/GameData/ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/GameData/"
+          # System/ has NO --delete: it also holds OzServer.ini (auth/admin
+          # tokens), logs and the running server's cache, which CI must never
+          # remove.
+          rsync -az -e "$SSH_OPTS" \
+            stage/System/ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/System/"
+
+      - name: Install units and restart the services
+        run: |
+          set -euo pipefail
+          # The remote script validates both binaries, renders the units for
+          # DEPLOY_PATH, restarts them and dumps journal output on failure.
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "sudo -n bash '$DEPLOY_PATH/System/deploy-remote.sh' '$DEPLOY_PATH'"
+
+      - name: Deployment summary
+        run: |
+          services="AngelServ"
+          case "${DEPLOY_MASTER,,}" in
+            true|1|yes) services="AngelServ + AngelMaster" ;;
+          esac
+          {
+            echo "### Deployed \`${{ github.ref_name }}\`"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Host | \`$DEPLOY_HOST\` |"
+            echo "| Install root | \`$DEPLOY_PATH\` |"
+            echo "| Services | \`$services\` |"
+            echo "| Content | self-contained GameData (saves preserved) |"
+            echo "| Rollback | \`System/*.prev\` on the host, then \`systemctl restart <units>\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

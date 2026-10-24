@@ -174,6 +174,11 @@ std::string GameManager::SetActiveMission(const std::string& mission) {
     return m->world;
 }
 
+void GameManager::ClearActiveMission() {
+    m_activeMission.clear();
+    events::ObjectiveSystem::Instance().Reset();
+}
+
 std::string GameManager::ActiveSector() const {
     const MissionDef* m = FindMission(m_activeMission);
     return m ? m->sector : std::string();

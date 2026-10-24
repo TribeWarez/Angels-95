@@ -72,6 +72,30 @@ struct PawnDef {
     std::string anim_return;
     std::string anim_death;
     float anim_speed = 1.0f;
+    // External vertex-keyframe clip (.ozanim) for a STATIC model. The shipped
+    // enemy GLBs are unrigged, so this is the only animation path that works for
+    // them: oz::AnimatedMesh samples the clip and uploads vertex offsets. Ignored
+    // when mesh_type=skeletal (that asset already has its own clips).
+    std::string anim_file;
+
+    // Vertical placement of model_path. 0 = derive from the loaded mesh bounds
+    // (-bounds.min.y * model_scale), so the model's LOWEST point sits on the
+    // pawn's feet. A GLB whose pivot is at its centre used to be drawn with its
+    // origin at the feet, i.e. hovering by half its height - which is exactly
+    // what every un-rigged enemy did. Non-zero = explicit world-space override.
+    float model_y_offset = 0.0f;
+    // Cached auto offset, filled in by EnsurePawnMesh (bounds are only known
+    // after the asset loads). 0 is a valid offset, so the explicit override is
+    // the only thing that disables the derivation.
+    float auto_ground_offset = 0.0f;
+    bool  ground_offset_resolved = false;
+
+    // Hovering enemies (Floater). Gravity and ground snapping are skipped and the
+    // model bobs around its SPAWN height, so "floating" is deliberate instead of
+    // a side effect of an ungrounded pivot. Authored in the .cfg.
+    bool  hover = false;
+    float hover_amplitude = 0.35f;   // metres
+    float hover_speed = 1.6f;        // radians/second
 };
 
 // A single spawned pawn instance.
@@ -99,6 +123,13 @@ struct Pawn {
 
     float patrolTimer = 0.0f;
     float stateTimer = 0.0f;
+    // Client-side path-node patrol cursor (index into PawnSystem::m_pathNodes).
+    // The server already follows PathNode graphs; the client FSM used to ignore
+    // them and walk a slow arc instead.
+    int   pathTarget = 0;
+    // Hover phase for `hover` defs (Floater). Visual only: it never writes
+    // position.y, so collision/ground queries stay stable.
+    float hoverPhase = 0.0f;
 
     Texture2D sprite;       // billboard frame (loaded externally)
     Sound scream;           // aggro sound (loaded externally)
@@ -132,6 +163,9 @@ struct MeshObjectNode {
     std::string meshPath;
     std::string texturePath;
     std::string baseDir;
+    // Baked material graph name (GameData/Materials/<name>.ozmat). Empty = use
+    // the model's own texture only.
+    std::string materialName;
     Vector3 position{0, 0, 0};
     float yaw = 0.0f;
     float scale = 1.0f;
@@ -566,7 +600,7 @@ private:
     int AllocSlot();
 
     // FSM tick helpers
-    static void TickPatrol(Pawn& p, float dt);
+    void TickPatrol(Pawn& p, float dt);   // member: patrol follows m_pathNodes
     static void TickChase(Pawn& p, const Vector3& playerPos, float dt);
     static void TickReturn(Pawn& p, float dt);
     static void TransitionState(Pawn& p, PawnState newState);
