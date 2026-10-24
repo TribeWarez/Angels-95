@@ -131,7 +131,6 @@ public:
             "GameData/Tex/Global/Gibs/blood_1.png",
             "GameData/Tex/Global/Gibs/blood_2.png",
             "GameData/Tex/Global/Gibs/blood_3.png",
-            "GameData/Tex/Global/Gibs/blood_hand.png",
         };
         for (const char* p : kBlood) {
             Texture2D t = LoadBloodTexture(p);
