@@ -281,7 +281,7 @@ asset-scope tree + pack-on-import (b82).
 - [x] Title video wired (b57: looping title video)
 - [ ] Positional audio (attenuation/pan) — zone ambience/reverb landed via `SoundManager` (b57/b82)
 - [x] 3D particles (b74: 4096-particle `OzParticleSimulationManager` pool)
-- [x] Animation for NPCs + remote players: the three unrigged enemies (Walker/Skaarj/Floater) drive generated `.ozanim` Idle/Walk/Run/Death clips (`tools/gen_pawn_anims.py`), the Brute plays its embedded skeletal take, dropped guns idle-animate, and the Arcanist remote-player model is skeletal with measured idle/chase clips. A def still needs its own clips authored to animate.
+- [x] Animation for NPCs + dropped items: the three unrigged enemies (Walker/Skaarj/Floater) drive generated `.ozanim` Idle/Walk/Run/Death clips (`tools/gen_pawn_anims.py`), the Brute plays its embedded skeletal take, and dropped guns idle-animate. The shipped player-character pack has only combat/stunt takes (no idle/walk), so remote players stay on the bind pose until a locomotion clip is authored - a def still needs its own clips to animate.
 
 ### Tier 4 — tooling & UX
 
