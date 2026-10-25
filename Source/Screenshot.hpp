@@ -37,6 +37,9 @@ struct ShotCam {
 // it runs the REAL title menu, not the world renderer. Page ids:
 // 0 Home, 1 Play, 2 Multiplayer, 3 Character, 4 Settings. -1 = off.
 inline int g_menuShotPage = -1;
+// `--menu-shot practice` opens the Play page on its Practice tab (the world list
+// with the preview box); plain `play` opens Campaign, which is the default tab.
+inline bool g_menuShotPractice = false;
 inline std::string g_menuShotOut;
 inline int g_menuShotFrames = 10;
 

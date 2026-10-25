@@ -253,6 +253,12 @@ public:
     bool has_world_spawn() const;
     net::NetVec3 world_spawn() const;
 
+    // The mission the server's current world implements ("" = none, or a server
+    // predating the field). Snapshot under the lock like the other accessors.
+    // Not bound into GameManager: a co-op session must not write Campaign.sav
+    // over a single-player campaign.
+    std::string server_mission() const;
+
     // Worlds the server has issued pickups for (world indices only).
     std::vector<int> pickup_worlds() const;
 
@@ -294,6 +300,8 @@ private:
     double m_lastWorldChangeAt = 0.0;
     net::NetVec3 m_worldSpawn{0, 0, 0};
     bool m_hasWorldSpawn = false;
+    // Mission this world implements, from the optional WORLD_CHANGE tail.
+    std::string m_serverMission;
     // Pickup collects we have requested but not yet seen acknowledged, keyed by
     // (pickup_id, world_index). A set rather than a single slot: overwriting one
     // entry with another used to drop the earlier grant on the floor even though

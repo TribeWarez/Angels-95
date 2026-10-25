@@ -161,21 +161,46 @@ std::string GameManager::SetActiveMission(const std::string& mission) {
     // Seed the objective store from the mission's objective defs.
     auto& objs = events::ObjectiveSystem::Instance();
     objs.Reset();
+    m_activeObjectives.clear();
     auto& reg = LightningEntityRegistry::Instance();
     for (const std::string& objName : m->objectives) {
         const EntityDef* od = reg.Find(objName);
         int count = 1;
+        LocalObjective local;
+        local.id = objName;
         if (od) {
             auto it = od->stats.floats.find("count");
             if (it != od->stats.floats.end()) count = (int)it->second;
+            auto tit = od->stats.strings.find("type");
+            if (tit != od->stats.strings.end()) local.type = tit->second;
+            auto git = od->stats.strings.find("target");
+            if (git != od->stats.strings.end()) local.target = git->second;
         }
+        local.count = count;
+        m_activeObjectives.push_back(local);
         objs.Define(objName, count);
     }
     return m->world;
 }
 
+void GameManager::AdvanceLocalObjectives(const std::string& type,
+                                         const std::string& sourceName) {
+    if (m_activeMission.empty()) return;
+    auto& objs = events::ObjectiveSystem::Instance();
+    for (const auto& o : m_activeObjectives) {
+        if (o.type != type) continue;
+        // An objective with no target counts anything; one with a target counts
+        // only its own NPC def / pickup name (same rule the server applies).
+        if (!o.target.empty() && o.target != "*" && o.target != sourceName) continue;
+        // Add() is a no-op once complete, and it emits objective.complete, which
+        // the bus bridge turns into the objective def's on_complete line.
+        objs.Add(o.id, 1);
+    }
+}
+
 void GameManager::ClearActiveMission() {
     m_activeMission.clear();
+    m_activeObjectives.clear();
     events::ObjectiveSystem::Instance().Reset();
 }
 

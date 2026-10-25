@@ -471,23 +471,44 @@ void OmegaClient::handle_message(const net::NetworkMessage& msg) {
             // PickupRespawnData::typeName. The world assignment is the part that
             // matters, so it is the part that must survive.
             if (msg.size < net::kWorldChangeSizeBase) return;
-            const std::lock_guard<std::mutex> lock(m_msg_mutex);
-            net::WorldChangeData wcd;
-            memcpy(&wcd, msg.payload, sizeof(wcd));
+            int changedWorld = -1;
+            bool changedAccepted = false;
+            {
+                const std::lock_guard<std::mutex> lock(m_msg_mutex);
+                // Zero-initialise before the memcpy: the payload holds the received
+                // bytes, but reading the full struct would otherwise take the
+                // trailing mission bytes from whatever the fixed-size buffer held
+                // when the message was short.
+                net::WorldChangeData wcd{};
+                memcpy(&wcd, msg.payload, sizeof(wcd));
 
-            // The server is authoritative: `world_index` is where we ARE, whether or
-            // not our request was granted. A refusal still carries the real world so
-            // the client can reconcile instead of waiting for a reply that already
-            // arrived saying no.
-            m_serverWorldIndex = wcd.world_index;
-            m_worldChangeAccepted = (wcd.accepted != 0);
-            m_lastWorldChangeAt = now_seconds();
-            // The spawn tail is optional; only trust it if it actually arrived.
-            if (msg.size >= sizeof(net::WorldChangeData)) {
-                m_worldSpawn = net::NetVec3{ wcd.spawnX, wcd.spawnY, wcd.spawnZ };
-                m_hasWorldSpawn = true;
+                // The server is authoritative: `world_index` is where we ARE, whether or
+                // not our request was granted. A refusal still carries the real world so
+                // the client can reconcile instead of waiting for a reply that already
+                // arrived saying no.
+                m_serverWorldIndex = wcd.world_index;
+                m_worldChangeAccepted = (wcd.accepted != 0);
+                m_lastWorldChangeAt = now_seconds();
+                // The spawn tail is optional; only trust it if it actually arrived.
+                if (msg.size >= net::kWorldChangeSizeWithSpawn) {
+                    m_worldSpawn = net::NetVec3{ wcd.spawnX, wcd.spawnY, wcd.spawnZ };
+                    m_hasWorldSpawn = true;
+                }
+                // The mission tail is optional too, and sits after the spawn one, so
+                // a server that has the spawn but not the mission must not be read as
+                // carrying an empty mission from stale buffer bytes.
+                if (msg.size >= net::kWorldChangeSizeWithMission) {
+                    wcd.mission[sizeof(wcd.mission) - 1] = '\0';
+                    m_serverMission = wcd.mission;
+                }
+                changedWorld = wcd.world_index;
+                changedAccepted = (wcd.accepted != 0);
             }
-            if (m_on_world_changed) m_on_world_changed(wcd.world_index, wcd.accepted != 0);
+            // Fire AFTER the lock is released. The hook is user code and calls
+            // back into this client (has_world_spawn/world_spawn/server_mission),
+            // whose accessors take the same non-recursive mutex — invoking it
+            // under the lock deadlocked the network thread on every world change.
+            if (m_on_world_changed) m_on_world_changed(changedWorld, changedAccepted);
             break;
         }
         case net::MessageType::PLAYER_PROFILE: {
@@ -688,6 +709,11 @@ net::NetVec3 OmegaClient::world_spawn() const {
     return m_worldSpawn;
 }
 
+std::string OmegaClient::server_mission() const {
+    const std::lock_guard<std::mutex> l(m_msg_mutex);
+    return m_serverMission;
+}
+
 std::vector<int> OmegaClient::pickup_worlds() const {
     const std::lock_guard<std::mutex> l(m_msg_mutex);
     std::vector<int> out;
@@ -728,6 +754,7 @@ void OmegaClient::on_disconnected() {
     m_worldChangeAccepted = false;
     m_lastWorldChangeAt = 0.0;
     m_hasWorldSpawn = false;
+    m_serverMission.clear();   // per-session server state (co-op beats)
 }
 
 std::string OmegaClient::consume_pending_scene_data() {

@@ -51,6 +51,24 @@ public:
     // mission's world ("" if unknown).
     std::string SetActiveMission(const std::string& mission);
 
+    // The active mission's objectives as resolved from their defs, in authored
+    // order. `target` is the NPC def / pickup name the objective counts (empty
+    // = anything); `type` is kill / collect.
+    struct LocalObjective {
+        std::string id;
+        std::string type;
+        std::string target;
+        int count = 1;
+    };
+    const std::vector<LocalObjective>& ActiveObjectives() const { return m_activeObjectives; }
+
+    // Advance the ACTIVE mission's LOCAL objective store from a gameplay fact
+    // (topic-level, so this is called with "kill"/"collect" and the NPC def or
+    // pickup name). Single-player owns progression locally because the server's
+    // store is unreachable offline; co-op keeps the server's copy and mirrors it
+    // over OBJECTIVE_STATE.
+    void AdvanceLocalObjectives(const std::string& type, const std::string& sourceName);
+
     // Drop the active mission and clear the objective/flag store. A NEW SESSION
     // starts with no campaign context; without this a practice match (or a
     // multiplayer join) inherited the previous session's campaign mission, and
@@ -74,6 +92,7 @@ private:
     CampaignDef m_campaign;
     std::vector<SectorDef>  m_sectors;
     std::vector<MissionDef> m_missions;
+    std::vector<LocalObjective> m_activeObjectives;
     std::string m_activeMission;
     bool m_loaded = false;
 };

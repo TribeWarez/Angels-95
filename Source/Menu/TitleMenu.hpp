@@ -48,6 +48,7 @@ using angelsmenu::CharacterDef;
 using angelsmenu::CharacterRoster;
 
 #include <algorithm>
+#include <unordered_map>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -224,6 +225,9 @@ public:
         m_internet.Cancel();
         if (m_lanScanning) m_lanDiscovery.stop();
         m_preview.Shutdown();
+        for (auto& kv : m_worldPreviewTex)
+            if (kv.second.id > 0) UnloadTexture(kv.second);
+        m_worldPreviewTex.clear();
         m_textures.Unload();
     }
 
@@ -238,6 +242,13 @@ public:
             m_filter.source = angelsmenu::ServerFilter::Lan;
             LanStart();
         }
+    }
+
+    // Developer capture helper: pick the Play page's tab (0 = Campaign,
+    // 1 = Practice). Used by `--menu-shot practice` so the world-preview box can
+    // be captured headlessly.
+    void SetStartPlayTab(int tab) {
+        if (tab >= 0 && tab <= (int)PlayTab::Practice) m_playTab = (PlayTab)tab;
     }
 
     bool Tick() {
@@ -382,6 +393,12 @@ private:
     bool m_previewDragging = false;
     angelsmenu::CharacterPreview m_preview;
     Texture2D m_livePreviewTex{0};
+
+    // World preview captures, keyed by world folder. `--shot` writes
+    // GameData/Screenshots/<World>_1.png, _2.png, ...; the first that exists is
+    // the menu preview. The "missing" case is cached too (a null Texture2D) so a
+    // world without a capture does not hit the filesystem every frame.
+    std::unordered_map<std::string, Texture2D> m_worldPreviewTex;
 
     // --- worlds -----------------------------------------------------------
     std::vector<WorldEntry> m_worlds;
@@ -1359,19 +1376,27 @@ private:
                                      area.Right() - list.Right() - FS(12), list.h};
         Card(detail);
         const oz::game::MissionDef* md = gm.FindMission(m_selectedMission);
-        float dy = detail.y + FS(12);
         if (!md) {
-            DrawText("Select a mission", (int)(detail.x + FS(12)), (int)dy, FS(14),
-                     angelsui::kTextDim);
+            DrawText("Select a mission", (int)(detail.x + FS(12)),
+                     (int)(detail.y + FS(12)), FS(14), angelsui::kTextDim);
         } else {
-            DrawText(md->name.c_str(), (int)(detail.x + FS(12)), (int)dy, FS(18), angelsui::kText);
-            dy += FS(26);
+            const float pad = FS(12);
+            const float btnH = FS(32);
+            const float metaH = FS(56);
+            float imgH = detail.h - pad * 2 - btnH - FS(10) - metaH;
+            if (imgH < FS(90)) imgH = FS(90);
+
+            const angelsmenu::UiRect img = {detail.x + pad, detail.y + pad,
+                                            detail.w - pad * 2, imgH};
+            DrawWorldPreviewBox(img, md->world, md->name);
+
+            const float dx = detail.x + FS(12);
+            float dy = img.y + img.h + FS(8);
             DrawText(TextFormat("%s  //  %s", md->sector.c_str(), md->mode.c_str()),
-                     (int)(detail.x + FS(12)), (int)dy, FS(11), angelsui::kTextDim);
-            dy += FS(22);
+                     (int)dx, (int)dy, FS(11), angelsui::kTextDim);
+            dy += FS(18);
             DrawText(TextFormat("World: %s", md->world.c_str()),
-                     (int)(detail.x + FS(12)), (int)dy, FS(11), angelsui::kTextSoft);
-            dy += FS(26);
+                     (int)dx, (int)dy, FS(11), angelsui::kTextSoft);
         }
         if (md && Button({detail.x + FS(12), detail.Bottom() - FS(44),
                           detail.w - FS(24), FS(32)}, "Launch Mission", true)) {
@@ -1380,6 +1405,74 @@ private:
             m_resultMission = md->name;
             m_done = true;
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // World preview captures
+    //
+    // The screenshots produced by `--shot` are the previews: no extra authoring
+    // step, and recapturing a world updates the menu. Captures are decoded once,
+    // downscaled to ~640 px wide (a 720p/1080p PNG per world would otherwise sit
+    // in VRAM at full size for the whole menu session) and cached per folder.
+    // ---------------------------------------------------------------------
+    Texture2D WorldPreviewTexture(const std::string& dirName) {
+        auto it = m_worldPreviewTex.find(dirName);
+        if (it != m_worldPreviewTex.end()) return it->second;
+
+        Texture2D tex{0};
+        for (int i = 1; i <= 5 && tex.id == 0; ++i) {
+            const std::string path = "GameData/Screenshots/" + dirName + "_" +
+                                     std::to_string(i) + ".png";
+            if (!FileExists(path.c_str())) continue;
+
+            Image img = LoadImageWithFallback(path.c_str());
+            if (img.data == nullptr) continue;
+            constexpr int kMaxW = 640;
+            if (img.width > kMaxW) {
+                const int h = std::max(1, (int)((float)img.height *
+                                                ((float)kMaxW / (float)img.width)));
+                ImageResize(&img, kMaxW, h);
+            }
+            tex = LoadTextureFromImage(img);
+            UnloadImage(img);
+            if (tex.id > 0) SetTextureFilter(tex, TEXTURE_FILTER_BILINEAR);
+        }
+
+        m_worldPreviewTex[dirName] = tex;
+        return tex;
+    }
+
+    // Fit the capture into `box` preserving its aspect (letterboxed), then layer
+    // the world name over the TOP of the image on a gradient bar. The bar is what
+    // keeps the name readable on a bright sky capture as well as a dark interior.
+    void DrawWorldPreviewBox(angelsmenu::UiRect box, const std::string& dirName,
+                             const std::string& displayName) {
+        if (box.w <= 0.0f || box.h <= 0.0f) return;
+
+        DrawRectangleRec({box.x, box.y, box.w, box.h}, (Color){8, 12, 22, 255});
+
+        const Texture2D tex = WorldPreviewTexture(dirName);
+        if (tex.id > 0) {
+            const float scale = std::min(box.w / (float)tex.width,
+                                         box.h / (float)tex.height);
+            const float dw = (float)tex.width * scale;
+            const float dh = (float)tex.height * scale;
+            DrawTexturePro(tex, {0, 0, (float)tex.width, (float)tex.height},
+                           {box.x + (box.w - dw) * 0.5f,
+                            box.y + (box.h - dh) * 0.5f, dw, dh},
+                           {0, 0}, 0.0f, WHITE);
+        } else {
+            DrawText("No preview capture", (int)(box.x + FS(10)),
+                     (int)(box.y + box.h * 0.5f - FS(6)), FS(12),
+                     angelsui::kTextDim);
+        }
+
+        const float barH = std::min(box.h, (float)FS(42));
+        DrawRectangleGradientV((int)box.x, (int)box.y, (int)box.w, (int)barH,
+                               (Color){0, 0, 0, 215}, (Color){0, 0, 0, 0});
+        DrawText(displayName.c_str(), (int)(box.x + FS(10)), (int)(box.y + FS(8)),
+                 FS(18), WHITE);
+        DrawRectangleLinesEx({box.x, box.y, box.w, box.h}, 1.0f, angelsui::kBorder);
     }
 
     void DrawPracticeList(angelsmenu::UiRect area) {
@@ -1403,12 +1496,14 @@ private:
         }
         BeginScissorMode((int)list.x, (int)list.y, (int)list.w, (int)list.h);
         float y = list.y + FS(6) - m_worldScroll * rowH;
+        int hoveredWorld = -1;
         for (int i = 0; i < (int)m_worlds.size(); ++i) {
             if (y + rowH > list.y && y < list.Bottom()) {
                 const WorldEntry& w = m_worlds[i];
                 Rectangle row = {list.x + FS(8), y, list.w - FS(16), (float)rowH - FS(2)};
                 const bool sel = (m_selectedWorld == i);
                 const bool hover = MouseIn({row.x, row.y, row.width, row.height});
+                if (hover) hoveredWorld = i;
                 if (sel) DrawRectangleRec(row, (Color){24, 48, 92, 220});
                 else if (hover) DrawRectangleRec(row, (Color){30, 60, 110, 180});
                 DrawText(w.name.c_str(), (int)(row.x + FS(8)), (int)(row.y + FS(6)),
@@ -1431,27 +1526,52 @@ private:
         angelsmenu::UiRect detail = {list.Right() + FS(12), list.y,
                                      area.Right() - list.Right() - FS(12), list.h};
         Card(detail);
-        const float dx = detail.x + FS(12);
-        float dy = detail.y + FS(12);
-        if (m_selectedWorld >= 0 && m_selectedWorld < (int)m_worlds.size()) {
-            const WorldEntry& w = m_worlds[m_selectedWorld];
-            DrawText(w.name.c_str(), (int)dx, (int)dy, FS(20), angelsui::kText);
-            dy += FS(30);
+
+        // Hovering a row previews it; with no row under the cursor the selected
+        // world stays on screen. With nothing selected yet, preview the first
+        // world so the box is never empty - the Load button stays disabled until
+        // a row is actually clicked.
+        const int previewIdx = (hoveredWorld >= 0)
+                                   ? hoveredWorld
+                                   : (m_selectedWorld >= 0
+                                          ? m_selectedWorld
+                                          : (m_worlds.empty() ? -1 : 0));
+        if (previewIdx >= 0 && previewIdx < (int)m_worlds.size()) {
+            const WorldEntry& w = m_worlds[previewIdx];
+            const float pad = FS(12);
+            const float btnH = FS(32);
+            const float metaH = FS(44);
+            float imgH = detail.h - pad * 2 - btnH - FS(10) - metaH;
+            if (imgH < FS(90)) imgH = FS(90);
+
+            const angelsmenu::UiRect img = {detail.x + pad, detail.y + pad,
+                                            detail.w - pad * 2, imgH};
+            DrawWorldPreviewBox(img, w.dirName, w.name);
+
+            const float dx = detail.x + FS(12);
+            const float dy = img.y + img.h + FS(8);
             DrawText(TextFormat("Folder: %s", w.dirName.c_str()), (int)dx, (int)dy,
                      FS(11), angelsui::kTextDim);
-            dy += FS(20);
             if (!w.sector.empty())
-                DrawText(TextFormat("Sector: %s", w.sector.c_str()), (int)dx, (int)dy,
-                         FS(11), angelsui::kTextDim);
-            if (Button({dx, detail.Bottom() - FS(44), detail.w - FS(24), FS(32)},
-                       "Load World", true)) {
-                m_result = Result::PlayWorld;
-                m_resultWorld = w.dirName;
-                m_resultMission.clear();
-                m_done = true;
+                DrawText(TextFormat("Sector: %s", w.sector.c_str()), (int)dx,
+                         (int)(dy + FS(16)), FS(11), angelsui::kTextDim);
+            if (m_selectedWorld < 0)
+                DrawText("Click a world to select it.", (int)dx,
+                         (int)(dy + FS(34)), FS(11), (Color){200, 170, 120, 220});
+
+            if (Button({detail.x + FS(12), detail.Bottom() - FS(44),
+                        detail.w - FS(24), FS(32)},
+                       "Load World", true, m_selectedWorld >= 0)) {
+                if (m_selectedWorld >= 0 && m_selectedWorld < (int)m_worlds.size()) {
+                    m_result = Result::PlayWorld;
+                    m_resultWorld = m_worlds[m_selectedWorld].dirName;
+                    m_resultMission.clear();
+                    m_done = true;
+                }
             }
         } else {
-            DrawText("Select a world", (int)dx, (int)dy, FS(14), angelsui::kTextDim);
+            DrawText("Select a world", (int)(detail.x + FS(12)),
+                     (int)(detail.y + FS(12)), FS(14), angelsui::kTextDim);
         }
     }
 
