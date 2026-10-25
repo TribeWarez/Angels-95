@@ -359,16 +359,35 @@ struct WorldChangeData {
     float spawnX;      // optional tail: authoritative spawn for that world
     float spawnY;
     float spawnZ;
+    // Optional SECOND tail: the `: mission` this world implements ("" when the
+    // world is not in the hierarchy or the arc is OFF). Co-op clients use it for
+    // the mission's authored start/complete beats; objectives stay
+    // OBJECTIVE_STATE's job, and the name is deliberately NOT bound into the
+    // client's GameManager — a multiplayer session must not overwrite a
+    // single-player `Campaign.sav`.
+    char mission[40];
 };
 
 // Bytes a reader must see before it can trust the trailing spawn. The world
 // assignment itself is what gates pickup and melee validation, so a peer predating
 // the tail still gets the part that matters.
 //
-// Gate on THIS, never on sizeof(WorldChangeData) — requiring the full size made a
+// Gate on THESE, never on sizeof(WorldChangeData) — requiring the full size made a
 // client drop every message from a server predating the field, which is the same
-// trap as PickupRespawnData::typeName.
+// trap as PickupRespawnData::typeName. Each tail has its own gate so adding one
+// does not silently hide the one before it.
 constexpr uint32_t kWorldChangeSizeBase = offsetof(WorldChangeData, spawnX);
+constexpr uint32_t kWorldChangeSizeWithSpawn = offsetof(WorldChangeData, mission);
+constexpr uint32_t kWorldChangeSizeWithMission = sizeof(WorldChangeData);
+
+// The mission field is fixed-size and the send site uses strncpy, so a longer
+// name truncates on the wire with no error anywhere. Shipped max is 24 chars;
+// Server::send_world_change warns when this fails, the same rule as
+// kObjectiveIdMax.
+constexpr size_t kMissionNameMax = sizeof(WorldChangeData::mission);
+constexpr bool MissionNameFits(const std::string& name) {
+    return name.size() < kMissionNameMax;
+}
 
 // Server -> client COOP objective progress (OBJECTIVE_STATE). One objective per
 // message; the server sends the player's own world's objectives periodically, so
