@@ -271,6 +271,52 @@ The deploy user can write the binaries the units execute as root, so a tighter
 sudoers rule than `NOPASSWD:ALL` is not a security boundary. Use a dedicated,
 key-only account and restrict it at the SSH/firewall level instead.
 
+#### Per-host ports, master targets and unit drift
+
+The deploy **rewrites** `/etc/systemd/system/angels95-serv.service` and
+`angels95-master.service` from `tools/*.service` on every tag. Host-specific
+ports and announce flags must therefore not live in those two files — the next
+`b*` deploy reverts them. There are two supported places:
+
+1. **Systemd drop-in (per host, survives every deploy).** The deploy only
+   writes the main unit, never the `.d/` directory:
+
+   ```ini
+   # /etc/systemd/system/angels95-serv.service.d/host.conf
+   [Service]
+   ExecStart=
+   ExecStart=/srv/angels95/System/AngelServ \
+       --port 27115 --http-port 8180 \
+       --dir /srv/angels95/GameData --bind 0.0.0.0 \
+       --master 127.0.0.1:27910 \
+       --master-http http://127.0.0.1:27960
+   ```
+
+   `ExecStart=` (empty) resets the main unit's command; the second line replaces
+   it. Run `sudo systemctl daemon-reload` after editing. This is the durable
+   way to keep non-default ports on one host.
+
+2. **Repository default (all hosts):** change `tools/angels95-serv.service` /
+   `tools/angels95-master.service` and ship a tag. b108 did this for the master
+   (`27910/27960`) so it can coexist with the hosted listing.
+
+Master announce targets are better kept in `System/OzServer.ini`, which the
+deploy preserves:
+
+```ini
+[MasterServers]
+# Public portal (hosted, Docker fleet on 27900/27950):
+Master=https://angels95.tribewarez.com/master
+# Local systemd master from this repo (b108+), optional:
+Master1=http://127.0.0.1:27960
+```
+
+CLI flags in the unit/drop-in override the ini, so do not pass `--master` there
+if you want the ini to be authoritative. To list only on the public portal,
+leave `Master1` out; to keep the systemd fleet self-contained, leave
+`Master` out instead.
+
+
 The binaries are built on `ubuntu-24.04` and CI verifies they require no symbol
 newer than `GLIBC_2.39`, so the VPS must provide at least that (Ubuntu 24.04 or
 a newer compatible distro). `deploy-remote.sh` runs `--version` on both binaries
