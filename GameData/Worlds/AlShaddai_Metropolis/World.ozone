@@ -1,7 +1,31 @@
-# OZONE world scaffold - AlShaddai_Metropolis
-# Sector: Sefirah_3_Oasis333   (see Wiki/Game-Hierarchy.md)
-# Placeholder geometry only: a floor, a perimeter and a sky zone.
-# Format: ozone v1.0
+# OZONE world - AlShaddai_Metropolis
+# Sefirah 3 - Oasis 333 (Zeroth Desert). A fortified desert trade sanctuary.
+#
+# INTENT
+#   Fantasy: a place that was generous once. The arcades still shade an empty
+#   bazaar; the gate still opens for caravans that never come.
+#   One moment: walking the bazaar promenade - six columns of shade on the
+#   left, the dry well in the sun on the right, and a silhouette on the wall
+#   walk above, the only thing that has moved here in years.
+#
+#   Pacing arc:
+#     0:00  READ       north gate, walled town beyond, gatehouse overhead
+#     0:30  PRESSURE   gate yard, cover behind carts and the well
+#     1:30  TENSION    bazaar promenade (shaded, tight, flanks both sides)
+#     2:30  RELEASE    climb to the wall walk; the whole town reads at once
+#     3:00  STORY      caravanserai: dark, abandoned, one fire still burning
+#     3:45  EXIT       caravan gate to the chasm road
+#
+#   Flow:  gate yard -> bazaar promenade -> wall walk (east stair)
+#                     |-> caravanserai (south-west)  |-> well
+#                     |-> caravan gate -> EXIT (north)
+#
+# GEOMETRY NOTES
+#   Town floor z=0. Arcade canopy underside 6.0 (a full jump needs 5.25).
+#   Wall walk top 4.0 with four 1.0 treads. Outer wall 9 tall. Palms are
+#   tapered cylinders plus a cone, and are placed clear of the walkways.
+#
+# Format: ozone v1.0  (Z-up: x=east, y=north, z=up)
 
 # ============================================================================
 # Geometry
@@ -227,30 +251,59 @@ add box 40 34 1.215 3.62 2.43 2.46 0 flags=16
 # Exit: the caravan gate in the north wall. Spawn is the chasm-side
 # plateau at its origin.
 
-# Floor (placeholder)
-add box 0 0 -0.25 80 0.5 80 0
-# Perimeter walls (placeholder)
-add box 0 -40 1 80 2 2 0
-add box 0 40 1 80 2 2 0
-add box -40 0 1 2 2 80 0
-add box 40 0 1 2 2 80 0
-
-playerstart 0 0 0 0
-light directional 50 50 80 200 205 215 0.3
-
-zone sky -60 -60 -30 60 60 60 1 name=AlShaddai_Metropolis_sky
-
-# COOP content (scaffold): NPCs + pickups so objectives are completable.
-npc Walker 10 10 0
-npc Walker -10 10 0
-npc Walker 10 -10 0
-npc Walker -10 -10 0
-npc Walker 0 20 0
-pickup pistol_01 5 0 0
-pickup rifle_01 -5 0 0
-pickup etheral_waver 0 -5 0
-
-# trigger scaffold
-trigger Trigger_EnterVolume 8 -5 0 18 5 8 once
-# portal scaffold to next mission world (box X 20-26, Y -4..4, Z 0-8; spawn 0 0 0 in the target)
-portal Chasm_ForgottenMemories 20 -4 0 26 4 8 0 0 0 bidir
+# ============================================================================
+# Entities
+# ============================================================================
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_noon.png GameData/Tex/Global/Sky/sky_noon.png
+Mesh.Static GameData/Environment/Props/Rock_Medium_A.glb -56 30 0 25 scale=0.7 tex=GameData/Environment/Props/Rock_Diffuse.png
+Mesh.Static GameData/Environment/Props/Rock_Medium_B.glb 54 -52 0 160 scale=0.6 tex=GameData/Environment/Props/Rock_Diffuse.png
+Mesh.Static GameData/Environment/Props/Rock_Small_A.glb 40 34 0 80 scale=0.9 tex=GameData/Environment/Props/Rock_Diffuse.png
+Mesh.Static GameData/Environment/Props/Bush_Dry_A.glb -20 -6 0 15 scale=1.2
+Mesh.Static GameData/Environment/Props/Bush_Dry_B.glb 12 12 0 200 scale=1.0
+Mesh.Static GameData/Environment/Props/Bush_Dry_A.glb 36 -12 0 300 scale=1.1
+zone sky -70 -70 -20 70 70 60 1 name=alshaddai_sky
+zone reverb -58 -58 0 -30 -30 8 1 name=alshaddai_caravanserai
+zone reverb -43 -28 4 -21 28 7 1 name=alshaddai_arcade
+zone sound -8 48 0 8 64 8 1 name=alshaddai_gate
+zone water 17 -13 -1.6 31 1 0.5 1 name=alshaddai_pool gravity=16 jump=8 terminal=55 water_gravity=7 water_drag=0.9 swim_up=4 ladder_speed=6 fly_mult=1.5
+playerstart 0 42 0 0
+pickup Medkit -10 -2 1 45
+pickup pistol_01 -48 -46 1 30
+pickup rifle_01 58 20 5 30
+pickup ManaVial 58 30 5 30
+pickup HealthVial 0 44 1 30
+pickup Coin 48 -44 1 30
+PathNode gate 0 52 0 radius=4 next=square
+PathNode square 8 24 0 radius=3.5 next=gate,well,arcade_n
+PathNode well 4 -6 0 radius=3 next=square,arcade_s
+PathNode arcade_n -32 20 0 radius=3 next=square,arcade_s
+PathNode arcade_s -32 -20 0 radius=3 next=arcade_n,hall_door
+PathNode hall_door -26 -38 0 radius=2.5 next=arcade_s,hall_in
+PathNode hall_in -44 -38 0 radius=3 next=hall_door
+PathNode east_walk 58 -12 4 radius=3 next=east_walk_n
+PathNode east_walk_n 58 20 4 radius=3 next=east_walk
+npc Walker 6 30 0 0
+npc Walker 16 20 0 0
+npc Walker -12 14 0 0
+npc Brute -32 0 0 0
+npc Skaarj -32 24 0 0
+npc Skaarj -32 -24 0 0
+npc Skaarj 58 18 4 0
+npc Brute -40 -46 0 0
+light directional -20 40 100 255 238 210 1
+light directional 20 -40 20 255 200 150 0.2
+ParticleEmitter fire -32 -20 5.0 16 0.8 2.0 10 0.3 0.05 255 170 70 255 60 0 -1.5 4 0 0 1 0
+ParticleEmitter fire -32 20 5.0 16 0.8 2.0 10 0.3 0.05 255 170 70 255 60 0 -1.5 4 0 0 1 0
+ParticleEmitter fire -44 -48 4.6 14 0.9 1.8 9 0.28 0.05 255 160 60 255 70 10 -1.4 4 0 0 1 0
+particles 1 90 1.0 214 194 156 0.5 0.1
+light point -32 -20 5.4 255 215 160 0.45 15 effect=2
+light point -32 0 5.4 255 215 160 0.45 15 effect=2
+light point -32 20 5.4 255 215 160 0.45 15 effect=2
+light point 4 0 4 255 225 180 0.35 12
+light point 24 -6 4.5 150 205 235 0.55 18
+light point 0 58 10 255 200 140 0.5 14 effect=2
+light point 58 0 6.5 255 205 150 0.4 20
+light point -44 -48 4 255 160 90 0.75 18 effect=3
+light point 20 44 8 255 220 170 0.3 16
+trigger Trigger_EnterVolume -12 34 0 -4 40 6 once
+portal Chasm_ForgottenMemories -5 56 0 5 62 6 0 0 0 bidir

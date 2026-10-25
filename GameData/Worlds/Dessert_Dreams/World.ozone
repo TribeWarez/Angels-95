@@ -102,16 +102,16 @@ pickup EnergyCrystal 0 -14 3 30
 pickup Medkit 14 14 3 30
 pickup pistol_01 -18 0 3 30
 pickup ManaTonic 18 0 3 30
-pickup rifle_01 52 -46 3 30
-pickup Powerup 52 -56 3 30
+pickup rifle_01 56 -46 1 30
+pickup Powerup 56 -50 1 30
 pickup Key 66 8 1 30
 pickup EnergyCrystal -18 62 1 30
 pickup ManaVial 0 0 -0.5 30
-npc Floater -60 -18 1
+npc Floater -54 -18 1
 npc Walker 30 26 1
 npc Brute 46 -40 1
 npc Walker -55 0 1
-npc Walker -36 0 3
+npc Walker -36 0 1
 npc Skaarj 0 16 3
 npc Skaarj 18 0 3
 npc Brute -18 0 3
@@ -132,7 +132,7 @@ light point 60 10 5 255 235 200 0.4 25
 zone sky -120 -120 -30 120 120 90 1 name=dd_sky gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
 zone water -8 -8 -2 8 8 -0.3 1 name=dd_oasis gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
 PathNode gate_out -55 0 1 radius=4 next=gate_in
-PathNode gate_in -36 0 3 radius=3 next=plaza_w
+PathNode gate_in -36 0 1 radius=3 next=plaza_w
 PathNode plaza_w -18 0 3 radius=3 next=plaza_n,plaza_s
 PathNode plaza_n 0 16 3 radius=3 next=plaza_e,plaza_w
 PathNode plaza_e 18 0 3 radius=3 next=plaza_s,plaza_n
@@ -143,7 +143,7 @@ PathNode rim_s 0 -11 2 radius=2.5 next=rim_w,basin
 PathNode rim_w -11 0 2 radius=2.5 next=rim_n,basin
 PathNode basin 0 0 -1.5 radius=2 next=rim_n
 PathNode mesa_foot -20 58 1 radius=5 next=mesa_top
-PathNode mesa_top -20 66 1 radius=5 next=mesa_foot
+PathNode mesa_top -20 86 1 radius=5 next=mesa_foot
 PathNode outpost_a 46 -40 1 radius=3 next=outpost_b
 PathNode outpost_b 58 -50 1 radius=3 next=outpost_a
 levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_noon.png GameData/Tex/Global/Sky/sky_day.png

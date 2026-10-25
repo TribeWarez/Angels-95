@@ -1,0 +1,22 @@
+// AlShaddai_Metropolis - world sky zone (name=alshaddai_sky in World.ozone).
+// The entity name must match the OZONE zone's name= exactly: zone enter/exit is
+// dispatched on that key, and the registry re-points world defs on every load.
+entity "alshaddai_sky" : skyzone {
+    fog_color = (0.84, 0.72, 0.55)
+    fog_density = 0.005
+    ambient_light = (0.60, 0.53, 0.44)
+    skybox = "GameData/Tex/Global/Sky/sky_noon.png"
+    actions {
+        on_enter {
+            set_fog 0.84 0.72 0.55 0.005
+            set_ambient 0.60 0.53 0.44
+            set_skybox "GameData/Tex/Global/Sky/sky_noon.png"
+            say "AlShaddai - the market is empty and the gate still opens"
+        }
+        on_exit {
+            restore_fog
+            restore_skybox
+            say "You leave the sanctuary walls"
+        }
+    }
+}

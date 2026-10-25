@@ -253,14 +253,14 @@ pickup Coin 0 -10 0.7 30
 pickup EnergyCrystal 20 -38 2 30
 pickup Powerup 28 -38 0.7 30
 pickup HealthVial 0 -30 0.7 30
-pickup ManaVial 12 -70 0.7 30
+pickup ManaVial 26 -70 1.45 30
 pickup Medkit 12 -38 2 30
 pickup Ammo 28 -30 0.7 30
 pickup rifle_01 59 -14 0.7 30
 pickup etheral_waver 59 14 0.7 30
 pickup HealthVial 44 -8 0.7 30
 pickup Ammo 44 6 0.7 30
-pickup Powerup 74 22 9.5 30
+pickup Powerup 70 22 1 30
 npc Skaarj 20 -66 0.5
 npc Walker 26 -44 0.5
 npc Floater 14 -42 0.5
