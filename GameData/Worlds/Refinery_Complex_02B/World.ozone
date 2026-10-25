@@ -1,34 +1,259 @@
-# OZONE world scaffold - Refinery_Complex_02B
-# Sector: Sefirah_2_HydrosisPrime   (see Wiki/Game-Hierarchy.md)
-# Placeholder geometry only: a floor, a perimeter and a sky zone.
-# Format: ozone v1.0
+# OZONE world - Refinery_Complex_02B
+# Sefirah 2 - Hydrosis Prime. A processing refinery that never shut down.
+#
+# INTENT
+#   Fantasy: heat, metal and the sound of something still working. The plant
+#   is not abandoned, it is unattended.
+#   One moment: crossing the yard between two storage tanks with the stack
+#   burning above the pipe hall - and realising the catwalk inside is the
+#   only place to see the whole plant at once.
+#
+#   Pacing arc:
+#     0:00  READ       yard, tanks either side, stack lit ahead
+#     0:40  PRESSURE   open yard, pipe racks and the conveyor for cover
+#     1:40  TENSION    pipe hall: 12 high, two catwalks above you
+#     2:30  REWARD     catwalk climb: full plant overview, an angle on the
+#                      furnace floor below
+#     3:15  STORY      control room, still powered, the way out is in it
+#     4:00  EXIT
+#
+#   Flow:  yard -> pipe hall (south door) -> catwalk stairs -> cross catwalk
+#                |-> furnace floor                        |-> control room
+#                |-> tank yard (west)                          -> EXIT
+#
+# GEOMETRY NOTES
+#   Yard z=0. Hall ceiling 12. Catwalk top 7, underside 6.5. Overhead pipe
+#   runs at 6.0 so the ground beneath them is jump-safe. Tanks are 14 tall.
+#
+# Format: ozone v1.0  (Z-up: x=east, y=north, z=up)
 
-levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_darknoon.png
+# ============================================================================
+# Geometry
+# ============================================================================
+# Four slabs, not one: the coolant sump is cut into the yard.
+add box -43 0 -0.3 34 0.6 120 0 1 texScaleU=4 texScaleV=4
+add box 25 0 -0.3 70 0.6 120 0 1 texScaleU=4 texScaleV=4
+add box -18 -46 -0.3 16 0.6 28 0 1 texScaleU=2 texScaleV=3
+add box -18 22 -0.3 16 0.6 76 0 1 texScaleU=2 texScaleV=3
+#
+# Site fence: 8 tall. One gate, south, on the exit road.
+add box 0 59 4 120 8 2 0 2
+add box -33 -59 4 54 8 2 0 2
+add box 33 -59 4 54 8 2 0 2
+add box -59 0 4 2 8 116 0 2
+add box 59 0 4 2 8 116 0 2
+add box 0 -59 7 12 2 2 0 2
+#
+# Tank farm: four 14-tall storage tanks, the level's landmarks.
+#
+# Coolant sump: 14x14, 1.4 deep. The surface is cosmetic
+# (NO_BSP_CUTS) so you drop into it; the basin floor is the collision.
+add box -18 -24 -1.7 16 0.6 16 0 3
+add box -25.5 -24 -1 1 2 16 0 3
+add box -10.5 -24 -1 1 2 16 0 3
+add box -18 -31.5 -1 16 2 1 0 3
+add box -18 -16.5 -1 16 2 1 0 3
+add box -18 -24 -0.045 14 0.09 14 0 4 flags=268698752 texPath=GameData/Tex/Global/EFX/liquid_acid.png texScaleU=5 texScaleV=5 panU=0.02 panV=0.03 surfAlpha=0.82 surfGlow=(0.05,0.18,0.05) surfGlowScale=0.2
+# Kerbed rim and the feed pipe that keeps it topped up.
+add box -26.4 -24 0.125 0.8 0.25 17.6 0 3
+add box -9.6 -24 0.125 0.8 0.25 17.6 0 3
+add box -18 -32.4 0.125 17.6 0.25 0.8 0 3
+add box -18 -15.6 0.125 17.6 0.25 0.8 0 3
+add cyl -8 -24 0.45 0.45 0.45 0.45 10 0 3
+add box -8.5 -24 0.5 3 0.4 0.8 0 3
+#
+# Tank farm: four 14-tall storage tanks, the level's landmarks.
+add cyl -34 26 14 6 6 14 20 0 3
+add cyl -34 26 14.6 6.4 6.4 0.6 20 0 2
+# Access ladder cage, purely to give the tanks a scale reference.
+add box -27.8 26 4.5 0.4 9 2 0 3
+add cyl 34 26 14 6 6 14 20 0 3
+add cyl 34 26 14.6 6.4 6.4 0.6 20 0 2
+# Access ladder cage, purely to give the tanks a scale reference.
+add box 40.2 26 4.5 0.4 9 2 0 3
+add cyl -34 -30 14 6 6 14 20 0 3
+add cyl -34 -30 14.6 6.4 6.4 0.6 20 0 2
+# Access ladder cage, purely to give the tanks a scale reference.
+add box -27.8 -30 4.5 0.4 9 2 0 3
+add cyl 34 -30 14 6 6 14 20 0 3
+add cyl 34 -30 14.6 6.4 6.4 0.6 20 0 2
+# Access ladder cage, purely to give the tanks a scale reference.
+add box 40.2 -30 4.5 0.4 9 2 0 3
+#
+# Pipe hall: 40x28, ceiling 12. South wall has the 12-wide door; the
+# north wall IS the furnace, with the stack behind it.
+add box 0 0 13.3 40 0.6 28 0 4
+add box -19.5 0 6.5 1 13 28 0 2
+add box 19.5 0 6.5 1 13 28 0 2
+add box -13 -14.5 6.5 14 13 1 0 2
+add box 13 -14.5 6.5 14 13 1 0 2
+add box 0 -14.5 11 12 4 1 0 2
+# Furnace: a 6-tall firebox with a 12-tall lintel above it, so the hall
+# is still closed to the sky.
+add box -13 14 6.5 14 13 1 0 2
+add box 13 14 6.5 14 13 1 0 2
+add box 0 14 0.6 12 1.2 1 0 2
+add box 0 14 9.25 12 7.5 1 0 2
+# The firebox mouth: 0.3 thick, glowing, so it is a light source you can
+# read across the hall without a lamp placement fighting the geometry.
+add box 0 13.85 3.35 12 4.3 0.3 0 4 flags=788480 texPath=GameData/Tex/Global/EFX/liquid_lava.png texScaleU=2 texScaleV=1 panV=0.18
+# Stack behind the hall.
+add cyl 0 18 26 2.4 3.2 26 16 0 2
+#
+# Catwalk ring at 7: west run, east run, and a cross run at the far end
+# over the furnace. Underside 6.5, so the floor below is jump-safe.
+add box -17 7 6.75 4 0.5 14 0 3 texScaleU=1 texScaleV=5
+add box 17 0 6.75 4 0.5 28 0 3 texScaleU=1 texScaleV=5
+add box 0 12 6.75 30 0.5 4 0 3 texScaleU=5 texScaleV=1
+# Handrails on the outer edges only, 1.2 tall.
+add box -18.85 7 7.6 0.3 1.2 14 0 3
+add box 18.85 0 7.6 0.3 1.2 28 0 3
+add box 0 13.85 7.6 38 1.2 0.3 0 3
+# Stair up the west run: seven 1.0 treads standing in the open floor.
+add box -17 -6.5 0.5 4 1 1 0 3
+add box -17 -5.5 1 4 2 1 0 3
+add box -17 -4.5 1.5 4 3 1 0 3
+add box -17 -3.5 2 4 4 1 0 3
+add box -17 -2.5 2.5 4 5 1 0 3
+add box -17 -1.5 3 4 6 1 0 3
+add box -17 -0.5 3.5 4 7 1 0 3
+# Drip tray and pipe bundle under the east run - and the cover on the
+# hall floor.
+add box 17 -5 6.25 4 0.5 18 0 2
+# Floor machinery: pumps and a coolant manifold, all >=1.5 so they block.
+add box -8 -8 1.1 8 2.2 4 0 3
+add box 8 -8 1.1 8 2.2 4 0 3
+add box -6 5 0.9 8 1.8 6 0 3
+add box 6 5 0.9 8 1.8 6 0 3
+#
+# Control room: 24x20, ceiling 8, door on the west face, still powered.
+add box 38 0 8.3 24 0.6 20 0 4
+add box 26.5 -6.5 4 1 8 7 0 2
+add box 26.5 6.5 4 1 8 7 0 2
+add box 26.5 0 7.25 1 1.5 6 0 2
+add box 49.5 0 4 1 8 20 0 2
+add box 38 9.5 4 24 8 1 0 2
+add box 38 -9.5 4 24 8 1 0 2
+# Console banks: cover, and the reason the room is lit.
+add box 38 -5 1 12 2 2 0 3
+add box 38 5 1 12 2 2 0 3
+# Exit frame inside the room.
+add box 45 -5 3.5 2 7 2 0 3
+add box 45 5 3.5 2 7 2 0 3
+add box 45 0 6.5 2 1 8 0 3
+#
+# Conveyor along the east side of the yard: 1.6 tall, continuous cover
+# from the south gate up to the hall.
+add box 9 -27 0.8 2 1.6 18 0 3
+add box 9 -17 1.5 4 3 2 0 3
+add box 9 -33.5 0.2 1.6 0.4 1 0 3
+add box 9 -27.5 0.2 1.6 0.4 1 0 3
+add box 9 -21.5 0.2 1.6 0.4 1 0 3
+add box 9 -15.5 0.2 1.6 0.4 1 0 3
+# Overhead pipe runs in the west yard, at 6.0 so nothing walks under a
+# 5-unit ceiling.
+add box -37 -45 6.4 30 0.8 2 0 3
+add box -37 43 6.4 30 0.8 2 0 3
+add box -31.4 -42 3 1.2 6 8 0 3
+add box -27.4 -42 3 1.2 6 8 0 3
+add box -23.4 -42 3 1.2 6 8 0 3
+add box -47.4 41 3 1.2 6 6 0 3
+add box -35.4 41 3 1.2 6 6 0 3
+add box -23.4 41 3 1.2 6 6 0 3
+# Pump house, south-west.
+add box -43 -44 3 18 6 16 0 2
+add box -43 -51.8 2.7 2 1.4 0.4 0 3 flags=16384 surfGlow=(1.0,0.7,0.3) surfGlowScale=0.2
+# Spoil heaps and drums: cover with a silhouette.
+add cyl -20 -34 2.2 3.2 3.2 2.2 12 0 2
+add cyl 20 -30 1.6 1 1 1.6 10 0 3
+add cyl 22 -33 1.6 1 1 1.6 10 0 3
+add cyl 18 -33 1.6 1 1 1.6 10 0 3
+#
+# Yard boulders and a dry bush, with one collision box per rock.
+add box -40 -26 1.28 4.58 2.56 3.28 0 flags=16
+add box 30 -40 0.945 2.82 1.89 1.92 0 flags=16
+#
+#
+#
+# Spawn: inside the south gate, hall door and burning stack in frame.
+# --- pickups ---
+#
+# --- patrol graph ---
+# Catwalk is its own loop; no floor node links up to it.
+#
+# --- encounters ---
+# E1 yard: one behind the conveyor, one in the open, brute in the middle.
+# E2 hall floor: machinery cover between the door and the furnace.
+# E3 catwalk: the overwatch, reachable only by the stair.
+# E4 control room: the last guard, between the consoles and the exit.
+# E5 tank yard: a patrolling walker west of the hall.
+#
+# --- light ---
+#
+# --- atmosphere ---
+# Embers out of the firebox mouth: the furnace light was already there.
+# Yard floods on the tank corners.
+# Hall: the furnace does the work, plus two hanging lamps.
+# Control room.
+# Pump house lamp on the outside wall.
+# Coolant: green against the furnace orange.
+#
+# --- routing ---
+# Exit: the frame in the control room. Aethelgard's origin is
+# EngineTest's open concrete pad, which is walkable.
 
-# Floor (placeholder)
-add box 0 0 -0.25 80 0.5 80 0
-# Perimeter walls (placeholder)
-add box 0 -40 1 80 2 2 0
-add box 0 40 1 80 2 2 0
-add box -40 0 1 2 2 80 0
-add box 40 0 1 2 2 80 0
-
-playerstart 0 0 0 0
-light directional 50 50 80 200 205 215 0.3
-
-zone sky -60 -60 -30 60 60 60 1 name=Refinery_Complex_02B_sky
-
-# COOP content (scaffold): NPCs + pickups so objectives are completable.
-npc Walker 10 10 0
-npc Walker -10 10 0
-npc Walker 10 -10 0
-npc Walker -10 -10 0
-npc Walker 0 20 0
-pickup pistol_01 5 0 0
-pickup rifle_01 -5 0 0
-pickup etheral_waver 0 -5 0
-
-# trigger scaffold
-trigger Trigger_EnterVolume 8 -5 0 18 5 8 once
-# portal scaffold to next mission world (box X 20-26, Y -4..4, Z 0-8; spawn 0 0 0 in the target)
-portal Aethelgard_Ruins 20 -4 0 26 4 8 0 0 0 bidir
+# ============================================================================
+# Entities
+# ============================================================================
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_evening.png GameData/Tex/Global/Sky/sky_evening.png
+Mesh.Static GameData/Environment/Props/Rock_Medium_A.glb -40 -26 0 70 scale=0.6 tex=GameData/Environment/Props/Rock_Diffuse.png
+Mesh.Static GameData/Environment/Props/Rock_Small_A.glb 30 -40 0 15 scale=0.7 tex=GameData/Environment/Props/Rock_Diffuse.png
+Mesh.Static GameData/Environment/Props/Bush_Dry_B.glb 20 -44 0 120 scale=1.0
+zone sky -66 -66 -20 66 66 60 1 name=refinery_sky
+zone reverb -20 -14 0 20 14 12 1 name=refinery_hall
+zone reverb 26 -10 0 50 10 8 1 name=refinery_control
+zone sound -20 14 0 20 22 20 1 name=refinery_stack
+zone water -25 -31 -1.4 -11 -17 0.5 1 name=refinery_sump gravity=15 jump=7 terminal=50 water_gravity=9 water_drag=0.85 swim_up=3.5 ladder_speed=6 fly_mult=1.5
+playerstart -14 -42 0 165
+pickup Medkit 9 -32 2.6 45
+pickup rifle_01 36 0 1 30
+pickup pistol_01 -44 -32 1 30
+pickup HealthVial -8 -8 3.2 30
+pickup ManaVial 17 6 8 30
+pickup Coin -50 50 1 30
+PathNode gate 0 -52 0 radius=4 next=yard_s
+PathNode yard_s 0 -30 0 radius=4 next=gate,yard_e,yard_w
+PathNode yard_e 26 -22 0 radius=4 next=yard_s,door
+PathNode yard_w -30 -22 0 radius=4 next=yard_s,pump
+PathNode pump -44 -30 0 radius=3 next=yard_w
+PathNode door 0 -12 0 radius=3 next=yard_e,hall_s
+PathNode hall_s 0 -4 0 radius=3 next=door,hall_e,hall_w
+PathNode hall_w -10 4 0 radius=3 next=hall_s
+PathNode hall_e 10 4 0 radius=3 next=hall_s
+PathNode walk_w -17 4 7 radius=2.5 next=walk_n
+PathNode walk_n 0 12 7 radius=2.5 next=walk_w,walk_e
+PathNode walk_e 17 4 7 radius=2.5 next=walk_n
+PathNode control 38 0 0 radius=3 next=door
+npc Walker 6 -24 0 0
+npc Walker -8 -30 0 0
+npc Brute 0 -16 0 0
+npc Skaarj -8 -4 0 0
+npc Skaarj 8 11 0 0
+npc Skaarj 0 12 7 0
+npc Brute 40 8 0 0
+npc Walker -30 -20 0 0
+light directional 60 30 75 255 225 190 0.75
+light directional -50 -40 40 90 100 130 0.2
+ParticleEmitter fire 0 11.5 2.2 26 0.9 2.6 12 0.35 0.05 255 175 70 255 60 0 -2 6 0 0 1 0
+light point -34 14 12 255 210 160 0.5 26 effect=4
+light point 34 14 12 255 210 160 0.5 26 effect=4
+light point -34 -18 12 255 210 160 0.45 26 effect=4
+light point 34 -18 12 255 210 160 0.45 26 effect=4
+light point 0 12 3.5 255 150 80 1.2 24 effect=3
+light point -12 -6 10 255 220 180 0.4 20
+light point 12 -6 10 255 220 180 0.4 20
+light point 38 0 7 160 210 255 0.6 22
+light point -42 -32 4 255 200 140 0.4 14 effect=2
+light point -18 -24 4 130 220 150 0.55 18
+trigger Trigger_EnterVolume -6 -24 0 6 -20 6 once
+portal Aethelgard_Ruins 44 -3 0 46 3 6 0 0 0 bidir

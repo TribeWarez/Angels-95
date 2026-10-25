@@ -1,0 +1,22 @@
+// NearDeath_Threshold - world sky zone (name=threshold_sky in World.ozone).
+// The entity name must match the OZONE zone's name= exactly: zone enter/exit is
+// dispatched on that key, and the registry re-points world defs on every load.
+entity "threshold_sky" : skyzone {
+    fog_color = (0.30, 0.34, 0.48)
+    fog_density = 0.0055
+    ambient_light = (0.40, 0.42, 0.52)
+    skybox = "GameData/Tex/Global/Sky/sky_pilgrimage_02.png"
+    actions {
+        on_enter {
+            set_fog 0.30 0.34 0.48 0.0055
+            set_ambient 0.40 0.42 0.52
+            set_skybox "GameData/Tex/Global/Sky/sky_pilgrimage_02.png"
+            say "Near Death Threshold - the field is not reflecting the sky"
+        }
+        on_exit {
+            restore_fog
+            restore_skybox
+            say "You leave the threshold"
+        }
+    }
+}

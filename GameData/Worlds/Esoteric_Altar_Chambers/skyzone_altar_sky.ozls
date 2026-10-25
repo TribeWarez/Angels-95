@@ -1,0 +1,22 @@
+// Esoteric_Altar_Chambers - world sky zone (name=altar_sky in World.ozone).
+// The entity name must match the OZONE zone's name= exactly: zone enter/exit is
+// dispatched on that key, and the registry re-points world defs on every load.
+entity "altar_sky" : skyzone {
+    fog_color = (0.42, 0.36, 0.34)
+    fog_density = 0.004
+    ambient_light = (0.44, 0.40, 0.40)
+    skybox = "GameData/Tex/Global/Sky/sky_pilgrimage_01.png"
+    actions {
+        on_enter {
+            set_fog 0.42 0.36 0.34 0.004
+            set_ambient 0.44 0.40 0.40
+            set_skybox "GameData/Tex/Global/Sky/sky_pilgrimage_01.png"
+            say "Esoteric Altar Chambers - the candles are still lit"
+        }
+        on_exit {
+            restore_fog
+            restore_skybox
+            say "You leave the chambers"
+        }
+    }
+}

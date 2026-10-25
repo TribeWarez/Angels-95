@@ -1,0 +1,22 @@
+// Chasm_ForgottenMemories - world sky zone (name=chasm_sky in World.ozone).
+// The entity name must match the OZONE zone's name= exactly: zone enter/exit is
+// dispatched on that key, and the registry re-points world defs on every load.
+entity "chasm_sky" : skyzone {
+    fog_color = (0.55, 0.45, 0.42)
+    fog_density = 0.006
+    ambient_light = (0.46, 0.40, 0.42)
+    skybox = "GameData/Tex/Global/Sky/sky_grad_dusk.png"
+    actions {
+        on_enter {
+            set_fog 0.55 0.45 0.42 0.006
+            set_ambient 0.46 0.40 0.42
+            set_skybox "GameData/Tex/Global/Sky/sky_grad_dusk.png"
+            say "Chasm of Forgotten Memories - the rock remembers"
+        }
+        on_exit {
+            restore_fog
+            restore_skybox
+            say "You leave the canyon rim"
+        }
+    }
+}

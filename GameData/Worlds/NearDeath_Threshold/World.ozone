@@ -1,34 +1,160 @@
-# OZONE world scaffold - NearDeath_Threshold
-# Sector: Sefirah_5_ShatteredRealm   (see Wiki/Game-Hierarchy.md)
-# Placeholder geometry only: a floor, a perimeter and a sky zone.
-# Format: ozone v1.0
+# OZONE world - NearDeath_Threshold
+# Sefirah 5 - Shattered Realm. The last threshold before the sanctum.
+#
+# INTENT
+#   Fantasy: not a place, a condition. One bridge, two rows of standing
+#   stones, and a mirror field below that reflects the sky instead of the
+#   world.
+#   One moment: halfway across with the far gate small ahead and the field
+#   showing a second, upside-down bridge underneath you.
+#
+#   Pacing arc:
+#     0:00  READ       threshold plate, bridge, the gate small at the far end
+#     0:40  PRESSURE   bridge head, no cover but the standing stones
+#     1:30  CHOICE     under-route: drop to the field, follow the reversed
+#                      bridge, climb the far stair
+#     2:30  CLIMAX     bridge midpoint, no fallback, the gate in sight
+#     3:15  RESOLUTION pass the gate
+#
+#   Flow:  threshold plate -> bridge -> far gate -> EXIT
+#                           |-> mirror field -> far stair -> gate
+#
+# GEOMETRY NOTES
+#   Bridge top 0, 8 wide, 3 above the mirror field, unrailed. Both ends of
+#   the field have 3-tread stairs, so the drop is a loop, not a fall.
+#
+# Format: ozone v1.0  (Z-up: x=east, y=north, z=up)
 
-levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_pilgrimage_01.png
+# ============================================================================
+# Geometry
+# ============================================================================
+add box 0 0 -3.3 112 0.6 112 0 2 texScaleU=6 texScaleV=6
+#
+# Seams in the field, laid out as the reflection of the bridge above.
+add box -4.125 0 -2.95 0.25 0.1 108 0 3 flags=16384 surfGlow=(0.6,0.75,1.0) surfGlowScale=0.2
+add box 4.125 0 -2.95 0.25 0.1 108 0 3 flags=16384 surfGlow=(0.6,0.75,1.0) surfGlowScale=0.2
+# Field rubble: cover on the under-route.
+add box -18 -30 -2.1 4 1.8 4 0 2
+add box 16 -22 -2.1 4 1.8 4 0 2
+add box -22 6 -2.1 4 1.8 4 0 2
+add box 20 12 -2.1 4 1.8 4 0 2
+add box -14 34 -2.1 4 1.8 4 0 2
+add box 18 38 -2.1 4 1.8 4 0 2
+#
+# Threshold plate at the south end: 1.0 step up onto the bridge.
+add box 0 -48 -1 32 4 4 0 3
+# Bridge: 8 wide, 92 long, top 0, no rails.
+add box 0 0 -0.3 8 0.6 92 0 3 texScaleU=1 texScaleV=10
+# Under-rib and piers, so the bridge reads as built and lays a shadow
+# shape onto the field.
+add box 0 0 -1.4 6 1.6 92 0 2
+add cyl 0 -36 -2.6 1.2 1.2 2 8 0 2
+add cyl 0 -18 -2.6 1.2 1.2 2 8 0 2
+add cyl 0 0 -2.6 1.2 1.2 2 8 0 2
+add cyl 0 18 -2.6 1.2 1.2 2 8 0 2
+add cyl 0 36 -2.6 1.2 1.2 2 8 0 2
+# Stairs at both ends of the field, so the under-route is a loop.
+add box 0 -48.5 -2.5 8 1 1 0 2
+add box 0 -47.5 -2 8 2 1 0 2
+add box 0 -46.5 -1.5 8 3 1 0 2
+add box 0 48.5 -2.5 8 1 1 0 2
+add box 0 47.5 -2 8 2 1 0 2
+add box 0 46.5 -1.5 8 3 1 0 2
+#
+# Standing stones flanking the bridge, at varied heights.
+add box -12 -30 0 4 6 2 0 2
+add box 12 -30 0.2 4 6.4 2 0 2
+add box -12 -20 0.35 4 6.7 2 0 2
+add box 12 -20 -0.05 4 5.9 2 0 2
+add box -12 -10 0.7 4 7.4 2 0 2
+add box 12 -10 -0.3 4 5.4 2 0 2
+add box -12 0 0 4 6 2 0 2
+add box 12 0 0.2 4 6.4 2 0 2
+add box -12 10 0.35 4 6.7 2 0 2
+add box 12 10 -0.05 4 5.9 2 0 2
+add box -12 20 0.7 4 7.4 2 0 2
+add box 12 20 -0.3 4 5.4 2 0 2
+add box -12 30 0 4 6 2 0 2
+add box 12 30 0.2 4 6.4 2 0 2
+# Far gate: piers, lintel, and a lit sheet in the opening.
+add box -5 45 3.5 2 13 2 0 3
+add box 5 45 3.5 2 13 2 0 3
+add box 0 45 10.7 12 1.4 2 0 3
+# The opening is exactly the bridge's width (8), so no part of the gate
+# hangs over open field and leaves a 3-unit ceiling under it.
+add box 0 44.9 4.5 8 9 0.4 0 4 flags=788480 texPath=GameData/Tex/Global/EFX/liquid_water.png panU=0.02 panV=0.09 surfAlpha=0.9
+#
+# Shell: 7 tall above the field, far enough out that it reads as endless.
+add box 0 55 2 112 10 2 0 2
+add box 0 -55 2 112 10 2 0 2
+add box -55 0 2 2 10 108 0 2
+add box 55 0 2 2 10 108 0 2
+#
+#
+#
+# Spawn: on the threshold plate, the bridge running away from you.
+# --- pickups ---
+#
+# --- patrol graph ---
+# The mirror field is its own loop.
+#
+# --- encounters ---
+# E1 bridge head: one, backlit by the gate, no cover.
+# E2 midpoint: the brute, where there is no fallback.
+# E3 under-route: two, so the drop is a fight as well as a fall.
+# E4 gate: the last pair.
+#
+# --- light ---
+#
+# --- atmosphere ---
+# Void drift over the mirror field, and mist at the gate.
+# The gate is the destination.
+# Bridge lamps, one every twenty units.
+# Field: two pools of light under the bridge.
+#
+# --- routing ---
+# Exit: the far gate. Esoteric_Altar_Chambers' origin is its antechamber.
 
-# Floor (placeholder)
-add box 0 0 -0.25 80 0.5 80 0
-# Perimeter walls (placeholder)
-add box 0 -40 1 80 2 2 0
-add box 0 40 1 80 2 2 0
-add box -40 0 1 2 2 80 0
-add box 40 0 1 2 2 80 0
-
-playerstart 0 0 0 0
-light directional 50 50 80 200 205 215 0.3
-
-zone sky -60 -60 -30 60 60 60 1 name=NearDeath_Threshold_sky
-
-# COOP content (scaffold): NPCs + pickups so objectives are completable.
-npc Walker 10 10 0
-npc Walker -10 10 0
-npc Walker 10 -10 0
-npc Walker -10 -10 0
-npc Walker 0 20 0
-pickup pistol_01 5 0 0
-pickup rifle_01 -5 0 0
-pickup etheral_waver 0 -5 0
-
-# trigger scaffold
-trigger Trigger_EnterVolume 8 -5 0 18 5 8 once
-# portal scaffold to next mission world (box X 20-26, Y -4..4, Z 0-8; spawn 0 0 0 in the target)
-portal Esoteric_Altar_Chambers 20 -4 0 26 4 8 0 0 0 bidir
+# ============================================================================
+# Entities
+# ============================================================================
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_pilgrimage_02.png GameData/Tex/Global/Sky/sky_pilgrimage_02.png
+zone sky -60 -60 -20 60 60 30 1 name=threshold_sky
+zone sound -6 -50 -1 6 50 8 1 name=threshold_bridge
+zone sound -54 -54 -4 54 54 -1 1 name=threshold_field
+playerstart 0 -48 1 180
+pickup Medkit -12 -34 -2 45
+pickup pistol_01 -12 6 -2 30
+pickup rifle_01 12 -6 -2 30
+pickup HealthVial 0 24 1 30
+pickup ManaVial 0 42 1 30
+pickup Coin 8 -18 -2 30
+PathNode plate 0 -38 1 radius=4 next=bridge_s
+PathNode bridge_s 0 -30 0 radius=3 next=plate,bridge_m
+PathNode bridge_m 0 0 0 radius=3 next=bridge_s,bridge_n
+PathNode bridge_n 0 30 0 radius=3 next=bridge_m,gate
+PathNode gate 0 44 0 radius=3 next=bridge_n
+PathNode field_s -18 -20 -3 radius=4 next=field_n
+PathNode field_n 18 20 -3 radius=4 next=field_s
+npc Walker 0 -26 0 0
+npc Brute 0 -2 0 0
+npc Walker -14 -20 -3 0
+npc Skaarj 14 20 -3 0
+npc Skaarj -4 38 0 0
+npc Walker 4 42 0 0
+light directional 20 -50 70 180 190 240 0.35
+particles 3 60 0.6 195 205 235 0.1 0.1
+ParticleEmitter mist 0 44 2 12 2.2 1.4 18 0.18 1.5 180 200 240 150 170 220 -0.2 6 0 0 1 0
+light point 0 44 8 180 210 255 1 24
+light point -8 -30 4 255 210 170 0.4 14 effect=4
+light point 8 -30 4 255 210 170 0.4 14 effect=4
+light point -8 -10 4 255 210 170 0.4 14 effect=4
+light point 8 -10 4 255 210 170 0.4 14 effect=4
+light point -8 10 4 255 210 170 0.4 14 effect=4
+light point 8 10 4 255 210 170 0.4 14 effect=4
+light point -8 30 4 255 210 170 0.4 14 effect=4
+light point 8 30 4 255 210 170 0.4 14 effect=4
+light point -9 -10 -1 120 160 220 0.5 22
+light point 9 22 -1 120 160 220 0.5 22
+trigger Trigger_EnterVolume -4 34 0 4 38 6 once
+portal Esoteric_Altar_Chambers -4 44 1 4 46 9 0 0 0 bidir

@@ -1,0 +1,22 @@
+// SoulEater_Vaults - world sky zone (name=vaults_sky in World.ozone).
+// The entity name must match the OZONE zone's name= exactly: zone enter/exit is
+// dispatched on that key, and the registry re-points world defs on every load.
+entity "vaults_sky" : skyzone {
+    fog_color = (0.24, 0.22, 0.30)
+    fog_density = 0.006
+    ambient_light = (0.34, 0.32, 0.38)
+    skybox = "GameData/Tex/Global/Sky/sky_dead.png"
+    actions {
+        on_enter {
+            set_fog 0.24 0.22 0.30 0.006
+            set_ambient 0.34 0.32 0.38
+            set_skybox "GameData/Tex/Global/Sky/sky_dead.png"
+            say "Soul Eater Vaults - every door here was built to close"
+        }
+        on_exit {
+            restore_fog
+            restore_skybox
+            say "You leave the vaults"
+        }
+    }
+}

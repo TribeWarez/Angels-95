@@ -1,34 +1,468 @@
-# OZONE world scaffold - Sektor_02_MegacityGrid
-# Sector: Sefirah_1_TerranPrime   (see Wiki/Game-Hierarchy.md)
-# Placeholder geometry only: a floor, a perimeter and a sky zone.
-# Format: ozone v1.0
+# OZONE world - Sektor_02_MegacityGrid
+# Sefirah 1 - Terran Prime. Dense urban signal relays.
+#
+# INTENT
+#   Fantasy: the city is a machine and you are walking through the wiring.
+#   Two districts: the crossroads where the grid is still inhabited, and the
+#   relay plaza beyond the gate where the machine itself stands.
+#   One moment: stepping out of the south avenue into the crossroads with the
+#   rail deck overhead and the relay tower standing above the north gate -
+#   the next district visible over the wall before you reach it.
+#
+#   Pacing arc:
+#     0:00  READ       south avenue, deck + tower ahead, no threat in reach
+#     0:30  PRESSURE   crossroads skirmish behind the newsstand
+#     1:30  FLANK      relay hall (racks, one door) or the substation dead end
+#     2:30  REWARD     deck climb: rifle + an overview of every route
+#     3:00  OPTIONAL   market roof: grass, coin, a brute - pure choice
+#     4:00  GATE       the north gate: the plaza opens up, tower overhead
+#     5:00  DISTRICT   relay plaza: arcade west, vault east, tower centre
+#     6:00  CLIMB      ring deck (10) -> tower top (20) under the stairs' own
+#                      fire, with the vault and arcade still to clear below
+#     7:00  EXIT       the tower top
+#
+#   Flow:  south avenue -> crossroads -> relay hall / substation / market roof
+#                      -> rail deck (optional) -> NORTH GATE
+#                      -> relay plaza -> arcade (west) | vault (east)
+#                      -> ring deck -> tower top -> EXIT
+#
+#   Two independent routes through district B: the plaza floor (arcade, vault,
+#   tower base) and the high route (stair -> ring deck -> tower top). The high
+#   route skips the plaza, so clearing it is a choice, not a corridor.
+#
+# GEOMETRY NOTES
+#   Floor z=0 in both districts. Deck underside 5.5, hall ceiling 8, arcade
+#   canopy 6.0. Ring deck 10, tower top 19.9, every stair tread rises 1.0.
+#   Tower is a solid cylinder (r=8, top 19.9) with an external-ring deck; the
+#   last stair tread tops at 20.0 so it never shares a plane with the tower.
+#
+# Format: ozone v1.0  (Z-up: x=east, y=north, z=up)
 
-levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_day.png
+# ============================================================================
+# Geometry
+# ============================================================================
+# ==========================================================================
+# DISTRICT A - the crossroads. Ground z=0, four 16-wide avenues.
+# ==========================================================================
+# One slab for the whole district: per-region slabs would share the z=0
+# top plane and z-fight where they meet.
+add box 0 1 -0.3 104 0.6 106 0 1 texScaleU=3 texScaleV=3
+#
+# Perimeter: 10 tall. The NORTH wall now has the gate to district B
+# (12 wide, 6 tall). The old east transit gate is bricked up: it is the
+# substation door now, and the sealed arch tells you the line is dead.
+add box -30 53 5 48 10 2 0 2
+add box 30 53 5 48 10 2 0 2
+add box 0 53 8 12 4 2 0 2
+add box 0 -53 5 108 10 2 0 2
+add box -53 0 5 2 10 104 0 2
+add box 53 -28.5 5 2 10 47 0 2
+add box 53 28.5 5 2 10 47 0 2
+add box 53 0 5 2 10 10 0 2
+# Gate jambs, so the opening reads as a gate and not a gap.
+add box -6.5 53 5 1 10 2 0 3
+add box 6.5 53 5 1 10 2 0 3
+#
+# Plinth and cornice on the inner face: ten-tall extruded boxes read as
+# hillsides otherwise. Eight brushes.
+add box 0 51.85 0.3 108 0.6 0.3 0 3
+add box 0 -51.85 0.3 108 0.6 0.3 0 3
+add box -51.85 0 0.3 0.3 0.6 104 0 3
+add box 51.85 0 0.3 0.3 0.6 104 0 3
+add box 0 51.8 9.75 108 0.5 0.4 0 3
+add box 0 -51.8 9.75 108 0.5 0.4 0 3
+add box -51.8 0 9.75 0.4 0.5 104 0 3
+add box 51.8 0 9.75 0.4 0.5 104 0 3
+#
+# NW block: street wall of the north avenue, 15 tall with a 22-tall crown.
+add box -30 30 7.5 44 15 44 0 2
+add box -31 30 18.5 26 7 28 0 2
+add box -30 8.6 15.4 44 0.8 1.2 0 3
+add box -42 7.925 3.6 12 1.2 0.15 0 4 flags=16384 surfGlow=(1,0.72,0.35) surfGlowScale=0.2
+add box -26 7.925 6.6 12 1.2 0.15 0 4 flags=16384 surfGlow=(1,0.72,0.35) surfGlowScale=0.2
+add box -42 7.925 9.6 12 1.2 0.15 0 4 flags=16384 surfGlow=(1,0.72,0.35) surfGlowScale=0.2
+add box -26 7.925 12.6 12 1.2 0.15 0 4 flags=16384 surfGlow=(1,0.72,0.35) surfGlowScale=0.2
+# The same strips on the EAST face, which is what the north avenue
+# actually looks at from the spawn.
+add box -8.075 18 3.6 0.15 1.2 12 0 4 flags=16384 surfGlow=(1,0.72,0.35) surfGlowScale=0.2
+add box -8.075 44 3.6 0.15 1.2 12 0 4 flags=16384 surfGlow=(1,0.72,0.35) surfGlowScale=0.2
+add box -8.075 18 6.6 0.15 1.2 12 0 4 flags=16384 surfGlow=(1,0.72,0.35) surfGlowScale=0.2
+add box -8.075 44 6.6 0.15 1.2 12 0 4 flags=16384 surfGlow=(1,0.72,0.35) surfGlowScale=0.2
+#
+# NE block: hollow relay hall, ceiling 8, one 6-wide door facing the
+# north avenue. The lit sign over the door is the affordance.
+add box 8.5 18 4 1 8 20 0 2
+add box 8.5 43 4 1 8 18 0 2
+add box 51.5 30 4 1 8 44 0 2
+add box 30 51.5 4 44 8 1 0 2
+add box 30 8.5 4 44 8 1 0 2
+add box 30 30 8.3 45.2 0.6 45.2 0 4
+add box 8.125 31 7 0.25 1.2 8 0 3 flags=16384 surfGlow=(0.35,0.85,1.0) surfGlowScale=0.2
+add box 18 15.2 1.1 8 2.2 2.4 0 3
+add box 18 27.2 1.1 8 2.2 2.4 0 3
+add box 18 39.2 1.1 8 2.2 2.4 0 3
+add box 44 15.2 1.1 8 2.2 2.4 0 3
+add box 44 27.2 1.1 8 2.2 2.4 0 3
+add box 44 39.2 1.1 8 2.2 2.4 0 3
+add box 27 22 1.1 6 2.2 4 0 3
+add box 27 36 1.1 6 2.2 4 0 3
+# And the relay hall's west face, the other half of the avenue.
+add box 7.925 18 3.6 0.15 1.2 12 0 4 flags=16384 surfGlow=(0.55,0.8,1.0) surfGlowScale=0.2
+add box 7.925 44 3.6 0.15 1.2 12 0 4 flags=16384 surfGlow=(0.55,0.8,1.0) surfGlowScale=0.2
+add box 7.925 18 6 0.15 1.2 12 0 4 flags=16384 surfGlow=(0.55,0.8,1.0) surfGlowScale=0.2
+add box 7.925 44 6 0.15 1.2 12 0 4 flags=16384 surfGlow=(0.55,0.8,1.0) surfGlowScale=0.2
+#
+# SW block: 5.9 tall under a 0.1 grass slab, so the walkable roof is
+# exactly 6.0 and the block's own top face stays hidden beneath it.
+add box -30 -30 2.95 44 5.9 44 0 2
+add box -30 -30 5.95 44 0.1 44 0 5 texScaleU=6 texScaleV=6
+add box -30 -51.5 6.6 44 1.2 1 0 2
+add box -51.5 -30 6.6 1 1.2 44 0 2
+add box -28 -2.5 0.5 4 1 1 0 1
+add box -28 -3.5 1 4 2 1 0 1
+add box -28 -4.5 1.5 4 3 1 0 1
+add box -28 -5.5 2 4 4 1 0 1
+add box -28 -6.5 2.5 4 5 1 0 1
+add box -28 -7.5 3 4 6 1 0 1
+add box -41 -41 6.8 6 1.6 6 0 3
+add box -21 -27 6.8 6 1.6 6 0 3
+add cyl -34 -44 12 0.35 0.55 6 8 0 3
+add cyl -34 -44 13.4 0 3 1.4 12 0 5
+#
+# SE block: roofed colonnade, underside 8.5, columns as flank cover.
+add box 30 -30 8.8 44 0.6 44 0 4
+add cyl 14 -46 8.5 1.2 1.2 8.5 12 0 3
+add cyl 14 -30 8.5 1.2 1.2 8.5 12 0 3
+add cyl 14 -14 8.5 1.2 1.2 8.5 12 0 3
+add cyl 30 -46 8.5 1.2 1.2 8.5 12 0 3
+add cyl 30 -30 8.5 1.2 1.2 8.5 12 0 3
+add cyl 30 -14 8.5 1.2 1.2 8.5 12 0 3
+add cyl 46 -46 8.5 1.2 1.2 8.5 12 0 3
+add cyl 46 -30 8.5 1.2 1.2 8.5 12 0 3
+add cyl 46 -14 8.5 1.2 1.2 8.5 12 0 3
+add box 27 -32 1.1 6 2.2 4 0 3
+#
+# Rail deck across the east-west avenue: underside 5.5, top 6.0.
+add box 0 0 5.75 40 0.5 4 0 3
+add cyl -14 0 5.5 0.8 0.8 5.5 10 0 3
+add cyl 14 0 5.5 0.8 0.8 5.5 10 0 3
+add box -4 7.5 0.5 4 1 1 0 1
+add box -4 6.5 1 4 2 1 0 1
+add box -4 5.5 1.5 4 3 1 0 1
+add box -4 4.5 2 4 4 1 0 1
+add box -4 3.5 2.5 4 5 1 0 1
+add box -4 2.5 3 4 6 1 0 1
+add box -19.7 0 6.55 0.6 1.1 4 0 3
+add box 19.7 0 6.55 0.6 1.1 4 0 3
+#
+# Newsstand at the corner of the north avenue: cover at 2.35, clear of
+# the deck above.
+add box 3 5 1 4 2 4 0 3
+add box 3 5 2.175 5 0.35 5 0 4
+add cyl -7 -7 1 0.35 0.35 1 8 0 3
+add cyl 7 -7 1 0.35 0.35 1 8 0 3
+add cyl -7 7 1 0.35 0.35 1 8 0 3
+add cyl 7 7 1 0.35 0.35 1 8 0 3
+# Crosswalk bars at the four mouths of the junction, 0.05 proud and
+# a different tiling, so the crossroads reads as a junction.
+add box -5.2 11.75 0.025 1.6 0.05 4.5 0 2
+add box -5.2 -11.75 0.025 1.6 0.05 4.5 0 2
+add box -2.2 11.75 0.025 1.6 0.05 4.5 0 2
+add box -2.2 -11.75 0.025 1.6 0.05 4.5 0 2
+add box 4.8 11.75 0.025 1.6 0.05 4.5 0 2
+add box 4.8 -11.75 0.025 1.6 0.05 4.5 0 2
+add box 7.8 11.75 0.025 1.6 0.05 4.5 0 2
+add box 7.8 -11.75 0.025 1.6 0.05 4.5 0 2
+add box 11.75 -5.2 0.025 4.5 0.05 1.6 0 2
+add box -11.75 -5.2 0.025 4.5 0.05 1.6 0 2
+add box 11.75 -2.2 0.025 4.5 0.05 1.6 0 2
+add box -11.75 -2.2 0.025 4.5 0.05 1.6 0 2
+add box 11.75 4.8 0.025 4.5 0.05 1.6 0 2
+add box -11.75 4.8 0.025 4.5 0.05 1.6 0 2
+add box 11.75 7.8 0.025 4.5 0.05 1.6 0 2
+add box -11.75 7.8 0.025 4.5 0.05 1.6 0 2
+# Tower apron, 0.12 proud, so the plaza has a centre.
+add cyl 0 88 0.12 13.5 13.5 0.12 28 0 2
+# Lane markings: two thin painted lines per avenue. A single wide
+# stripe in the metal slot reads as a rust treadmill, not a road.
+add box -1.875 32 0.015 0.45 0.03 36 0 2
+add box -1.875 -32 0.015 0.45 0.03 36 0 2
+add box 1.875 32 0.015 0.45 0.03 36 0 2
+add box 1.875 -32 0.015 0.45 0.03 36 0 2
+# Street clutter at eye height.
+add cyl -16 -18 1.1 0.55 0.55 1.1 10 0 3
+add cyl -14.5 -19 1.1 0.55 0.55 1.1 10 0 3
+add cyl 18 16 1.1 0.55 0.55 1.1 10 0 3
+add cyl 19.5 17 1.1 0.55 0.55 1.1 10 0 3
+add cyl -20 12 1.1 0.55 0.55 1.1 10 0 3
+add cyl 20 -16 1.1 0.55 0.55 1.1 10 0 3
+add box -21 -21 0.8 2 1.6 2 0 3
+add box -19 -23 0.8 2 1.6 2 0 3
+add box 25 21 0.8 2 1.6 2 0 3
+add box 23 23 0.8 2 1.6 2 0 3
+#
+# Substation: the dead east street is now a room. A cross wall with a
+# 5.5-tall door, a 6-high ceiling, and the Coin inside. Optional.
+add box 46.5 -5.5 4 1 8 5 0 2
+add box 46.5 5.5 4 1 8 5 0 2
+add box 46.5 0 6.75 1 2.5 6 0 2
+add box 49 0 8.3 6 0.6 16 0 4
+# Transformer cabinets: cover at 2.2.
+add box 49 -4 1.1 2 2.2 4 0 3
+add box 49 4 1.1 2 2.2 4 0 3
+# The sealed arch: a riveted plate over the old transit gate.
+add box 51.9 0 3 0.2 4 8 0 3
+add box 51.85 0 4.8 0.3 0.4 8.4 0 4
+#
+# Painted skyline (flags=8), all of it outside the two districts.
+add box -90 5 19 20 38 70 0 2 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 71 -70 17 22 34 40 0 2 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 95 15 21 18 42 70 0 2 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box -69 150 15 14 30 40 0 2 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box -5 141 14 50 28 18 0 2 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 42 139 12 36 24 18 0 2 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+# A second, lower row so the skyline steps back in bands instead of
+# reading as one flat cut-out.
+add box -71 48 10 26 20 8 0 2 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 47 58 8 22 16 8 0 2 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 67 99 9 18 18 10 0 2 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box -30 129 7 28 14 6 0 2 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 22 129 6 24 12 6 0 2 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box -60 100 8.5 20 17 8 0 2 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+#
+# ==========================================================================
+# DISTRICT B - the relay plaza, y 54..122. Reached through the north
+# gate. The tower is the landmark you saw over the wall from district A.
+# ==========================================================================
+add box 0 88 -0.3 104 0.6 68 0 1 texScaleU=3 texScaleV=3
+add box 0 123 5 108 10 2 0 2
+add box 53 88 5 2 10 68 0 2
+add box -53 88 5 2 10 68 0 2
+#
+# Relay tower: solid cylinder, r=8, top 19.9. Deliberately 0.1 BELOW the
+# last stair tread so the two tops never share a plane.
+add cyl 0 88 19.9 8 8 19.9 24 0 2
+# Banding ribs and a service door: built, not extruded.
+add cyl 0 88 7.2 8.12 8.12 0.25 24 0 3
+add cyl 0 88 14.2 8.12 8.12 0.25 24 0 3
+add box 0 79.9 1.8 3.2 3.6 0.3 0 3
+add cyl 0 88 18.6 8.2 8.2 0.6 24 0 4
+# Base collar, so the tower reads as built into the plaza.
+add cyl 0 88 1 9.2 9.2 1 24 0 2
+#
+# Ring deck at 10: four slabs around the tower, a 3-wide walkway that
+# circles it. Underside 9.4, so the plaza floor beneath it is jump-safe.
+add box 0 78.5 9.7 22 0.6 3 0 2
+add box 0 97.5 9.7 22 0.6 3 0 2
+add box -9.5 88 9.7 3 0.6 16 0 2
+add box 9.5 88 9.7 3 0.6 16 0 2
+add cyl -10 78.5 9.4 0.5 0.5 9.4 8 0 3
+add cyl -10 97.5 9.4 0.5 0.5 9.4 8 0 3
+add cyl 10 78.5 9.4 0.5 0.5 9.4 8 0 3
+add cyl 10 97.5 9.4 0.5 0.5 9.4 8 0 3
+# Rail on the outer rim only.
+add box -10.85 88 10.55 0.3 1.1 22 0 3
+add box 10.85 88 10.55 0.3 1.1 22 0 3
+#
+# Stair 1: plaza floor to the ring deck, 10 treads, landing on the
+# south slab's edge.
+add box -9 67.5 0.5 4 1 1 0 1
+add box -9 68.5 1 4 2 1 0 1
+add box -9 69.5 1.5 4 3 1 0 1
+add box -9 70.5 2 4 4 1 0 1
+add box -9 71.5 2.5 4 5 1 0 1
+add box -9 72.5 3 4 6 1 0 1
+add box -9 73.5 3.5 4 7 1 0 1
+add box -9 74.5 4 4 8 1 0 1
+add box -9 75.5 4.5 4 9 1 0 1
+add box -9 76.5 5 4 10 1 0 1
+# Stair 2: ring deck to the tower top, 10 treads hugging the east face.
+add box 8.5 80.5 10.5 7 1 1 0 1
+add box 8.5 81.5 11 7 2 1 0 1
+add box 8.5 82.5 11.5 7 3 1 0 1
+add box 8.5 83.5 12 7 4 1 0 1
+add box 8.5 84.5 12.5 7 5 1 0 1
+add box 8.5 85.5 13 7 6 1 0 1
+add box 8.5 86.5 13.5 7 7 1 0 1
+add box 8.5 87.5 14 7 8 1 0 1
+add box 8.5 88.5 14.5 7 9 1 0 1
+add box 8.5 89.5 15 7 10 1 0 1
+#
+# Arcade along the west wall: a roofed promenade at 6.0, the flank route
+# through the plaza. Columns every 14 so the runs are 6 clear between.
+add box -40 89 7.95 14 0.7 62 0 4
+add cyl -44 62 7.6 0.9 0.9 7.6 10 0 3
+add cyl -36 62 7.6 0.9 0.9 7.6 10 0 3
+add cyl -44 76 7.6 0.9 0.9 7.6 10 0 3
+add cyl -36 76 7.6 0.9 0.9 7.6 10 0 3
+add cyl -44 90 7.6 0.9 0.9 7.6 10 0 3
+add cyl -36 90 7.6 0.9 0.9 7.6 10 0 3
+add cyl -44 104 7.6 0.9 0.9 7.6 10 0 3
+add cyl -36 104 7.6 0.9 0.9 7.6 10 0 3
+add cyl -44 118 7.6 0.9 0.9 7.6 10 0 3
+add cyl -36 118 7.6 0.9 0.9 7.6 10 0 3
+# Arcade furniture: benches, cover at 1.6.
+add box -44 71.5 0.8 4 1.6 3 0 3
+add box -44 97.5 0.8 4 1.6 3 0 3
+#
+# Vault, north-east: solid walls, ceiling 8, one door. The melee weapon
+# is in here, which is what makes the east side worth walking.
+add box 34 111 8.3 21 0.6 15 0 4
+add box 24.5 111 4 1 8 14 0 2
+add box 43.5 111 4 1 8 14 0 2
+add box 34 117.5 4 20 8 1 0 2
+add box 27 104.5 4 6 8 1 0 2
+add box 40 104.5 4 8 8 1 0 2
+add box 33 104.5 7 6 2 1 0 2
+# Display plinth for the blade, and two crates as cover.
+add box 34 111.5 0.6 4 1.2 3 0 3
+add box 27.5 115.5 1.1 3 2.2 3 0 3
+add box 39.5 115.5 1.1 3 2.2 3 0 3
+#
+# Plaza dressing: a dead signal mast, planters, and the gate lamps.
+add cyl -26 62 14 0.4 0.4 14 8 0 3
+add cyl -26 62 16 0 2.2 2 8 0 3
+add box 20 60 0.8 6 1.6 6 0 3
+add box 44 76 0.8 6 1.6 6 0 3
+add box -24 108 0.8 6 1.6 6 0 3
+add box 14 108 0.8 6 1.6 6 0 3
+#
+# Mesh props have no collision of their own, so each solid one carries
+# one conservative flags=16 box, which is what AutoConvex would emit for
+# a convex rock. Foliage carries none: a bush should not block.
+add box -26 100 2.185 7.1 4.37 4.94 0 flags=16
+add box -46 3 1.19 3.7 2.38 3.28 0 flags=16
+add box 30 -44 1.08 3.22 2.16 2.18 0 flags=16
+#
+#
+#
+# Spawn: south avenue, looking north up the street at the deck and the
+# tower above the gate. Nothing is in melee reach on the first frame.
+# --- pickups ---
+# --- district B ---
+#
+# --- patrol graph (links are by NAME, so the graph survives reordering) ---
+# Roof and deck get closed loops of their own: a street node must not
+# link to a raised one, or the patrol line cuts through the stair.
+#
+# District B, ground loop.
+# District B, high route: ring deck and tower top.
+#
+# --- encounters ---
+# A. E1 crossroads: visible from the spawn at 16 units, newsstand cover.
+# A. E2 east street: the substation guard.
+# A. E3 relay hall: one behind a rack row, one on the far side.
+# A. E4 gate approach.
+# A. E5 deck and market roof, both seen from below first.
+#
+# B. E6 plaza: two in the open, one holding the gate itself.
+# B. E7 promenade: the arcade is not free.
+# B. E8 vault.
+# B. E9 ring deck and tower top: the climb is contested.
+#
+# --- light ---
+# Evening sun raking down the avenues from the west-north.
+# Hall: cold strip lighting.
+# Colonnade and deck.
+# Market roof.
+#
+# B. Gate, plaza, promenade, vault, tower.
+# Spine lamps: the tower's south face takes no sun, so the plaza needs
+# its own light or the district reads as a silhouette.
+#
+# --- routing ---
+# Two once-triggers, both clear of the spawn volume.
+# Exit: the top of the relay tower. The destination spawn is the
+# Sektor_03 yard at its origin, which is open ground there.
 
-# Floor (placeholder)
-add box 0 0 -0.25 80 0.5 80 0
-# Perimeter walls (placeholder)
-add box 0 -40 1 80 2 2 0
-add box 0 40 1 80 2 2 0
-add box -40 0 1 2 2 80 0
-add box 40 0 1 2 2 80 0
-
-playerstart 0 0 0 0
-light directional 50 50 80 200 205 215 0.3
-
-zone sky -60 -60 -30 60 60 60 1 name=Sektor_02_MegacityGrid_sky
-
-# COOP content (scaffold): NPCs + pickups so objectives are completable.
-npc Walker 10 10 0
-npc Walker -10 10 0
-npc Walker 10 -10 0
-npc Walker -10 -10 0
-npc Walker 0 20 0
-pickup pistol_01 5 0 0
-pickup rifle_01 -5 0 0
-pickup etheral_waver 0 -5 0
-
-# trigger scaffold
-trigger Trigger_EnterVolume 8 -5 0 18 5 8 once
-# portal scaffold to next mission world (box X 20-26, Y -4..4, Z 0-8; spawn 0 0 0 in the target)
-portal Sektor_03_AegisBaseAlpha 20 -4 0 26 4 8 0 0 0 bidir
+# ============================================================================
+# Entities
+# ============================================================================
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_evening.png GameData/Tex/Global/Sky/sky_evening.png
+Mesh.Static GameData/Environment/Props/Rock_Large_A.glb -26 100 0 20 scale=0.45 tex=GameData/Environment/Props/Rock_Diffuse.png
+Mesh.Static GameData/Environment/Props/Rock_Medium_B.glb -46 3 0 130 scale=0.55 tex=GameData/Environment/Props/Rock_Diffuse.png
+Mesh.Static GameData/Environment/Props/Rock_Small_A.glb 30 -44 0 300 scale=0.8 tex=GameData/Environment/Props/Rock_Diffuse.png
+Mesh.Static GameData/Environment/Props/Bush_Dry_A.glb -32 -46 6 40 scale=1.3
+Mesh.Static GameData/Environment/Props/Bush_Dry_B.glb 18 56 0 200 scale=1.0
+zone sky -58 -58 -20 58 126 70 1 name=sector02_sky
+zone reverb 9 9 0 51 51 8 1 name=sector02_hall
+zone reverb 8 -52 0 52 -8 9 1 name=sector02_arcade
+zone reverb 24 104 0 44 118 8 1 name=sector02_vault
+zone reverb -47 58 0 -33 120 7 1 name=sector02_promenade
+playerstart 0 -34 0 180
+pickup pistol_01 26 31 1 30
+pickup rifle_01 12 0 7 20
+pickup Medkit 3 5 3.4 45
+pickup ManaVial -30 -30 7 30
+pickup Coin 49 0 1 30
+pickup HealthVial 7 48 1 30
+pickup etheral_waver 34 111 2.2 60
+pickup ManaVial -40 90 1 30
+pickup HealthVial 0 86 20.9 30
+pickup Coin -9.5 88 11 30
+PathNode s_ave 0 -20 0 radius=4 next=cross
+PathNode cross 0 0 0 radius=3 next=s_ave,n_ave,e_ave,w_ave
+PathNode n_ave 0 20 0 radius=3 next=cross,hall_door
+PathNode hall_door 4 31 0 radius=2.5 next=n_ave,hall_in
+PathNode hall_in 16 31 0 radius=3 next=hall_door,hall_far
+PathNode hall_far 44 20 0 radius=3 next=hall_in
+PathNode e_ave 26 0 0 radius=3 next=cross,sub
+PathNode sub 49 0 0 radius=2.5 next=e_ave
+PathNode w_ave -26 0 0 radius=3 next=cross
+PathNode roof -32 -30 6 radius=3 next=roof_far
+PathNode roof_far -46 -32 6 radius=3 next=roof
+PathNode deck_w -10 0 6 radius=2.5 next=deck_e
+PathNode deck_e 10 0 6 radius=2.5 next=deck_w
+PathNode b_gate 0 60 0 radius=4 next=plaza_s
+PathNode plaza_s 0 72 0 radius=4 next=b_gate,plaza_n,prom_s
+PathNode plaza_n 0 104 0 radius=4 next=plaza_s,vault_door
+PathNode prom_s -40 66 0 radius=3 next=plaza_s,prom_n
+PathNode prom_n -40 104 0 radius=3 next=prom_s
+PathNode vault_door 33 100 0 radius=2.5 next=plaza_n,vault_in
+PathNode vault_in 33 110 0 radius=3 next=vault_door
+PathNode deck_s -9 78 10 radius=2.5 next=deck_n
+PathNode deck_n 0 97 10 radius=2.5 next=deck_s
+PathNode tower_top 0 88 20 radius=3 next=tower_top_e
+PathNode tower_top_e 6 88 20 radius=2.5 next=tower_top
+npc Walker 2 -14 0 0
+npc Walker -14 6 0 0
+npc Walker 6 10 0 0
+npc Skaarj 26 0 0 0
+npc Skaarj 49 0 0 0
+npc Skaarj 18 31 0 0
+npc Skaarj 40 20 0 0
+npc Brute 44 -4 0 0
+npc Walker -10 0 6 0
+npc Walker 10 0 6 0
+npc Brute -30 -42 6 0
+npc Walker 6 66 0 0
+npc Walker -16 74 0 0
+npc Brute 0 58 0 0
+npc Skaarj -40 90 0 0
+npc Brute 34 110 0 0
+npc Skaarj -9 88 10 0
+npc Walker 0 92 20 0
+light directional -80 60 70 255 200 150 0.85
+light directional 60 -40 30 90 110 160 0.22
+light point -7 -7 7 255 186 120 0.5 18 effect=4
+light point 7 7 7 255 186 120 0.5 18 effect=4
+light point 0 30 7 255 186 120 0.45 18 effect=4
+light point -30 0 7 255 186 120 0.45 18 effect=4
+light point 26 0 7 255 186 120 0.45 18 effect=4
+light point 18 20 7 150 200 255 0.55 22
+light point 42 40 7 150 200 255 0.55 22
+light point 38 -22 7.5 255 205 150 0.4 20
+light point 10 0 7.5 255 205 150 0.35 14
+light point -32 -34 8 255 190 130 0.4 16 effect=2
+light point 0 58 8 255 195 135 0.5 16 effect=4
+light point -16 88 8 255 195 135 0.45 20 effect=4
+light point 16 88 8 255 195 135 0.45 20 effect=4
+light point 0 72 7 255 198 140 0.75 24 effect=4
+light point 0 98 7 255 198 140 0.65 24 effect=4
+light point -40 88 5.4 255 210 160 0.4 16 effect=2
+light point 34 111 7 160 210 255 0.6 16
+light point 0 88 22 120 210 255 1 26
+light point -9 88 11 255 205 150 0.4 14 effect=4
+trigger Trigger_EnterVolume -6 -16 0 6 -12 6 once
+trigger Trigger_EnterVolume -6 56 0 6 60 6 once
+portal Sektor_03_AegisBaseAlpha -4 84 20 4 92 26 0 0 0 bidir

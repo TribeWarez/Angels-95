@@ -1,34 +1,224 @@
-# OZONE world scaffold - Digital_Purgatory
-# Sector: Sefirah_4_CybrosisSubnet   (see Wiki/Game-Hierarchy.md)
-# Placeholder geometry only: a floor, a perimeter and a sky zone.
-# Format: ozone v1.0
+# OZONE world - Digital_Purgatory
+# Sefirah 4 - Cybrosis Subnet. The space between two states of a machine.
+#
+# INTENT
+#   Fantasy: a place with no weather and no floor - the grid is the floor.
+#   Memory is stored here and it is not being read. Everything is a slab and
+#   everything hums.
+#   One moment: stepping off the last stair onto the core disc with the
+#   column burning inside it and four light bridges leaving in four
+#   directions, each one to a platform holding something you want.
+#
+#   Pacing arc:
+#     0:00  READ       deck, monolith forest ahead, core glow above
+#     0:40  PRESSURE   the lanes: no sky, no cover above waist height
+#     1:40  PURSUIT    the four platforms are all reachable, all useful
+#     2:40  CLIMAX     the core disc, guarded, exposed on every side
+#     3:30  EXIT       north platform
+#
+#   Flow:  entry deck -> monolith forest (four lanes) -> core stairs
+#                      |-> east platform (health)   -> core
+#                      |-> west platform (coin)     -> core
+#                      |-> south platform (mana)    -> core
+#                      |-> north platform -> EXIT
+#
+# GEOMETRY NOTES
+#   Deck z=0. Core disc top 4 with four 1.0 treads up its south face.
+#   Bridges top 4, 4 wide, no rails (a fall is 4 units and the stairs are
+#   central). Monoliths are 3x3 and 10 tall, on an 18-unit grid, which
+#   leaves every axis clear for the bridges.
+#
+# Format: ozone v1.0  (Z-up: x=east, y=north, z=up)
 
-levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_darknight.png
+# ============================================================================
+# Geometry
+# ============================================================================
+add box 0 0 -0.4 112 0.8 112 0 1 texScaleU=6 texScaleV=6
+#
+# Shell: 9 tall, unlit so it reads as a boundary rather than a wall.
+add box 0 55 4.5 112 9 2 0 2 flags=2048
+add box 0 -55 4.5 112 9 2 0 2 flags=2048
+add box -55 0 4.5 2 9 108 0 2 flags=2048
+add box 55 0 4.5 2 9 108 0 2 flags=2048
+# Grid inlays in the deck: 0.1 proud, so they read without collision.
+add box -48 0 0.05 0.5 0.1 108 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+add box 0 -48 0.05 108 0.1 0.5 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+add box -36 0 0.05 0.5 0.1 108 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+add box 0 -36 0.05 108 0.1 0.5 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+add box -24 0 0.05 0.5 0.1 108 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+add box 0 -24 0.05 108 0.1 0.5 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+add box -12 0 0.05 0.5 0.1 108 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+add box 0 -12 0.05 108 0.1 0.5 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+add box 0 0 0.05 0.5 0.1 108 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+add box 0 0 0.05 108 0.1 0.5 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+add box 12 0 0.05 0.5 0.1 108 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+add box 0 12 0.05 108 0.1 0.5 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+add box 24 0 0.05 0.5 0.1 108 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+add box 0 24 0.05 108 0.1 0.5 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+add box 36 0 0.05 0.5 0.1 108 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+add box 0 36 0.05 108 0.1 0.5 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+add box 48 0 0.05 0.5 0.1 108 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+add box 0 48 0.05 108 0.1 0.5 0 3 flags=16384 surfGlow=(0.15,0.6,1.0) surfGlowScale=0.2
+#
+# Monolith forest: 16 slabs on an 18-unit grid. They are pure cover -
+# waist height would be a step, these are walls - and they are placed
+# so every bridge axis stays clear.
+add box -42 -42 5 3 10 12 0 2
+add box -42 -42 10.2 3.2 0.4 12.2 0 3 flags=16384 surfGlow=(0.4,0.2,0.9) surfGlowScale=0.2
+add box -42 -24 5 3 10 12 0 2
+add box -42 -24 10.2 3.2 0.4 12.2 0 3 flags=16384 surfGlow=(0.4,0.2,0.9) surfGlowScale=0.2
+add box -42 24 5 3 10 12 0 2
+add box -42 24 10.2 3.2 0.4 12.2 0 3 flags=16384 surfGlow=(0.4,0.2,0.9) surfGlowScale=0.2
+add box -42 42 5 3 10 12 0 2
+add box -42 42 10.2 3.2 0.4 12.2 0 3 flags=16384 surfGlow=(0.4,0.2,0.9) surfGlowScale=0.2
+add box -24 -42 5 3 10 12 0 2
+add box -24 -42 10.2 3.2 0.4 12.2 0 3 flags=16384 surfGlow=(0.4,0.2,0.9) surfGlowScale=0.2
+add box -24 -24 5 3 10 12 0 2
+add box -24 -24 10.2 3.2 0.4 12.2 0 3 flags=16384 surfGlow=(0.4,0.2,0.9) surfGlowScale=0.2
+add box -24 24 5 3 10 12 0 2
+add box -24 24 10.2 3.2 0.4 12.2 0 3 flags=16384 surfGlow=(0.4,0.2,0.9) surfGlowScale=0.2
+add box -24 42 5 3 10 12 0 2
+add box -24 42 10.2 3.2 0.4 12.2 0 3 flags=16384 surfGlow=(0.4,0.2,0.9) surfGlowScale=0.2
+add box 24 -42 5 3 10 12 0 2
+add box 24 -42 10.2 3.2 0.4 12.2 0 3 flags=16384 surfGlow=(0.4,0.2,0.9) surfGlowScale=0.2
+add box 24 -24 5 3 10 12 0 2
+add box 24 -24 10.2 3.2 0.4 12.2 0 3 flags=16384 surfGlow=(0.4,0.2,0.9) surfGlowScale=0.2
+add box 24 24 5 3 10 12 0 2
+add box 24 24 10.2 3.2 0.4 12.2 0 3 flags=16384 surfGlow=(0.4,0.2,0.9) surfGlowScale=0.2
+add box 24 42 5 3 10 12 0 2
+add box 24 42 10.2 3.2 0.4 12.2 0 3 flags=16384 surfGlow=(0.4,0.2,0.9) surfGlowScale=0.2
+add box 42 -42 5 3 10 12 0 2
+add box 42 -42 10.2 3.2 0.4 12.2 0 3 flags=16384 surfGlow=(0.4,0.2,0.9) surfGlowScale=0.2
+add box 42 -24 5 3 10 12 0 2
+add box 42 -24 10.2 3.2 0.4 12.2 0 3 flags=16384 surfGlow=(0.4,0.2,0.9) surfGlowScale=0.2
+add box 42 24 5 3 10 12 0 2
+add box 42 24 10.2 3.2 0.4 12.2 0 3 flags=16384 surfGlow=(0.4,0.2,0.9) surfGlowScale=0.2
+add box 42 42 5 3 10 12 0 2
+add box 42 42 10.2 3.2 0.4 12.2 0 3 flags=16384 surfGlow=(0.4,0.2,0.9) surfGlowScale=0.2
+#
+# Core: a 4-high disc, four treads up the south face, a glowing column
+# inside it. The disc is 20 across, so holding it means covering 360.
+add cyl 0 0 6 10 10 6 28 0 2
+add box 0 -15.5 0.5 6 1 1 0 3
+add box 0 -14.5 1 6 2 1 0 3
+add box 0 -13.5 1.5 6 3 1 0 3
+add box 0 -12.5 2 6 4 1 0 3
+add box 0 -11.5 2.5 6 5 1 0 3
+add box 0 -10.5 3 6 6 1 0 3
+add cyl 0 0 16 2.2 2.2 10 16 0 3
+# The column's glow is a separate skin so the disc stays solid.
+add cyl 0 0 16.2 2.4 2.4 0.4 16 0 4
+# Console ring on the disc: four low blocks, cover on the high ground.
+add box 6 6 6.8 4 1.6 4 0 3
+add box -6 6 6.8 4 1.6 4 0 3
+add box 6 -6 6.8 4 1.6 4 0 3
+add box -6 -6 6.8 4 1.6 4 0 3
+#
+# Four platforms at the cardinal points, 4 high, joined to the disc by
+# 4-wide light bridges. Each platform is a reward with a distinct role.
+add box 0 32 2.95 10 5.9 10 0 3
+add box 0 32 5.95 10 0.1 10 0 4 flags=16384 surfGlow=(0.2,0.55,1.0) surfGlowScale=0.2
+add box 0 -32 2.95 10 5.9 10 0 3
+add box 0 -32 5.95 10 0.1 10 0 4 flags=16384 surfGlow=(0.2,0.55,1.0) surfGlowScale=0.2
+add box 32 0 2.95 10 5.9 10 0 3
+add box 32 0 5.95 10 0.1 10 0 4 flags=16384 surfGlow=(0.2,0.55,1.0) surfGlowScale=0.2
+add box -32 0 2.95 10 5.9 10 0 3
+add box -32 0 5.95 10 0.1 10 0 4 flags=16384 surfGlow=(0.2,0.55,1.0) surfGlowScale=0.2
+add box 0 18.5 5.7 4 0.6 17 0 4 flags=16384 surfGlow=(0.2,0.55,1.0) surfGlowScale=0.2 surfAlpha=0.9
+add box 18.5 0 5.7 17 0.6 4 0 4 flags=16384 surfGlow=(0.2,0.55,1.0) surfGlowScale=0.2 surfAlpha=0.9
+add box -18.5 0 5.7 17 0.6 4 0 4 flags=16384 surfGlow=(0.2,0.55,1.0) surfGlowScale=0.2 surfAlpha=0.9
+# Exit frame on the north platform.
+add box -3.25 37 9 1.5 6 2 0 3
+add box 3.25 37 9 1.5 6 2 0 3
+add box 0 37 12.6 8 1.2 2 0 3
+# South platform has a stair of its own from the deck: a fourth
+# bridge would have run straight through the core stairs.
+add box 0 -42.5 0.5 4 1 1 0 3
+add box 0 -41.5 1 4 2 1 0 3
+add box 0 -40.5 1.5 4 3 1 0 3
+add box 0 -39.5 2 4 4 1 0 3
+add box 0 -38.5 2.5 4 5 1 0 3
+add box 0 -37.5 3 4 6 1 0 3
+#
+#
+#
+# Spawn: entry deck, south centre, core glow directly ahead and the
+# first monolith pair framing it.
+# --- pickups ---
+#
+# --- patrol graph ---
+# Core and platforms are one loop; nothing on the deck links up.
+#
+# --- encounters ---
+# E1 the lanes: a watcher in each outer lane, seen through the monoliths
+# in slices rather than as a group.
+# E2 approach: the core stair is guarded from above.
+# E3 the disc: two defenders, so taking the high ground is a fight.
+# E4 the platforms: one each on the exit side and the reward side.
+#
+# --- light ---
+# No sun: this world is lit by the grid and the core.
+#
+# --- atmosphere ---
+# Motes rising off the core: the grid has weather, it is just not water.
+# No mist here either, for the same reason: a growing untextured
+# particle is a white card. The core light carries the atmosphere.
+# The core column is the key light.
+# Axis lights, one per bridge.
+# Entry and exit markers.
+# Magenta accents in the forest so the lanes have landmarks.
+#
+# --- routing ---
+# Exit: the north platform frame. Phantom_Hubs' origin is the station
+# concourse, which is at deck level there.
 
-# Floor (placeholder)
-add box 0 0 -0.25 80 0.5 80 0
-# Perimeter walls (placeholder)
-add box 0 -40 1 80 2 2 0
-add box 0 40 1 80 2 2 0
-add box -40 0 1 2 2 80 0
-add box 40 0 1 2 2 80 0
-
-playerstart 0 0 0 0
-light directional 50 50 80 200 205 215 0.3
-
-zone sky -60 -60 -30 60 60 60 1 name=Digital_Purgatory_sky
-
-# COOP content (scaffold): NPCs + pickups so objectives are completable.
-npc Walker 10 10 0
-npc Walker -10 10 0
-npc Walker 10 -10 0
-npc Walker -10 -10 0
-npc Walker 0 20 0
-pickup pistol_01 5 0 0
-pickup rifle_01 -5 0 0
-pickup etheral_waver 0 -5 0
-
-# trigger scaffold
-trigger Trigger_EnterVolume 8 -5 0 18 5 8 once
-# portal scaffold to next mission world (box X 20-26, Y -4..4, Z 0-8; spawn 0 0 0 in the target)
-portal Phantom_Hubs 20 -4 0 26 4 8 0 0 0 bidir
+# ============================================================================
+# Entities
+# ============================================================================
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_darknight.png GameData/Tex/Global/Sky/sky_darknight.png
+zone sky -60 -60 -20 60 60 40 1 name=purgatory_sky
+zone reverb -11 -11 0 11 11 15 1 name=purgatory_core
+zone sound -56 -56 0 56 56 10 1 name=purgatory_grid
+playerstart 0 -52 0 180
+pickup Medkit 30 2 7 45
+pickup HealthVial 34 -2 7 30
+pickup pistol_01 -34 2 7 30
+pickup Coin -30 -2 7 30
+pickup ManaVial -2 -34 7 30
+pickup rifle_01 6 6 8.6 30
+pickup etheral_waver 0 32 7 60
+PathNode entry 6 -44 0 radius=4 next=lane_s
+PathNode lane_s 0 -20 0 radius=4 next=entry,west,east
+PathNode west -20 0 0 radius=4 next=lane_s,lane_n
+PathNode east 20 0 0 radius=4 next=lane_s,lane_n
+PathNode lane_n 0 20 0 radius=4 next=west,east
+PathNode core 0 5 6 radius=3 next=core_n
+PathNode core_n 0 8 6 radius=3 next=core,plat_n
+PathNode plat_n 0 32 6 radius=3 next=core_n
+PathNode plat_s 0 -32 6 radius=3 next=core_s
+PathNode core_s 0 -8 6 radius=3 next=plat_s
+PathNode plat_e 32 0 6 radius=3 next=core_e
+PathNode core_e 8 0 6 radius=3 next=plat_e
+PathNode plat_w -32 0 6 radius=3 next=core_w
+PathNode core_w -8 0 6 radius=3 next=plat_w
+npc Walker -20 -8 0 0
+npc Walker 20 8 0 0
+npc Skaarj 0 -22 0 0
+npc Skaarj 0 -4 6 0
+npc Brute 4 4 6 0
+npc Walker -4 0 6 0
+npc Skaarj 0 30 6 0
+npc Brute -30 0 6 0
+light directional 0 0 60 100 120 180 0.18
+light point 0 0 18 130 190 255 1.4 40
+light point 6.5 0 8.5 130 190 255 0.9 20
+light point 0 20 8 60 140 255 0.6 20
+light point 0 -20 8 60 140 255 0.6 20
+light point 20 0 8 60 140 255 0.6 20
+light point -20 0 8 60 140 255 0.6 20
+light point 0 -44 6 255 210 140 0.6 18 effect=4
+light point 0 40 8 255 220 150 0.7 16 effect=4
+light point -12 -30 9 200 70 255 0.5 16
+light point 12 30 9 200 70 255 0.5 16
+trigger Trigger_EnterVolume -5 -28 0 5 -24 6 once
+portal Phantom_Hubs -2.5 36 6 2.5 38 11.5 0 0 0 bidir

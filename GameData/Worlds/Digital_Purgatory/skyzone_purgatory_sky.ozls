@@ -1,0 +1,22 @@
+// Digital_Purgatory - world sky zone (name=purgatory_sky in World.ozone).
+// The entity name must match the OZONE zone's name= exactly: zone enter/exit is
+// dispatched on that key, and the registry re-points world defs on every load.
+entity "purgatory_sky" : skyzone {
+    fog_color = (0.10, 0.12, 0.22)
+    fog_density = 0.007
+    ambient_light = (0.28, 0.30, 0.40)
+    skybox = "GameData/Tex/Global/Sky/sky_darknight.png"
+    actions {
+        on_enter {
+            set_fog 0.10 0.12 0.22 0.007
+            set_ambient 0.28 0.30 0.40
+            set_skybox "GameData/Tex/Global/Sky/sky_darknight.png"
+            say "Digital Purgatory - nothing here has been read in a long time"
+        }
+        on_exit {
+            restore_fog
+            restore_skybox
+            say "You leave the grid"
+        }
+    }
+}

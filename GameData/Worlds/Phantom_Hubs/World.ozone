@@ -1,34 +1,175 @@
-# OZONE world scaffold - Phantom_Hubs
-# Sector: Sefirah_4_CybrosisSubnet   (see Wiki/Game-Hierarchy.md)
-# Placeholder geometry only: a floor, a perimeter and a sky zone.
-# Format: ozone v1.0
+# OZONE world - Phantom_Hubs
+# Sefirah 4 - Cybrosis Subnet. A transit interchange with no timetable.
+#
+# INTENT
+#   Fantasy: the last station before somewhere. Everything still runs; the
+#   boards still update; nothing has arrived in a long time.
+#   One moment: standing on the concourse mezzanine with both platforms, the
+#   empty track below and the departure board glowing at the far end.
+#
+#   Pacing arc:
+#     0:00  READ       concourse, roof columns, board beyond
+#     0:30  PRESSURE   concourse skirmish around the ticket machines
+#     1:30  FLANK      the track trench: a 1.9 drop, climbable, bypasses the
+#                      platform choke entirely
+#     2:30  VANTAGE    mezzanine stairs; the whole interchange at once
+#     3:15  EXIT       service corridor at the east end
+#
+#   Flow:  concourse -> platform A -> track trench -> platform B
+#                |-> mezzanine (stairs)          |-> service corridor
+#                                                  -> EXIT
+#
+# GEOMETRY NOTES
+#   Concourse z=0. Track bed -1.9, so a jump (2.25) gets a player out
+#   without a stair. Mezzanine top 6, underside 5.5. Concourse roof 12.
+#
+# Format: ozone v1.0  (Z-up: x=east, y=north, z=up)
 
-levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_darknight.png
+# ============================================================================
+# Geometry
+# ============================================================================
+# The deck is two slabs with the track between them. One slab would
+# cover the trench, and the trench is a route, not decoration.
+add box 0 -23.5 -0.3 104 0.6 57 0 1 texScaleU=4 texScaleV=2
+add box 0 34.5 -0.3 104 0.6 35 0 1 texScaleU=4 texScaleV=2
+add box 62 0 -0.3 20 0.6 10 0 1 texScaleU=2 texScaleV=1
+# Track bed, 1.9 below the platforms.
+add box 0 11 -2.2 104 0.6 12 0 3 texScaleU=1 texScaleV=5
+add box -51 11 -1.25 2 2.5 12 0 2
+add box 51 11 -1.25 2 2.5 12 0 2
+# Rails, 0.15 proud.
+add box 0 8.15 -1.825 100 0.15 0.3 0 3
+add box 0 13.85 -1.825 100 0.15 0.3 0 3
+# Buffers at the terminus ends.
+add box -44 11 -0.65 4 2.5 12 0 3
+add box 44 11 -0.65 4 2.5 12 0 3
+#
+add box 0 51 4.5 104 9 2 0 2
+add box 0 -51 4.5 104 9 2 0 2
+add box -51 0 4.5 2 9 100 0 2
+# East wall carries the service corridor opening, 10 wide, 6 tall.
+add box 51 -27.5 4.5 2 9 45 0 2
+add box 51 27.5 4.5 2 9 45 0 2
+add box 51 0 7.5 2 3 10 0 2
+#
+# Concourse roof at 12 over the south half, on two rows of columns.
+add box 0 -29 12.3 68 0.6 42 0 4
+add cyl -30 -44 12 1 1 12 12 0 3
+add cyl -30 -30 12 1 1 12 12 0 3
+add cyl -30 -16 12 1 1 12 12 0 3
+add cyl -10 -44 12 1 1 12 12 0 3
+add cyl -10 -30 12 1 1 12 12 0 3
+add cyl -10 -16 12 1 1 12 12 0 3
+add cyl 10 -44 12 1 1 12 12 0 3
+add cyl 10 -30 12 1 1 12 12 0 3
+add cyl 10 -16 12 1 1 12 12 0 3
+add cyl 30 -44 12 1 1 12 12 0 3
+add cyl 30 -30 12 1 1 12 12 0 3
+add cyl 30 -16 12 1 1 12 12 0 3
+# Mezzanine along the south wall: top 6, underside 5.5.
+add box -15 -47 5.75 38 0.5 10 0 3
+add box -19 -42.2 6.45 30 0.9 0.4 0 3
+# Stair up to it, rising north-to-south so it lands on the edge.
+add box 1 -36.5 0.5 4 1 1 0 3
+add box 1 -37.5 1 4 2 1 0 3
+add box 1 -38.5 1.5 4 3 1 0 3
+add box 1 -39.5 2 4 4 1 0 3
+add box 1 -40.5 2.5 4 5 1 0 3
+add box 1 -41.5 3 4 6 1 0 3
+add box 2.8 -33 6.45 0.4 0.9 6 0 3
+#
+# Platform furniture: benches and ticket machines, all >=1.5 so they
+# block. The departure board is one lit panel on the far wall.
+add box -35 2 0.8 6 1.6 2 0 3
+add box -13 2 0.8 6 1.6 2 0 3
+add box 11 2 0.8 6 1.6 2 0 3
+add box 37 2 0.8 6 1.6 2 0 3
+add box -40 -20 1.1 8 2.2 4 0 3
+add box -29 -20 1.1 8 2.2 4 0 3
+add box 25 20 0.8 10 1.6 2 0 3
+add box 4 29 0.8 20 1.6 2 0 3
+add box -42 27 1.1 4 2.2 6 0 3
+add box 0 49.6 5.2 16 2.4 0.4 0 4 flags=16384 surfGlow=(1.0,0.75,0.3) surfGlowScale=0.2
+#
+# Service corridor east, 20 long, ceiling 8, ending in the exit frame.
+add box 62 0 8.3 20 0.6 12 0 4
+add box 62 5.5 4 20 8 1 0 2
+add box 62 -5.5 4 20 8 1 0 2
+add box 71 0 4 2 8 12 0 2
+add box 67 -4 2.75 2 5.5 2 0 3
+add box 67 4 2.75 2 5.5 2 0 3
+add box 67 0 6 2 1 6 0 3
+#
+#
+#
+# Spawn: concourse, south centre, both platforms and the board in frame.
+# --- pickups ---
+#
+# --- patrol graph ---
+# The trench is its own loop; nothing above links into it.
+# Mezzanine loop.
+#
+# --- encounters ---
+# E1 concourse: one at the machines, one across the floor, brute central.
+# E2 platforms: the choke into the corridor is held.
+# E3 track: the flank has its own guard.
+# E4 mezzanine: the overwatch, only reachable by the stair.
+# E5 corridor.
+#
+# --- light ---
+# Concourse ceiling strips.
+# Platforms.
+# Track: one work light, so the trench is readable from above.
+# Mezzanine and corridor.
+#
+# --- routing ---
+# Exit: the service corridor frame. SoulEater_Vaults' origin is the
+# crypt antechamber floor there.
 
-# Floor (placeholder)
-add box 0 0 -0.25 80 0.5 80 0
-# Perimeter walls (placeholder)
-add box 0 -40 1 80 2 2 0
-add box 0 40 1 80 2 2 0
-add box -40 0 1 2 2 80 0
-add box 40 0 1 2 2 80 0
-
-playerstart 0 0 0 0
-light directional 50 50 80 200 205 215 0.3
-
-zone sky -60 -60 -30 60 60 60 1 name=Phantom_Hubs_sky
-
-# COOP content (scaffold): NPCs + pickups so objectives are completable.
-npc Walker 10 10 0
-npc Walker -10 10 0
-npc Walker 10 -10 0
-npc Walker -10 -10 0
-npc Walker 0 20 0
-pickup pistol_01 5 0 0
-pickup rifle_01 -5 0 0
-pickup etheral_waver 0 -5 0
-
-# trigger scaffold
-trigger Trigger_EnterVolume 8 -5 0 18 5 8 once
-# portal scaffold to next mission world (box X 20-26, Y -4..4, Z 0-8; spawn 0 0 0 in the target)
-portal SoulEater_Vaults 20 -4 0 26 4 8 0 0 0 bidir
+# ============================================================================
+# Entities
+# ============================================================================
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_darknight.png GameData/Tex/Global/Sky/sky_darknight.png
+zone sky -60 -60 -20 76 60 40 1 name=hubs_sky
+zone reverb -34 -52 0 34 -8 12 1 name=hubs_concourse
+zone sound -52 5 -2.5 52 17 4 1 name=hubs_track
+playerstart 10 -46 0 172
+pickup Medkit -30 -20 3.2 45
+pickup pistol_01 8 29 2.6 30
+pickup rifle_01 -26 -46 7 30
+pickup HealthVial -44 2 1 30
+pickup ManaVial 32 26 1 30
+pickup Coin 0 11 -0.9 30
+PathNode conc_s 0 -30 0 radius=4 next=conc_n
+PathNode conc_n 0 -14 0 radius=4 next=conc_s,plat_a
+PathNode plat_a -20 2 0 radius=4 next=conc_n,plat_a_e
+PathNode plat_a_e 22 2 0 radius=4 next=plat_a,corr
+PathNode corr 54 0 0 radius=3 next=plat_a_e,corr_end
+PathNode corr_end 66 0 0 radius=3 next=corr
+PathNode track_w -40 11 -1.9 radius=4 next=track_e
+PathNode track_e 36 11 -1.9 radius=4 next=track_w
+PathNode mezz -26 -46 6 radius=3 next=mezz_e
+PathNode mezz_e -10 -46 6 radius=3 next=mezz
+npc Walker -32 -24 0 0
+npc Walker 14 -30 0 0
+npc Brute 0 -18 0 0
+npc Skaarj -20 2 0 0
+npc Skaarj 26 3 0 0
+npc Walker 0 11 -1.9 0
+npc Skaarj -12 -46 6 0
+npc Brute 62 0 0 0
+light directional -40 30 60 130 145 180 0.25
+light point -20 -44 11 200 225 255 0.6 22
+light point 20 -44 11 200 225 255 0.6 22
+light point -20 -30 11 200 225 255 0.6 22
+light point 20 -30 11 200 225 255 0.6 22
+light point -20 -16 11 200 225 255 0.6 22
+light point 20 -16 11 200 225 255 0.6 22
+light point -24 0 8 255 220 170 0.5 20 effect=4
+light point 24 0 8 255 220 170 0.5 20 effect=4
+light point 0 24 8 255 220 170 0.5 20 effect=4
+light point 0 11 6 255 190 120 0.5 26 effect=2
+light point -26 -46 10 200 225 255 0.4 16
+light point 60 0 7 160 210 255 0.6 18
+trigger Trigger_EnterVolume -6 -6 0 6 -2 6 once
+portal SoulEater_Vaults 66 -3 0 68 3 5.5 0 0 0 bidir

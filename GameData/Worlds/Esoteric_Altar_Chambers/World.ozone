@@ -1,32 +1,174 @@
-# OZONE world scaffold - Esoteric_Altar_Chambers
-# Sector: Sefirah_5_ShatteredRealm   (see Wiki/Game-Hierarchy.md)
-# Placeholder geometry only: a floor, a perimeter and a sky zone.
-# Format: ozone v1.0
+# OZONE world - Esoteric_Altar_Chambers
+# Sefirah 5 - Shattered Realm. The last chamber of the arc.
+#
+# INTENT
+#   Fantasy: a working altar, not a ruin. Someone has been here and the
+#   candles are still lit. This is the end of the road, so the level stops
+#   being a route and becomes a room.
+#   One moment: the sanctum opening - the roof breaks and the altar stands
+#   under open sky. The last thing the campaign shows is upward.
+#
+#   Pacing arc:
+#     0:00  READ       antechamber, lit door, no threat in reach
+#     0:40  PRESSURE   rite hall, symmetrical cover, a chapel either side
+#     1:40  TENSION    the sanctum door: one way in, one way out
+#     2:30  CLIMAX     the sanctum, guards on the dais approach
+#     3:30  RESOLUTION the altar approach
+#
+#   Flow:  antechamber -> rite hall -> (chapel W / chapel E) -> sanctum
+#
+#   Finale: this is the last world in the chain, so there is no portal. The
+#   sanctum is the objective and the arc ends at the altar.
+#
+# GEOMETRY NOTES
+#   Floor z=0. Antechamber ceiling 8, rite hall 10, sanctum 9 with an
+#   8x8 oculus over the altar. Altar dais is three 1.0 treads onto a
+#   3-high platform. Every door is 6 tall.
+#
+# Format: ozone v1.0  (Z-up: x=east, y=north, z=up)
 
-levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_pilgrimage_01.png
+# ============================================================================
+# Geometry
+# ============================================================================
+add box 0 0 -0.3 72 0.6 96 0 1 texScaleU=4 texScaleV=4
+#
+# Antechamber: 24 wide, ceiling 8.
+add box 0 -30 8.3 24 0.6 32 0 2
+add box -11.5 -30 4 1 8 32 0 2
+add box 11.5 -30 4 1 8 32 0 2
+add box 0 -45 4 24 8 2 0 2
+add box -7.5 -14.5 4 9 8 1 0 2
+add box 7.5 -14.5 4 9 8 1 0 2
+add box 0 -14.5 7 6 2 1 0 2
+# Benches and a font: the antechamber is a place to prepare.
+add box -7 -39 0.8 4 1.6 2 0 3
+add box 7 -39 0.8 4 1.6 2 0 3
+add cyl 0 -34 1.2 1.2 1.2 1.2 12 0 3
+#
+# Rite hall: 36x28, ceiling 10. Symmetrical by design - the two chapels
+# are identical, so the choice between them is tactical, not informational.
+add box 0 1 10.3 36 0.6 30 0 4
+# North wall with the sanctum door: 6 wide, 6 tall. Without this
+# opening the last room of the campaign is sealed.
+add box -10.5 15.5 5 15 10 1 0 2
+add box 10.5 15.5 5 15 10 1 0 2
+add box 0 15.5 8 6 4 1 0 2
+# Side walls, with the chapel doorways left open (piers + lintel).
+add box -17.5 -8.5 5 1 10 11 0 2
+add box -17.5 9.5 5 1 10 13 0 2
+add box -17.5 0 8 1 4 6 0 2
+add box 17.5 -8.5 5 1 10 11 0 2
+add box 17.5 9.5 5 1 10 13 0 2
+add box 17.5 0 8 1 4 6 0 2
+add box -10.5 -14.5 5 15 10 1 0 2
+add box 10.5 -14.5 5 15 10 1 0 2
+add box 0 -14.5 8 6 4 1 0 2
+# Chapels: 14x14 each, opening onto the hall through a 6-wide door.
+add box -24 0 8.3 14 0.6 14 0 4
+add box -31.5 0 4 1 8 14 0 2
+add box -24 -6.5 4 14 8 1 0 2
+add box -24 6.5 4 14 8 1 0 2
+add box -24 1 0.8 2.8 1.6 4 0 3
+add box 24 0 8.3 14 0.6 14 0 4
+add box 31.5 0 4 1 8 14 0 2
+add box 24 -6.5 4 14 8 1 0 2
+add box 24 6.5 4 14 8 1 0 2
+add box 24 1 0.8 2.8 1.6 4 0 3
+# Hall cover: a ring of six pillars around the centre.
+add cyl 9 1 10 1.1 1.1 10 10 0 3
+add cyl 4.5 8.794 10 1.1 1.1 10 10 0 3
+add cyl -4.5 8.794 10 1.1 1.1 10 10 0 3
+add cyl -9 1 10 1.1 1.1 10 10 0 3
+add cyl -4.5 -6.794 10 1.1 1.1 10 10 0 3
+add cyl 4.5 -6.794 10 1.1 1.1 10 10 0 3
+#
+# Sanctum: 20x28, ceiling 9, with an 8x8 oculus over the altar.
+add box 0 23 9.3 20 0.6 14 0 4
+add box 0 41 9.3 20 0.6 6 0 4
+add box -7 34 9.3 6 0.6 8 0 4
+add box 7 34 9.3 6 0.6 8 0 4
+add box -9.5 30 4.5 1 9 28 0 2
+add box 9.5 30 4.5 1 9 28 0 2
+add box 0 43 4.5 20 9 2 0 2
+# Altar dais: three 1.0 treads onto a 3-high platform.
+add box 0 27.5 0.5 12 1 1 0 1
+add box 0 28.5 1 12 2 1 0 1
+add box 0 29.5 1.5 12 3 1 0 1
+add box 0 35 1.5 14 3 10 0 1
+add box 0 36.5 4 6 2 3 0 3
+add box 0 36.5 5.2 7.2 0.4 4.2 0 4 flags=16384 surfGlow=(1.0,0.85,0.5) surfGlowScale=0.2
+# Two flanking obelisks.
+add cyl -7 41 7 1 1 7 8 0 3
+add cyl 7 41 7 1 1 7 8 0 3
+#
+#
+#
+# Spawn: antechamber, the lit door ahead and the sanctum glow beyond it.
+# --- pickups ---
+#
+# --- patrol graph ---
+#
+# --- encounters ---
+# E1 antechamber: two, met before the door.
+# E2 rite hall: the symmetrical pair, one per side.
+# E3 chapels: each is held, so neither flank is free.
+# E4 sanctum: two on the dais approach.
+#
+# --- light ---
+#
+# --- atmosphere ---
+# The altar candles and the two chapel fires.
+# Antechamber: warm, low.
+# Rite hall: cold and high.
+# Chapels, one candle cluster each.
+# Sanctum: daylight through the oculus and the altar's own glow.
+#
+# --- routing ---
+# The altar approach is the story beat and the end of the arc.
 
-# Floor (placeholder)
-add box 0 0 -0.25 80 0.5 80 0
-# Perimeter walls (placeholder)
-add box 0 -40 1 80 2 2 0
-add box 0 40 1 80 2 2 0
-add box -40 0 1 2 2 80 0
-add box 40 0 1 2 2 80 0
-
-playerstart 0 0 0 0
-light directional 50 50 80 200 205 215 0.3
-
-zone sky -60 -60 -30 60 60 60 1 name=Esoteric_Altar_Chambers_sky
-
-# COOP content (scaffold): NPCs + pickups so objectives are completable.
-npc Walker 10 10 0
-npc Walker -10 10 0
-npc Walker 10 -10 0
-npc Walker -10 -10 0
-npc Walker 0 20 0
-pickup pistol_01 5 0 0
-pickup rifle_01 -5 0 0
-pickup etheral_waver 0 -5 0
-
-# trigger scaffold
-trigger Trigger_EnterVolume 8 -5 0 18 5 8 once
+# ============================================================================
+# Entities
+# ============================================================================
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_pilgrimage_01.png GameData/Tex/Global/Sky/sky_pilgrimage_01.png
+zone sky -40 -52 -20 40 52 30 1 name=altar_sky
+zone reverb -12 -46 0 12 -14 8 1 name=altar_antechamber
+zone reverb -18 -14 0 18 16 10 1 name=altar_rite
+zone reverb -10 16 0 10 44 9 1 name=altar_sanctum
+playerstart 0 -42 0 180
+pickup Medkit -7 -36 1 45
+pickup pistol_01 -24 5 1 30
+pickup rifle_01 24 5 1 30
+pickup HealthVial 0 2 1 30
+pickup ManaVial 0 42 1 30
+pickup Coin 0 26 1 30
+pickup etheral_waver 5 33 4 60
+PathNode ante 0 -40 0 radius=4 next=ante_door
+PathNode ante_door 0 -18 0 radius=3 next=ante,rite_s
+PathNode rite_s 0 -8 0 radius=3 next=ante_door,rite_n
+PathNode rite_n 0 8 0 radius=3 next=rite_s,sanctum_door,chapel_w
+PathNode chapel_w -24 3 0 radius=3 next=rite_n
+PathNode chapel_e 20 3 0 radius=3 next=rite_n
+PathNode sanctum_door 0 18 0 radius=3 next=rite_n,altar
+PathNode altar 0 38 3 radius=3 next=sanctum_door
+npc Walker -4 -32 0 0
+npc Walker 4 -28 0 0
+npc Skaarj -8 1 0 0
+npc Skaarj 8 1 0 0
+npc Walker -24 5 0 0
+npc Brute 24 -4 0 0
+npc Brute 0 24 0 0
+npc Skaarj 6 32 3 0
+light directional 0 -30 80 220 200 255 0.4
+ParticleEmitter fire 0 36 5.8 18 1.0 2.2 10 0.3 0.05 255 210 130 255 90 20 -1.2 5 0 0 1 0
+ParticleEmitter fire -24 3 5.2 14 0.9 1.8 9 0.26 0.05 255 180 90 255 80 20 -1.2 4 0 0 1 0
+ParticleEmitter fire 24 3 5.2 14 0.9 1.8 9 0.26 0.05 255 180 90 255 80 20 -1.2 4 0 0 1 0
+light point 0 -34 6 255 200 140 0.5 18 effect=2
+light point 0 -44 6 255 200 140 0.4 14 effect=2
+light point 0 1 9 190 200 255 0.6 26
+light point -12 1 7 190 200 255 0.35 14
+light point 12 1 7 190 200 255 0.35 14
+light point -24 3 5 255 170 110 0.55 14 effect=3
+light point 24 3 5 255 170 110 0.55 14 effect=3
+light point 0 34 12 255 245 220 0.9 24
+light point 0 36 6 255 220 160 0.8 18 effect=3
+trigger Trigger_EnterVolume -6 24 0 6 28 6 once

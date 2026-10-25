@@ -1,0 +1,22 @@
+// Citadel_AstralMind - world sky zone (name=astral_sky in World.ozone).
+// The entity name must match the OZONE zone's name= exactly: zone enter/exit is
+// dispatched on that key, and the registry re-points world defs on every load.
+entity "astral_sky" : skyzone {
+    fog_color = (0.34, 0.28, 0.46)
+    fog_density = 0.0045
+    ambient_light = (0.42, 0.38, 0.50)
+    skybox = "GameData/Tex/Global/Sky/sky_pilgrimage_01.png"
+    actions {
+        on_enter {
+            set_fog 0.34 0.28 0.46 0.0045
+            set_ambient 0.42 0.38 0.50
+            set_skybox "GameData/Tex/Global/Sky/sky_pilgrimage_01.png"
+            say "Citadel Astral Mind - the ground let go first"
+        }
+        on_exit {
+            restore_fog
+            restore_skybox
+            say "You leave the citadel"
+        }
+    }
+}

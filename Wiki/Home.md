@@ -42,6 +42,7 @@ b101 are at the end):
 | [Editor Usage](Editor-Usage) | AngelEd panels, toolbar, CSG, workflow, known gaps |
 | [LightningScript](LightningScript) | Scripting language reference, opcodes, entity definitions |
 | [World Format (OZONE)](World-Format-OZONE) | OZONE syntax and world directory layout |
+| [World Design Pass](World-Design-Pass) | Campaign-map design standard, per-level intent and the authoring traps |
 | [Building](Building) | Build instructions, prerequisites, test targets, CI |
 | [Engine Roadmap](Engine-Roadmap) | Gap analysis and prioritized roadmap by tier |
 | [Master Server](Master-Server) | Master server protocol, HTTPS uplink, client browser |

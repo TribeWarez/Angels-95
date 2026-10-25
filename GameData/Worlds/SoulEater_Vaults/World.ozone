@@ -1,34 +1,208 @@
-# OZONE world scaffold - SoulEater_Vaults
-# Sector: Sefirah_4_CybrosisSubnet   (see Wiki/Game-Hierarchy.md)
-# Placeholder geometry only: a floor, a perimeter and a sky zone.
-# Format: ozone v1.0
+# OZONE world - SoulEater_Vaults
+# Sefirah 4 - Cybrosis Subnet. A vault complex built to keep something in.
+#
+# INTENT
+#   Fantasy: a crypt designed as a lock, not a tomb. Every vault is open,
+#   which means whatever was kept here is not.
+#   One moment: the soul well - a lit shaft in the middle of the nave with
+#   eight candles around it, and the nave's only long sightline running
+#   straight through it to the far door.
+#
+#   Pacing arc:
+#     0:00  READ       antechamber, nave beyond, the well lit at the centre
+#     0:40  PRESSURE   nave skirmish with sarcophagi as cover
+#     1:30  CHOICE     three side vaults a side, each with loot and a guard
+#     2:45  CLIMAX     the well chamber, four guards, no centre cover
+#     3:30  EXIT       the sealed door at the far end
+#
+#   Flow:  antechamber -> nave -> (vault W1 / E1 / W2) -> well
+#                           -> far door -> EXIT
+#
+# GEOMETRY NOTES
+#   Floor z=0. Nave ceiling 9, vaults 8. The well is a 1.0 dais with a
+#   glowing shaft; eight candles stand on it. Vaults are on a 12-unit
+#   pitch, so the nave wall between them is a 2-wide pier.
+#
+# Format: ozone v1.0  (Z-up: x=east, y=north, z=up)
 
-levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_darknight.png
+# ============================================================================
+# Geometry
+# ============================================================================
+add box 0 0 -0.3 96 0.6 104 0 1 texScaleU=4 texScaleV=4
+#
+# Antechamber: 24 wide, ceiling 8. Its north wall is the nave's south
+# wall, with a 6-wide door in it.
+add box 0 -33 8.3 24 0.6 38 0 4
+add box -11.5 -33 4 1 8 38 0 2
+add box 11.5 -33 4 1 8 38 0 2
+add box 0 -51 4 24 8 2 0 2
+add box -7.5 -14.5 4 9 8 1 0 2
+add box 7.5 -14.5 4 9 8 1 0 2
+add box 0 -14.5 7 6 2 1 0 2
+#
+# Nave: 30 wide, ceiling 9, running the length of the map.
+add box 0 15 9.3 32 0.6 58 0 2
+add box 0 43.5 4.5 32 9 1 0 2
+# Nave side walls exist only where there is no vault: the vault front
+# walls make up the rest, so there is no double wall to z-fight.
+add box -15.5 -11 4.5 1 9 6 0 2
+add box 15.5 -11 4.5 1 9 6 0 2
+add box -15.5 3 4.5 1 9 2 0 2
+add box 15.5 3 4.5 1 9 2 0 2
+add box -15.5 15 4.5 1 9 2 0 2
+add box 15.5 15 4.5 1 9 2 0 2
+add box -15.5 34.5 4.5 1 9 17 0 2
+add box 15.5 34.5 4.5 1 9 17 0 2
+#
+# Six side vaults, 10 deep on a 12 pitch. Each opens onto the nave
+# through a 4-wide door and holds one sarcophagus and one piece of loot.
+add box -23 -3 8.3 16 0.6 10 0 2
+add box -31.5 -3 4 1 8 10 0 2
+add box -23 -7.5 4 16 8 1 0 2
+add box -23 1.5 4 16 8 1 0 2
+# Front wall: piers plus lintel, 4-wide doorway.
+add box -15.5 -6 4 1 8 2 0 2
+add box -15.5 0 4 1 8 2 0 2
+add box -15.5 -3 7 1 2 4 0 2
+add box -23 -3 0.8 2.4 1.6 4 0 3
+add box 23 -3 8.3 16 0.6 10 0 2
+add box 31.5 -3 4 1 8 10 0 2
+add box 23 -7.5 4 16 8 1 0 2
+add box 23 1.5 4 16 8 1 0 2
+# Front wall: piers plus lintel, 4-wide doorway.
+add box 15.5 -6 4 1 8 2 0 2
+add box 15.5 0 4 1 8 2 0 2
+add box 15.5 -3 7 1 2 4 0 2
+add box 23 -3 0.8 2.4 1.6 4 0 3
+add box -23 9 8.3 16 0.6 10 0 2
+add box -31.5 9 4 1 8 10 0 2
+add box -23 4.5 4 16 8 1 0 2
+add box -23 13.5 4 16 8 1 0 2
+# Front wall: piers plus lintel, 4-wide doorway.
+add box -15.5 6 4 1 8 2 0 2
+add box -15.5 12 4 1 8 2 0 2
+add box -15.5 9 7 1 2 4 0 2
+add box -23 9 0.8 2.4 1.6 4 0 3
+add box 23 9 8.3 16 0.6 10 0 2
+add box 31.5 9 4 1 8 10 0 2
+add box 23 4.5 4 16 8 1 0 2
+add box 23 13.5 4 16 8 1 0 2
+# Front wall: piers plus lintel, 4-wide doorway.
+add box 15.5 6 4 1 8 2 0 2
+add box 15.5 12 4 1 8 2 0 2
+add box 15.5 9 7 1 2 4 0 2
+add box 23 9 0.8 2.4 1.6 4 0 3
+add box -23 21 8.3 16 0.6 10 0 2
+add box -31.5 21 4 1 8 10 0 2
+add box -23 16.5 4 16 8 1 0 2
+add box -23 25.5 4 16 8 1 0 2
+# Front wall: piers plus lintel, 4-wide doorway.
+add box -15.5 18 4 1 8 2 0 2
+add box -15.5 24 4 1 8 2 0 2
+add box -15.5 21 7 1 2 4 0 2
+add box -23 21 0.8 2.4 1.6 4 0 3
+add box 23 21 8.3 16 0.6 10 0 2
+add box 31.5 21 4 1 8 10 0 2
+add box 23 16.5 4 16 8 1 0 2
+add box 23 25.5 4 16 8 1 0 2
+# Front wall: piers plus lintel, 4-wide doorway.
+add box 15.5 18 4 1 8 2 0 2
+add box 15.5 24 4 1 8 2 0 2
+add box 15.5 21 7 1 2 4 0 2
+add box 23 21 0.8 2.4 1.6 4 0 3
+#
+# Soul well: a 1.0 dais, eight candle columns and a glowing shaft.
+add cyl 0 4 1 6 6 1 24 0 3
+add cyl 0 4 12 1.1 1.1 11 12 0 3
+add cyl 4.6 4 3.2 0.22 0.22 2.2 6 0 3
+add box 4.6 4 3.4 0.36 0.4 0.36 0 4 flags=16384 surfGlow=(1.0,0.65,0.25) surfGlowScale=0.2
+add cyl 3.253 7.253 3.2 0.22 0.22 2.2 6 0 3
+add box 3.253 7.253 3.4 0.36 0.4 0.36 0 4 flags=16384 surfGlow=(1.0,0.65,0.25) surfGlowScale=0.2
+add cyl 0 8.6 3.2 0.22 0.22 2.2 6 0 3
+add box 0 8.6 3.4 0.36 0.4 0.36 0 4 flags=16384 surfGlow=(1.0,0.65,0.25) surfGlowScale=0.2
+add cyl -3.253 7.253 3.2 0.22 0.22 2.2 6 0 3
+add box -3.253 7.253 3.4 0.36 0.4 0.36 0 4 flags=16384 surfGlow=(1.0,0.65,0.25) surfGlowScale=0.2
+add cyl -4.6 4 3.2 0.22 0.22 2.2 6 0 3
+add box -4.6 4 3.4 0.36 0.4 0.36 0 4 flags=16384 surfGlow=(1.0,0.65,0.25) surfGlowScale=0.2
+add cyl -3.253 0.747 3.2 0.22 0.22 2.2 6 0 3
+add box -3.253 0.747 3.4 0.36 0.4 0.36 0 4 flags=16384 surfGlow=(1.0,0.65,0.25) surfGlowScale=0.2
+add cyl 0 -0.6 3.2 0.22 0.22 2.2 6 0 3
+add box 0 -0.6 3.4 0.36 0.4 0.36 0 4 flags=16384 surfGlow=(1.0,0.65,0.25) surfGlowScale=0.2
+add cyl 3.253 0.747 3.2 0.22 0.22 2.2 6 0 3
+add box 3.253 0.747 3.4 0.36 0.4 0.36 0 4 flags=16384 surfGlow=(1.0,0.65,0.25) surfGlowScale=0.2
+#
+# Sealed door: piers and a lintel, opening 8 wide.
+add box -7 41 4 2 8 2 0 3
+add box 7 41 4 2 8 2 0 3
+add box 0 41 8.5 16 1 2 0 3
+add box 0 40.8 4 12 6 0.4 0 4 flags=788480 texPath=GameData/Tex/Global/EFX/liquid_water.png panU=0.02 panV=0.07 surfAlpha=0.92
+#
+#
+#
+# Spawn: the antechamber, nave door ahead, well shaft visible through it.
+# --- pickups ---
+#
+# --- patrol graph ---
+#
+# --- encounters ---
+# E1 antechamber: one, seen the moment the door opens.
+# E2 nave: two in the open between the sarcophagi.
+# E3 side vaults: one per vault, so a flank is never free.
+# E4 well chamber: the dais is held, and it is the only cover.
+#
+# --- light ---
+#
+# --- atmosphere ---
+# Candle flames on the well: eight wicks, two that actually burn.
+# The shaft is the key light of the level.
+# Antechamber and far door.
+# Vault lamps, so a flank is legible from the nave.
+#
+# --- routing ---
+# Exit: the sealed door. Citadel_AstralMind's origin is its island deck.
 
-# Floor (placeholder)
-add box 0 0 -0.25 80 0.5 80 0
-# Perimeter walls (placeholder)
-add box 0 -40 1 80 2 2 0
-add box 0 40 1 80 2 2 0
-add box -40 0 1 2 2 80 0
-add box 40 0 1 2 2 80 0
-
-playerstart 0 0 0 0
-light directional 50 50 80 200 205 215 0.3
-
-zone sky -60 -60 -30 60 60 60 1 name=SoulEater_Vaults_sky
-
-# COOP content (scaffold): NPCs + pickups so objectives are completable.
-npc Walker 10 10 0
-npc Walker -10 10 0
-npc Walker 10 -10 0
-npc Walker -10 -10 0
-npc Walker 0 20 0
-pickup pistol_01 5 0 0
-pickup rifle_01 -5 0 0
-pickup etheral_waver 0 -5 0
-
-# trigger scaffold
-trigger Trigger_EnterVolume 8 -5 0 18 5 8 once
-# portal scaffold to next mission world (box X 20-26, Y -4..4, Z 0-8; spawn 0 0 0 in the target)
-portal Citadel_AstralMind 20 -4 0 26 4 8 0 0 0 bidir
+# ============================================================================
+# Entities
+# ============================================================================
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_darknight.png GameData/Tex/Global/Sky/sky_darknight.png
+zone sky -56 -56 -20 56 56 30 1 name=vaults_sky
+zone reverb -16 -14 0 16 44 9 1 name=vaults_nave
+zone reverb -12 -52 0 12 -14 8 1 name=vaults_antechamber
+playerstart 0 -46 0 180
+pickup Medkit -6 -40 1 45
+pickup pistol_01 -23 9 2.6 30
+pickup rifle_01 23 9 2.6 30
+pickup HealthVial 23 21 2.6 30
+pickup ManaVial -23 21 2.6 30
+pickup Coin 3 4 2 30
+pickup etheral_waver 0 37 1 60
+PathNode ante 0 -44 0 radius=4 next=door_s
+PathNode door_s 0 -18 0 radius=3 next=ante,nave_s
+PathNode nave_s 0 0 0 radius=3 next=door_s,nave_n,vault_w1,vault_e1
+PathNode nave_n 0 34 0 radius=3 next=nave_s,nave_end
+PathNode nave_end 0 38 0 radius=3 next=nave_n
+PathNode vault_w1 -26 -6 0 radius=3 next=nave_s,vault_w3
+PathNode vault_w3 -26 20 0 radius=3 next=vault_w1
+PathNode vault_e1 26 -6 0 radius=3 next=nave_s,vault_e3
+PathNode vault_e3 26 20 0 radius=3 next=vault_e1
+npc Walker 0 -34 0 0
+npc Walker -8 4 0 0
+npc Skaarj 8 -4 0 0
+npc Skaarj -26 -6 0 0
+npc Walker 26 -6 0 0
+npc Skaarj -26 20 0 0
+npc Brute 0 14 0 0
+npc Walker 6 1 0 0
+light directional 0 0 70 120 130 170 0.15
+ParticleEmitter fire 4.6 4 3.4 12 0.7 1.6 8 0.22 0.04 255 190 110 255 90 20 -1 3 0 0 1 0
+ParticleEmitter fire -4.6 4 3.4 12 0.7 1.6 8 0.22 0.04 255 190 110 255 90 20 -1 3 0 0 1 0
+light point 3.5 4 9 160 210 255 1.2 30
+light point 3.5 4 4 160 210 255 0.8 18
+light point 0 -34 6 255 210 160 0.55 18 effect=4
+light point 0 -48 6 255 210 160 0.4 14 effect=4
+light point 0 37 7 160 210 255 0.6 16
+light point -26 -6 6 255 190 120 0.5 14 effect=2
+light point 26 -6 6 255 190 120 0.5 14 effect=2
+light point -26 20 6 255 190 120 0.5 14 effect=2
+trigger Trigger_EnterVolume -6 -22 0 6 -18 6 once
+portal Citadel_AstralMind -4 40 1 4 41 7 0 0 0 bidir

@@ -1,34 +1,199 @@
-# OZONE world scaffold - Citadel_AstralMind
-# Sector: Sefirah_5_ShatteredRealm   (see Wiki/Game-Hierarchy.md)
-# Placeholder geometry only: a floor, a perimeter and a sky zone.
-# Format: ozone v1.0
+# OZONE world - Citadel_AstralMind
+# Sefirah 5 - Shattered Realm. A citadel that broke free of its ground.
+#
+# INTENT
+#   Fantasy: the floor is gone. What is left is the citadel's plan - a
+#   central platform and four outbuildings - still connected, still holding
+#   formation, twenty units above the plain it tore out of.
+#   One moment: crossing a 4-wide bridge with nothing under it and the long
+#   stair back up visible on the plain below.
+#
+#   Pacing arc:
+#     0:00  READ       island deck, four satellites, four bridges
+#     0:40  PRESSURE   deck skirmish, the bridges are the only exits
+#     1:30  RISK       bridge crossings: 4 wide, unrailed, a guard each
+#     2:30  RECOVERY   the plain below: survivable, lootable, and it has a
+#                      stair back up, so a fall costs time, not the run
+#     3:30  EXIT       north satellite, the highest of the four
+#
+#   Flow:  island -> bridges -> satellites (loot) -> north satellite -> EXIT
+#                 |-> fall -> shattered plain -> south stair -> island
+#
+# GEOMETRY NOTES
+#   Island deck top 0. Satellites top 2/4/4/6 by compass point; each bridge
+#   meets its satellite at the same height, with 1.0 treads at the island
+#   end. Plain z=-20 with a 20-tread stair to the island edge.
+#
+# Format: ozone v1.0  (Z-up: x=east, y=north, z=up)
 
-levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_pilgrimage_01.png
+# ============================================================================
+# Geometry
+# ============================================================================
+add box 0 0 -20.5 140 1 140 0 2 texScaleU=8 texScaleV=8
+#
+# Plain rubble: rotated slabs, so the recovery floor reads as debris and
+# offers cover against anything that follows you down.
+add box -34 -40 -18.5 4 3 12 18 2 texScaleU=1 texScaleV=2
+add box 26 -44 -18.8 4 2.4 12 18 2 texScaleU=1 texScaleV=2
+add box -44 18 -18.3 4 3.4 12 18 2 texScaleU=1 texScaleV=2
+add box 40 22 -18.6 4 2.8 12 18 2 texScaleU=1 texScaleV=2
+add box 16 -34 -19 4 2 12 18 2 texScaleU=1 texScaleV=2
+add box -24 46 -18.7 4 2.6 12 18 2 texScaleU=1 texScaleV=2
+add box 30 -8 -18.9 4 2.2 12 18 2 texScaleU=1 texScaleV=2
+#
+# Island deck: an 8-sided slab, 3 deep, top exactly 0.
+add cyl 0 0 0 17 17 3 8 0 3
+# Centrepiece: a stepped dais and a broken spire, the landmark.
+add cyl 0 0 1.5 5 5 1.5 16 0 3
+add cyl 0 0 12 1.6 1.6 10.5 12 0 3
+add cyl 0 0 13.5 0 2.6 1.5 12 0 3
+# Fragment ring on the deck, cover at 1.8.
+add box 9.211 3.894 0.9 3.2 1.8 3.2 0 3
+add box 1.233 9.924 0.9 3.2 1.8 3.2 0 3
+add box -7.978 6.03 0.9 3.2 1.8 3.2 0 3
+add box -9.211 -3.894 0.9 3.2 1.8 3.2 0 3
+add box -1.233 -9.924 0.9 3.2 1.8 3.2 0 3
+add box 7.978 -6.03 0.9 3.2 1.8 3.2 0 3
+#
+# Four satellites at the compass points, ringed by height: south 2,
+# east and west 4, north 6.
+add cyl 0 -34 2 7 7 5 8 0 3
+add cyl 34 0 4 7 7 7 8 0 3
+add cyl -34 0 4 7 7 7 8 0 3
+add cyl 0 34 6 7 7 9 8 0 3
+#
+# Bridges are 4 wide and unrailed on purpose: the drop is the risk, and
+# the plain is the recovery. Each has treads at the island end so the
+# height change is walkable.
+# South: deck 0 to satellite 2.
+add box 0 -15.5 0.5 4 1 1 0 3
+add box 0 -16.5 1 4 2 1 0 3
+add box 0 -22 1 4 2 10 0 3
+# East and west: deck 0 to satellite 4.
+add box 13.5 0 0.5 1 1 4 0 3
+add box 14.5 0 1 1 2 4 0 3
+add box 15.5 0 1.5 1 3 4 0 3
+add box 16.5 0 2 1 4 4 0 3
+add box 22 0 3 10 2 4 0 3
+add box -13.5 0 0.5 1 1 4 0 3
+add box -14.5 0 1 1 2 4 0 3
+add box -15.5 0 1.5 1 3 4 0 3
+add box -16.5 0 2 1 4 4 0 3
+add box -22 0 3 10 2 4 0 3
+# North: deck 0 to satellite 6, the long climb.
+add box 0 11.5 0.5 4 1 1 0 3
+add box 0 12.5 1 4 2 1 0 3
+add box 0 13.5 1.5 4 3 1 0 3
+add box 0 14.5 2 4 4 1 0 3
+add box 0 15.5 2.5 4 5 1 0 3
+add box 0 16.5 3 4 6 1 0 3
+add box 0 22 5 4 2 10 0 3
+#
+# Recovery stair: 22 treads from the plain up to the SOUTH satellite,
+# not to the island - the island's south edge is already under the
+# bridge, and a stair under a bridge is a headroom trap.
+add box 0 -62.5 -19.5 8 1 1 0 2
+add box 0 -61.5 -19 8 2 1 0 2
+add box 0 -60.5 -18.5 8 3 1 0 2
+add box 0 -59.5 -18 8 4 1 0 2
+add box 0 -58.5 -17.5 8 5 1 0 2
+add box 0 -57.5 -17 8 6 1 0 2
+add box 0 -56.5 -16.5 8 7 1 0 2
+add box 0 -55.5 -16 8 8 1 0 2
+add box 0 -54.5 -15.5 8 9 1 0 2
+add box 0 -53.5 -15 8 10 1 0 2
+add box 0 -52.5 -14.5 8 11 1 0 2
+add box 0 -51.5 -14 8 12 1 0 2
+add box 0 -50.5 -13.5 8 13 1 0 2
+add box 0 -49.5 -13 8 14 1 0 2
+add box 0 -48.5 -12.5 8 15 1 0 2
+add box 0 -47.5 -12 8 16 1 0 2
+add box 0 -46.5 -11.5 8 17 1 0 2
+add box 0 -45.5 -11 8 18 1 0 2
+add box 0 -44.5 -10.5 8 19 1 0 2
+add box 0 -43.5 -10 8 20 1 0 2
+add box 0 -42.5 -9.5 8 21 1 0 2
+add box 0 -41.5 -9 8 22 1 0 2
+#
+# Exit frame on the north satellite.
+add box -5 39 9.5 2 7 2 0 3
+add box 5 39 9.5 2 7 2 0 3
+add box 0 39 13.7 12 1.4 2 0 3
+#
+#
+#
+# Spawn: deck centre-south, spire behind, four bridges and four heights
+# readable in one frame.
+# --- pickups ---
+#
+# --- patrol graph ---
+# The plain is its own loop; nothing on the deck links down to it.
+#
+# --- encounters ---
+# E1 deck: two, using the spire and the fragments as cover.
+# E2 bridges: one guard per crossing, so each is its own commitment.
+# E3 satellites.
+# E4 plain: two, so a fall is not a safe room.
+#
+# --- light ---
+#
+# --- atmosphere ---
+# Psychic drift: the shattered realm is open sky, so it gets weather.
+# Spire and dais.
+# One lamp per satellite so the far ones read as destinations.
+# Plain: two low lights, so the recovery floor is not a black hole.
+#
+# --- routing ---
+# Exit: the north satellite frame. NearDeath_Threshold's origin is the
+# threshold plate there.
 
-# Floor (placeholder)
-add box 0 0 -0.25 80 0.5 80 0
-# Perimeter walls (placeholder)
-add box 0 -40 1 80 2 2 0
-add box 0 40 1 80 2 2 0
-add box -40 0 1 2 2 80 0
-add box 40 0 1 2 2 80 0
-
-playerstart 0 0 0 0
-light directional 50 50 80 200 205 215 0.3
-
-zone sky -60 -60 -30 60 60 60 1 name=Citadel_AstralMind_sky
-
-# COOP content (scaffold): NPCs + pickups so objectives are completable.
-npc Walker 10 10 0
-npc Walker -10 10 0
-npc Walker 10 -10 0
-npc Walker -10 -10 0
-npc Walker 0 20 0
-pickup pistol_01 5 0 0
-pickup rifle_01 -5 0 0
-pickup etheral_waver 0 -5 0
-
-# trigger scaffold
-trigger Trigger_EnterVolume 8 -5 0 18 5 8 once
-# portal scaffold to next mission world (box X 20-26, Y -4..4, Z 0-8; spawn 0 0 0 in the target)
-portal NearDeath_Threshold 20 -4 0 26 4 8 0 0 0 bidir
+# ============================================================================
+# Entities
+# ============================================================================
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_pilgrimage_01.png GameData/Tex/Global/Sky/sky_pilgrimage_01.png
+zone sky -74 -74 -30 74 74 50 1 name=astral_sky
+zone reverb -17 -17 -3 17 17 14 1 name=astral_island
+zone sound -70 -70 -21 70 70 -18 1 name=astral_plain
+playerstart 0 -15 0 168
+pickup Medkit -10 0 1 45
+pickup rifle_01 34 0 5 30
+pickup pistol_01 0 -34 3 30
+pickup HealthVial 0 34 7 30
+pickup ManaVial -34 0 5 30
+pickup Coin 0 -3 2.5 30
+PathNode deck_s 0 -4 0 radius=3 next=deck_n
+PathNode deck_n 0 10 0 radius=3 next=deck_s,deck_e,deck_w
+PathNode deck_e 12 0 0 radius=3 next=deck_n
+PathNode deck_w -12 0 0 radius=3 next=deck_n
+PathNode sat_s 0 -34 2 radius=3 next=sat_s2
+PathNode sat_s2 4 -34 2 radius=3 next=sat_s
+PathNode sat_e 34 0 4 radius=3 next=sat_e2
+PathNode sat_e2 34 4 4 radius=3 next=sat_e
+PathNode sat_w -34 0 4 radius=3 next=sat_w2
+PathNode sat_w2 -34 -4 4 radius=3 next=sat_w
+PathNode sat_n 0 34 6 radius=3 next=sat_n2
+PathNode sat_n2 -4 34 6 radius=3 next=sat_n
+PathNode plain_w -50 0 -20 radius=5 next=plain_e
+PathNode plain_e 50 0 -20 radius=5 next=plain_w
+npc Walker -6 -2 0 0
+npc Skaarj 7 3 0 0
+npc Skaarj 0 22 6 0
+npc Walker 22 0 4 0
+npc Walker -22 0 4 0
+npc Brute 0 34 6 0
+npc Skaarj 0 -34 2 0
+npc Brute 20 10 -20 0
+npc Walker -20 -10 -20 0
+light directional -60 40 90 210 190 255 0.55
+particles 4 80 1.2 175 155 230 0.2 0.15
+light directional 50 -50 40 120 140 190 0.25
+light point 6.5 0 13 190 160 255 0.9 26
+light point 4.5 0 3 190 160 255 0.6 16
+light point 0 -34 5 255 220 180 0.5 16 effect=4
+light point 34 0 7 255 220 180 0.5 16 effect=4
+light point -34 0 7 255 220 180 0.5 16 effect=4
+light point 0 34 9 255 220 180 0.6 18 effect=4
+light point 0 -44 -12 150 170 220 0.4 40
+light point 0 20 -12 150 170 220 0.35 30
+trigger Trigger_EnterVolume -6 6 0 6 10 6 once
+portal NearDeath_Threshold -2 38 6 2 39 13 0 0 0 bidir

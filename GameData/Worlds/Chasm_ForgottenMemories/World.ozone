@@ -1,34 +1,238 @@
-# OZONE world scaffold - Chasm_ForgottenMemories
-# Sector: Sefirah_3_Oasis333   (see Wiki/Game-Hierarchy.md)
-# Placeholder geometry only: a floor, a perimeter and a sky zone.
-# Format: ozone v1.0
+# OZONE world - Chasm_ForgottenMemories
+# Sefirah 3 - Oasis 333. A canyon where the ground remembers.
+#
+# INTENT
+#   Fantasy: the only way forward is across, and the canyon is full of the
+#   things the world dropped. Shards of memory are embedded in the rock and
+#   they are the only light down there.
+#   One moment: standing mid-bridge with the shrine obelisks on the far rim
+#   and a single lit formation in the canyon wall below, and realising the
+#   canyon floor is walkable and the climb back is already built.
+#
+#   Pacing arc:
+#     0:00  READ       south rim, the whole crossing visible
+#     0:40  PRESSURE   rim skirmish, no cover but the drop behind you
+#     1:30  COMMIT     the bridge: 10 wide, railed, one brute at the far end
+#     2:00  DISCOVERY  the canyon floor: shards, a pistol, two guards
+#     3:00  CLIMB      the north stair out of the canyon
+#     3:30  RESOLVE    shrine courtyard, melee weapon, exit arch
+#
+#   Flow:  south rim -> bridge -> north rim -> shrine -> EXIT
+#                        |-> canyon floor (via the drop)
+#                              |-> north stair -> north rim
+#         upper bridge (optional, rifle) reached by a south-side stair
+#
+#   Two routes across, one of them a fall you can walk out of. The drop is
+#   never a softlock: the canyon floor has an 8-tread stair to the north rim.
+#
+# GEOMETRY NOTES
+#   banks z=0, canyon floor z=-8, canyon 24 wide in Y. Bridge top z=0 with
+#   1.2 rails (a 1.0 rail would be a step). Upper bridge top 7. Shrine
+#   obelisks are solid; the glowing shards are 0.2-thick SURF_GLOW slabs.
+#
+# Format: ozone v1.0  (Z-up: x=east, y=north, z=up)
 
-levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_noon.png
+# ============================================================================
+# Geometry
+# ============================================================================
+add box 0 -33 -4.25 124 8.5 58 0 1 texScaleU=6 texScaleV=4
+add box 0 41 -4.25 124 8.5 42 0 1 texScaleU=6 texScaleV=4
+#
+# Canyon floor: rock, 8 below the rims. One slab, so there is no seam
+# where a player lands.
+# Four slabs, not one: the seep is cut into the canyon floor.
+add box -38 8 -8.25 48 0.5 24 0 2 texScaleU=8 texScaleV=2
+add box 32 8 -8.25 60 0.5 24 0 2 texScaleU=8 texScaleV=2
+add box -6 -1 -8.25 16 0.5 6 0 2 texScaleU=2 texScaleV=2
+add box -6 17 -8.25 16 0.5 6 0 2 texScaleU=2 texScaleV=2
+# Seep: 14x10, 1.4 deep, fed by the shards. Cosmetic surface again.
+add box -6 8 -9.1 16 0.6 12 0 2
+add box -13.5 8 -8.7 1 1.4 12 0 2
+add box 1.5 8 -8.7 1 1.4 12 0 2
+add box -6 2.5 -8.7 16 1.4 1 0 2
+add box -6 13.5 -8.7 16 1.4 1 0 2
+add box -6 8 -8.16 14 0.08 10 0 4 flags=268700800 texPath=GameData/Tex/Global/EFX/water_pool.png texScaleU=6 texScaleV=6 panU=0.02 panV=0.015 surfAlpha=0.8 surfGlow=(0.05,0.10,0.16) surfGlowScale=0.2
+# Kerbed rim of wet stone.
+add box -14.3 8 -7.875 0.6 0.25 13.2 0 3
+add box 2.3 8 -7.875 0.6 0.25 13.2 0 3
+add box -6 1.7 -7.875 17.2 0.25 0.6 0 3
+add box -6 14.3 -7.875 17.2 0.25 0.6 0 3
+# Close the canyon ends, or the floor runs out at the world border.
+add box -61 8 0.25 2 17.5 24 0 2
+add box 61 8 0.25 2 17.5 24 0 2
+#
+# Rim walls, 9 tall. The shrine end carries the exit arch.
+add box 0 -61 4.5 124 9 2 0 2
+add box -61 -32 4.5 2 9 56 0 2
+add box 61 -32 4.5 2 9 56 0 2
+add box 0 61 4.5 124 9 2 0 2
+add box -61 40 4.5 2 9 40 0 2
+add box 61 40 4.5 2 9 40 0 2
+#
+# Main bridge: 10 wide, spans exactly rim to rim so no top face is
+# shared with a bank. Rails are 1.2 tall, which is above the 1.0 step
+# threshold and therefore actually holds the player on.
+add box 0 8 -0.25 10 0.5 24 0 3 texScaleU=2 texScaleV=4
+add box -4.85 8 0.6 0.3 1.2 24 0 3
+add box 4.85 8 0.6 0.3 1.2 24 0 3
+# Under-rib so the bridge reads as built, not extruded.
+add box 0 8 -0.95 8 0.9 24 0 2
+#
+# Upper bridge and its stair: the optional high road. It dead-ends on
+# the north rim, so it is a vantage and a rifle, not a shortcut.
+add box 24 8 6.75 8 0.5 24 0 1 texScaleU=2 texScaleV=4
+add box 20.15 8 7.6 0.3 1.2 24 0 3
+add box 27.85 8 7.6 0.3 1.2 24 0 3
+add box 24 -10.5 0.5 8 1 1 0 1
+add box 24 -9.5 1 8 2 1 0 1
+add box 24 -8.5 1.5 8 3 1 0 1
+add box 24 -7.5 2 8 4 1 0 1
+add box 24 -6.5 2.5 8 5 1 0 1
+add box 24 -5.5 3 8 6 1 0 1
+add box 24 -4.5 3.5 8 7 1 0 1
+# Piers down to the canyon floor: from below, an un-supported deck
+# reads as a floating slab rather than as a broken aqueduct.
+add box 22 0 -0.75 2 14.5 2 0 2
+add box 26 0 -0.75 2 14.5 2 0 2
+add box 22 10 -0.75 2 14.5 2 0 2
+add box 26 10 -0.75 2 14.5 2 0 2
+#
+# North stair out of the canyon: eight 1.0 treads. This is the way back
+# if the player takes the drop, and it is visible from the bridge.
+add box 44 12.5 -7.5 8 1 1 0 1
+add box 44 13.5 -7 8 2 1 0 1
+add box 44 14.5 -6.5 8 3 1 0 1
+add box 44 15.5 -6 8 4 1 0 1
+add box 44 16.5 -5.5 8 5 1 0 1
+add box 44 17.5 -5 8 6 1 0 1
+add box 44 18.5 -4.5 8 7 1 0 1
+add box 44 19.5 -4 8 8 1 0 1
+#
+# Fallen spans: rotated beams in the floor of the canyon. A rotated
+# brush collides as its conservative AABB, so these also break up the
+# floor into pockets.
+add box -28 6 -6.6 3 2.4 22 24 2 texScaleU=1 texScaleV=4
+add box 18 -2 -6.9 3 1.8 18 -31 2 texScaleU=1 texScaleV=3
+# The shard fissures that used to sit in this wall are gone. Every
+# SURF_GLOW brush whose ONLY texture is the positional texSlot renders
+# its glow face as an untinted WHITE panel - tried the rock slot, a dark
+# slot, a brush-wide surfTexSlot and a 6% glow, and the face stayed
+# white - so the decoration read as white light boxes. The canyon gets
+# its light from the three shard lamps instead. See
+# Wiki/World-Design-Pass.md, open item 6.
+# Grotto props on the canyon floor: cut stone, so the floor reads as
+# worked rather than natural.
+add box -11 2 -7.1 6 1.8 4 0 3
+add box 33 4 -7.2 6 1.6 4 0 3
+add cyl 4 8 -5 0.9 0.9 3 10 0 3
+#
+# Shrine: broken columns and six obelisks flanking the approach to the
+# exit arch. Heights vary on purpose - a level skyline reads as a ruin.
+add cyl -30 34 3 1.3 1.3 3 10 0 3
+add cyl -22 40 5.5 1.3 1.3 5.5 10 0 3
+add cyl -14 30 2.2 1.3 1.3 2.2 10 0 3
+add cyl 14 30 2.6 1.3 1.3 2.6 10 0 3
+add cyl 22 40 4.8 1.3 1.3 4.8 10 0 3
+add cyl 30 34 3.4 1.3 1.3 3.4 10 0 3
+add cyl -44 46 6.5 1.3 1.3 6.5 10 0 3
+add cyl 44 46 7.5 1.3 1.3 7.5 10 0 3
+# Dais before the arch: one step, so it is walked.
+add box 0 49 0.5 16 1 10 0 1
+# Exit arch: two piers and a lintel, opening 10 wide and 7 tall.
+add box -7.5 55 3.5 3 7 2 0 3
+add box 7.5 55 3.5 3 7 2 0 3
+add box 0 55 7.6 18 1.2 2 0 3
+#
+# Canyon boulders, with collision boxes because the floor is walkable.
+add box -30 8 -5.57 7.88 4.86 5.48 0 flags=16
+add box 34 4 -6.935 3.82 2.13 2.74 0 flags=16
+add box -20 -20 0.945 2.82 1.89 1.92 0 flags=16
+#
+#
+#
+# Spawn: south rim, the crossing and the shrine both in frame.
+# --- pickups ---
+#
+# --- patrol graph ---
+# The canyon floor is its own loop: nothing above links into it, so a
+# patrol cannot walk off the bridge chasing a waypoint.
+# The upper bridge is a dead end with a two-node loop.
+#
+# --- encounters ---
+# E1 south rim: seen from the spawn at 30 units, no cover behind.
+# E2 bridge: one brute at the far end of the choke, visible the whole way.
+# E3 upper bridge: the guard on the high road.
+# E4 canyon floor: two, so the descent is not free.
+# E5 shrine: the courtyard is held.
+#
+# --- light ---
+# Low sun from the west, cold fill from the sky.
+#
+# --- atmosphere ---
+# Mixture of dust and cold vapour off the shards.
+# No mist column here. An UNTEXTURED particle draws as an opaque
+# white quad, and this emitter's size curve GROWS (0.2 to 1.6), so
+# it read as a white card hanging in the canyon. Re-add it once the
+# particle texture work lands.
+# The shards are the canyon's only light: three lamps follow the wall.
+# The seep catches the shard light.
+# Bridge and rim.
+# Upper bridge marker so the climb is discoverable from the rim.
+# Shrine.
+#
+# --- routing ---
+# Exit: the shrine arch. Digital_Purgatory's origin is open deck there.
 
-# Floor (placeholder)
-add box 0 0 -0.25 80 0.5 80 0
-# Perimeter walls (placeholder)
-add box 0 -40 1 80 2 2 0
-add box 0 40 1 80 2 2 0
-add box -40 0 1 2 2 80 0
-add box 40 0 1 2 2 80 0
-
-playerstart 0 0 0 0
-light directional 50 50 80 200 205 215 0.3
-
-zone sky -60 -60 -30 60 60 60 1 name=Chasm_ForgottenMemories_sky
-
-# COOP content (scaffold): NPCs + pickups so objectives are completable.
-npc Walker 10 10 0
-npc Walker -10 10 0
-npc Walker 10 -10 0
-npc Walker -10 -10 0
-npc Walker 0 20 0
-pickup pistol_01 5 0 0
-pickup rifle_01 -5 0 0
-pickup etheral_waver 0 -5 0
-
-# trigger scaffold
-trigger Trigger_EnterVolume 8 -5 0 18 5 8 once
-# portal scaffold to next mission world (box X 20-26, Y -4..4, Z 0-8; spawn 0 0 0 in the target)
-portal Digital_Purgatory 20 -4 0 26 4 8 0 0 0 bidir
+# ============================================================================
+# Entities
+# ============================================================================
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_grad_dusk.png GameData/Tex/Global/Sky/sky_grad_dusk.png
+Mesh.Static GameData/Environment/Props/Rock_Large_A.glb -30 8 -8 55 scale=0.5 tex=GameData/Environment/Props/Rock_Diffuse.png
+Mesh.Static GameData/Environment/Props/Rock_Medium_A.glb 34 4 -8 200 scale=0.5 tex=GameData/Environment/Props/Rock_Diffuse.png
+Mesh.Static GameData/Environment/Props/Rock_Small_A.glb -20 -20 0 300 scale=0.7 tex=GameData/Environment/Props/Rock_Diffuse.png
+Mesh.Static GameData/Environment/Props/Bush_Dry_B.glb 18 24 0 40 scale=1.1
+zone sky -66 -66 -20 66 66 50 1 name=chasm_sky
+zone reverb -10 -4 -8 10 20 4 1 name=chasm_bridge
+zone sound -50 -4 -8.5 50 20 -6 1 name=chasm_floor
+zone water -13 3 -8.8 1 13 -7.5 1 name=chasm_seep gravity=17 jump=8.5 terminal=58 water_gravity=7 water_drag=0.92 swim_up=4 ladder_speed=6 fly_mult=1.5
+playerstart 0 -16 0 180
+pickup Medkit -10 -30 1 45
+pickup rifle_01 24 14 8 30
+pickup pistol_01 -4 -2 -7 30
+pickup HealthVial 32 10 -7 30
+pickup Coin -36 -2 -7 30
+pickup ManaVial 0 48 2 30
+pickup etheral_waver 0 52 2 60
+PathNode south_rim 0 -30 0 radius=4 next=bridge_s
+PathNode bridge_s 0 -6 0 radius=3 next=south_rim,bridge_n
+PathNode bridge_n 0 18 0 radius=3 next=bridge_s,north_rim
+PathNode north_rim 0 26 0 radius=4 next=bridge_n,shrine
+PathNode shrine 0 44 0 radius=4 next=north_rim,arch
+PathNode arch 0 52 1 radius=3 next=shrine
+PathNode floor_w -40 6 -8 radius=4 next=floor_e
+PathNode floor_e 40 6 -8 radius=4 next=floor_w
+PathNode upper_s 24 2 7 radius=2.5 next=upper_n
+PathNode upper_n 24 16 7 radius=2.5 next=upper_s
+npc Walker -6 -30 0 0
+npc Walker 7 -24 0 0
+npc Brute 0 14 0 0
+npc Skaarj 24 12 7 0
+npc Skaarj -20 4 -8 0
+npc Skaarj 24 10 -8 0
+npc Walker -8 38 0 0
+npc Skaarj 10 40 0 0
+light directional -90 20 45 255 210 170 0.8
+light directional 50 -30 60 110 130 175 0.25
+particles 1 70 0.9 200 196 186 0.3 0.1
+light point -34 -2 -4 120 200 255 0.7 16 flare=0 corona=0
+light point 0 -2 -4 120 200 255 0.7 16 flare=0 corona=0
+light point 30 -2 -4 120 200 255 0.7 16 flare=0 corona=0
+light point -6 8 -7 120 200 255 0.55 14 flare=0 corona=0
+light point 0 6 6 255 220 180 0.4 18
+light point 0 -34 6 255 220 180 0.35 16
+light point 24 -12 9 255 200 140 0.45 12
+light point 0 46 7 255 225 190 0.55 20
+light point -22 40 7 255 190 130 0.35 12 effect=2
+light point 22 40 7 255 190 130 0.35 12 effect=2
+trigger Trigger_EnterVolume -6 -8 0 6 -4 6 once
+portal Digital_Purgatory -5 54 1 5 57 7 0 -44 0.2 bidir

@@ -1,0 +1,22 @@
+// Sektor_03_AegisBaseAlpha - world sky zone (name=sector03_sky in World.ozone).
+// The entity name must match the OZONE zone's name= exactly: zone enter/exit is
+// dispatched on that key, and the registry re-points world defs on every load.
+entity "sector03_sky" : skyzone {
+    fog_color = (0.52, 0.56, 0.62)
+    fog_density = 0.004
+    ambient_light = (0.50, 0.52, 0.56)
+    skybox = "GameData/Tex/Global/Sky/sky_day.png"
+    actions {
+        on_enter {
+            set_fog 0.52 0.56 0.62 0.004
+            set_ambient 0.50 0.52 0.56
+            set_skybox "GameData/Tex/Global/Sky/sky_day.png"
+            say "Aegis Base Alpha - the hangar doors are open"
+        }
+        on_exit {
+            restore_fog
+            restore_skybox
+            say "You leave the base perimeter"
+        }
+    }
+}

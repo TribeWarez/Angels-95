@@ -1,34 +1,388 @@
-# OZONE world scaffold - Sektor_03_AegisBaseAlpha
-# Sector: Sefirah_1_TerranPrime   (see Wiki/Game-Hierarchy.md)
-# Placeholder geometry only: a floor, a perimeter and a sky zone.
-# Format: ozone v1.0
+# OZONE world - Sektor_03_AegisBaseAlpha
+# Sefirah 1 - Terran Prime. A rogue portal research base.
+#
+# INTENT
+#   Fantasy: a base that lost control of something and kept building. The
+#   hangar still has the empty cradle; the machine itself was moved north,
+#   behind two more checkpoints.
+#   One moment: the hangar doors part on an EMPTY portal frame - the dais,
+#   the pylons, no field - and you realise the thing is deeper in.
+#
+#   Pacing arc:
+#     0:00  READ       gate yard, hangar doors ahead, crates for cover
+#     0:40  PRESSURE   yard crossfire from three angles
+#     1:40  OPTIONAL   barracks (pistol), armoury (rifle), watchtower
+#     2:40  STORY      hangar: the empty frame, the crane, the cradles
+#     3:30  GATE       north gate -> motor pool
+#     4:30  PRESSURE   apron: fuel island, vehicle bay, two bunkers
+#     5:30  CLIMB      bunker roofs: an angle on the whole apron
+#     6:30  CLIMAX     containment annex: cells, gallery, the rig
+#     7:30  RESOLUTION walk into the machine
+#
+#   Flow:  south gate -> yard -> hangar (empty frame) -> north gate
+#                         |-> barracks   |-> armoury   |-> watchtower
+#                      -> motor pool -> bunker roofs (optional)
+#                      -> annex -> gallery / cells -> rig -> EXIT
+#
+#   Two routes through the annex: the hall floor straight at the rig, or the
+#   control gallery (8 up) that overlooks it. The gallery is the safer read
+#   and the cells hold the loot, so the floor route is a choice.
+#
+# GEOMETRY NOTES
+#   Yard, apron and annex all z=0. Hangar ceiling 10, annex ceiling 14,
+#   gallery 8, bunkers 6. Every doorway 6+ tall, every tread 1.0.
+#
+# Format: ozone v1.0  (Z-up: x=east, y=north, z=up)
 
-levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_day.png
+# ============================================================================
+# Geometry
+# ============================================================================
+# ==========================================================================
+# DISTRICT A - the compound: yard, hangar, barracks, armoury, tower.
+# ==========================================================================
+add box 0 0 -0.3 116 0.6 116 0 1 texScaleU=3 texScaleV=3
+#
+# Compound fence: 6 tall. The south gate is the entry; the NORTH wall now
+# has a gate to the motor pool (10 wide, 5.5 tall).
+add box -32 57 3 52 6 2 0 2
+add box 32 57 3 52 6 2 0 2
+add box 0 57 5.75 12 0.5 2 0 2
+add box -31.5 -57 3 53 6 2 0 2
+add box 31.5 -57 3 53 6 2 0 2
+add box -57 0 3 2 6 112 0 2
+add box 57 0 3 2 6 112 0 2
+add box 0 -57 5.75 10 0.5 2 0 2
+#
+# Hangar: 40x40, ceiling 10, 12-wide south door. The rig frame is here,
+# EMPTY - the machine was moved to the annex. That absence is the beat.
+add box 0 10 10.3 40 0.6 40 0 4
+add box -19.5 10 5 1 10 40 0 2
+add box 19.5 10 5 1 10 40 0 2
+add box 0 29.5 5 40 10 1 0 2
+add box -13 -9.5 5 14 10 1 0 2
+add box 13 -9.5 5 14 10 1 0 2
+add box 0 -9.5 9.5 12 1 1 0 2
+add box 0 -10.1 8.3 12 0.6 0.2 0 4 flags=2048
+# The empty cradle: dais, pylons, lintel, no field.
+add box 0 21 0.5 16 1 10 0 3
+add box -7.5 20 6 3 10 4 0 3
+add box 7.5 20 6 3 10 4 0 3
+add box 0 20 10.25 18 2.5 4 0 3
+# Severed feed lines on the floor, so the frame reads as stripped.
+add box 0 14.2 0.125 10 0.25 0.4 0 3
+add box 0 16.2 0.125 10 0.25 0.4 0 3
+add box 0 18.2 0.125 10 0.25 0.4 0 3
+add box -11.5 16 0.8 5 1.6 4 0 3
+add box 11.5 16 0.8 5 1.6 4 0 3
+# Crane gantry over the middle of the hall, underside 7.
+add box 0 7 7.3 36 0.6 2 0 3
+add cyl -14 12 7 0.4 0.4 7 8 0 3
+add cyl 14 12 7 0.4 0.4 7 8 0 3
+# Shipping cradles along the east wall (the rig was crated from here).
+add box 15.5 24.5 1.3 5 2.6 5 0 3
+add box -15.5 24.5 1.3 5 2.6 5 0 3
+#
+# Barracks: 22x22, ceiling 8, door on the south face.
+add box -39 9 8.3 22 0.6 20 0 4
+add box -49.5 9 4 1 8 20 0 2
+add box -28.5 9 4 1 8 20 0 2
+add box -39 18.5 4 22 8 1 0 2
+add box -46 -0.5 4 8 8 1 0 2
+add box -32 -0.5 4 8 8 1 0 2
+add box -39 -0.5 7 6 2 1 0 2
+add box -44 3.5 0.75 6 1.5 3 0 3
+add box -44 8.5 0.75 6 1.5 3 0 3
+add box -44 13.5 0.75 6 1.5 3 0 3
+add box -33 14 1.1 6 2.2 4 0 3
+#
+# Armoury: solid walls, ceiling 8, door on the west face.
+add box 39 8 8.3 22 0.6 20 0 4
+add box 28.5 2 4 1 8 8 0 2
+add box 28.5 15 4 1 8 6 0 2
+add box 28.5 9 7.25 1 1.5 6 0 2
+add box 49.5 8 4 1 8 20 0 2
+add box 39 17.5 4 22 8 1 0 2
+add box 39 -1.5 4 22 8 1 0 2
+add box 39 3 1.1 10 2.2 2 0 3
+add box 39 11 1.1 10 2.2 2 0 3
+#
+# Watchtower: 12x12 solid, 8 tall, stairs up the north face.
+add box 36 -44 4 12 8 12 0 2
+add box 36 -49.5 8.6 12 1.2 1 0 2
+add box 30.5 -44 8.6 1 1.2 12 0 2
+add box 41.5 -44 8.6 1 1.2 12 0 2
+add box 36 -30.5 0.5 6 1 1 0 1
+add box 36 -31.5 1 6 2 1 0 1
+add box 36 -32.5 1.5 6 3 1 0 1
+add box 36 -33.5 2 6 4 1 0 1
+add box 36 -34.5 2.5 6 5 1 0 1
+add box 36 -35.5 3 6 6 1 0 1
+add box 36 -36.5 3.5 6 7 1 0 1
+add box 36 -37.5 4 6 8 1 0 1
+#
+# Yard cover: a truck body, crate stacks, drums, a painted plinth.
+add box -11 -37 1.4 10 2.8 6 0 3
+add box -11 -32.5 0.8 10 1.6 3 0 3
+add box 9.5 -28.5 1.1 3 2.2 3 0 3
+add box 13.5 -28.5 1.1 3 2.2 3 0 3
+add box 9.5 -22.5 1.1 3 2.2 3 0 3
+add box 13.5 -22.5 1.1 3 2.2 3 0 3
+add cyl -4 -22 1.6 0.9 0.9 1.6 12 0 3
+add cyl -1 -24 1.6 0.9 0.9 1.6 12 0 3
+add box 0 -18 0.1 12 0.2 4 0 3
+#
+# ==========================================================================
+# DISTRICT B - the motor pool, y 58..106. Open apron between two
+# bunkers, with a roofed vehicle bay at the far end.
+# ==========================================================================
+add box 0 82 -0.3 112 0.6 48 0 1 texScaleU=3 texScaleV=3
+add box -57 82 3 2 6 48 0 2
+add box 57 82 3 2 6 48 0 2
+#
+# Battery bunkers: 6 tall, roofs walkable, firing slits facing the apron.
+add box -45 81 3 22 6 30 0 2
+add box -33.925 74 3.4 0.15 0.8 4 0 4 flags=16384 surfGlow=(1.0,0.8,0.45) surfGlowScale=0.2
+add box -33.925 82 3.4 0.15 0.8 4 0 4 flags=16384 surfGlow=(1.0,0.8,0.45) surfGlowScale=0.2
+add box -33.925 90 3.4 0.15 0.8 4 0 4 flags=16384 surfGlow=(1.0,0.8,0.45) surfGlowScale=0.2
+add box 45 81 3 22 6 30 0 2
+add box 33.925 74 3.4 0.15 0.8 4 0 4 flags=16384 surfGlow=(1.0,0.8,0.45) surfGlowScale=0.2
+add box 33.925 82 3.4 0.15 0.8 4 0 4 flags=16384 surfGlow=(1.0,0.8,0.45) surfGlowScale=0.2
+add box 33.925 90 3.4 0.15 0.8 4 0 4 flags=16384 surfGlow=(1.0,0.8,0.45) surfGlowScale=0.2
+# Stair up the west bunker roof: six treads off the apron.
+add box -28.5 79 0.5 1 1 6 0 1
+add box -29.5 79 1 1 2 6 0 1
+add box -30.5 79 1.5 1 3 6 0 1
+add box -31.5 79 2 1 4 6 0 1
+add box -32.5 79 2.5 1 5 6 0 1
+add box -33.5 79 3 1 6 6 0 1
+# No rail on the roofs: the drop is 6 and the apron is the arena.
+#
+# Fuel island under a canopy at 6.0: three pumps, cover at 3.2.
+add cyl -6 78 3.2 1.2 1.2 3.2 10 0 3
+add cyl 0 78 3.2 1.2 1.2 3.2 10 0 3
+add cyl 6 78 3.2 1.2 1.2 3.2 10 0 3
+add box 0 78 8.75 20 0.7 10 0 4
+add cyl -10 73 8.4 0.5 0.5 8.4 8 0 3
+add cyl 10 73 8.4 0.5 0.5 8.4 8 0 3
+add cyl -10 83 8.4 0.5 0.5 8.4 8 0 3
+add cyl 10 83 8.4 0.5 0.5 8.4 8 0 3
+#
+# Vehicle bay: 52 wide, ceiling 8, open on the south side on columns.
+add box 0 98 8.3 52 0.6 12 0 4
+add box 0 103.5 4 52 8 1 0 2
+add cyl -24 93 8 0.7 0.7 8 8 0 3
+add cyl -8 93 8 0.7 0.7 8 8 0 3
+add cyl 8 93 8 0.7 0.7 8 8 0 3
+add cyl 24 93 8 0.7 0.7 8 8 0 3
+# A wrecked APC and its crates: the bay's cover.
+add box -9 98 1.3 10 2.6 4 0 3
+add box -1 98 0.9 6 1.8 2 0 3
+add box 15 98.5 1.1 10 2.2 5 0 3
+#
+# Apron clutter: barrier blocks and drums, all cover height.
+add box -17.5 62.6 0.85 5 1.7 1.2 0 3
+add box -11.5 62.6 0.85 5 1.7 1.2 0 3
+add box 20.5 66.6 0.85 5 1.7 1.2 0 3
+add box 26.5 66.6 0.85 5 1.7 1.2 0 3
+add cyl 30 60 1.6 0.9 0.9 1.6 10 0 3
+add cyl 33 62 1.6 0.9 0.9 1.6 10 0 3
+# Perimeter road markings, 0.1 proud.
+add box 0 64.2 0.05 108 0.1 0.4 0 3
+add box 0 100.2 0.05 108 0.1 0.4 0 3
+#
+# ==========================================================================
+# DISTRICT C - the containment annex, y 106..146. The rig is here.
+# ==========================================================================
+add box 0 126 -0.3 80 0.6 40 0 1 texScaleU=3 texScaleV=3
+add box 0 145 6 80 12 2 0 2
+add box -39 125 6 2 12 38 0 2
+add box 39 125 6 2 12 38 0 2
+# Annex front wall: two segments and a 12-wide, 9-tall door.
+add box -23 106.5 6 34 12 1 0 2
+add box 23 106.5 6 34 12 1 0 2
+add box 0 106.5 10.5 12 3 1 0 2
+#
+# Rig hall: 60x28, ceiling 14. Tall on purpose - the field needs the
+# height to read from the door.
+add box 0 126.25 14.3 61 0.6 29.5 0 4
+add box -29.5 126 7 1 14 28 0 2
+add box 29.5 126 7 1 14 28 0 2
+add box 0 139.5 7 60 14 1 0 2
+add box -18 111.5 7 24 14 1 0 2
+add box 18 111.5 7 24 14 1 0 2
+add box 0 111.5 11.5 12 5 1 0 2
+#
+# The rig: 1.0 dais, 3x3 pylons 12 tall, lintel, and the field sheet.
+add box 0 134.5 0.5 16 1 9 0 3
+add box -7.5 134 6.5 3 11 4 0 3
+add box 7.5 134 6.5 3 11 4 0 3
+add box 0 134 11.5 18 3 4 0 3
+add box 0 134 5.5 12 9 0.2 0 4 flags=788480 texPath=GameData/Tex/Global/EFX/liquid_water.png panU=0.03 panV=-0.09 surfAlpha=0.92
+# Console wings on the dais, cover at 1.6.
+add box -11.5 130 0.8 5 1.6 4 0 3
+add box 11.5 130 0.8 5 1.6 4 0 3
+#
+# Control gallery: 8 up, along the west wall, railed on the hall side.
+# Stair of eight treads at its south end, so the gallery is a real route.
+add box -26 130 7.7 6 0.6 16 0 3
+add box -23.15 130 8.45 0.3 0.9 16 0 3
+add box -26 114.5 0.5 6 1 1 0 1
+add box -26 115.5 1 6 2 1 0 1
+add box -26 116.5 1.5 6 3 1 0 1
+add box -26 117.5 2 6 4 1 0 1
+add box -26 118.5 2.5 6 5 1 0 1
+add box -26 119.5 3 6 6 1 0 1
+add box -26 120.5 3.5 6 7 1 0 1
+add box -26 121.5 4 6 8 1 0 1
+# No props on the gallery: 14 ceiling over an 8 deck leaves 6.0, and
+# any cover taller than 0.95 would make the walkway a jump trap.
+#
+# Containment cells, east side: two rooms, ceiling 8, one door each.
+add box 24.5 117 8.3 9 0.6 10 0 4
+add box 28.5 117 4 1 8 10 0 2
+add box 24.5 112.5 4 9 8 1 0 2
+add box 24.5 121.5 4 9 8 1 0 2
+add box 20.5 114.5 4 1 8 3 0 2
+add box 20.5 120 4 1 8 2 0 2
+add box 20.5 117.5 6.75 1 2.5 3 0 2
+# Restraint plinth and a sample case.
+add box 25 117 0.6 2 1.2 4 0 3
+add box 27.25 115 1 1.5 2 2 0 3
+add box 24.5 131 8.3 9 0.6 10 0 4
+add box 28.5 131 4 1 8 10 0 2
+add box 24.5 126.5 4 9 8 1 0 2
+add box 24.5 135.5 4 9 8 1 0 2
+add box 20.5 128.5 4 1 8 3 0 2
+add box 20.5 134 4 1 8 2 0 2
+add box 20.5 131.5 6.75 1 2.5 3 0 2
+# Restraint plinth and a sample case.
+add box 25 131 0.6 2 1.2 4 0 3
+add box 27.25 129 1 1.5 2 2 0 3
+#
+#
+#
+# Spawn: just inside the south gate, facing the hangar doors 45 units up
+# the yard. The yard's cover is laid out either side of that sightline.
+# --- pickups ---
+# --- district B and C ---
+#
+# --- patrol graph ---
+# The tower top is its own loop: street nodes must not link upstairs.
+#
+# District B, apron loop.
+# Bunker roof: its own loop.
+#
+# District C, hall and gallery loops.
+#
+# --- encounters ---
+# A. E1 yard: three read from the gate, crates and the truck between them.
+# A. E2 hangar: the empty frame is guarded.
+# A. E3 side rooms and the tower.
+#
+# B. E4 apron: two on the floor, one holding the fuel island.
+# B. E5 bunker roof and vehicle bay.
+#
+# C. E6 annex: the rig is held, the gallery overlooks it.
+# C. E7 containment cells: one each, so the loot costs a fight.
+#
+# --- light ---
+# Yard floods on the four corners of the parade ground.
+# Hangar interior: high cold strip lights.
+# The empty cradle keeps its light: it is still switched on.
+# Side rooms and tower.
+#
+# B. Apron: four masts and the fuel island.
+# C. Annex: the rig is the key light.
+#
+# --- routing ---
+# Exit: the aperture of the annex rig. Spawn is KryoArchipel's origin,
+# which is open ice there.
 
-# Floor (placeholder)
-add box 0 0 -0.25 80 0.5 80 0
-# Perimeter walls (placeholder)
-add box 0 -40 1 80 2 2 0
-add box 0 40 1 80 2 2 0
-add box -40 0 1 2 2 80 0
-add box 40 0 1 2 2 80 0
-
-playerstart 0 0 0 0
-light directional 50 50 80 200 205 215 0.3
-
-zone sky -60 -60 -30 60 60 60 1 name=Sektor_03_AegisBaseAlpha_sky
-
-# COOP content (scaffold): NPCs + pickups so objectives are completable.
-npc Walker 10 10 0
-npc Walker -10 10 0
-npc Walker 10 -10 0
-npc Walker -10 -10 0
-npc Walker 0 20 0
-pickup pistol_01 5 0 0
-pickup rifle_01 -5 0 0
-pickup etheral_waver 0 -5 0
-
-# trigger scaffold
-trigger Trigger_EnterVolume 8 -5 0 18 5 8 once
-# portal scaffold to next mission world (box X 20-26, Y -4..4, Z 0-8; spawn 0 0 0 in the target)
-portal KryoArchipel_Severny 20 -4 0 26 4 8 0 0 0 bidir
+# ============================================================================
+# Entities
+# ============================================================================
+levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_day.png GameData/Tex/Global/Sky/sky_day.png
+zone sky -62 -62 -20 62 150 70 1 name=sector03_sky
+zone reverb -20 -10 0 20 30 10 1 name=sector03_hangar
+zone reverb -50 -1 0 -28 19 8 1 name=sector03_barracks
+zone reverb -30 112 0 30 140 14 1 name=sector03_annex
+zone sound -56 58 0 56 106 10 1 name=sector03_apron
+playerstart 0 -46 0 180
+pickup rifle_01 40 14 1 30
+pickup pistol_01 -38 6 1 30
+pickup Medkit -11 -37 3 45
+pickup HealthVial 0 22 2 30
+pickup ManaVial 36 -44 9 30
+pickup Coin 13.5 -28.5 3.2 30
+pickup HealthVial -45 80 7 30
+pickup ManaVial -26 130 9 30
+pickup etheral_waver 25 117 2.2 60
+pickup Coin 30 62 1 30
+pickup Medkit 15 98 3.2 45
+PathNode gate 0 -38 0 radius=4 next=yard
+PathNode yard 0 -12 0 radius=4 next=gate,doors,barracks
+PathNode doors 0 -6 0 radius=3 next=yard,dais
+PathNode dais 0 22 1 radius=3 next=doors,hall_w
+PathNode hall_w -16 4 0 radius=3 next=dais,hall_e
+PathNode hall_e 16 4 0 radius=3 next=hall_w
+PathNode barracks -39 8 0 radius=3 next=yard
+PathNode armoury 34 8 0 radius=3 next=hall_e
+PathNode tower_top 36 -44 8 radius=3 next=tower_top_w
+PathNode tower_top_w 32 -44 8 radius=3 next=tower_top
+PathNode n_gate 0 60 0 radius=4 next=apron_s
+PathNode apron_s 0 70 0 radius=4 next=n_gate,apron_n,fuel
+PathNode fuel 0 84 0 radius=3 next=apron_s,apron_n
+PathNode apron_n 0 96 0 radius=4 next=apron_s,bay,annex_door
+PathNode bay 18 94 0 radius=3 next=apron_n
+PathNode annex_door 0 104 0 radius=3 next=apron_n,annex_hall
+PathNode roof_b -45 76 6 radius=3 next=roof_b2
+PathNode roof_b2 -45 88 6 radius=3 next=roof_b
+PathNode annex_hall 0 118 0 radius=4 next=annex_door,rig,cell_a
+PathNode rig 0 126 0 radius=3 next=annex_hall
+PathNode cell_a 16 117 0 radius=2.5 next=annex_hall,cell_in
+PathNode cell_in 25 120 0 radius=2.5 next=cell_a
+PathNode gal_s -26 124 8 radius=2.5 next=gal_n
+PathNode gal_n -26 134 8 radius=2.5 next=gal_s
+npc Walker -10 -26 0 0
+npc Walker 10 -18 0 0
+npc Brute 4 -36 0 0
+npc Skaarj 0 22 1 0
+npc Skaarj -14 12 0 0
+npc Skaarj 14 12 0 0
+npc Skaarj -38 16 0 0
+npc Brute 42 8 0 0
+npc Walker 36 -44 8 0
+npc Walker -6 68 0 0
+npc Walker 12 72 0 0
+npc Brute 0 88 0 0
+npc Skaarj -45 80 6 0
+npc Skaarj 16 94 0 0
+npc Skaarj 0 122 0 0
+npc Brute 0 136 1 0
+npc Skaarj -26 128 8 0
+npc Skaarj 24 120 0 0
+npc Brute 24 134 0 0
+light directional 40 50 80 240 240 235 0.9
+light directional -50 -30 40 120 140 170 0.2
+light point -24 -24 8 230 240 255 0.45 26
+light point 24 -24 8 230 240 255 0.45 26
+light point -24 14 8 230 240 255 0.4 26
+light point 24 14 8 230 240 255 0.4 26
+light point -12 4 9 200 225 255 0.6 26
+light point 12 4 9 200 225 255 0.6 26
+light point 0 12 6 90 200 255 0.7 18
+light point -40 8 6 255 225 180 0.5 18
+light point 40 8 6 255 225 180 0.5 18
+light point 36 -42 9 255 210 150 0.5 18 effect=4
+light point -20 64 8 230 240 255 0.45 26
+light point 20 64 8 230 240 255 0.45 26
+light point -20 100 8 230 240 255 0.4 26
+light point 20 100 8 230 240 255 0.4 26
+light point 0 78 5.4 255 210 150 0.5 16 effect=2
+light point 0 126 8 90 200 255 1.1 26
+light point 0 120 12 200 225 255 0.5 26
+light point -26 128 9 255 210 160 0.45 18
+light point 25 117 6 255 195 140 0.4 14 effect=2
+trigger Trigger_EnterVolume -6 -22 0 6 -18 6 once
+trigger Trigger_EnterVolume -6 58 0 6 62 6 once
+portal KryoArchipel_Severny -5 133 1.2 5 135 9.5 0 0 8 bidir
