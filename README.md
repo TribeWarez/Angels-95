@@ -466,6 +466,29 @@ See also [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md),
 - [pl_mpeg](https://github.com/phoboslab/pl_mpeg) — MPEG1 video playback
 - [c99-raylib-video-player](https://github.com/WEREMSOFT/c99-raylib-vide-player) — Video integration
 
+### Agent skills used for content and effects work
+
+The campaign-map design pass and the particle/bloom work were done with two
+published agent skills. Neither is linked into the build — they are reference
+instructions (plus a validation helper) — but they shaped real decisions, so
+they are credited here and pinned so a fresh checkout reproduces the same
+guidance.
+
+| Skill | Author | How it is used |
+|---|---|---|
+| **[level-designer](https://github.com/coreymaypray/sloth-skill-tree)** | [coreymaypray](https://github.com/coreymaypray) (Maycrest Group) | Spatial intent, pacing arcs, encounter and readability standards. It is the structure behind [`Wiki/World-Design-Pass.md`](Wiki/World-Design-Pass.md) and the campaign levels. Installed per machine under `~/.opencode/skills/`, not vendored here. |
+| **[game-vfx](https://github.com/akillness/jeo-skills)** | [akillness](https://github.com/akillness) | Particle budgets, effect composition and readability for the emitter/bloom work. Vendored under [`.agents/skills/game-vfx/`](.agents/skills/game-vfx/) and pinned in [`skills-lock.json`](skills-lock.json). |
+
+Both were installed with [`skillfish`](https://github.com/coreymaypray/skillfish):
+
+```bash
+npx skillfish add coreymaypray/sloth-skill-tree level-designer
+npx skillfish add akillness/jeo-skills game-vfx
+```
+
+Each skill remains under its own author's terms — check the linked repository
+for its license before reusing it outside this project.
+
 ---
 
 ## Origins

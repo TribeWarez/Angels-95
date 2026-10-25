@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "game-vfx": {
+      "source": "akillness/jeo-skills",
+      "sourceType": "github",
+      "skillPath": ".agent-skills/game-vfx/SKILL.md",
+      "computedHash": "4ce21a95af0c5a1bb9eed8d45cb5d98407e4b5dd8e7733ecae6287146513b287"
+    }
+  }
+}
