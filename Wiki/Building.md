@@ -242,16 +242,15 @@ worldchecks, the GLIBC 2.39 gate) passes. The `deploy` job in
    with journal output if one does not become active.
 
 Deploys are gated on the `production` GitHub environment, so the repository can
-require a reviewer before a rollout. By default only `AngelServ` is shipped: the
-public listing normally runs the separate
-[`TribeWarez/angels95-master-server`](https://github.com/TribeWarez/angels95-master-server)
-deployment and two masters cannot share UDP `27900`. Set the repository variable
-`DEPLOY_MASTER` to `true` only on a host that should run the in-repo
-`AngelMaster` itself. A deploy that does not ship `angels95-master.service`
-automatically runs `systemctl disable --now angels95-master` if that unit was
-installed by an earlier deploy, so switching the flag off also stops a
-stale/crash-looping master (e.g. one that lost the `27900` port to the hosted
-master).
+require a reviewer before a rollout. By default only `AngelServ` is shipped. The
+in-repo `AngelMaster` is opt-in: when shipped it listens on **`27910/udp` +
+`27960/tcp`** (see `tools/angels95-master.service`), so it can coexist with the
+hosted listing on the protocol defaults `27900/27950`. Set the repository
+variable `DEPLOY_MASTER` to `true` only on a host that should run the in-repo
+master. A deploy that does not ship `angels95-master.service` automatically runs
+`systemctl disable --now angels95-master` if that unit was installed by an
+earlier deploy, so switching the flag off also stops a stale/crash-looping
+master.
 
 #### One-time VPS setup
 
@@ -279,9 +278,11 @@ before restarting, so a mismatched host fails the deploy instead of the fleet.
 
 Create `System/OzServer.ini` once with the host's `[Server]`/`[Auth]` tokens —
 the deploy never writes that file. Open the ports you actually use:
-`27015/udp` + `8080/tcp` for `AngelServ`, `27900/udp` + `27950/tcp` for
-`AngelMaster` (put an HTTPS reverse proxy in front of the master if it is
-public).
+`27015/udp` + `8080/tcp` for `AngelServ`, `27910/udp` + `27960/tcp` for the
+in-repo `AngelMaster` (put an HTTPS reverse proxy in front of it if it is
+public). Advertise it explicitly — game servers via a second `[MasterServers]`
+entry, clients via `System/Angels95.ini` — as the unit is not on the default
+`27900/27950` ports.
 
 #### Repository configuration
 
@@ -300,7 +301,7 @@ Variables:
 |---|---|---|
 | `DEPLOY_PORT` | `22` | SSH port |
 | `DEPLOY_PATH` | `/srv/angels95` | install root; holds `System/` and `GameData/` |
-| `DEPLOY_MASTER` | `false` | also ship `AngelMaster`; leave `false` when the public listing runs in `angels95-master-server` (two masters cannot share UDP 27900) |
+| `DEPLOY_MASTER` | `false` | also ship the in-repo `AngelMaster` on `27910/27960`; opt-in, so it does not collide with the hosted listing on `27900/27950` |
 
 #### Rollback and manual redeploy
 

@@ -20,7 +20,11 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=/srv/angels95
 # No game data dependency: this process only stores heartbeats.
-ExecStart=/srv/angels95/System/AngelMaster --bind 0.0.0.0 --port 27900 --http-port 27950
+# Non-default ports on purpose: the public listing already owns the protocol's
+# default 27900/27950 (TribeWarez/angels95-master-server), and two masters cannot
+# share them on one host. Advertise this one explicitly (clients /
+# [MasterServers]) as http://<host>:27960.
+ExecStart=/srv/angels95/System/AngelMaster --bind 0.0.0.0 --port 27910 --http-port 27960
 Restart=on-failure
 RestartSec=5
 

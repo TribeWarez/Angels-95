@@ -558,14 +558,16 @@ jobs:
   #   DEPLOY_PORT          SSH port, default 22
   #   DEPLOY_PATH          install root, default /srv/angels95
   #   DEPLOY_MASTER        false (default) ships only AngelServ; true also ships
-  #                        AngelMaster. The public listing normally runs the
-  #                        separate TribeWarez/angels95-master-server deployment,
-  #                        and two masters cannot share UDP 27900.
+  #                        AngelMaster on 27910/27960 (the hosted listing in
+  #                        TribeWarez/angels95-master-server owns the protocol's
+  #                        default 27900/27950, so the in-repo unit deliberately
+  #                        uses non-default ports and can coexist).
   #
   # The VPS needs: rsync, curl (HTTPS master uplink) and passwordless sudo for
   # `bash <DEPLOY_PATH>/System/deploy-remote.sh`, which installs/restarts the
-  # units. Firewall: 27015/udp + 8080/tcp (AngelServ), 27900/udp + 27950/tcp
-  # (AngelMaster). See Wiki/Building.md -> "Automatic server deployment".
+  # units. Firewall: 27015/udp + 8080/tcp (AngelServ), 27910/udp + 27960/tcp
+  # (in-repo AngelMaster; the hosted master keeps 27900/27950). See
+  # Wiki/Building.md -> "Automatic server deployment".
   # ---------------------------------------------------------------------------
   deploy:
     name: Deploy to VPS
@@ -582,10 +584,9 @@ jobs:
       DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
       DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
       DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/srv/angels95' }}
-      # The in-repo master is OPT-IN. The public listing normally runs the
-      # separate TribeWarez/angels95-master-server deployment, and two masters
-      # cannot share UDP 27900; default false ships only AngelServ. Set this
-      # variable to true only on a host that should run AngelMaster itself.
+      # The in-repo master is OPT-IN. When shipped it runs on 27910/27960
+      # (tools/angels95-master.service) so it coexists with the hosted listing
+      # on the protocol defaults 27900/27950. Default false ships only AngelServ.
       DEPLOY_MASTER: ${{ vars.DEPLOY_MASTER || 'false' }}
     steps:
       - uses: actions/checkout@v4
@@ -620,9 +621,9 @@ jobs:
           mkdir -p stage/System
           cp tools/angels95-serv.service tools/deploy-remote.sh stage/System/
           chmod +x stage/System/AngelServ stage/System/deploy-remote.sh
-          # The public listing may live in the separate master repo; then only
-          # the game server is shipped (leave the binary out too, so the host
-          # cannot accidentally start a second master on 27900/27950).
+          # The in-repo master is opt-in. When it is shipped it listens on
+          # 27910/27960 (see tools/angels95-master.service), so it can coexist
+          # with the hosted master on the protocol defaults 27900/27950.
           if [ "${DEPLOY_MASTER,,}" = "true" ] || [ "${DEPLOY_MASTER,,}" = "1" ] || [ "${DEPLOY_MASTER,,}" = "yes" ]; then
             cp tools/angels95-master.service stage/System/
             chmod +x stage/System/AngelMaster

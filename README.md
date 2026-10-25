@@ -225,12 +225,15 @@ See [`Wiki/Master-Server.md`](Wiki/Master-Server.md) for the full protocol.
 
 ### Deployment
 
-Tagging a build (`b*`) deploys both servers to a VPS over SSH + systemd, after
-the Linux CI job (tests, worldchecks, GLIBC gate) passes. CI ships the two
-binaries, the systemd units and a self-contained `GameData/` tree; the host's
-`System/OzServer.ini` and `GameData/Saves/` are preserved, and the previous
-binaries stay beside the new ones for a one-step rollback. Setup (secrets,
-`DEPLOY_PATH`, sudoers, firewall, rollback) is documented in
+Tagging a build (`b*`) deploys `AngelServ` (and optionally the in-repo
+`AngelMaster`) to a VPS over SSH + systemd, after the Linux CI job (tests,
+worldchecks, GLIBC gate) passes. CI ships the binaries, the systemd units and a
+self-contained `GameData/` tree; the host's `System/OzServer.ini` and
+`GameData/Saves/` are preserved, and the previous binaries stay beside the new
+ones for a one-step rollback. The in-repo master is opt-in (`DEPLOY_MASTER=true`)
+and listens on `27910/27960` so it can coexist with the hosted listing on
+`27900/27950`. Setup (secrets, `DEPLOY_PATH`, sudoers, firewall, rollback) is
+documented in
 [`Wiki/Building.md`](Wiki/Building.md#automatic-server-deployment-github-actions).
 
 ### Client
