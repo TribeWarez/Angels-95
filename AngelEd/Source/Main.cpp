@@ -886,32 +886,25 @@ int main(int argc, char **argv){
             }
         }
 
-        ClearBackground(BLACK);
-
-        // Apply lighting mode before 3D rendering
-        rlDrawRenderBatchActive();
-        if (OTEditor.ViewMode == LightingMode::WIREFRAME) {
-            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-            glDisable(GL_CULL_FACE);
-        } else {
-            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-            glEnable(GL_CULL_FACE);
-        }
-
-        BeginMode3D(OTEditor.MainCamera);
-
         // -------------------------------------------------------------------
-        // Skybox cube (viewport backdrop) â€” toggled by the toolbar "Sky" button.
-        // Mirrors the client: top/bottom use the cap texture, sides reuse it
-        // unless a dedicated side skybox is authored.
+        // Sky texture + SURF_PORTAL view.
+        //
+        // Resolved BEFORE the 3D mode (and before anything seeds the target):
+        // raylib cannot nest render textures, so the portal pass must own the
+        // render target when it runs. The cube below and the portal view share
+        // this one resolution, exactly like the client.
         // -------------------------------------------------------------------
+        static Texture2D s_skyTex = {0};
+        static std::string s_skyPath;
+
+        oz::SkyboxFog skyFog;
+        skyFog.active = true;
+        OzoneLoader::Instance().GetWorldFog(skyFog.color, skyFog.start, skyFog.end,
+                                            skyFog.density, skyFog.intensity);
+
         if (OTEditor.ShowSkybox) {
-            static Texture2D s_skyTex = {0};
-            static std::string s_skyPath;
-
-            // Resolve the skybox texture: an explicitly-applied levelinfo skybox
-            // path takes priority; otherwise fall back to the world's
-            // Models/Skybox.png default.
+            // An explicitly-applied levelinfo skybox path takes priority;
+            // otherwise fall back to the world's Models/Skybox.png default.
             std::string want;
             {
                 LevelMetadata meta = GetLevelMetadata();
@@ -931,37 +924,60 @@ int main(int argc, char **argv){
                 }
                 s_skyPath = want;
             }
+        }
+        const bool wantSky = OTEditor.ShowSkybox && s_skyTex.id > 0;
 
-            if (s_skyTex.id > 0) {
-                // The cube itself - face geometry, per-face rotations, distance,
-                // fog and the draw loop - is oz::Skybox's, shared with the client.
-                // This block used to carry its own copy of all of it at radius
-                // 1000 with no fog, so the editor viewport showed a sky at a
-                // different angular size than the game and could not show the
-                // horizon fog the player actually gets. Both were the same bug in
-                // two places.
-                //
-                // The fog is the world's, read from the same owner the client uses
-                // (OzoneLoader, because raylib has no GetShaderValue).
-                oz::SkyboxFog fog;
-                fog.active = true;
-                OzoneLoader::Instance().GetWorldFog(fog.color, fog.start, fog.end,
-                                                    fog.density, fog.intensity);
+        if (wantSky && OzoneLoader::Instance().HasSkyPortalFaces()) {
+            SkyZoneNode* sky = PawnSystem::Instance().GetActiveSkyZone();
+            const Vector3 anchor = sky ? sky->position : OTEditor.MainCamera.position;
+            oz::SkyPortal::Instance().Render(
+                OTEditor.MainCamera, anchor, s_skyTex, Texture2D{0}, &skyFog,
+                GetScreenWidth(), GetScreenHeight());
+        }
 
-                // No side texture in the editor: passing {0} makes oz::Skybox fall
-                // back to the cap, which is what the old drawFace calls did by
-                // passing s_skyTex for all six faces.
-                oz::Skybox::Instance().Draw(
-                    OTEditor.MainCamera.position, s_skyTex, Texture2D{0},
-                    /*cullBackfaces=*/OTEditor.ViewMode != LightingMode::WIREFRAME,
-                    &fog);
-            }
+        ClearBackground(BLACK);
+
+        // Apply lighting mode before 3D rendering
+        rlDrawRenderBatchActive();
+        if (OTEditor.ViewMode == LightingMode::WIREFRAME) {
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+            glDisable(GL_CULL_FACE);
+        } else {
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+            glEnable(GL_CULL_FACE);
+        }
+
+        BeginMode3D(OTEditor.MainCamera);
+
+        // -------------------------------------------------------------------
+        // Skybox cube (viewport backdrop) â€” toggled by the toolbar "Sky" button.
+        // Mirrors the client: top/bottom use the cap texture, sides reuse it
+        // unless a dedicated side skybox is authored. The cube itself - face
+        // geometry, per-face rotations, distance, fog and the draw loop - is
+        // oz::Skybox's, shared with the client (this block used to carry its own
+        // copy at radius 1000 with no fog, so the editor's sky had a different
+        // angular size and no horizon fog).
+        // -------------------------------------------------------------------
+        if (wantSky) {
+            oz::Skybox::Instance().Draw(
+                OTEditor.MainCamera.position, s_skyTex, Texture2D{0},
+                /*cullBackfaces=*/OTEditor.ViewMode != LightingMode::WIREFRAME,
+                &skyFog);
         }
 
         DrawGrid(1000, 10.0f);
 
         // OZONE world geometry
         OzoneLoader::Instance().Draw(OTEditor.MainCamera);
+
+        // SURF_PORTAL faces sample the sky view rendered before BeginMode3D.
+        // Drawn after the world so geometry in front of a portal occludes it -
+        // the same ordering the client uses.
+        if (wantSky && OzoneLoader::Instance().HasSkyPortalFaces()) {
+            OzoneLoader::Instance().DrawSkyPortals(OTEditor.MainCamera,
+                                                   oz::SkyPortal::Instance().View(),
+                                                   GetScreenWidth(), GetScreenHeight());
+        }
 
         // One-shot texture-apply probe (armed by the apply drains), logged after
         // the world pass so the lazy face-mesh build has run for this frame.
@@ -2629,6 +2645,9 @@ AngelTechEditor.DrawModel = false;
     StopSoundPreview();
     OzoneLoader::Instance().Unload();
     ozmat::MaterialRegistry::Instance().Shutdown();
+    // The portal view is a render texture; release it with the other GPU
+    // resources, before CloseWindow(), while the GL context is still alive.
+    oz::SkyPortal::Instance().Shutdown();
     UnloadRenderTexture(g_previewRT);
 #ifdef _WIN32
     DestroyAllEditorWindows();

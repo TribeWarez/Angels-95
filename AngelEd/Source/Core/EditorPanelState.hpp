@@ -338,7 +338,7 @@ struct DefStatRow {
     float propEmitterLife = 1.0f;
     float propEmitterSpeed = 2.0f;
     float propEmitterSize = 0.4f;
-    float propEmitterSpread = 0.4f;
+    float propEmitterSpread = 12.0f;   // degrees (cone half-angle)
     int propEmitterR = 255, propEmitterG = 180, propEmitterB = 80;
     // End-of-life size and colour, plus gravity and spawn radius. The panel used
     // to expose only the start values, so an emitter's fade-out was authored by

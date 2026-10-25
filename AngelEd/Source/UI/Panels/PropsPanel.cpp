@@ -1153,7 +1153,10 @@ static void PopulatePropertiesPanel(HWND hwnd) {
         addField(L"Lifetime:", ID_PP_EMITTER_LIFE, g_editorPanels.propEmitterLife);
         addField(L"Speed:", ID_PP_EMITTER_SPEED, g_editorPanels.propEmitterSpeed);
         addField(L"Size:", ID_PP_EMITTER_SIZE, g_editorPanels.propEmitterSize);
-        addField(L"Spread:", ID_PP_EMITTER_SPREAD, g_editorPanels.propEmitterSpread);
+        // Spread is a cone HALF-ANGLE in degrees (shared with Burst), not a
+        // 0..1 fraction - the label says so because a bare "Spread" read as a
+        // fraction is how the two meanings drifted apart.
+        addField(L"Spread (deg):", ID_PP_EMITTER_SPREAD, g_editorPanels.propEmitterSpread);
         addField(L"Gravity:", ID_PP_EMITTER_GRAVITY, g_editorPanels.propEmitterGravity);
         addField(L"Radius:", ID_PP_EMITTER_RADIUS, g_editorPanels.propEmitterRadius);
         addField(L"Color R:", ID_PP_EMITTER_R, (float)g_editorPanels.propEmitterR);

@@ -184,7 +184,7 @@ void ApplyPlacementSpawns(const std::vector<ed::Event>& events) {
                 n.rate = 30.0f;
                 n.lifetime = 0.9f;
                 n.speed = 2.0f;
-                n.spread = 0.5f;
+                n.spread = 12.0f;   // degrees, matching SpawnFromEmitter/ConeDirection
                 n.sizeStart = 0.5f;
                 n.sizeEnd = 0.0f;
                 n.colorStart = { 255, 170, 60, 255 };

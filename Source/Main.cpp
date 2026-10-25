@@ -1074,11 +1074,14 @@ ShowSpellbook = false;
 
         // Skip game input/update when paused
         if (g_gamePaused) {
-            // Put the frozen world back on screen. The old code drew the
-            // overlay over whatever happened to be in the back buffer.
-            DrawTexturePro(Target.texture,
-                           (Rectangle){0, 0, (float)Target.texture.width,
-                                       (float)-Target.texture.height},
+            // Put the frozen world back on screen. Use the RESOLVED (graded) image
+            // when the post chain has one - drawing the float scene here would skip
+            // the grade and could clip.
+            Texture2D frozen = oz::PostFX::Instance().Ready()
+                                   ? oz::PostFX::Instance().ResolvedTexture()
+                                   : Target.texture;
+            DrawTexturePro(frozen,
+                           (Rectangle){0, 0, (float)frozen.width, (float)-frozen.height},
                            (Rectangle){0, 0, (float)GetScreenWidth(),
                                        (float)GetScreenHeight()},
                            (Vector2){0, 0}, 0.0f, WHITE);
@@ -1305,6 +1308,22 @@ ShowSpellbook = false;
 
         ClearBackground(BLACK);
 
+        // Push the persisted grade settings into the chain. Kept here so the dev
+        // panel and the title Video tab take exactly the same path.
+        {
+            auto& grade = oz::PostFX::Instance().Grade();
+            grade.exposure      = PostFXEnabled ? PostExposure : 1.0f;
+            grade.bloomStrength = PostFXEnabled ? PostBloom : 0.0f;
+            grade.vignette      = PostFXEnabled ? PostVignette : 0.0f;
+        }
+
+        // Resolve the HDR scene through bloom + grade into the LDR result. The
+        // Pixel/Jitter post shaders below still expect a display-ready texture, so
+        // they draw the RESOLVED image, not the float scene.
+        Texture2D resolved = oz::PostFX::Instance().Resolve(
+            Target, Target.texture.width, Target.texture.height);
+        Texture2D finalTex = (resolved.id > 0) ? resolved : Target.texture;
+
         // Apply post-processing shaders during final blit
         {
             bool shaderActive = false;
@@ -1328,7 +1347,7 @@ ShowSpellbook = false;
                 SetShaderValue(AngelTechData.FogShader, GetShaderLocation(AngelTechData.FogShader, "fogIntensity"), &FogIntensity, SHADER_UNIFORM_FLOAT);
                 shaderActive = true;
             }
-            DrawTexturePro(Target.texture, (Rectangle){ 0, 0, Target.texture.width, -Target.texture.height }, (Rectangle){ 0, 0, float(GetScreenWidth()), float(GetScreenHeight())}, (Vector2){ 0, 0 } , 0.f , WHITE);
+            DrawTexturePro(finalTex, (Rectangle){ 0, 0, (float)finalTex.width, (float)-finalTex.height }, (Rectangle){ 0, 0, float(GetScreenWidth()), float(GetScreenHeight())}, (Vector2){ 0, 0 } , 0.f , WHITE);
             if (shaderActive) EndShaderMode();
         }
         // LightningScript dynamic hotbar. Hidden while the inventory overlay is
@@ -1632,11 +1651,14 @@ ShowSpellbook = false;
     // old ordering closed the window in the shot tick, which forced this whole
     // teardown block to be skipped for shot runs (touching a dead context would
     // fault) and left every GPU object to leak at process exit.
-    UnloadRenderTexture(Target);
+    oz::PostFX::DestroyTarget(Target);
+    oz::PostFX::Instance().Shutdown();
     EngineBillboard::Shutdown();
     oz::SurfaceMaterial::Instance().Shutdown();
     oz::Skybox::Instance().Shutdown();
     oz::SkyMaterial::Instance().Shutdown();
+    // Portal view render texture (see Renderer/SkyPortal.hpp).
+    oz::SkyPortal::Instance().Shutdown();
     // Instanced particle VAO/VBOs + shader. Released with the other GPU
     // resources and BEFORE CloseWindow(), while the GL context is still alive -
     // the manager is an intentionally-leaked singleton, so without this its GL

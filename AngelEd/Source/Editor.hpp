@@ -5,6 +5,7 @@
 #include "../../Source/Renderer/EngineBillboard.hpp"
 #include "../../Source/Renderer/SurfaceMaterial.hpp"
 #include "../../Source/Renderer/SkyMaterial.hpp"
+#include "../../Source/Renderer/SkyPortal.hpp"   // also brings in Skybox.hpp
 #include "../../Source/World/OzOzoneLoader.hpp"
 #include "../../Source/Script/LightningEntityRegistry.hpp"
 #include <cstring>

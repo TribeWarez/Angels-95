@@ -3,7 +3,229 @@
 # Placeholder geometry only: a floor, a perimeter and a sky zone.
 # Format: ozone v1.0
 
-levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_noon.png
+# ============================================================================
+# Geometry
+# ============================================================================
+# Four slabs, not one: the oasis basin is a hole in the plaza, and
+# `sub` would not cut the render mesh.
+add box -24 0 -0.3 80 0.6 128 0 1 texScaleU=4 texScaleV=4
+add box 48 0 -0.3 32 0.6 128 0 1 texScaleU=4 texScaleV=4
+add box 24 -39 -0.3 16 0.6 50 0 1 texScaleU=2 texScaleV=4
+add box 24 33 -0.3 16 0.6 62 0 1 texScaleU=2 texScaleV=4
+#
+# Outer wall: 9 tall, 2 thick, four corners. The north wall carries the
+# caravan gate - the exit - and the gatehouse sits above it.
+add box 0 -63 4.5 128 9 2 0 2
+add box -63 0 4.5 2 9 124 0 2
+add box 63 0 4.5 2 9 124 0 2
+# North gate opening: 12 wide, 6 tall.
+add box -35 63 4.5 58 9 2 0 2
+add box 35 63 4.5 58 9 2 0 2
+add box 0 63 7.5 12 3 2 0 2
+# Plinth and cornice on the inner face of the wall: two bands turn a
+# 9-tall extruded box into masonry, and they are 8 brushes.
+add box 0 61.85 0.25 128 0.5 0.3 0 3
+add box 0 -61.85 0.25 128 0.5 0.3 0 3
+add box -61.85 0 0.25 0.3 0.5 124 0 3
+add box 61.85 0 0.25 0.3 0.5 124 0 3
+add box 0 61.8 8.8 128 0.4 0.4 0 3
+add box 0 -61.8 8.8 128 0.4 0.4 0 3
+add box -61.8 0 8.8 0.4 0.4 124 0 3
+add box 61.8 0 8.8 0.4 0.4 124 0 3
+# Pilasters on the two long walls, so the elevation has rhythm.
+add box -55 61.7 4.5 2 9 0.6 0 3
+add box -55 -61.7 4.5 2 9 0.6 0 3
+add box -35 61.7 4.5 2 9 0.6 0 3
+add box -35 -61.7 4.5 2 9 0.6 0 3
+add box -15 61.7 4.5 2 9 0.6 0 3
+add box -15 -61.7 4.5 2 9 0.6 0 3
+add box 5 61.7 4.5 2 9 0.6 0 3
+add box 5 -61.7 4.5 2 9 0.6 0 3
+add box 25 61.7 4.5 2 9 0.6 0 3
+add box 25 -61.7 4.5 2 9 0.6 0 3
+add box 45 61.7 4.5 2 9 0.6 0 3
+add box 45 -61.7 4.5 2 9 0.6 0 3
+# Gatehouse block over the opening.
+add box 0 62.25 10.75 16 3.5 3.5 0 2
+add box 0 62.1 12.8 17 0.6 3.8 0 3
+# Wall-walk band along the east wall, top 4.0, parapet 5.2.
+# Solid to the walk top, not an overhang: a 3.4 underside over
+# walkable floor is a jump trap (the move is rolled back and the
+# player sticks to the wall beside them).
+add box 58 2 2 8 4 64 0 2
+add box 61.5 2 4.6 1 1.2 64 0 2
+# Stair up to the wall walk: four 1.0 treads from the bazaar floor.
+add box 58 -33.5 0.5 8 1 1 0 1
+add box 58 -32.5 1 8 2 1 0 1
+add box 58 -31.5 1.5 8 3 1 0 1
+add box 58 -30.5 2 8 4 1 0 1
+# Face relief on the terrace front, so it does not read as a plain slab.
+add box 53.8 -23 2.1 0.4 1.8 2 0 3
+add box 53.8 -11 2.1 0.4 1.8 2 0 3
+add box 53.8 1 2.1 0.4 1.8 2 0 3
+add box 53.8 13 2.1 0.4 1.8 2 0 3
+add box 53.8 25 2.1 0.4 1.8 2 0 3
+#
+# Oasis: 16x16 basin, 1.6 deep, cut into the east half of the square.
+# The surface is a COSMETIC sheet (NO_BSP_CUTS) so you fall through it
+# into the water, and the basin floor is the collision you stand on.
+add box 24 -6 -1.85 16 0.5 16 0 3
+add box 16.5 -6 -1.05 1 2.1 16 0 3
+add box 31.5 -6 -1.05 1 2.1 16 0 3
+add box 24 -13.5 -1.05 16 2.1 1 0 3
+add box 24 1.5 -1.05 16 2.1 1 0 3
+# Water sheet: UNLIT | TWO_SIDED | TRANSLUCENT | PAN_U | NO_BSP_CUTS.
+add box 24 -6 -0.045 14 0.09 14 0 4 flags=268700800 texPath=GameData/Tex/Global/EFX/water_pool.png texScaleU=5 texScaleV=5 panU=0.03 surfAlpha=0.78 surfGlow=(0.05,0.12,0.18) surfGlowScale=0.2
+# Kerbed rim: 0.3 proud, so the edge reads and is a step, not a trip.
+add box 15.6 -6 0.15 0.8 0.3 17.6 0 2
+add box 32.4 -6 0.15 0.8 0.3 17.6 0 2
+add box 24 -14.4 0.15 17.6 0.3 0.8 0 2
+add box 24 2.4 0.15 17.6 0.3 0.8 0 2
+# Palms on the far corners of the basin.
+add cyl 12 -18 7 0.35 0.6 7 8 0 3
+add cyl 12 -18 9 0 3.4 2 12 0 5
+add cyl 36 -18 7 0.35 0.6 7 8 0 3
+add cyl 36 -18 9 0 3.4 2 12 0 5
+#
+# Arcade: two rows of six columns carrying a canopy at 6.0. This is the
+# tension space - shade on one side, open sun on the other, and the
+# columns break every sightline down its length.
+add cyl -24 -25 6 1 1 6 12 0 3
+add cyl -40 -25 6 1 1 6 12 0 3
+add cyl -24 -15 6 1 1 6 12 0 3
+add cyl -40 -15 6 1 1 6 12 0 3
+add cyl -24 -5 6 1 1 6 12 0 3
+add cyl -40 -5 6 1 1 6 12 0 3
+add cyl -24 5 6 1 1 6 12 0 3
+add cyl -40 5 6 1 1 6 12 0 3
+add cyl -24 15 6 1 1 6 12 0 3
+add cyl -40 15 6 1 1 6 12 0 3
+add cyl -24 25 6 1 1 6 12 0 3
+add cyl -40 25 6 1 1 6 12 0 3
+add box -32 0 6.35 22 0.7 56 0 4
+# A second, shorter arcade on the west side of the well square.
+add cyl -52 -12 6 1 1 6 12 0 3
+add cyl -52 0 6 1 1 6 12 0 3
+add cyl -52 12 6 1 1 6 12 0 3
+add box -51 0 6.35 8 0.7 30 0 4
+#
+# The dry well: a 2.4 rim with a 1.9 stone lip inside it. Cover height
+# 1.9 clears the 1.0 step threshold, so it blocks.
+add cyl 4 0 1.9 2.6 2.6 1.9 20 0 3
+add cyl 4 0 2.4 1.9 2.6 0.5 20 0 3
+# Paved apron around the well, 0.15 proud: reads as the town centre
+# from the gate and costs nothing to walk over.
+add box 4 0 0.075 20 0.15 20 0 2 texScaleU=3 texScaleV=3
+# Processional strip from the gate to the well, 0.10 proud and UNDER
+# the 0.15 apron so the two never share a top plane.
+add box 0 24 0.05 10 0.1 72 0 2 texScaleU=1 texScaleV=8
+# Winch beam across the well.
+add box 4 0 2.6 10 0.4 0.6 0 3
+#
+# Stalls: counters 2.2 tall with a solid back, so each is a real piece of
+# cover with a side you cannot be shot through.
+add box 2 -20.5 1.1 8 2.2 3 0 3
+add box -1.75 -20.5 1.7 0.5 3.4 3 0 3
+add box -10 19.5 1.1 8 2.2 3 0 3
+add box -13.75 19.5 1.7 0.5 3.4 3 0 3
+add box 24 -24.5 1.1 8 2.2 3 0 3
+add box 20.25 -24.5 1.7 0.5 3.4 3 0 3
+add box 24 15.5 1.1 8 2.2 3 0 3
+add box 20.25 15.5 1.7 0.5 3.4 3 0 3
+add box 40 -12.5 1.1 8 2.2 3 0 3
+add box 36.25 -12.5 1.7 0.5 3.4 3 0 3
+add box 40 9.5 1.1 8 2.2 3 0 3
+add box 36.25 9.5 1.7 0.5 3.4 3 0 3
+#
+# Caravanserai (south-west): a roofed hall, ceiling 8, two doors. The
+# only interior in the level, and the only place out of the sun.
+add box -44 -44 8.3 28 0.6 28 0 4
+add box -57.5 -44 4 1 8 28 0 2
+add box -44 -57.5 4 28 8 1 0 2
+add box -29.5 -50 4 1 8 16 0 2
+add box -29.5 -33 4 1 8 6 0 2
+add box -29.5 -39 7.25 1 1.5 6 0 2
+add box -44 -30.5 4 28 8 1 0 2
+# Feed troughs and a dead hearth.
+add box -48 -50.5 0.8 8 1.6 3 0 3
+add box -48 -42.5 0.8 8 1.6 3 0 3
+add cyl -36 -52 1.5 1.5 1.5 1.5 12 0 3
+#
+# Pots and crates at eye height, in corners: the band a player actually
+# looks at. Barrels are 1.1 (a step, not cover) and crates 1.6.
+add cyl 34 -22 1.1 0.55 0.55 1.1 10 0 3
+add cyl 35.6 -23 1.1 0.55 0.55 1.1 10 0 3
+add cyl 10 28 1.1 0.55 0.55 1.1 10 0 3
+add cyl 11.6 29 1.1 0.55 0.55 1.1 10 0 3
+add cyl -14 34 1.1 0.55 0.55 1.1 10 0 3
+add cyl -15.6 35 1.1 0.55 0.55 1.1 10 0 3
+add cyl 44 24 1.1 0.55 0.55 1.1 10 0 3
+add cyl 45.6 25 1.1 0.55 0.55 1.1 10 0 3
+add box 45 -5 0.8 2 1.6 2 0 3
+add box 47 -7 0.8 2 1.6 2 0 3
+add box 31 7 0.8 2 1.6 2 0 3
+add box 29 9 0.8 2 1.6 2 0 3
+add box -19 -13 0.8 2 1.6 2 0 3
+add box -17 -15 0.8 2 1.6 2 0 3
+#
+# Palms: tapered trunk (cyl, top = authored cz) plus a cone canopy. All
+# three sit clear of the arcade and the wall walk.
+add cyl -8 -44 7 0.35 0.6 7 8 0 3
+add cyl -8 -44 9 0 3.4 2 12 0 5
+add cyl 26 44 7 0.35 0.6 7 8 0 3
+add cyl 26 44 9 0 3.4 2 12 0 5
+add cyl 48 -40 7 0.35 0.6 7 8 0 3
+add cyl 48 -40 9 0 3.4 2 12 0 5
+#
+# Painted dune ring (flags=8) outside the wall. Nine boxes at radius
+# 78-92, tall enough to break the wall line from the plaza floor.
+# Sky-portal ring (SURF_PORTAL): perimeter panels show the sky-zone view; collision unchanged.
+add box -82 -35 10 20 20 34 0 2 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box -34 -82 12 48 24 24 0 2 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 27 -82 9 50 18 24 0 2 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 84 -4 11 20 22 60 0 2 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 82 56 10 20 20 44 0 2 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 3 84 11 54 22 20 0 2 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box -47 83 9 50 18 22 0 2 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box -84 19 8 20 16 50 0 2 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+#
+# Boulders fallen off the wall and dry scrub at the oasis.
+add box -56 30 1.49 5.34 2.98 3.84 0 flags=16
+add box 54 -52 1.3 4.04 2.6 3.58 0 flags=16
+add box 40 34 1.215 3.62 2.43 2.46 0 flags=16
+#
+#
+# The oasis is a real water volume: swim physics inside it, dry land
+# outside. Top is above the kerb so you surface and can climb out.
+#
+# Spawn: just inside the gate looking south into the bazaar, the well
+# square ahead and the east wall walk rising on the left.
+# --- pickups ---
+#
+# --- patrol graph ---
+# The wall walk is its own loop (top 4.0); no street node links to it.
+#
+# --- encounters ---
+# E1 gate yard: one in the open, two behind the stalls either side.
+# E2 bazaar: a brute in the middle of the promenade, skaarj on the flanks.
+# E3 wall walk: the silhouette from the spawn, reachable only by the stair.
+# E4 caravanserai: the interior ambush.
+#
+# --- light ---
+# Harsh noon sun, high and slightly west.
+# Warm bounce fill from the sand, so shade is warm rather than blue.
+#
+# --- atmosphere ---
+# Braziers: the arcade torches and the caravan hearth were already lit,
+# they just had no flame. Dust because the town is in a desert.
+# Arcade lanterns, cool against the sand.
+# Well, gatehouse, wall walk, hall hearth.
+# Cool water light, so the oasis is a colour contrast, not more sand.
+# Palm squares.
+#
+# --- routing ---
+# Exit: the caravan gate in the north wall. Spawn is the chasm-side
+# plateau at its origin.
 
 # Floor (placeholder)
 add box 0 0 -0.25 80 0.5 80 0

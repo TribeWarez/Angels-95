@@ -366,9 +366,10 @@ void ResetRenderableSurfaceDefault(int idx);
     // wall with a single glowing face picked up an additive ghost of its other
     // five. Making the filter a parameter makes "exactly once" structural.
     enum class SurfacePass {
-        Full,          // the world pass: every face except backdrop + invisible
+        Full,          // the world pass: every face except backdrop/portal + invisible
         GlowingOnly,   // the glow halo: only SURF_GLOW faces
         BackdropOnly,  // the sky pass: only SURF_FAKEBACKDROP faces
+        SkyPortalOnly, // the portal pass: only SURF_PORTAL faces, sampled from the sky view
     };
 
     // Draw one renderable through the surface-flagged path: up to six per-face
@@ -379,6 +380,19 @@ void ResetRenderableSurfaceDefault(int idx);
     void DrawSurface(OzoneRenderable& r, SurfacePass pass = SurfacePass::Full);
     // Faces carrying SURF_GLOW, re-drawn additively over the composited frame.
     void DrawGlowGeometry(Camera3D& camera);
+
+    // SURF_PORTAL faces, drawn from the pre-rendered sky view (`skyView`, see
+    // Renderer/SkyPortal.hpp). `vpW/vpH` must be the size of the framebuffer
+    // being drawn into (the client renders 3D into `Target`, which can be
+    // resolution-scaled), because the shader samples by gl_FragCoord.
+    //
+    // Portal faces are opaque and depth-tested: the face is its own mask, so no
+    // stencil buffer or second world render is involved.
+    void DrawSkyPortals(Camera3D& camera, Texture2D skyView, int vpW, int vpH);
+
+    // True when any face in the loaded world carries SURF_PORTAL. Callers gate
+    // the (cheap but pointless) sky-view render on this.
+    bool HasSkyPortalFaces() const;
 
     // Editor integration — heightmap generation (called from editor main loop)
     Model BuildHeightmap(const std::string& imagePath, const std::string& texPath,
@@ -486,6 +500,14 @@ private:
     int m_lastCsgOverflow = 0;     // overflow_count() from the last collision rebuild
     OzoneZoneCounters m_zoneCounters; // per-load zone name counters
     OzoneEntitySet m_entities;     // parsed, not-yet-injected entity nodes
+
+    // Sky-portal pass (Source/Renderer/SkyPortal.hpp owns the offscreen view).
+    // The shader is owned here, lazily loaded, and released in Unload() with the
+    // face meshes - it is a real GL program, so it must not outlive the context.
+    Shader m_skyPortalShader{0};
+    int    m_skyPortalViewportLoc = -1;
+    bool   m_skyPortalShaderTried = false;
+    bool   EnsureSkyPortalShader();
 
     void UnloadTextures();
     void UnloadHeightmap();

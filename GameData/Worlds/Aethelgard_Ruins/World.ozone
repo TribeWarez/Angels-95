@@ -168,16 +168,17 @@ add box 9.5 -38 1.25 1 2.5 20 0 3
 add box 30.5 -38 1.25 1 2.5 20 0 3
 
 # --- Painted backdrop ring (flags=8) ---
-add box 0 45 8 60 16 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_07.png texScaleU=12 texScaleV=4 flags=8
-add box -40 0 8 1 16 60 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_08.png texScaleU=12 texScaleV=4 flags=8
-add box 0 -92 9 60 18 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_09.png texScaleU=12 texScaleV=4 flags=8
-add box 43 -70 8 1 16 44 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=10 texScaleV=4 flags=8
-add box -43 -70 8 1 16 44 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_03.png texScaleU=10 texScaleV=4 flags=8
-add box 59 31 9 40 18 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_03.png texScaleU=10 texScaleV=4 flags=8
-add box 59 -31 9 40 18 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_04.png texScaleU=10 texScaleV=4 flags=8
-add box 81 -19 9 1 18 22 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_04.png texScaleU=3 texScaleV=3 flags=8
-add box 81 19 9 1 18 22 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_04.png texScaleU=3 texScaleV=3 flags=8
-add box 81 0 11.75 1 12.5 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=2 texScaleV=2 flags=8
+# Sky-portal ring (SURF_PORTAL): perimeter panels show the sky-zone view; collision unchanged.
+add box 0 45 8 60 16 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_07.png texScaleU=12 texScaleV=4 flags=32768
+add box -40 0 8 1 16 60 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_08.png texScaleU=12 texScaleV=4 flags=32768
+add box 0 -92 9 60 18 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_09.png texScaleU=12 texScaleV=4 flags=32768
+add box 43 -70 8 1 16 44 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=10 texScaleV=4 flags=32768
+add box -43 -70 8 1 16 44 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_03.png texScaleU=10 texScaleV=4 flags=32768
+add box 59 31 9 40 18 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_03.png texScaleU=10 texScaleV=4 flags=32768
+add box 59 -31 9 40 18 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_04.png texScaleU=10 texScaleV=4 flags=32768
+add box 81 -19 9 1 18 22 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_04.png texScaleU=3 texScaleV=3 flags=32768
+add box 81 19 9 1 18 22 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_04.png texScaleU=3 texScaleV=3 flags=32768
+add box 81 0 11.75 1 12.5 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=2 texScaleV=2 flags=32768
 
 # --- Path of Dissolution: causeway floor, boundary walls, pillars ---
 add box 79.5 0 -0.5 3 1 17 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=4

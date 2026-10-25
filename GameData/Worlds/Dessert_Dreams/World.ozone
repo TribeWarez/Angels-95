@@ -2,22 +2,23 @@
 # Format: ozone v1.0
 
 add box 0 0 -0.5 210 1 210 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtSand.png texScaleU=24 texScaleV=24
-add box -75 100 26 50 52 1 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=3 flags=8
-add box -25 100 22 50 44 1 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=2 flags=8
-add box 25 100 29 50 58 1 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=3 flags=8
-add box 75 100 24 50 48 1 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=2 flags=8
-add box -75 -100 26 50 52 1 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=2 flags=8
-add box -25 -100 22 50 44 1 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=3 flags=8
-add box 25 -100 29 50 58 1 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=2 flags=8
-add box 75 -100 24 50 48 1 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=3 flags=8
-add box 100 -75 26 1 52 50 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=3 flags=8
-add box 100 -25 22 1 44 50 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=2 flags=8
-add box 100 25 29 1 58 50 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=3 flags=8
-add box 100 75 24 1 48 50 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=2 flags=8
-add box -100 -75 26 1 52 50 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=3 flags=8
-add box -100 -25 22 1 44 50 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=2 flags=8
-add box -100 25 29 1 58 50 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=3 flags=8
-add box -100 75 24 1 48 50 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=2 flags=8
+# Sky-portal ring (SURF_PORTAL): perimeter panels show the sky-zone view; collision unchanged.
+add box -75 100 26 50 52 1 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=3 flags=32768
+add box -25 100 22 50 44 1 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=2 flags=32768
+add box 25 100 29 50 58 1 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=3 flags=32768
+add box 75 100 24 50 48 1 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=2 flags=32768
+add box -75 -100 26 50 52 1 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=2 flags=32768
+add box -25 -100 22 50 44 1 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=3 flags=32768
+add box 25 -100 29 50 58 1 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=2 flags=32768
+add box 75 -100 24 50 48 1 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=3 flags=32768
+add box 100 -75 26 1 52 50 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=3 flags=32768
+add box 100 -25 22 1 44 50 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=2 flags=32768
+add box 100 25 29 1 58 50 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=3 flags=32768
+add box 100 75 24 1 48 50 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=2 flags=32768
+add box -100 -75 26 1 52 50 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=3 flags=32768
+add box -100 -25 22 1 44 50 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=2 flags=32768
+add box -100 25 29 1 58 50 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=3 flags=32768
+add box -100 75 24 1 48 50 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=2 texScaleV=2 flags=32768
 add box -18 74 7 34 14 18 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=8 texScaleV=4
 add box -20 74 17 22 6 12 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=6 texScaleV=3
 add box -22 74 23 12 6 7 0 texPath=GameData/Worlds/Dessert_Dreams/oztex/xtCliff.png texScaleU=5 texScaleV=2

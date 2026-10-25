@@ -106,6 +106,8 @@ void SaveGame();
 #include "Renderer/SurfaceMaterial.hpp"
 #include "Renderer/SkyMaterial.hpp"
 #include "Renderer/Skybox.hpp"
+#include "Renderer/SkyPortal.hpp"
+#include "Renderer/PostFX.hpp"
 
 // ---------------------------------------------------------------------------
 // OzoneCollisionQuery — adapter that feeds OzoneLoader's chunked collision
@@ -249,6 +251,18 @@ EngineData AngelTechData;
 
 bool LoadFlag = false;
 
+// Has the world being loaded authored its fog yet?
+//
+// `restore_fog` promises to "hand fog back to the level defaults", and the level
+// default is only known once the world's skyzone has run its `on_enter` (the
+// fog lives in the .ozls skyzone def, not in the OZONE file). This flag is
+// cleared on every LoadWorld and set by the first fog application afterwards,
+// which is that `on_enter`. Before it existed, g_levelFog was captured ONCE in
+// AngelTechInit from the startup literals (density 1.0), so every `restore_fog`
+// restored a dense wall of fog instead of the level's own.
+// g_levelFog itself is declared further down, next to the code that writes it.
+static bool g_levelFogCaptured = false;
+
 // STILL HARDCODED FILE PATH Loading for Worlds
 // TODO: abreviate into handling by OzOzoneLoader and PawnBased/LightningScript Based object loading  // NOLINT
 
@@ -339,7 +353,19 @@ auto LoadWorld()
         OzParticleSimulationManager::Instance().Clear();
         // Reset level metadata so stale settings never leak across worlds
         PawnSystem::Instance().GetWorldInfo() = WorldInfo{};
-        ParticlesEnabled = false;
+        // Do NOT reset the user's Particles master toggle here. It is loaded
+        // from Angels95.ini into Settings.hpp before the first world load, and it
+        // is the only thing that decides whether the ambient layer draws
+        // (OzParticleSimulationManager::SetEnabled). This line used to force it
+        // to false on EVERY load - and the level's own weather is configured a
+        // few lines below and then gated on the flag it had just cleared - so
+        // all 42 authored OZONE emitters and every `particles` field rendered
+        // nothing until the player found the dev Settings toggle. The manager's
+        // Clear() above is what retires the previous world's field.
+        //
+        // The world's authored fog is not known until its skyzone on_enter runs,
+        // so arm the capture rather than restoring the previous world's value.
+        g_levelFogCaptured = false;
         CombatFX::Instance().ClearAll();
         if (g_skySideTex.id > 0) { UnloadTexture(g_skySideTex); g_skySideTex = {0}; }
 
@@ -931,7 +957,7 @@ void AngelTechInit()
 
     AngelTechData.GameLights[0] = CreateLight(LIGHT_DIRECTIONAL, {AngelTechData.MainCamera.position.x, AngelTechData.MainCamera.position.y, AngelTechData.MainCamera.position.z}, Vector3Zero(), WHITE, AngelTechData.Lights);
 
-    Target = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+    Target = oz::PostFX::CreateTarget(GetScreenWidth(), GetScreenHeight());
 
     // Pre-cache weapon object models from entity definitions (Object1-5)
     {
@@ -1166,8 +1192,8 @@ void PlayHomeScreen()
     if (g_skipMenu)
     {
         g_skipMenu = false;
-        UnloadRenderTexture(Target);
-        Target = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+        oz::PostFX::DestroyTarget(Target);
+        Target = oz::PostFX::CreateTarget(GetScreenWidth(), GetScreenHeight());
         AngelTechData.Deaths = 1;
         return;
     }
@@ -1213,8 +1239,8 @@ void PlayHomeScreen()
 
     if (menu.ShouldLoadGame() || menu.GetSelectedWorld())
     {
-        UnloadRenderTexture(Target);
-        Target = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+        oz::PostFX::DestroyTarget(Target);
+        Target = oz::PostFX::CreateTarget(GetScreenWidth(), GetScreenHeight());
         AngelTechData.Deaths = 1;
     }
 
@@ -1771,14 +1797,61 @@ static void SweepProjectilesVsWorld(float dt)
 
 void DrawWorld()
 {
-    BeginTextureMode(Target);
-    ClearBackground(BLACK);
-
-// Detect sky zone BEFORE 3D mode begins (needed for sky camera setup)
+    // Detect sky zone BEFORE the render target is bound. The portal view needs
+    // the zone anchor, and raylib cannot nest render textures: EndTextureMode
+    // rebinds the default framebuffer, not the previously bound one. So the
+    // portal pass has to run while nothing else owns the target.
     PawnSystem::Instance().UpdateSkyZone(
         AngelTechData.MainCamera.position,
         g_playerMovement.PlayerBounds);
-    bool inSkyZone = PawnSystem::Instance().IsInSkyZone();
+    const bool inSkyZone = PawnSystem::Instance().IsInSkyZone();
+
+    // -----------------------------------------------------------------------
+    // Resolve the sky textures ONCE, so the cube below and the portal view can
+    // never disagree about which sky this world is showing.
+    //
+    // Precedence: the level skybox (levelinfo / set_skybox / world default) is
+    // authoritative; a zone's authored skybox is only used when the level defines
+    // none. Previously the zone texture always won, so a saved levelinfo skybox
+    // appeared to be ignored inside sky zones.
+    // -----------------------------------------------------------------------
+    Texture2D skyCapTex = {0};
+    if (WorldModels.Skybox.id > 0 && AngelTechData.SkyboxEnabled) {
+        skyCapTex = WorldModels.Skybox;
+    } else if (inSkyZone) {
+        SkyZoneNode* sky = PawnSystem::Instance().GetActiveSkyZone();
+        if (sky && sky->skyboxTex.id > 0)
+            skyCapTex = sky->skyboxTex;
+        else if (WorldModels.Skybox.id > 0)
+            skyCapTex = WorldModels.Skybox;
+    }
+    const bool wantSky = (skyCapTex.id > 0 || g_skySideTex.id > 0);
+
+    // The world's fog is owned by OzoneLoader (raylib has no GetShaderValue) and
+    // UpdateLightSources() is the single mirror point into SurfaceMaterial; the
+    // sky is a third consumer of the SAME state, read back from the owner rather
+    // than from a local. One fetch serves the cube and the portal view.
+    oz::SkyboxFog skyFog;
+    skyFog.active = true;
+    OzoneLoader::Instance().GetWorldFog(skyFog.color, skyFog.start, skyFog.end,
+                                        skyFog.density, skyFog.intensity);
+
+    // -----------------------------------------------------------------------
+    // SURF_PORTAL support: pre-render the sky from the zone anchor, half-res.
+    // Gated on the world actually authoring a portal face, so worlds without one
+    // pay nothing. `Target`'s size is passed because the face shader samples in
+    // gl_FragCoord space, and Target can be resolution-scaled.
+    // -----------------------------------------------------------------------
+    if (wantSky && OzoneLoader::Instance().HasSkyPortalFaces()) {
+        SkyZoneNode* sky = PawnSystem::Instance().GetActiveSkyZone();
+        const Vector3 anchor = sky ? sky->position : AngelTechData.MainCamera.position;
+        oz::SkyPortal::Instance().Render(
+            AngelTechData.MainCamera, anchor, skyCapTex, g_skySideTex, &skyFog,
+            Target.texture.width, Target.texture.height);
+    }
+
+    BeginTextureMode(Target);
+    ClearBackground(BLACK);
 
     BeginMode3D(AngelTechData.MainCamera);
 
@@ -1798,39 +1871,17 @@ void DrawWorld()
 // appeared to be ignored inside sky zones.
 // ---------------------------------------------------------------------------
 {
-    Texture2D capTex = {0};
-    if (WorldModels.Skybox.id > 0 && AngelTechData.SkyboxEnabled) {
-        capTex = WorldModels.Skybox;
-    } else if (inSkyZone) {
-        SkyZoneNode* sky = PawnSystem::Instance().GetActiveSkyZone();
-        if (sky && sky->skyboxTex.id > 0)
-            capTex = sky->skyboxTex;
-        else if (WorldModels.Skybox.id > 0)
-            capTex = WorldModels.Skybox;
-    }
-
     // Sides use an authored side texture when available; otherwise oz::Skybox
     // falls back to the cap so the sky renders all around (previously they drew a
     // flat colour and appeared black).
-    if (capTex.id > 0 || g_skySideTex.id > 0) {
-        // The world's fog is owned by OzoneLoader (raylib has no GetShaderValue)
-        // and UpdateLightSources() is the single mirror point into SurfaceMaterial;
-        // the sky is a third consumer of the SAME state, read back from the owner
-        // rather than from a local. OzoneLoader owns both because Core.hpp sets fog
-        // on LitFog from three sites (startup, zone entry, zone exit) and one
-        // mirror point cannot drift from three writers.
-        oz::SkyboxFog fog;
-        fog.active = true;
-        OzoneLoader::Instance().GetWorldFog(fog.color, fog.start, fog.end,
-                                            fog.density, fog.intensity);
-
+    if (wantSky) {
         // Culling ON for the rest of the frame: the generated OZONE brushes have
         // correct winding and want it. Imported meshes opt back out via
         // oz::ScopedCullOff in oz::Mesh::Draw (see Renderer/CullState.hpp - this
         // used to be a raw call that nothing ever turned back off).
         oz::Skybox::Instance().Draw(AngelTechData.MainCamera.position,
-                                    capTex, g_skySideTex,
-                                    /*cullBackfaces=*/true, &fog);
+                                    skyCapTex, g_skySideTex,
+                                    /*cullBackfaces=*/true, &skyFog);
     }
 }
 
@@ -1851,6 +1902,19 @@ if (inSkyZone)
     SoundManager::Instance().Update();
 
     OzoneLoader::Instance().DrawWorldGeometry(AngelTechData.MainCamera);
+
+    // -----------------------------------------------------------------------
+    // PORTAL PASS — SURF_PORTAL faces sample the sky view rendered above. They
+    // are opaque and depth-tested, and excluded from both the world and backdrop
+    // passes, so each portal face is drawn exactly once. Placed after the opaque
+    // world so geometry in front of a portal occludes it, and before the glow
+    // pass so an additive halo cannot leak through a hole.
+    // -----------------------------------------------------------------------
+    if (wantSky && OzoneLoader::Instance().HasSkyPortalFaces()) {
+        OzoneLoader::Instance().DrawSkyPortals(AngelTechData.MainCamera,
+                                               oz::SkyPortal::Instance().View(),
+                                               Target.texture.width, Target.texture.height);
+    }
 
     // Additive re-draw of every SURF_GLOW face, after the opaque world so the
     // halo lands on top of the composited image. No-op unless a surface actually
@@ -2060,6 +2124,15 @@ if (inSkyZone)
             static int fogColorLoc = GetShaderLocation(AngelTechData.Lights, "fogColor");
             float density = lem.PendingFogDensity();
             float color[3] = {lem.PendingFogR(), lem.PendingFogG(), lem.PendingFogB()};
+            // First fog a freshly loaded world applies IS that level's authored
+            // fog (its skyzone on_enter). Record it as the restore target, or
+            // `restore_fog` keeps handing back the startup literals.
+            if (!g_levelFogCaptured) {
+                g_levelFog.fogDensity = density;
+                for (int i = 0; i < 3; i++) g_levelFog.fogColor[i] = color[i];
+                g_levelFogCaptured = true;
+                OZ_INFO("Fog: captured level default from skyzone (density %.4f)", density);
+            }
             SetShaderValue(AngelTechData.Lights, fogDensityLoc, &density, SHADER_UNIFORM_FLOAT);
             SetShaderValue(AngelTechData.Lights, fogColorLoc, color, SHADER_UNIFORM_VEC3);
             // PUBLISH. See the note on restore_fog above: writing only this
@@ -2160,6 +2233,17 @@ if (inSkyZone)
                     static int fogColorLoc = GetShaderLocation(AngelTechData.Lights, "fogColor");
                     static int fogStartLoc = GetShaderLocation(AngelTechData.Lights, "fogStart");
                     static int fogEndLoc = GetShaderLocation(AngelTechData.Lights, "fogEnd");
+                    // Same level-default capture as the script fog path: a world
+                    // whose fog comes from a volumetric env zone instead of a
+                    // skyzone def must ALSO be restorable by `restore_fog`.
+                    if (!g_levelFogCaptured) {
+                        g_levelFog.fogDensity = fd;
+                        g_levelFog.fogStart = eo.fogStart;
+                        g_levelFog.fogEnd = eo.fogEnd;
+                        for (int i = 0; i < 3; i++) g_levelFog.fogColor[i] = fc[i];
+                        g_levelFogCaptured = true;
+                        OZ_INFO("Fog: captured level default from env zone (density %.4f)", fd);
+                    }
                     SetShaderValue(AngelTechData.Lights, fogColorLoc, fc, SHADER_UNIFORM_VEC3);
                     SetShaderValue(AngelTechData.Lights, fogDensityLoc, &fd, SHADER_UNIFORM_FLOAT);
                     float fs = eo.fogStart, fe = eo.fogEnd;
@@ -2206,7 +2290,21 @@ if (inSkyZone)
                     OzoneLoader::Instance().SetWorldFog(defFogColor, defFogStart,
                                                         defFogEnd, defFogDensity);
                 }
-                OzoneLoader::Instance().SetWorldAmbient(0.1f, 0.1f, 0.1f, 1.0f);
+                // Restore the LIT program's ambient uniform as well. This branch
+                // used to publish to OzoneLoader only, so Surface.fs (which reads
+                // that mirror) snapped back to the default while every lit mesh
+                // kept the zone's ambient for the rest of the session - the two
+                // programs disagreed in the same frame.
+                {
+                    float defAmb[4];
+                    FillDefaultAmbient(defAmb);
+                    if (AngelTechData.Lights.id > 0) {
+                        static int ambientLoc = GetShaderLocation(AngelTechData.Lights, "ambient");
+                        SetShaderValue(AngelTechData.Lights, ambientLoc, defAmb, SHADER_UNIFORM_VEC4);
+                    }
+                    OzoneLoader::Instance().SetWorldAmbient(defAmb[0], defAmb[1],
+                                                            defAmb[2], defAmb[3]);
+                }
                 FogEnabled = false;
                 FogIntensity = 0.3f;
                 FogTint = {200, 200, 210, 255};

@@ -2091,7 +2091,25 @@ private:
         y += FS(30);
         DrawText("Applies to textures loaded after the next world load.",
                  (int)x, (int)y, FS(10), (Color){130, 150, 175, 210});
+        y += FS(24);
+
+        // HDR bloom + grade. Same globals the dev panel edits; Main.cpp pushes
+        // them into oz::PostFX::Grade() each frame.
+        if (Button({x, y, w, FS(26)}, PostFXEnabled ? "Post FX: ON" : "Post FX: OFF", PostFXEnabled))
+            PostFXEnabled = !PostFXEnabled;
+        y += FS(32);
+        PostExposure = angelsui::Slider({x, y, w, FS(22)},
+                                        TextFormat("Exposure  %.2f", PostExposure),
+                                        PostExposure, 0.25f, 3.0f);
         y += FS(28);
+        PostBloom = angelsui::Slider({x, y, w, FS(22)},
+                                     TextFormat("Bloom  %.2f", PostBloom),
+                                     PostBloom, 0.0f, 3.0f);
+        y += FS(28);
+        PostVignette = angelsui::Slider({x, y, w, FS(22)},
+                                        TextFormat("Vignette  %.2f", PostVignette),
+                                        PostVignette, 0.0f, 0.8f);
+        y += FS(34);
         const char* sizes[] = {"720p", "1080p", "1440p", "4K"};
         const int sw[] = {1280, 1920, 2560, 3840};
         const int sh[] = {720, 1080, 1440, 2160};

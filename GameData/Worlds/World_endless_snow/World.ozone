@@ -2,22 +2,23 @@
 # Format: ozone v1.0
 
 add box 0 0 -0.55 1200 1.1 1200 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/01_floor_snow_a2_32.png texScaleU=16 texScaleV=16
-add box -450 560 7 45 14 1 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=8
-add box -150 560 7 45 14 1 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=8
-add box 150 560 7 45 14 1 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=8
-add box 450 560 7 45 14 1 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=8
-add box -450 -560 7 45 14 1 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=8
-add box -150 -560 7 45 14 1 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=8
-add box 150 -560 7 45 14 1 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=8
-add box 450 -560 7 45 14 1 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=8
-add box 560 -450 7 1 14 45 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=8
-add box 560 -150 7 1 14 45 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=8
-add box 560 150 7 1 14 45 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=8
-add box 560 450 7 1 14 45 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=8
-add box -560 -450 7 1 14 45 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=8
-add box -560 -150 7 1 14 45 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=8
-add box -560 150 7 1 14 45 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=8
-add box -560 450 7 1 14 45 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=8
+# Sky-portal ring (SURF_PORTAL): perimeter panels show the sky-zone view; collision unchanged.
+add box -450 560 7 45 14 1 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=32768
+add box -150 560 7 45 14 1 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=32768
+add box 150 560 7 45 14 1 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=32768
+add box 450 560 7 45 14 1 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=32768
+add box -450 -560 7 45 14 1 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=32768
+add box -150 -560 7 45 14 1 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=32768
+add box 150 -560 7 45 14 1 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=32768
+add box 450 -560 7 45 14 1 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=32768
+add box 560 -450 7 1 14 45 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=32768
+add box 560 -150 7 1 14 45 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=32768
+add box 560 150 7 1 14 45 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=32768
+add box 560 450 7 1 14 45 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=32768
+add box -560 -450 7 1 14 45 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=32768
+add box -560 -150 7 1 14 45 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=32768
+add box -560 150 7 1 14 45 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=32768
+add box -560 450 7 1 14 45 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/00_sky_snow_a1_32.png texScaleU=10 texScaleV=4 flags=32768
 add box -500 200 1.5 60 3 12 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/02_floor_snow_a3_32.png texScaleU=16 texScaleV=16
 add box -500 -300 1.5 60 3 12 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/02_floor_snow_a3_32.png texScaleU=16 texScaleV=16
 add box 500 0 1.5 60 3 12 0 texPath=GameData/Worlds/World_endless_snow/oztex/tileset/02_floor_snow_a3_32.png texScaleU=16 texScaleV=16

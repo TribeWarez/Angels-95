@@ -92,7 +92,7 @@ inline constexpr uint32_t SURF_UNLIT           = (1u << 11);  // flat albedo, no
 inline constexpr uint32_t SURF_FAKE_LIT        = (1u << 12);
 inline constexpr uint32_t SURF_SPECIAL_LIT     = (1u << 13);  // reserved: custom model
 inline constexpr uint32_t SURF_GLOW            = (1u << 14);  // self-illumination
-inline constexpr uint32_t SURF_PORTAL          = (1u << 15);  // portal surface
+inline constexpr uint32_t SURF_PORTAL          = (1u << 15);  // sky portal: face shows the sky-zone view
 inline constexpr uint32_t SURF_MIRROR          = (1u << 16);  // mirror surface
 inline constexpr uint32_t SURF_ENVIRONMENT     = (1u << 17);  // environment-mapped
 

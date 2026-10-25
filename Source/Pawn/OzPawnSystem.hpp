@@ -312,7 +312,7 @@ struct ParticleEmitterNode {
     float rate = 20.0f;             // particles per second
     float lifetime = 1.0f;          // seconds
     float speed = 2.0f;             // initial speed
-    float spread = 0.4f;            // emission cone randomness (0..1+)
+    float spread = 12.0f;           // emission cone HALF-ANGLE, degrees (shared with Burst())
     float sizeStart = 0.4f;
     float sizeEnd = 0.0f;
     Color colorStart{255, 180, 80, 255};

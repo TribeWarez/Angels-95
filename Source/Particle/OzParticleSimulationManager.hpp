@@ -1,9 +1,77 @@
 #pragma once
 #include "raylib.h"
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
 #include <unordered_map>
+
+namespace oz {
+namespace particles {
+
+// The ONE definition of an emission cone, shared by OZONE `ParticleEmitter`
+// nodes and gameplay Burst() calls.
+//
+// These used to be two different meanings for the same authored field, and the
+// mismatch was invisible because neither side could see the other:
+//   * an emitter treated `spread` as a raw unit-vector offset added to each
+//     component ((x,y,z) +- spread), so spread=12 -- which every shipped fire
+//     emitter authors -- produced a near-isotropic spray rather than a cone;
+//   * Burst() treated its `spread` as a half-angle in DEGREES.
+// Emitters now use degrees too, which is the unit the rest of the OZONE
+// vocabulary uses for angles (yaw, rotation). HOISTED into the header so the
+// behaviour is unit-testable without a GL context: the particle pool lives in a
+// .cpp that links raylib, and a cone that can only be checked by looking at a
+// screenshot is how the two meanings drifted apart in the first place.
+//
+// `base` need not be normalised. `u1`/`u2` are caller-supplied uniform [0,1)
+// randoms so both call sites share one distribution and a test can be
+// deterministic. sqrt(u2) keeps the direction uniform over the cone's disc
+// rather than bunched at its axis.
+inline Vector3 ConeDirection(Vector3 base, float spreadDegrees, float u1, float u2) {
+    constexpr float kPi = 3.14159265358979f;
+
+    float bl = sqrtf(base.x * base.x + base.y * base.y + base.z * base.z);
+    if (bl > 1e-4f) {
+        base.x /= bl; base.y /= bl; base.z /= bl;
+    } else {
+        base = Vector3{0.0f, 1.0f, 0.0f};
+    }
+
+    if (spreadDegrees <= 0.0f) return base;
+    if (spreadDegrees > 180.0f) spreadDegrees = 180.0f;   // a cone, never a full sphere
+    const float spreadRad = spreadDegrees * (kPi / 180.0f);
+
+    auto cross = [](Vector3 a, Vector3 b) {
+        return Vector3{a.y * b.z - a.z * b.y,
+                       a.z * b.x - a.x * b.z,
+                       a.x * b.y - a.y * b.x};
+    };
+    auto normalize = [](Vector3 v) {
+        const float l = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
+        if (l < 1e-6f) return Vector3{0.0f, 1.0f, 0.0f};
+        return Vector3{v.x / l, v.y / l, v.z / l};
+    };
+
+    // Orthonormal basis around base. The 0.99 test keeps the cross product
+    // well-conditioned when the axis is (nearly) vertical.
+    const Vector3 up = (fabsf(base.y) > 0.99f) ? Vector3{1.0f, 0.0f, 0.0f}
+                                               : Vector3{0.0f, 1.0f, 0.0f};
+    const Vector3 right = normalize(cross(up, base));
+    const Vector3 realUp = cross(base, right);
+
+    const float ang = u1 * 2.0f * kPi;
+    const float rad = sqrtf(u2) * spreadRad;
+    const float sa = sinf(rad);
+
+    return normalize(Vector3{
+        base.x * cosf(rad) + (right.x * cosf(ang) + realUp.x * sinf(ang)) * sa,
+        base.y * cosf(rad) + (right.y * cosf(ang) + realUp.y * sinf(ang)) * sa,
+        base.z * cosf(rad) + (right.z * cosf(ang) + realUp.z * sinf(ang)) * sa});
+}
+
+} // namespace particles
+} // namespace oz
 
 // ---------------------------------------------------------------------------
 // OzParticleSimulationManager — GameEngine.ParticleEmitter simulation.
@@ -53,7 +121,11 @@ public:
     // Gates OZONE emitters and weather ONLY. Gameplay bursts spawned by Burst()
     // (muzzle smoke, impact sparks, blood/gibs) still draw when this is off, so
     // the setting cannot silently remove combat feedback/gore.
-    void SetEnabled(bool enabled) { m_enabled = enabled; }
+    //
+    // Turning it OFF also RETIRES the live ambient field. Hiding alone left a
+    // 300-second snow emitter simulating invisibly, spending CPU and squatting
+    // in the shared pool where it starved combat bursts (see Acquire).
+    void SetEnabled(bool enabled);
 
     // Drop every live particle (emitter nodes are cleared separately).
     void Clear();
@@ -75,6 +147,22 @@ public:
                float lifetime, float gravity = 0.0f, Texture2D tex = {0});
 
     int LiveCount() const { return m_live; }
+
+    // Per-source accounting. One pool is shared by three sources with THREE
+    // different claims on it, so "how many particles" alone cannot answer
+    // "is the ambient field starving combat feedback?".
+    int EmitterLiveCount() const { return m_emitterLive; }
+    int WeatherLiveCount() const { return m_weather.live; }
+    int GameplayLiveCount() const {
+        const int n = m_live - m_emitterLive - m_weather.live;
+        return n > 0 ? n : 0;
+    }
+
+    // Published so tests and worldcheck can assert against the real numbers
+    // instead of hard-coding 4096 and drifting.
+    static constexpr int PoolCapacity()      { return MAX_PARTICLES; }
+    static constexpr int GameplayReserve()   { return kGameplayReserve; }
+    static constexpr int EmitterBudget()     { return kEmitterMax; }
 
 private:
     OzParticleSimulationManager() = default;
@@ -109,6 +197,32 @@ private:
     };
 
     static constexpr int MAX_PARTICLES = 4096;
+
+    // Pool share-out. Three sources contend for ONE pool and they do not have
+    // equal claim on it:
+    //
+    //   * gameplay bursts (muzzle smoke, impact sparks, blood/gibs) are the
+    //     player's confirmation that a shot connected and must NEVER fail;
+    //   * a weather field is ambient set-dressing and interchangeable flake
+    //     for flake;
+    //   * an authored emitter is a deliberate feature, but its demand is
+    //     unbounded -- World_endless_snow authors rate 60 x life 300 twice,
+    //     i.e. 59,400 steady particles against this pool.
+    //
+    // Before these caps, `Acquire` simply returned nullptr once the pool
+    // filled, so a saturated ambient field silently killed every combat burst
+    // for the rest of the session, with no log and no visible cause.
+    //
+    // The reserve is a hard floor for bursts and doubles as the ceiling for
+    // weather (MAX_WEATHER_PARTICLES) plus everything else for emitters.
+    static constexpr int kGameplayReserve = 512;
+    static constexpr int MAX_WEATHER_PARTICLES = 1200;
+    static constexpr int kEmitterMax = MAX_PARTICLES - kGameplayReserve - MAX_WEATHER_PARTICLES;
+
+    // Which source is claiming a slot. The claim sets the particle's tags AND
+    // charges the matching counter in exactly one place (Claim), because the
+    // counters and the flags used to be maintained by hand at four call sites.
+    enum class Source { Emitter, Weather, Gameplay };
 
     // Per-particle render state: the size/colour interpolation over the
     // particle's age, plus the CPU light modulation. size <= 0 means "skip".
@@ -146,7 +260,8 @@ private:
     // initialise, so a missing shader - or a headless test target with no GL
     // context - never takes particles off screen.
     bool EnsureInstancedResources();
-    void DrawInstanced(Camera3D& camera, const std::vector<const LightNode*>& lights);
+    void DrawInstanced(Camera3D& camera, const std::vector<const LightNode*>& lights,
+                       bool ambient);
 
     // Modulate a particle colour by the light reaching it. Immediate-mode
     // DrawBillboard cannot carry a custom shader, so lighting is sampled on the
@@ -158,14 +273,22 @@ private:
     Texture2D DefaultTexture();
     void SpawnFromEmitter(const struct ParticleEmitterNode& e, int count);
 
-    // Claim a free pool slot, or nullptr if the pool is full.
-    Particle* Acquire();
+    // Claim a free pool slot for `src`, or nullptr if that source is at its
+    // budget. Gameplay claims may evict the oldest ambient particle when the
+    // pool is genuinely full -- see the implementation for why that is a
+    // guarantee rather than a nicety.
+    Particle* Acquire(Source src);
+    // Attach a claimed slot to a source: the ONE place the tags and the
+    // per-source counters are updated, so they cannot disagree.
+    Particle* Claim(Particle& p, Source src);
+    // Retire a live particle: the ONE place the counters are released.
+    void Retire(Particle& p);
 
     // Ambient weather state. `type` matches ParticleTypeNameToIndex()
     // (OzoneParser.cpp): 0 none, 1 snow, 2 rain, 3 void, 4 psychic.
     //
-    // The cap is a fraction of MAX_PARTICLES on purpose - see ConfigureWeather.
-    static constexpr int MAX_WEATHER_PARTICLES = 1200;
+    // The cap is a fraction of MAX_PARTICLES on purpose - see the share-out
+    // comment next to MAX_PARTICLES.
     struct Weather {
         int type = 0;
         float density = 0.0f;      // spawns per second
@@ -180,6 +303,7 @@ private:
     std::vector<Particle> m_pool;
     int m_next = 0;
     int m_live = 0;
+    int m_emitterLive = 0;           // authored-emitter particles only (not weather, not gameplay)
     Texture2D m_defaultTex{0};
     std::unordered_map<std::string, Texture2D> m_texCache;
     std::unordered_map<uint32_t, float> m_spawnAccum;
@@ -191,6 +315,7 @@ private:
     unsigned int m_instVbo = 0;      // dynamic per-instance stream
     Shader m_instShader{0};
     int m_locMVP = -1, m_locCamRight = -1, m_locCamUp = -1;
+    int m_locTexUnit = -1;           // `texture0` sampler: must be the INT 0 (see EnsureInstancedResources)
     bool m_instTried = false;        // one attempt, so a missing shader does not re-log per frame
 
     // Per-frame instance scratch, reused to avoid allocating in the draw path.

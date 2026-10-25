@@ -41,10 +41,11 @@ static const wchar_t* CLASS_SURFACEPROPS = L"OzSurfaceProps";
 //            still implies the feature is coming, and there are 14 of them, which
 //            is most of a column of checkboxes that can never be ticked.
 //
-// SURF_PORTAL and SURF_MIRROR are the deliberate exception: kept VISIBLE but
-// disabled and relabelled "(planned)". They are real features with real designs
-// (a render-target pass; a reflection probe) rather than vocabulary nobody filled
-// in, so the dialog should say so rather than pretend.
+// SURF_MIRROR is the remaining exception: kept VISIBLE but disabled and
+// relabelled "(planned)". It is a real feature with a real design (a reflection
+// probe) rather than vocabulary nobody filled in, so the dialog should say so
+// rather than pretend. SURF_PORTAL used to be in this group and is now LIVE - it
+// is the sky portal (the face shows the sky-zone view; see Renderer/SkyPortal.hpp).
 //
 // SURF_COLLISION_PROXY is absent entirely - AutoConvex generates it, so a
 // checkbox would let someone hand-write "invisible but still solid".
@@ -69,8 +70,8 @@ static const SurfaceFlagRow kSurfaceFlagRows[] = {
     // --- live: column 2 ---
     { L"No Fog",              SURF_NO_FOG,          true },
     { L"No BSP Cuts",         SURF_NO_BSP_CUTS,     true },
+    { L"Sky Portal",          SURF_PORTAL,          true },
     // --- planned: shown, disabled ---
-    { L"Portal (planned)",    SURF_PORTAL,          false },
     { L"Mirror (planned)",    SURF_MIRROR,          false },
 };
 static const int kSurfaceFlagCount = (int)(sizeof(kSurfaceFlagRows) / sizeof(kSurfaceFlagRows[0]));

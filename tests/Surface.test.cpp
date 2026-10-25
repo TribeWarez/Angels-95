@@ -914,7 +914,7 @@ static void test_dead_flags_are_still_dead() {
     // `normal = normal;`, so it looks implemented and is not. It belongs here
     // because inert is the property that matters, not unread.
     const Named dead[] = {
-        { SURF_SPECIAL_LIT, "SURF_SPECIAL_LIT" }, { SURF_PORTAL, "SURF_PORTAL" },
+        { SURF_SPECIAL_LIT, "SURF_SPECIAL_LIT" },
         { SURF_MIRROR, "SURF_MIRROR" }, { SURF_ENVIRONMENT, "SURF_ENVIRONMENT" },
         { SURF_SMALL_WAVY, "SURF_SMALL_WAVY" },
         { SURF_BRIGHT_CORNERS, "SURF_BRIGHT_CORNERS" },
@@ -927,18 +927,19 @@ static void test_dead_flags_are_still_dead() {
         { SURF_NO_SMOOTH, "SURF_NO_SMOOTH" },
     };
     const int deadCount = (int)(sizeof(dead) / sizeof(dead[0]));
-    check(deadCount == 14, "the dead-flag register has 14 entries");
+    check(deadCount == 13, "the dead-flag register has 13 entries");
 
-    // The dialog's Flags tab exposes 16 rows: these 14 live flags plus PORTAL and
-    // MIRROR shown-but-disabled as "(planned)".
+    // The dialog's Flags tab exposes 16 rows: these 15 live flags plus MIRROR
+    // shown-but-disabled as "(planned)". SURF_PORTAL moved out of the planned
+    // group when the sky portal landed - it is now a real render pass.
     const uint32_t live[] = {
         SURF_FAKEBACKDROP, SURF_INVISIBLE, SURF_MASKED, SURF_TRANSLUCENT,
         SURF_ALPHABLEND, SURF_MODULATED, SURF_TWO_SIDED, SURF_UNLIT,
         SURF_FAKE_LIT, SURF_GLOW, SURF_PAN_U, SURF_PAN_V,
-        SURF_NO_FOG, SURF_NO_BSP_CUTS,
+        SURF_NO_FOG, SURF_NO_BSP_CUTS, SURF_PORTAL,
     };
     const int liveCount = (int)(sizeof(live) / sizeof(live[0]));
-    check(liveCount == 14, "14 flags are live and offered as enabled checkboxes");
+    check(liveCount == 15, "15 flags are live and offered as enabled checkboxes");
 
     bool overlap = false;
     for (int i = 0; i < liveCount; i++)
@@ -994,11 +995,23 @@ static void test_dead_flags_are_still_dead() {
     }
     check(wrongRows == 0, "no dead flag is offered as an enabled checkbox");
 
-    check(panel.find("L\"Portal (planned)\"") != std::string::npos &&
-          panel.find("L\"Mirror (planned)\"") != std::string::npos,
-          "PORTAL and MIRROR are labelled '(planned)' rather than hidden");
+    check(panel.find("L\"Mirror (planned)\"") != std::string::npos,
+          "MIRROR is labelled '(planned)' rather than hidden");
+    check(panel.find("L\"Portal (planned)\"") == std::string::npos &&
+          panel.find("L\"Sky Portal\"") != std::string::npos,
+          "the portal row is a live 'Sky Portal' checkbox, not '(planned)'");
     check(panel.find("EnableWindow(c, FALSE)") != std::string::npos,
           "the dialog disables its unimplemented rows rather than leaving them live");
+
+    // A live flag must have a consumer. SURF_PORTAL's is the sky portal pass:
+    // FaceBelongsToPass routes it to SurfacePass::SkyPortalOnly, which
+    // DrawSkyPortals draws from the pre-rendered sky view.
+    const std::string loader = ReadFile("Source/World/OzOzoneLoader.cpp");
+    if (!loader.empty()) {
+        check(loader.find("SkyPortalOnly") != std::string::npos &&
+              loader.find("DrawSkyPortals") != std::string::npos,
+              "SURF_PORTAL reaches a real render pass (SkyPortalOnly / DrawSkyPortals)");
+    }
 }
 
 // Every uniform the shader reads is actually uploaded.

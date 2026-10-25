@@ -166,9 +166,10 @@ add box 0 -41.5 -1 4.5 1 3 0 1
 add box 0 -43.5 -1.25 4.5 0.5 1 0 1
 
 # ==============================================================================
-# Painted cliff backdrop (SURF_FAKEBACKDROP, flags=8). Unlit at full painted
-# value and the map's outer collision edge. Heights alternate so the skyline
-# is broken.
+# Sky-portal ring (SURF_PORTAL, flags=32768). These 12 panels used to be painted
+# SURF_FAKEBACKDROP walls (flags=8); they now show the sky-zone view through the
+# face instead of tiled stone art, which is what makes the arena edge read as
+# distance rather than as a wall standing 42 units away.
 #
 # texScale is 1x1 on purpose. At 3x2 a 256x256 source tiled across a 60-unit
 # panel works out to ~12 texels per world unit - far too crisp for something
@@ -179,28 +180,24 @@ add box 0 -43.5 -1.25 4.5 0.5 1 0 1
 # offsets are deliberately NOT used - at scale 1 an offset would run the UVs past
 # 1.0 and seam across the middle of the panel.
 #
-# These boxes are also the arena's collision boundary (flags=8 does not imply
-# SURF_NO_BSP_CUTS, which is 1<<28), so their positions and extents are gameplay
-# and must not be changed for purely visual reasons. Texture and UVs only.
-#
-# The texScale kwargs are written out even though 1.0 is the default, to record
-# that the tiling was a deliberate choice. ExportToOzone omits them when they
-# equal 1.0, so saving from AngelEd will strip both kwargs off all 12 lines and
-# leave a larger-than-necessary diff - the render is identical either way, because
-# uvScaleU/uvScaleV default to 1.0 (SurfaceFlags.hpp).
+# The texPath/texScale kwargs are kept so the panels can be reverted to painted
+# backdrops by changing the flag alone - the portal pass ignores the texture.
+# (A ground-standing ring covers mostly BELOW-horizon angles, so it samples the
+# sky's horizon/fog band. That is the faithful portal result; biasing the sample
+# upward would show cloud texture instead.)
 # ==============================================================================
-add box -30 42 11 30 22 1 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
-add box 0 42 13 30 26 1 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
-add box 30 42 9 30 18 1 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
-add box -30 -42 9 30 18 1 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
-add box 0 -42 12 30 24 1 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
-add box 30 -42 13 30 26 1 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
-add box 42 -30 11 1 22 30 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
-add box 42 0 12 1 24 30 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
-add box 42 30 10 1 20 30 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
-add box -42 -30 12 1 24 30 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
-add box -42 0 10 1 20 30 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
-add box -42 30 11 1 22 30 0 flags=8 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box -30 42 11 30 22 1 0 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 0 42 13 30 26 1 0 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 30 42 9 30 18 1 0 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box -30 -42 9 30 18 1 0 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 0 -42 12 30 24 1 0 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 30 -42 13 30 26 1 0 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 42 -30 11 1 22 30 0 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 42 0 12 1 24 30 0 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box 42 30 10 1 20 30 0 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box -42 -30 12 1 24 30 0 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box -42 0 10 1 20 30 0 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
+add box -42 30 11 1 22 30 0 flags=32768 texPath=oztex/bb_wall_13.png texScaleU=1 texScaleV=1
 
 # ==============================================================================
 # Entities

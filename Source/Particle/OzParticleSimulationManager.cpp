@@ -92,15 +92,12 @@ void OzParticleSimulationManager::SpawnFromEmitter(const ParticleEmitterNode& e,
     else base = {0.0f, 1.0f, 0.0f};
 
     for (int i = 0; i < count; i++) {
-        Particle* p = Acquire();
-        if (!p) return; // pool exhausted
+        Particle* p = Acquire(Source::Emitter);
+        if (!p) return; // emitter budget or pool exhausted
 
-        Vector3 dir = {base.x + FRandSym() * e.spread,
-                       base.y + FRandSym() * e.spread,
-                       base.z + FRandSym() * e.spread};
-        float dl = sqrtf(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
-        if (dl < 1e-4f) dl = 1.0f;
-        dir.x /= dl; dir.y /= dl; dir.z /= dl;
+        // `e.spread` is a half-angle in DEGREES, shared with Burst(). See
+        // oz::particles::ConeDirection for what this replaced.
+        const Vector3 dir = oz::particles::ConeDirection(base, e.spread, FRand(), FRand());
         float spd = e.speed * (0.7f + 0.6f * FRand());
 
         p->position = {e.position.x + FRandSym() * e.radius,
@@ -117,7 +114,6 @@ void OzParticleSimulationManager::SpawnFromEmitter(const ParticleEmitterNode& e,
         p->gravity = e.gravity;
         p->billboard = e.billboard;
         p->texture = tex;
-        p->active = true;
     }
 }
 
@@ -126,14 +122,25 @@ void OzParticleSimulationManager::Update(float dt) {
     if ((int)m_pool.size() != MAX_PARTICLES) m_pool.resize(MAX_PARTICLES);
 
     // Spawn (read-only snapshot of the emitter definitions).
-    for (auto& e : PawnSystem::Instance().GetParticleEmitters()) {
-        if (!e.active || e.rate <= 0.0f) continue;
-        float& acc = m_spawnAccum[e.id];
-        acc += e.rate * dt;
-        int count = (int)acc;
-        if (count > 128) count = 128;
-        acc -= (float)count;
-        if (count > 0) SpawnFromEmitter(e, count);
+    //
+    // Gated on m_enabled: SetEnabled(false) retires the live ambient field, but
+    // without this an invisible emitter would immediately respawn it, spending
+    // pool slots and CPU on particles nobody can see.
+    if (m_enabled) {
+        for (auto& e : PawnSystem::Instance().GetParticleEmitters()) {
+            if (!e.active || e.rate <= 0.0f) continue;
+            float& acc = m_spawnAccum[e.id];
+            acc += e.rate * dt;
+            // Bound the accumulator. `count` is clamped to 128/frame but the
+            // remainder stayed in the map, so an absurd authored rate (or a long
+            // hitch) could grow it toward float precision loss - and it is never
+            // pruned while the emitter is at its budget.
+            if (acc > 4096.0f) acc = 4096.0f;
+            int count = (int)acc;
+            if (count > 128) count = 128;
+            acc -= (float)count;
+            if (count > 0) SpawnFromEmitter(e, count);
+        }
     }
 
     // Integrate / retire.
@@ -141,17 +148,10 @@ void OzParticleSimulationManager::Update(float dt) {
         if (!p.active) continue;
         p.age += dt;
         if (p.age >= p.lifetime) {
-            p.active = false;
-            m_live--;
             // Update() is the ONLY place particles age out (UpdateWeather runs
-            // after it and must not re-retire), so this is the only place the
-            // weather's own live count can be decremented. Missing it lets the
-            // count ratchet up to MAX_WEATHER_PARTICLES and silently freezes
-            // weather on for the rest of the session.
-            if (p.weather) {
-                p.weather = false;
-                if (m_weather.live > 0) m_weather.live--;
-            }
+            // after it and must not re-retire), so counter release lives in
+            // Retire() and nowhere else.
+            Retire(p);
             continue;
         }
         p.velocity.y += p.gravity * dt;
@@ -223,6 +223,12 @@ bool OzParticleSimulationManager::EnsureInstancedResources() {
     m_locMVP      = GetShaderLocation(m_instShader, "mvp");   // raylib's default MVP name
     m_locCamRight = GetShaderLocation(m_instShader, "camRight");
     m_locCamUp    = GetShaderLocation(m_instShader, "camUp");
+    // The atlas sampler must be the INTEGER 0. rlSetUniformSampler() is NOT a
+    // "select unit N" call: it takes a texture id, looks it up in the batch's
+    // active-texture table and sets the sampler to `1 + i`. Passing 0 there
+    // pointed `texture0` at unit 1+ (unbound), so every textured particle
+    // sampled black no matter how correctly the texture was bound to unit 0.
+    m_locTexUnit  = GetShaderLocation(m_instShader, "texture0");
 
     // Static unit quad: two triangles, positions only (the UV is derived in the
     // vertex shader from the corner offset). Six vertices, so no index buffer.
@@ -271,7 +277,8 @@ bool OzParticleSimulationManager::EnsureInstancedResources() {
 }
 
 void OzParticleSimulationManager::DrawInstanced(Camera3D& camera,
-                                                const std::vector<const LightNode*>& lights) {
+                                                const std::vector<const LightNode*>& lights,
+                                                bool ambient) {
     if (!EnsureInstancedResources()) return;
 
     // Camera basis for billboarding. Camera3D carries position/target/up but no
@@ -288,7 +295,13 @@ void OzParticleSimulationManager::DrawInstanced(Camera3D& camera,
     std::vector<const Particle*> visible;
     visible.reserve((size_t)m_live);
     for (const auto& p : m_pool)
-        if (p.active && p.billboard && p.texture.id > 0) visible.push_back(&p);
+        // `ambient` is the "Particles" master toggle. It MUST be applied here as
+        // well as in Draw's pre-check: this loop decides what is actually drawn,
+        // and omitting it meant that with particles disabled a single textured
+        // gameplay particle (blood/gibs) set `anyBillboard` and this function
+        // then drew the entire hidden ambient field as well.
+        if (p.active && (ambient || p.gameplay) && p.billboard && p.texture.id > 0)
+            visible.push_back(&p);
     if (visible.empty()) return;
     std::sort(visible.begin(), visible.end(),
               [&](const Particle* a, const Particle* b) {
@@ -302,22 +315,55 @@ void OzParticleSimulationManager::DrawInstanced(Camera3D& camera,
     // so one concatenated buffer could not express "start this group at instance
     // N" without drawing the wrong particles. One upload per distinct texture,
     // and a scene normally has exactly one (the generated default sprite).
-    BeginShaderMode(m_instShader);
-    // raylib 5.5 has no GetModelViewProjectionMatrix(); GetCameraMatrix (raymath)
-    // is the same view-projection the immediate path used, so both paths project
-    // identically.
-    SetShaderValueMatrix(m_instShader, m_locMVP, GetCameraMatrix(camera));
-    if (m_locCamRight >= 0) SetShaderValue(m_instShader, m_locCamRight, &right, SHADER_UNIFORM_VEC3);
-    if (m_locCamUp >= 0)    SetShaderValue(m_instShader, m_locCamUp, &up, SHADER_UNIFORM_VEC3);
-
     BeginBlendMode(BLEND_ALPHA);
+    rlDisableDepthMask();   // alpha quads must not occlude each other (see Draw)
     {
         // Camera-facing quads: backface culling is meaningless here and would drop
         // half of them on winding. Routed through the tracked setter so the
         // caller's state is restored (see Renderer/CullState.hpp).
         oz::ScopedCullOff cullOff;
 
-        if (rlEnableVertexArray(m_quadVao)) {
+        // ORDER IS LOAD-BEARING, and it is a raylib-6 behaviour change.
+        //
+        // raylib 6.0's rlDrawRenderBatch() finishes with glUseProgram(0) AND
+        // glBindVertexArray(0); 5.5 restored the previous state. BeginShaderMode
+        // and rlDisableBackfaceCulling both flush the batch, so:
+        //   * a BeginShaderMode issued BEFORE those calls is unbound and the
+        //     draw runs with program 0 (nothing renders), and
+        //   * a VAO bound before them is unbound too (GL_VERTEX_ARRAY_BINDING=0),
+        //     so even a trivial full-screen shader produced no fragments.
+        // Measured: prog=15 bound, vao=0 while the draw was issued. The CPU side
+        // reported hundreds of live, sorted, uploaded instances the whole time.
+        //
+        // So: every batch-flushing call comes first, then the program, then the
+        // VAO, then the draws. Nothing inside the loop flushes (rlEnableTexture
+        // and rlUpdateVertexBuffer are plain GL; rlSetTexture is BATCH-ONLY in
+        // 6.0 and does not bind anything, which is why the texture is bound with
+        // rlEnableTexture below).
+        BeginShaderMode(m_instShader);
+        rlEnableShader(m_instShader.id);   // BeginShaderMode only records the id on 6.0
+        // raylib 5.5 has no GetModelViewProjectionMatrix(); GetCameraMatrix is
+        // supposed to be the same view-projection the batch uploads, but on 6.0
+        // it does not match (particles projected off-screen). Use rlgl's own
+        // matrices and raymath's MatrixMultiply - this is EXACTLY the composition
+        // rlDrawRenderBatch uploads, so the custom program cannot disagree with
+        // raylib's own draws.
+        const Matrix viewProj = MatrixMultiply(rlGetMatrixModelview(), rlGetMatrixProjection());
+        SetShaderValueMatrix(m_instShader, m_locMVP, viewProj);
+        if (m_locCamRight >= 0) SetShaderValue(m_instShader, m_locCamRight, &right, SHADER_UNIFORM_VEC3);
+        if (m_locCamUp >= 0)    SetShaderValue(m_instShader, m_locCamUp, &up, SHADER_UNIFORM_VEC3);
+
+        // Pin the atlas to unit 0 for THIS draw. raylib leaves whichever material
+        // map it bound last as the current unit, and the sampler value (an INT,
+        // not a texture id) must be re-asserted with SetShaderValue.
+        rlActiveTextureSlot(0);
+        if (m_locTexUnit >= 0) {
+            const int unit = 0;
+            SetShaderValue(m_instShader, m_locTexUnit, &unit, SHADER_UNIFORM_INT);
+        }
+
+        if (rlEnableVertexArray(m_quadVao)) {   // LAST: this is what a flush would clear
+
             size_t i = 0;
             while (i < visible.size()) {
                 const int texId = visible[i]->texture.id;
@@ -339,7 +385,23 @@ void OzParticleSimulationManager::DrawInstanced(Camera3D& camera,
                 }
                 const int count = (int)(m_instData.size() / 8);
                 if (count > 0) {
-                    rlSetTexture(texId);
+                    // Unit 0 explicitly: raylib's DrawMesh leaves the last surface
+                    // map's slot active, and rlEnableTexture binds to the CURRENT
+                    // unit. Without this the atlas landed on slot 2/3 and the
+                    // shader's texture0 sampled something else (invisible fire).
+                    rlActiveTextureSlot(0);
+                    rlEnableTexture(texId);
+                    static int s_td = 0;
+                    if (s_td < 3) {
+                        typedef void (*PFNGETINT)(unsigned int, int*);
+                        auto gi = (PFNGETINT)rlGetProcAddress("glGetIntegerv");
+                        int act = -1, bound = -1;
+                        if (gi) { gi(0x84E0, &act); gi(0x8069, &bound); }
+                        OZ_INFO("PTEX tex=%u active=0x%X bound=%d texloc=%d",
+                                texId, act, bound,
+                                GetShaderLocation(m_instShader, "texture0"));
+                        s_td++;
+                    }
                     rlUpdateVertexBuffer(m_instVbo, m_instData.data(),
                                          (int)(m_instData.size() * sizeof(float)), 0);
                     rlDrawVertexArrayInstanced(0, 6, count);
@@ -356,6 +418,7 @@ void OzParticleSimulationManager::DrawInstanced(Camera3D& camera,
         }
     }
     EndBlendMode();
+    rlEnableDepthMask();
     EndShaderMode();
 }
 
@@ -383,25 +446,75 @@ void OzParticleSimulationManager::ConfigureWeather(int type, float density, floa
 }
 
 void OzParticleSimulationManager::ClearWeather() {
-    for (auto& p : m_pool) {
-        if (p.active && p.weather) { p.active = false; p.weather = false; if (m_live > 0) m_live--; }
-    }
+    for (auto& p : m_pool)
+        if (p.active && p.weather) Retire(p);
     m_weather.live = 0;
     m_weather.accum = 0.0f;
 }
 
-OzParticleSimulationManager::Particle* OzParticleSimulationManager::Acquire() {
+OzParticleSimulationManager::Particle*
+OzParticleSimulationManager::Claim(Particle& p, Source src) {
+    m_live++;
+    p.active = true;
+    // Tags and counters are written HERE and only here. They used to be set by
+    // hand at each spawn site, which is how `m_weather.live` and the "Particles"
+    // gate could disagree about what a slot was.
+    p.weather  = (src == Source::Weather);
+    p.gameplay = (src == Source::Gameplay);
+    if (src == Source::Weather) {
+        m_weather.live++;
+    } else if (src == Source::Emitter) {
+        m_emitterLive++;
+    }
+    return &p;
+}
+
+void OzParticleSimulationManager::Retire(Particle& p) {
+    if (!p.active) return;
+    p.active = false;
+    if (m_live > 0) m_live--;
+    if (p.weather) {
+        if (m_weather.live > 0) m_weather.live--;
+    } else if (!p.gameplay) {
+        if (m_emitterLive > 0) m_emitterLive--;
+    }
+    p.weather = false;
+    p.gameplay = false;
+}
+
+OzParticleSimulationManager::Particle* OzParticleSimulationManager::Acquire(Source src) {
+    if ((int)m_pool.size() != MAX_PARTICLES) m_pool.resize(MAX_PARTICLES);
+
+    // Budgets first, so a source cannot oversubscribe even when free slots
+    // exist. Without this, the shipped World_endless_snow emitters (59,400
+    // steady particles of demand) made the pool unreachable for everything else.
+    if (src == Source::Emitter && m_emitterLive >= kEmitterMax) return nullptr;
+    if (src == Source::Weather && m_weather.live >= MAX_WEATHER_PARTICLES) return nullptr;
+
     for (int tries = 0; tries < MAX_PARTICLES; tries++) {
         Particle& cand = m_pool[m_next];
         m_next = (m_next + 1) % MAX_PARTICLES;
-        if (!cand.active) {
-            m_live++;
-            // Reset the source tags on reuse: a slot that held a weather or
-            // gameplay particle must not keep that tag when an emitter takes it,
-            // or the weather counter and the "Particles" gate would misread it.
-            cand.weather = false;
-            cand.gameplay = false;
-            return &cand;
+        if (!cand.active) return Claim(cand, src);
+    }
+
+    // The pool is genuinely full. Gameplay feedback is the one source that must
+    // not silently vanish: a muzzle flash, impact spark or gib is the player's
+    // only confirmation the shot connected, and Burst() used to just `break`
+    // here. Evict the oldest AMBIENT particle instead - weather before an
+    // authored emitter, because a flake is interchangeable with the next one
+    // while an emitter is a deliberate authored feature.
+    if (src == Source::Gameplay) {
+        int victim = -1;
+        float bestScore = -1.0f;
+        for (int i = 0; i < MAX_PARTICLES; i++) {
+            Particle& p = m_pool[i];
+            if (!p.active || p.gameplay) continue;
+            const float score = (p.weather ? 1000.0f : 0.0f) + p.age;
+            if (score > bestScore) { bestScore = score; victim = i; }
+        }
+        if (victim >= 0) {
+            Retire(m_pool[victim]);
+            return Claim(m_pool[victim], src);
         }
     }
     return nullptr;   // pool exhausted
@@ -417,6 +530,7 @@ void OzParticleSimulationManager::UpdateWeather(float dt, Vector3 camPos) {
     if (m_weather.live >= MAX_WEATHER_PARTICLES) return;
 
     m_weather.accum += m_weather.density * dt;
+    if (m_weather.accum > 4096.0f) m_weather.accum = 4096.0f;
     int count = (int)m_weather.accum;
     if (count > 128) count = 128;
     m_weather.accum -= (float)count;
@@ -431,14 +545,10 @@ void OzParticleSimulationManager::UpdateWeather(float dt, Vector3 camPos) {
     const Color base = m_weather.color;
 
     for (int i = 0; i < count; i++) {
-        if (m_weather.live >= MAX_WEATHER_PARTICLES) break;
-        Particle* p = Acquire();
-        if (!p) break;
-
-        const float rx = (FRand() * 2.0f - 1.0f) * half;
-        const float rz = (FRand() * 2.0f - 1.0f) * half;
-        p->position = {camPos.x + rx, camPos.y + top, camPos.z + rz};
-
+        // Velocity first: the spawn height depends on its SIGN, and the old
+        // order put every type at the top of the box. Rising fields (void and
+        // psychic) therefore began 20 units overhead and drifted further up,
+        // i.e. only visible when looking at the sky.
         float life, grav, szStart, szEnd, vx, vy, vz;
         switch (m_weather.type) {
             case 2: {  // RAIN - fast, heavy, short-lived, drawn small and dense
@@ -469,8 +579,16 @@ void OzParticleSimulationManager::UpdateWeather(float dt, Vector3 camPos) {
             } break;
         }
 
-        p->active = true;
-        p->weather = true;
+        Particle* p = Acquire(Source::Weather);
+        if (!p) break;   // weather budget or pool exhausted
+
+        const float rx = (FRand() * 2.0f - 1.0f) * half;
+        const float rz = (FRand() * 2.0f - 1.0f) * half;
+        // Falling fields start at the top of the box, rising fields at the
+        // bottom, so the whole field traverses the view instead of leaving it.
+        const float spawnY = (vy > 0.0f) ? (camPos.y + bottom) : (camPos.y + top);
+        p->position = {camPos.x + rx, spawnY, camPos.z + rz};
+
         p->velocity = {vx, vy, vz};
         p->age = 0.0f;
         p->lifetime = life;
@@ -479,14 +597,28 @@ void OzParticleSimulationManager::UpdateWeather(float dt, Vector3 camPos) {
         p->gravity = grav;
         p->billboard = true;
         p->texture = tex;
-        // Fade in and out so nothing pops at spawn or death. Colour variance
-        // keeps a large field from reading as one flat sheet of dots.
+        // Fade out so nothing pops at death. Colour variance keeps a large field
+        // from reading as one flat sheet of dots. (Alpha starts randomised
+        // rather than ramping in; a true fade-in needs an age curve, which the
+        // two-stop lerp this pool uses cannot express.)
         const unsigned char v = (unsigned char)FRandRange(0.78f, 1.0f);
         const unsigned char alpha = (unsigned char)FRandRange(0.35f, 0.9f);
         p->colorStart = {(unsigned char)(base.r * v), (unsigned char)(base.g * v),
                          (unsigned char)(base.b * v), alpha};
         p->colorEnd   = {p->colorStart.r, p->colorStart.g, p->colorStart.b, 0};
-        m_weather.live++;
+    }
+}
+
+void OzParticleSimulationManager::SetEnabled(bool enabled) {
+    if (m_enabled == enabled) return;
+    m_enabled = enabled;
+    // Turning the ambient layer off RETIRES it rather than merely hiding it.
+    // Hiding left a 300-second snow emitter simulating invisibly: it kept
+    // spending CPU and, worse, kept its pool slots, so gameplay bursts could
+    // still be starved by an effect the player had switched off.
+    if (!enabled) {
+        for (auto& p : m_pool)
+            if (p.active && !p.gameplay) Retire(p);
     }
 }
 
@@ -539,11 +671,17 @@ void OzParticleSimulationManager::Draw(Camera3D& camera,
         for (const auto& p : m_pool)
             if (p.active && (ambient || p.gameplay) && p.billboard && p.texture.id > 0) { anyBillboard = true; break; }
         if (anyBillboard) {
-            DrawInstanced(camera, lit);
+            DrawInstanced(camera, lit, ambient);
             instancedDrew = true;
         }
     }
 
+    // Alpha-blended quads must not write depth. The instanced path sorts
+    // far-to-near so the ordering is already correct, but the immediate fallback
+    // draws in arbitrary pool order - with depth writes on, a nearer particle
+    // drawn earlier silently erased every farther one behind it. (World geometry
+    // still occludes particles: depth TEST stays enabled, only the write is off.)
+    rlDisableDepthMask();
     BeginBlendMode(BLEND_ALPHA);
     for (auto& p : m_pool) {
         if (!p.active) continue;
@@ -575,6 +713,7 @@ void OzParticleSimulationManager::Draw(Camera3D& camera,
         }
     }
     EndBlendMode();
+    rlEnableDepthMask();
 }
 
 // Multiply a particle's colour by the light reaching it.
@@ -626,39 +765,22 @@ void OzParticleSimulationManager::Burst(Vector3 pos, Vector3 dir, int count,
     if (count <= 0) return;
     if ((int)m_pool.size() != MAX_PARTICLES) m_pool.resize(MAX_PARTICLES);
 
-    Vector3 base = dir;
-    const float bl = sqrtf(base.x*base.x + base.y*base.y + base.z*base.z);
-    if (bl > 1e-4f) { base.x /= bl; base.y /= bl; base.z /= bl; }
-    else base = {0.0f, 1.0f, 0.0f};
-
-    // Build an orthonormal basis around base so the spread cone is isotropic.
-    Vector3 up = (std::fabs(base.y) > 0.99f) ? Vector3{1,0,0} : Vector3{0,1,0};
-    Vector3 right = Vector3Normalize(Vector3CrossProduct(up, base));
-    Vector3 realUp = Vector3CrossProduct(base, right);
-
-    const float spreadRad = spread * DEG2RAD;
     for (int i = 0; i < count; i++) {
-        // Shared with the weather spawner so the m_live bookkeeping has exactly
-        // one definition; Burst used to do this inline and increment nothing,
-        // which is how its particles were invisible to the pool accounting.
-        Particle* p = Acquire();
-        if (!p) break;   // pool exhausted
+        // Gameplay bursts have their own reserve and may evict ambient
+        // particles, so a saturated weather field or a 59,400-particle emitter
+        // cannot make combat feedback silently disappear.
+        Particle* p = Acquire(Source::Gameplay);
+        if (!p) break;   // pool exhausted (no ambient left to evict)
 
-        // Random point in the cone: random angle, random radial falloff
-        // (sqrt keeps the distribution uniform over the disc). FRand (the
+        // ONE cone definition shared with SpawnFromEmitter, so `spread` means
+        // the same thing (degrees) for both and neither can drift. FRand (the
         // file-local PRNG) rather than rand(): Burst used to call rand(), so a
-        // gameplay srand() reshuffled every muzzle flash and the two emitters
-        // shared the global sequence with the rest of the process.
-        const float ang = FRand() * 2.0f * PI;
-        const float rad = spreadRad > 0.0f ? sqrtf(FRand()) * spreadRad : 0.0f;
-        Vector3 v = base * cosf(rad)
-                  + (right * cosf(ang) + realUp * sinf(ang)) * sinf(rad);
-        v = Vector3Normalize(v);
+        // gameplay srand() reshuffled every muzzle flash.
+        const Vector3 v = oz::particles::ConeDirection(dir, spread, FRand(), FRand());
 
         // Per-particle speed jitter so a burst does not read as one rigid cone.
         const float s = speed * (0.7f + 0.6f * FRand());
 
-        p->active = true;
         p->position = pos;
         p->velocity = Vector3Scale(v, s);
         p->age = 0.0f;
@@ -671,8 +793,6 @@ void OzParticleSimulationManager::Burst(Vector3 pos, Vector3 dir, int count,
         // One-shot bursts are billboarded by default; a caller wanting solid
         // spheres passes tex == 0 and Draw already falls back to a sphere.
         p->billboard = true;
-        // Gameplay feedback, not ambient: the "Particles" toggle must not hide it.
-        p->gameplay = true;
         // Left as 0 when no texture is given: Draw falls back to a sphere, so a
         // one-shot burst does not need a GL upload. Resolving the soft sprite
         // here would touch the GPU even on paths that never draw (tests).
@@ -681,8 +801,9 @@ void OzParticleSimulationManager::Burst(Vector3 pos, Vector3 dir, int count,
 }
 
 void OzParticleSimulationManager::Clear() {
-    for (auto& p : m_pool) p.active = false;
+    for (auto& p : m_pool) { p.active = false; p.weather = false; p.gameplay = false; }
     m_live = 0;
+    m_emitterLive = 0;
     m_next = 0;
     m_spawnAccum.clear();
     // Clear() runs on world load. The weather *configuration* is re-applied by

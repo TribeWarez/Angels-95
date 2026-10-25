@@ -63,7 +63,25 @@ static inline void LoadClientSettings() {
     int fg = CfgClampI(Int(cfg, R, "fog_tint_g", FogTint.g), 0, 255);
     int fb = CfgClampI(Int(cfg, R, "fog_tint_b", FogTint.b), 0, 255);
     FogTint = (Color){(unsigned char)fr, (unsigned char)fg, (unsigned char)fb, 255};
-    ParticlesEnabled = Bool(cfg, R, "particles",    ParticlesEnabled);
+
+    // HDR bloom + grade. Clamped here so a hand-edited ini cannot push exposure
+    // to a value that blows the whole frame to white.
+    PostFXEnabled = Bool(cfg, R, "post_fx", PostFXEnabled);
+    PostExposure  = CfgClampF(Float(cfg, R, "post_exposure", PostExposure), 0.25f, 3.0f);
+    PostBloom     = CfgClampF(Float(cfg, R, "post_bloom", PostBloom), 0.0f, 3.0f);
+    PostVignette  = CfgClampF(Float(cfg, R, "post_vignette", PostVignette), 0.0f, 0.8f);
+    // `particles` is DELIBERATELY no longer read.
+    //
+    // It was persisted while a bug forced ParticlesEnabled=false on EVERY world
+    // load (Core.hpp's LoadWorld reset), and SaveClientSettings then wrote that
+    // artifact to the INI on exit. So on any install that has quit the game, the
+    // stored value is the bug's, not the player's - and honouring it leaves every
+    // OZONE emitter and every `particles` weather field invisible, in the shipped
+    // maps too. A new key is the only unambiguous migration: absent it means
+    // "pre-fix file" and defaults back to ON, and once this build has saved, the
+    // value is genuinely user-controlled. Do not read the old key again.
+    if (!cfg.Has(R, "particles_enabled")) ParticlesEnabled = true;
+    ParticlesEnabled = Bool(cfg, R, "particles_enabled", ParticlesEnabled);
     FPSEnabled       = Bool(cfg, R, "fps",          FPSEnabled);
 
     const char* A = kAudio;
@@ -137,7 +155,11 @@ static inline void SaveClientSettings() {
     cfg.SetInt(R,   "fog_tint_r", FogTint.r);
     cfg.SetInt(R,   "fog_tint_g", FogTint.g);
     cfg.SetInt(R,   "fog_tint_b", FogTint.b);
-    cfg.SetBool(R,  "particles",     ParticlesEnabled);
+    cfg.SetBool(R,  "post_fx",       PostFXEnabled);
+    cfg.SetFloat(R, "post_exposure", PostExposure);
+    cfg.SetFloat(R, "post_bloom",    PostBloom);
+    cfg.SetFloat(R, "post_vignette", PostVignette);
+    cfg.SetBool(R,  "particles_enabled", ParticlesEnabled);
     cfg.SetBool(R,  "fps",           FPSEnabled);
 
     const char* A = kAudio;

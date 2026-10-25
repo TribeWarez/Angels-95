@@ -6,6 +6,7 @@
 #include "../Settings.hpp"
 #include "../GameplayFlags.hpp"
 #include "../Audio/SoundManager.hpp"
+#include "../Renderer/PostFX.hpp"
 #include "../Renderer/raygui/raygui.h"
 #include "MenuStyle.hpp"
 #include <algorithm>
@@ -43,7 +44,7 @@ void UpdateSettings() {
     const float x0 = win.x + 14, x1 = win.x + W - 14;
     const float gap = 8, w3 = (x1 - x0 - gap * 2) / 3;
     static float s_scroll = 0.0f;
-    const float contentH = 1000.0f;
+    const float contentH = 1160.0f;
     const float viewH = H - 42.0f;
     const float maxScroll = std::max(0.0f, contentH - viewH);
     if (CheckCollisionPointRec(GetMousePosition(), win)) {
@@ -144,6 +145,28 @@ void UpdateSettings() {
                                  TextFormat("Size  %.0f", PixelSize), PixelSize, 1.0f, 32.0f);
     y += 70;
 
+    // Post-processing: HDR bloom + display grade. These write the Settings.hpp
+    // globals; Main.cpp pushes them into oz::PostFX::Grade() every frame, so the
+    // menu never needs to touch the chain itself (except the resolution rebuild
+    // below, which must keep the HDR target).
+    angelsui::Group({ x0, y, x1 - x0, 132 }, "Post FX (HDR)");
+    {
+        if (angelsui::Button({ x0 + 8, y + 24, x1 - x0 - 16, 24 },
+                             PostFXEnabled ? "Post FX: ON" : "Post FX: OFF", PostFXEnabled)) {
+            PostFXEnabled = !PostFXEnabled;
+        }
+        PostExposure = angelsui::Slider({ x0 + 8, y + 52, x1 - x0 - 16, 20 },
+                                        TextFormat("Exposure  %.2f", PostExposure),
+                                        PostExposure, 0.25f, 3.0f);
+        PostBloom = angelsui::Slider({ x0 + 8, y + 76, x1 - x0 - 16, 20 },
+                                     TextFormat("Bloom  %.2f", PostBloom),
+                                     PostBloom, 0.0f, 3.0f);
+        PostVignette = angelsui::Slider({ x0 + 8, y + 100, x1 - x0 - 16, 20 },
+                                        TextFormat("Vignette  %.2f", PostVignette),
+                                        PostVignette, 0.0f, 0.8f);
+    }
+    y += 144;
+
     // Vertex jitter.
     angelsui::Group({ x0, y, x1 - x0, 56 }, "Vertex Jitter");
     JitterIntensity = angelsui::Slider({ x0 + 8, y + 22, x1 - x0 - 16, 22 },
@@ -157,8 +180,11 @@ void UpdateSettings() {
                                        TextFormat("Scale  %.2f", ResolutionScale),
                                        ResolutionScale, 0.0f, 3.0f);
     if (angelsui::Button({ x0 + 8, y + 50, 140, 24 }, "Set Resolution")) {
-        UnloadRenderTexture(Target);
-        Target = LoadRenderTexture(int(1280 * ResolutionScale), int(720 * ResolutionScale));
+        // MUST keep the HDR target: the old code called UnloadRenderTexture +
+        // LoadRenderTexture, which silently downgraded the scene to RGBA8 and
+        // threw away the bloom headroom until the next restart.
+        oz::PostFX::DestroyTarget(Target);
+        Target = oz::PostFX::CreateTarget(int(1280 * ResolutionScale), int(720 * ResolutionScale));
     }
     y += 98;
 

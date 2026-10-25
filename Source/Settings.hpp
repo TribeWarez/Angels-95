@@ -45,6 +45,14 @@ static bool  FogEnabled = false;         // fog post-process toggle
 static float FogIntensity = 0.3f;        // fog blend amount
 static Color FogTint = {200, 200, 210, 255}; // fog color (R,G,B,A)
 
+// --- Post-processing (HDR bloom + display grade), persisted in [AngelTech.Render] ---
+// Applied to oz::PostFX each frame in Main.cpp. Defaults mirror PostGrade so a
+// fresh install looks the same whether or not the ini has the keys yet.
+static bool  PostFXEnabled = true;
+static float PostExposure  = 1.00f;      // 0.25..3.0
+static float PostBloom     = 0.85f;      // 0.0..3.0 (additive bloom strength)
+static float PostVignette  = 0.22f;      // 0.0..0.8
+
 static RenderTexture2D Target;
 
 static const char* FilterNames[] = { "Point (Nearest)", "Bilinear", "Trilinear", "Aniso x4", "Aniso x8", "Aniso x16" };

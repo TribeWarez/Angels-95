@@ -142,7 +142,7 @@ default.**
 | `1<<12` (4096) | `SURF_FAKE_LIT` | ambient-only lit surface: `baseColor * (amb/10)`, no light contribution. NOT the same as `UNLIT` |
 | `1<<13` (8192) | `SURF_SPECIAL_LIT` | reserved |
 | `1<<14` (16384) | `SURF_GLOW` | self-illumination + additive halo pass; **inert unless the colour is non-zero** |
-| `1<<15` (32768) | `SURF_PORTAL` | reserved |
+| `1<<15` (32768) | `SURF_PORTAL` | **sky portal** - the face shows the world's sky view (screen-space sample of a pre-rendered sky-zone view). Opt-in, per face; still collides unless `NO_BSP_CUTS` |
 | `1<<16` (65536) | `SURF_MIRROR` | reserved |
 | `1<<17` (131072) | `SURF_ENVIRONMENT` | reserved |
 | `1<<18` (262144) | `SURF_PAN_U` | scroll U; **inert unless `panU != 0`** |
@@ -248,12 +248,20 @@ reading an older revision of a level and a doorway does not work, that is why.
 | Zone | `zone <type> <minX> <minY> <minZ> <maxX> <maxY> <maxZ> <intensity>` |
 | Static mesh | `Mesh.Static <path> <x> <y> <z> <yaw> [scale=] [tex=] [wind=1]` |
 | Skeletal mesh | `Mesh.Skeletal <path> <x> <y> <z> <yaw> [scale=] [tex=] [anim=Clip] [speed=] [animfile=] [wind=1]` |
-| Particle emitter | `ParticleEmitter <type> <x> <y> <z> [rate life speed ...] [tex=]` |
+| Particle emitter | `ParticleEmitter <type> <x> <y> <z> [rate life speed spread ...] [tex=]` |
 | Path node | `PathNode <name> <x> <y> <z> [radius=R] [next=a,b,c] [loop]` |
 | Wind zone | `WindZone <minX> <minY> <minZ> <maxX> <maxY> <maxZ> <dirX> <dirY> <dirZ> <strength> [freq]` |
 
 Zones are scripted by sibling `<name>.ozls` skyzone files. The axis convention
 is **Z-up**.
+
+`ParticleEmitter`'s positional tail is `rate life speed spread sizeStart sizeEnd
+r g b rEnd gEnd bEnd gravity radius dirX dirY dirZ yaw`, with any of them also
+accepted as `key=`/`value` (e.g. `gravity=-0.8`). **`spread` is a cone
+half-angle in degrees** and is shared with `Burst()`, so `spread 12` is a 12°
+cone, not a 0..1 fraction and not world units. `type` (`fire`, `smoke`, `mist`,
+`snow`, …) is a label for the editor/World Graph only — the simulation reads the
+numbers, never the name.
 
 #### Per-zone physics overrides (b80)
 

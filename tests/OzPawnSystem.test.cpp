@@ -1001,6 +1001,141 @@ static int test_weather_shares_pool_with_burst() {
     PASS(); return 0; END_TEST();
 }
 
+// One pool is shared by three sources with different claims on it. Before the
+// budget existed, a saturated ambient field made Acquire() return nullptr and
+// gameplay bursts silently disappeared for the rest of the session.
+static int test_particle_pool_budget() {
+    TEST("Emitter field cannot starve gameplay bursts (budget + eviction)");
+    auto& sim = OzParticleSimulationManager::Instance();
+    auto& ps = PawnSystem::Instance();
+    sim.Clear();
+    sim.ClearWeather();
+    sim.SetEnabled(true);
+    ps.ClearParticleEmitters();
+
+    ParticleEmitterNode e;
+    e.type = "smoke";
+    e.position = {0, 0, 0};
+    e.direction = {0, 1, 0};
+    e.rate = 4000.0f;       // far more than the pool can hold
+    e.lifetime = 30.0f;     // long enough that nothing retires during the test
+    e.speed = 1.0f;
+    e.spread = 0.0f;
+    ps.AddParticleEmitter(e);
+
+    for (int i = 0; i < 240; i++) sim.Update(1.0f / 60.0f);
+
+    CHECK(sim.EmitterLiveCount() > 0);
+    CHECK(sim.EmitterLiveCount() <= OzParticleSimulationManager::EmitterBudget());
+    CHECK(sim.LiveCount() <= OzParticleSimulationManager::PoolCapacity());
+
+    // Fill the weather share too, so the ambient layer is at both of its caps.
+    sim.ConfigureWeather(1, 4000.0f, 1.0f, 255, 255, 255, 0.0f, 0.0f);
+    for (int i = 0; i < 600; i++) {
+        sim.Update(1.0f / 60.0f);
+        sim.UpdateWeather(1.0f / 60.0f, {0, 0, 0});
+    }
+    CHECK(sim.WeatherLiveCount() > 0);
+    CHECK(sim.EmitterLiveCount() <= OzParticleSimulationManager::EmitterBudget());
+
+    // Prove the burst below cannot simply take free slots: the ambient layer
+    // must be close enough to the cap that eviction is mandatory.
+    const int freeSlots = OzParticleSimulationManager::PoolCapacity() - sim.LiveCount();
+    CHECK(freeSlots < 700);
+
+    // Over-request the burst reserve on purpose: the first slots come from the
+    // reserve, the rest must EVICT ambient particles rather than disappear.
+    sim.Burst({0, 0, 0}, {0, 1, 0}, 700, 1.0f, 10.0f,
+              {255, 255, 255, 255}, {0, 0, 0, 0}, 0.1f, 0.1f, 0.5f);
+    CHECK_EQ(sim.GameplayLiveCount(), 700);
+    CHECK(sim.LiveCount() <= OzParticleSimulationManager::PoolCapacity());
+
+    ps.ClearParticleEmitters();
+    sim.Clear();
+    sim.ClearWeather();
+    PASS(); return 0; END_TEST();
+}
+
+// The "Particles" toggle is a master switch: off hides the AMBIENT layer and
+// retires it, but must never remove combat feedback.
+static int test_disable_particles_retires_ambient() {
+    TEST("Particles off retires the ambient field and keeps gameplay feedback");
+    auto& sim = OzParticleSimulationManager::Instance();
+    auto& ps = PawnSystem::Instance();
+    sim.Clear();
+    sim.ClearWeather();
+    sim.SetEnabled(true);
+    ps.ClearParticleEmitters();
+
+    ParticleEmitterNode e;
+    e.rate = 300.0f;
+    e.lifetime = 30.0f;
+    e.speed = 1.0f;
+    e.spread = 0.0f;
+    ps.AddParticleEmitter(e);
+
+    for (int i = 0; i < 120; i++) sim.Update(1.0f / 60.0f);
+    CHECK(sim.EmitterLiveCount() > 0);
+
+    sim.Burst({0, 0, 0}, {0, 1, 0}, 5, 1.0f, 0.0f,
+              {255, 255, 255, 255}, {0, 0, 0, 0}, 0.1f, 0.1f, 0.2f);
+    CHECK_EQ(sim.GameplayLiveCount(), 5);
+
+    sim.SetEnabled(false);
+    CHECK_EQ(sim.EmitterLiveCount(), 0);
+    CHECK_EQ(sim.WeatherLiveCount(), 0);
+    CHECK_EQ(sim.GameplayLiveCount(), 5);   // combat feedback survives the toggle
+
+    // ...and the retired field must not respawn behind the player's back.
+    for (int i = 0; i < 120; i++) sim.Update(1.0f / 60.0f);
+    CHECK_EQ(sim.EmitterLiveCount(), 0);
+    CHECK_EQ(sim.GameplayLiveCount(), 0);   // they still aged out normally
+
+    sim.SetEnabled(true);
+    ps.ClearParticleEmitters();
+    sim.Clear();
+    PASS(); return 0; END_TEST();
+}
+
+// The cone is ONE function shared by emitters and Burst, so `spread` cannot mean
+// two things again. Emitters used to read it as a raw unit-vector offset while
+// Burst read degrees, which turned every shipped `spread 12` fire emitter into
+// an isotropic spray.
+static int test_cone_direction_is_degrees() {
+    TEST("Emission cone is shared and measured in DEGREES");
+    constexpr float kPi = 3.14159265f;
+
+    const Vector3 axis = {0, 1, 0};
+
+    // Zero spread is exactly the axis.
+    const Vector3 straight = oz::particles::ConeDirection(axis, 0.0f, 0.25f, 0.75f);
+    CHECK_APROX(straight.y, 1.0f, 1e-4f);
+
+    // A 30-degree cone: every sample inside the half-angle, and it must actually
+    // use it (a collapsed cone would also satisfy the upper bound).
+    float maxAng = 0.0f, minAng = 999.0f;
+    for (int i = 0; i < 64; i++) {
+        const float u1 = (i + 0.5f) / 64.0f;
+        const float u2 = (((i * 37) % 64) + 0.5f) / 64.0f;
+        const Vector3 v = oz::particles::ConeDirection(axis, 30.0f, u1, u2);
+        float dot = v.y;
+        if (dot > 1.0f) dot = 1.0f;
+        if (dot < -1.0f) dot = -1.0f;
+        const float ang = acosf(dot) * 180.0f / kPi;
+        if (ang > maxAng) maxAng = ang;
+        if (ang < minAng) minAng = ang;
+    }
+    CHECK(maxAng <= 30.5f);
+    CHECK(maxAng > 20.0f);   // reaches the cone edge
+    CHECK(minAng < 5.0f);    // and still fills its axis
+
+    // A 90-degree cone must be perpendicular at the rim, not merely "roughly
+    // sideways" (the old unit-offset reading ignored the bound entirely).
+    const Vector3 rim = oz::particles::ConeDirection(axis, 90.0f, 0.0f, 1.0f);
+    CHECK(rim.y < 0.05f);
+    PASS(); return 0; END_TEST();
+}
+
 static int test_particle_gravity() {
     TEST("Burst gravity pulls particles down (negative = down), and particles still live");
     auto& sim = OzParticleSimulationManager::Instance();
@@ -1190,6 +1325,9 @@ int main() {
     failures += test_particle_burst();
     failures += test_weather_spawns_and_recycles();
     failures += test_weather_shares_pool_with_burst();
+    failures += test_particle_pool_budget();
+    failures += test_disable_particles_retires_ambient();
+    failures += test_cone_direction_is_degrees();
     failures += test_particle_gravity();
     failures += test_melee_nearest_target();
     failures += test_melee_out_of_reach_untouched();
