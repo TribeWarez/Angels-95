@@ -565,9 +565,10 @@ jobs:
   #
   # The VPS needs: rsync, curl (HTTPS master uplink) and passwordless sudo for
   # `bash <DEPLOY_PATH>/System/deploy-remote.sh`, which installs/restarts the
-  # units. Firewall: 27015/udp + 8080/tcp (AngelServ), 27910/udp + 27960/tcp
-  # (in-repo AngelMaster; the hosted master keeps 27900/27950). See
-  # Wiki/Building.md -> "Automatic server deployment".
+  # units. Firewall: 27115/udp + 8180/tcp (shipped AngelServ unit; binary
+  # defaults are 27015/8080), 27910/udp + 27960/tcp (in-repo AngelMaster; the
+  # hosted master keeps 27900/27950). See Wiki/Building.md -> "Automatic server
+  # deployment".
   # ---------------------------------------------------------------------------
   deploy:
     name: Deploy to VPS

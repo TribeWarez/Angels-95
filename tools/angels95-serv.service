@@ -19,7 +19,12 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/srv/angels95
-ExecStart=/srv/angels95/System/AngelServ --port 27015 --http-port 8080 --dir /srv/angels95/GameData --bind 0.0.0.0
+# Fleet settings (TribeWarez VPS): 27115/8180 so the systemd server can coexist
+# with the Docker fleet on the binary defaults 27015/8080, and heartbeats go to
+# the systemd master (b108+ on 27910/27960). `--public-ip` is required because
+# the local master sees a private/self source and would otherwise list that.
+# Change these for a different deployment.
+ExecStart=/srv/angels95/System/AngelServ --port 27115 --http-port 8180 --dir /srv/angels95/GameData --bind 0.0.0.0 --master 159.195.10.230:27910 --master-http http://159.195.10.230:27960 --public-ip 159.195.10.230
 Restart=on-failure
 RestartSec=5
 
