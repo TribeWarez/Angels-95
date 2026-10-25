@@ -4,14 +4,15 @@
 
 Angels95 is a **multiplayer game world** built on **AngelTech**, the engine that began life as the OmegaTech Engine — a persistent, server-authoritative realm where players explore partitioned worlds, collect power-ups, level up, and fight NPCs alongside other connected players.
 
-Built on [raylib](https://www.raylib.com/) 5.5 with PS1-inspired retro aesthetics and a custom OZONE world format. Current release: **b101**.
+Built on [raylib](https://www.raylib.com/) 5.5 with PS1-inspired retro aesthetics and a custom OZONE world format. Current release: **b111**.
 
 The player is an **AngelPlayer** built from behaviour modules (GameUi bridge, InventoryBehaviour, WeaponBehaviour, PlayerController); the **SlotBar** object-bar HUD renders a data-driven atlas with click-to-select. **ZoneManager** owns zone volumes, portals and environment overrides; **SoundManager** is the single facade for every sound/music call; the menu's Internet browser talks to the official HTTPS master; and `--shot` captures deterministic in-engine screenshots.
 
 ## Showcase
 
-In-engine `--shot` renders across the showcase worlds (the campaign maps added in
-b101 are at the end):
+In-engine `--shot` renders: the six showcase worlds, then the campaign arc
+(eleven of its worlds were rebuilt in b111 - two frames each, at the spawn
+and at the landmark the level is built around).
 
 <img src="../GameData/Screenshots/CitadelRuins_1.png" width="22%" alt="Citadel Ruins 1" />
 <img src="../GameData/Screenshots/CitadelRuins_2.png" width="22%" alt="Citadel Ruins 2" />
@@ -31,6 +32,29 @@ b101 are at the end):
 <img src="../GameData/Screenshots/KryoArchipel_Severny_1.png" width="22%" alt="Dusk Falls — upper terrace" />
 <img src="../GameData/Screenshots/KryoArchipel_Severny_2.png" width="22%" alt="Dusk Falls — cascade and aqueduct" />
 <img src="../GameData/Screenshots/KryoArchipel_Severny_3.png" width="22%" alt="Dusk Falls — basin and stepping stones" />
+
+<img src="../GameData/Screenshots/Sektor_02_MegacityGrid_1.png" width="22%" alt="Campaign - Megacity Grid 1" />
+<img src="../GameData/Screenshots/Sektor_02_MegacityGrid_2.png" width="22%" alt="Campaign - Megacity Grid 2" />
+<img src="../GameData/Screenshots/Sektor_03_AegisBaseAlpha_1.png" width="22%" alt="Campaign - Aegis Base Alpha 1" />
+<img src="../GameData/Screenshots/Sektor_03_AegisBaseAlpha_2.png" width="22%" alt="Campaign - Aegis Base Alpha 2" />
+<img src="../GameData/Screenshots/AlShaddai_Metropolis_1.png" width="22%" alt="Campaign - AlShaddai 1" />
+<img src="../GameData/Screenshots/AlShaddai_Metropolis_2.png" width="22%" alt="Campaign - AlShaddai 2" />
+<img src="../GameData/Screenshots/Chasm_ForgottenMemories_1.png" width="22%" alt="Campaign - Chasm 1" />
+<img src="../GameData/Screenshots/Chasm_ForgottenMemories_2.png" width="22%" alt="Campaign - Chasm 2" />
+<img src="../GameData/Screenshots/Refinery_Complex_02B_1.png" width="22%" alt="Campaign - Refinery 1" />
+<img src="../GameData/Screenshots/Refinery_Complex_02B_2.png" width="22%" alt="Campaign - Refinery 2" />
+<img src="../GameData/Screenshots/Digital_Purgatory_1.png" width="22%" alt="Campaign - Digital Purgatory 1" />
+<img src="../GameData/Screenshots/Digital_Purgatory_2.png" width="22%" alt="Campaign - Digital Purgatory 2" />
+<img src="../GameData/Screenshots/Phantom_Hubs_1.png" width="22%" alt="Campaign - Phantom Hubs 1" />
+<img src="../GameData/Screenshots/Phantom_Hubs_2.png" width="22%" alt="Campaign - Phantom Hubs 2" />
+<img src="../GameData/Screenshots/SoulEater_Vaults_1.png" width="22%" alt="Campaign - Soul Vaults 1" />
+<img src="../GameData/Screenshots/SoulEater_Vaults_2.png" width="22%" alt="Campaign - Soul Vaults 2" />
+<img src="../GameData/Screenshots/Citadel_AstralMind_1.png" width="22%" alt="Campaign - Astral Mind 1" />
+<img src="../GameData/Screenshots/Citadel_AstralMind_2.png" width="22%" alt="Campaign - Astral Mind 2" />
+<img src="../GameData/Screenshots/Esoteric_Altar_Chambers_1.png" width="22%" alt="Campaign - Altar Chambers 1" />
+<img src="../GameData/Screenshots/Esoteric_Altar_Chambers_2.png" width="22%" alt="Campaign - Altar Chambers 2" />
+<img src="../GameData/Screenshots/NearDeath_Threshold_1.png" width="22%" alt="Campaign - Threshold 1" />
+<img src="../GameData/Screenshots/NearDeath_Threshold_2.png" width="22%" alt="Campaign - Threshold 2" />
 
 ## Contents
 

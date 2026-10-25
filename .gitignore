@@ -90,6 +90,18 @@ GameData/Screenshots/*
 !GameData/Screenshots/Dessert_Dreams_*.png
 !GameData/Screenshots/Dust_Ravine_*.png
 !GameData/Screenshots/EngineTest_*.png
+# b111 campaign gallery (README/Wiki "Campaign" section)
+!GameData/Screenshots/Sektor_02_MegacityGrid_*.png
+!GameData/Screenshots/Sektor_03_AegisBaseAlpha_*.png
+!GameData/Screenshots/AlShaddai_Metropolis_*.png
+!GameData/Screenshots/Chasm_ForgottenMemories_*.png
+!GameData/Screenshots/Refinery_Complex_02B_*.png
+!GameData/Screenshots/Digital_Purgatory_*.png
+!GameData/Screenshots/Phantom_Hubs_*.png
+!GameData/Screenshots/SoulEater_Vaults_*.png
+!GameData/Screenshots/Citadel_AstralMind_*.png
+!GameData/Screenshots/Esoteric_Altar_Chambers_*.png
+!GameData/Screenshots/NearDeath_Threshold_*.png
 
 # Scratch plan files (keep main plan files tracked)
 PLAN_STUBS_*.scratch

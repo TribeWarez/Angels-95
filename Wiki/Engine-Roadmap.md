@@ -1,6 +1,6 @@
 # Engine Roadmap — Gap Analysis & Priorities
 
-Status as of **b101** (delivery logs for b57–b101 below). This page is the living
+Status as of **b111** (delivery logs for b57-b111 below). This page is the living
 gap analysis for the Angels95 / AngelTech engine: what exists, what is missing
 compared with a conventional game engine, and the prioritized plan to close the
 gaps. Each entry lists the `file:line` evidence so work can start without
@@ -10,6 +10,23 @@ Legend: **[0]** security/correctness, **[1]** engine fundamentals,
 **[2]** multiplayer completeness, **[3]** presentation, **[4]** tooling/UX.
 
 ---
+
+## b102-b111 delivery log
+
+- **Campaign maps rebuilt** (b111): the eleven placeholder worlds became authored
+  levels, `Sektor_02`/`Sektor_03` gained a second district each, and two audits
+  (collision reachability + the cross-world portal chain) found and fixed eight
+  progression bugs, including a gate with no floor and a sealed final room. See
+  `Wiki/World-Design-Pass.md`.
+- **Renderer** (b102-b111): sky-portal faces (`SURF_PORTAL`) sample a pre-rendered
+  sky view by screen position; HDR bloom and a grade pass; the instanced particle
+  path was rewritten for raylib 6.0 (`rlDrawRenderBatch` clears the program and
+  VAO, `BeginShaderMode` only records, camera matrix composition, sampler by
+  texture id) with a gameplay reserve in the pool; and the glow halo now emits
+  only the emissive term instead of re-adding the lit face.
+- **Animation** (b102-b111): pawn/item/player animation wired end to end, combat
+  feedback, and the editor GLB preview panel with live playback.
+- **CI/deploy**: automatic server deployment over SSH + systemd on `b*` tags.
 
 ## b83–b101 delivery log
 

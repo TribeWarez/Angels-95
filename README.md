@@ -17,13 +17,22 @@ dependency.
 
 Current release: **b111**.
 
+[![Download Angels 95](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/angels-95/files/latest/download)
+[![Download Angels 95](https://img.shields.io/sourceforge/dt/angels-95.svg)](https://sourceforge.net/projects/angels-95/files/latest/download)
+
+**Download:** [SourceForge](https://sourceforge.net/projects/angels-95/files/latest/download)
+· [GitHub Releases](https://github.com/TribeWarez/Angels-95/releases/latest)
+· `System-<tag>.zip` is the full Windows bundle; the server binaries are
+self-contained.
+
 ---
 
 ## Showcase
 
-All shots captured in-engine via `--shot` mode (PS1-style, HUD-free, 1920x1051).
-The four classic showcase worlds are below; the campaign worlds added in b101
-follow.
+All shots captured in-engine via `--shot` mode (PS1-style, HUD-free). The six
+curated showcase worlds come first, then the campaign arc added in b101 and
+rebuilt in b111 — two frames each, taken at the spawn and at the landmark the
+level is built around.
 
 ### Citadel Ruins
 
@@ -81,10 +90,103 @@ through the basin, and a lookout exit.
 <img src="GameData/Screenshots/KryoArchipel_Severny_2.png" width="32%" alt="Dusk Falls — the cascade and aqueduct" />
 <img src="GameData/Screenshots/KryoArchipel_Severny_3.png" width="32%" alt="Dusk Falls — basin and stepping stones" />
 
+## Campaign
+
+The Sefirot arc: fourteen connected worlds on one portal chain, with objectives,
+a campaign save and a campaign Host/Join pane. The eleven below were placeholder
+rooms until b111; each now has a design intent, a pacing arc and a landmark it is
+built around — the full brief for every one is in
+[`Wiki/World-Design-Pass.md`](Wiki/World-Design-Pass.md).
+
+### Sektor 02 — Megacity Grid
+A crossroads district and a relay plaza beyond the gate. The tower is visible
+over the wall from the spawn; the west stair leads to a ring deck, then the
+tower top where the exit is.
+
+<img src="GameData/Screenshots/Sektor_02_MegacityGrid_1.png" width="49%" alt="Megacity Grid — the south avenue and the rail deck" />
+<img src="GameData/Screenshots/Sektor_02_MegacityGrid_2.png" width="49%" alt="Megacity Grid — through the north gate to the relay tower" />
+
+### Sektor 03 — Aegis Base Alpha
+A compound, a motor pool and a containment annex. The hangar's portal cradle is
+empty — the machine was moved north, and the way off the base is through it.
+
+<img src="GameData/Screenshots/Sektor_03_AegisBaseAlpha_1.png" width="49%" alt="Aegis Base Alpha — the yard and the hangar doors" />
+<img src="GameData/Screenshots/Sektor_03_AegisBaseAlpha_2.png" width="49%" alt="Aegis Base Alpha — the containment annex and the portal rig" />
+
+### AlShaddai Metropolis
+A fortified desert sanctuary with an arcade, a dry well turned oasis, and a wall
+walk over the bazaar. The caravan gate is the exit.
+
+<img src="GameData/Screenshots/AlShaddai_Metropolis_1.png" width="49%" alt="AlShaddai — the gate, the paved processional and the well" />
+<img src="GameData/Screenshots/AlShaddai_Metropolis_2.png" width="49%" alt="AlShaddai — the oasis basin and its kerbed rim" />
+
+### Chasm of Forgotten Memories
+Two rims, three routes: the bridge, an upper crossing, and the canyon floor with
+its seep and the stair back up to the shrine.
+
+<img src="GameData/Screenshots/Chasm_ForgottenMemories_1.png" width="49%" alt="Chasm — the bridge and the shrine obelisks" />
+<img src="GameData/Screenshots/Chasm_ForgottenMemories_2.png" width="49%" alt="Chasm — the canyon seep under the bridge" />
+
+### Refinery Complex 02B
+A tank farm, a pipe hall with a burning furnace, catwalks over the floor, and a
+coolant sump in the yard. The control room is the exit.
+
+<img src="GameData/Screenshots/Refinery_Complex_02B_1.png" width="49%" alt="Refinery — the yard, the tanks and the pipe hall" />
+<img src="GameData/Screenshots/Refinery_Complex_02B_2.png" width="49%" alt="Refinery — the coolant sump" />
+
+### Digital Purgatory
+A grid deck under a monolith forest, a raised core disc with light bridges, and
+four platforms that each hold something you want.
+
+<img src="GameData/Screenshots/Digital_Purgatory_1.png" width="49%" alt="Digital Purgatory — the monolith forest and the core" />
+<img src="GameData/Screenshots/Digital_Purgatory_2.png" width="49%" alt="Digital Purgatory — the core disc and its bridges" />
+
+### Phantom Hubs
+An interchange with no timetable: platforms, an empty track trench, a concourse
+mezzanine and the departure board that still updates.
+
+<img src="GameData/Screenshots/Phantom_Hubs_1.png" width="49%" alt="Phantom Hubs — the concourse and the departure board" />
+<img src="GameData/Screenshots/Phantom_Hubs_2.png" width="49%" alt="Phantom Hubs — the platforms and the track trench" />
+
+### Soul Eater Vaults
+A nave with six side vaults and a lit soul well at its centre; the sealed door at
+the far end is the way on.
+
+<img src="GameData/Screenshots/SoulEater_Vaults_1.png" width="49%" alt="Soul Eater Vaults — the antechamber and the nave door" />
+<img src="GameData/Screenshots/SoulEater_Vaults_2.png" width="49%" alt="Soul Eater Vaults — the nave and the soul well" />
+
+### Citadel Astral Mind
+An island deck that broke free of its ground, four satellites on 4-wide bridges,
+and a shattered plain twenty units below with a stair back up.
+
+<img src="GameData/Screenshots/Citadel_AstralMind_1.png" width="49%" alt="Citadel Astral Mind — the island deck and the spire" />
+<img src="GameData/Screenshots/Citadel_AstralMind_2.png" width="49%" alt="Citadel Astral Mind — the bridges and the shattered plain" />
+
+### Esoteric Altar Chambers
+The last room of the arc: an antechamber, a symmetrical rite hall with two
+chapels, and a sanctum whose roof breaks over the altar.
+
+<img src="GameData/Screenshots/Esoteric_Altar_Chambers_1.png" width="49%" alt="Esoteric Altar Chambers — the antechamber and the lit door" />
+<img src="GameData/Screenshots/Esoteric_Altar_Chambers_2.png" width="49%" alt="Esoteric Altar Chambers — the rite hall" />
+
+### Near Death Threshold
+One bridge over a mirror field, standing stones either side, and a far gate. Drop
+to the field and the reversed bridge takes you the long way round.
+
+<img src="GameData/Screenshots/NearDeath_Threshold_1.png" width="49%" alt="Near Death Threshold — the bridge and the far gate" />
+<img src="GameData/Screenshots/NearDeath_Threshold_2.png" width="49%" alt="Near Death Threshold — the mirror field from the bridge" />
+
 ---
 
 ## Features
 
+- **A 14-world campaign arc (b101, rebuilt in b111)** — one portal chain across
+  five Sefirot sectors with objectives, a campaign save and a campaign Host/Join
+  pane. Eleven of those worlds were placeholder rooms until b111 and are now
+  authored levels with their own tileset, skyzone, patrol graph and encounter
+  design; `Sektor_02` and `Sektor_03` are two-district maps with two routes each.
+  The design brief for every level, plus the two audits that verify reachability
+  and the portal chain, live in [`Wiki/World-Design-Pass.md`](Wiki/World-Design-Pass.md).
 - **Two outdoor campaign maps (b101)** — `Sektor_01_SilentPines` (forested
   gorge: cliff-top arrival, stepped descent, river and bridge, waterfall,
   shrine ruins) and `KryoArchipel_Severny` / Dusk Falls (three dusk cascade
@@ -302,11 +404,11 @@ to create `.oz*` packages from `GameData/`.
 make test   # builds + runs every suite, then FAILS if any suite failed
 ```
 
-Standalone tests (no framework) land in the repo root as executables. 24 suites:
+Standalone tests (no framework) land in the repo root as executables. 26 suites:
 parser, context, registry, entity_manager, pawn_system, ozone_parser, join_uri,
 master, network, game_state, ozanim, ozls_writer, autoconvex, csg, brushmesh,
 surface, gametype, editorbus, assetscope, events, game, gizmomath, keybinds,
-menu. Single suites: `make test_parser`, etc.
+menu, clientsettings, material. Single suites: `make test_parser`, etc.
 
 `make test` also runs `worldcheck` over every shipped world (including
 `--asset-refs`) and `tools/check_editor_objects.sh`, so a broken map or a

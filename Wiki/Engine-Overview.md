@@ -404,7 +404,7 @@ Pickup types come from the LightningScript entity registry (`.ozls` definitions)
 ## Known Editor Gaps
 
 The editor is covered in detail by `Wiki/Editor-Usage.md`; the remaining
-limitations (as of b101):
+limitations (as of b111):
 
 - Render meshes are not CSG-carved (CSG booleans process collision volumes only)
 - Undo/redo covers world state only; camera and selection are not restored
