@@ -57,7 +57,7 @@
 // Changing this number means changing all three, and it changes the per-fragment
 // cost of EVERY lit mesh, particle, pickup, projectile and the view-model, because
 // both live shaders run an unrolled `for (i < MAX_LIGHTS)` loop per fragment.
-#define MAX_LIGHTS  32
+#define MAX_LIGHTS  64
 
 //----------------------------------------------------------------------------------
 // Types and Structures Definition

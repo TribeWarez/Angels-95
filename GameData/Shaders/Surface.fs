@@ -24,7 +24,7 @@ uniform vec4 colDiffuse;
 
 out vec4 finalColor;
 
-#define MAX_LIGHTS 32
+#define MAX_LIGHTS 64
 #define LIGHT_DIRECTIONAL 0
 #define LIGHT_POINT 1
 #define LIGHT_SPOT 2
