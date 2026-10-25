@@ -1510,6 +1510,45 @@ static void test_editor_transform_and_surface_wiring() {
           "surface draw fallback no longer drops brush rotation");
 }
 
+// The halo pass is the other half of the glow story, and it was broken in a way
+// no level data could fix: DrawGlowGeometry re-drew the glowing FACE additively,
+// so the face's own base colour was added twice. A 0.6-textured strip reached
+// 1.2 and clipped, which is why every textured glow surface - window strips,
+// shard fissures - read as a white card, and why lowering surfGlowScale did
+// nothing: the scale only ever moved the emissive addend, while the duplicated
+// base did the damage. Surface.fs now emits ONLY the emissive term while
+// uHaloPass is set, keeping the fog/gamma/alpha path.
+//
+// Same discipline as test_full_bright_is_not_batched: the failure mode is a
+// uniform that is declared and never uploaded, which no constant-parity check
+// can see, so inspect the artefacts as text.
+static void test_glow_halo_pass_is_wired() {
+    const std::string fs  = ReadFile("GameData/Shaders/Surface.fs");
+    const std::string mat = ReadFile("Source/Renderer/SurfaceMaterial.cpp");
+    const std::string hdr = ReadFile("Source/Renderer/SurfaceMaterial.hpp");
+    const std::string ldr = ReadFile("Source/World/OzOzoneLoader.cpp");
+    if (fs.empty() || mat.empty() || hdr.empty() || ldr.empty()) {
+        printf("  SKIP  glow halo pass (shader or source not found from cwd)\n");
+        return;
+    }
+
+    check(fs.find("uniform int   uHaloPass") != std::string::npos,
+          "Surface.fs declares uHaloPass");
+    check(fs.find("if (uHaloPass == 1)") != std::string::npos,
+          "Surface.fs branches on uHaloPass");
+    check(fs.find("lit = uGlow * uGlowScale;") != std::string::npos,
+          "the halo branch emits the emissive term, not the lit face");
+    check(mat.find("\"uHaloPass\"") != std::string::npos,
+          "SurfaceMaterial caches the uHaloPass location");
+    check(mat.find("SetShaderValue(m_shader, m_haloPassLoc") != std::string::npos,
+          "SetHaloPass uploads immediately, like SetFullBright");
+    check(hdr.find("void SetHaloPass(int on);") != std::string::npos,
+          "SetHaloPass is exposed on the facade");
+    check(ldr.find("sm.SetHaloPass(1)") != std::string::npos &&
+          ldr.find("sm.SetHaloPass(0)") != std::string::npos,
+          "DrawGlowGeometry brackets its additive pass with SetHaloPass");
+}
+
 int main() {
     printf("Surface tests:\n");
     test_legacy_bits_stable();
@@ -1520,6 +1559,7 @@ int main() {
     test_fog_curve_parity();
     test_skybox_has_one_implementation();
     test_full_bright_is_not_batched();
+    test_glow_halo_pass_is_wired();
     test_derive_legacy_surface_mirror();
     test_backdrop_gain();
     test_dead_flags_are_still_dead();

@@ -388,17 +388,41 @@ Applied to the rest of the set, in the order that gave the most for the least:
    map - the most visible "sloppy" artefact in the game. Both regenerated as dark
    silhouettes on transparency.
 
-### Open engine item
+### Open engine item: `SURF_GLOW` faces render white
 
-**A `SURF_GLOW` brush whose only texture is the positional `texSlot` renders its
-glow face as an untinted WHITE panel.** Verified on the Chasm shard fissures by
-varying one thing at a time: the glow colour and scale (down to 6%), the texture
-slot (rock, then the dark tech panel), and a brush-wide `surfTexSlot=`. The face
-stayed pure white in all four. The shipped glow surfaces all pair `flags=16384`
-with a brush-wide `texPath=` (the lava and acid pools), which is the form that
-works. The fissures were removed rather than shipped as white boxes. The
-S02/AlShaddai window strips use the same pattern and read as lit windows only
-because they are small - they are the same white face.
+**Status: isolated, partly fixed, still open.** Two engine fixes landed in this
+pass and one is left.
+
+Fixed:
+
+- **The halo pass drew the face twice.** `DrawGlowGeometry` re-draws a glowing
+  face additively; it used to add the whole *lit* face, so `base + base` clipped
+  and any textured glow surface read as a white card no matter how small
+  `surfGlowScale` was - the scale only ever moved the emissive addend.
+  `SurfaceMaterial::SetHaloPass(1)` now makes `Surface.fs` emit only
+  `uGlow * uGlowScale` for that pass, and `tests/Surface.test.cpp`
+  (`test_glow_halo_pass_is_wired`) pins the wiring.
+- **A face with zero UVs.** `BuildFaceMeshes` used to `memset` the texcoords to
+  zero when `uvBase` was empty, which makes every fragment sample ONE texel - a
+  flat slab indistinguishable from "untextured". It now copies the source
+  texcoords and only warns if there are none at all.
+
+Still open: **a `SURF_GLOW` brush renders as a pure white slab in the world
+pass on the local raylib 6.0 build.** Isolated by drawing two identical slivers
+in one frame - same geometry, same positional `texSlot=3`, one with
+`flags=16384` - the plain one is brown rock and the glowing one is white. An
+albedo-only shader probe stays white for it, and a magenta probe in the halo
+branch proves the halo is a separate, working add, so the fault is in how the
+*main* pass shades a GLOW face on that build. Falsified one at a time: the
+texture slot (3 and 4), a brush-wide `surfTexSlot`, a path-resolved `surfTex`,
+an explicit `rlActiveTextureSlot(0)/rlEnableTexture` before `DrawMesh`, the UVs
+(`uvBase=48`, identity transform), and exposure (dimming the three shard lamps
+0.7 -> 0.38 changed the wall but not the slab).
+
+CI pins raylib **5.5**; this host builds against **6.0**, so the first thing to
+try is reproducing on a 5.5 build. Until then the Chasm's shard fissures are
+removed rather than shipped as white boxes, and the canyon is lit by its lamps
+and the seep.
 
 ## Open items for the next pass
 

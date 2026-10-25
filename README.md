@@ -15,7 +15,7 @@ aesthetics, a custom **OZONE** world format, a
 (`AngelEd`), and a dedicated standalone server (`AngelServ`) with no raylib
 dependency.
 
-Current release: **b101**.
+Current release: **b111**.
 
 ---
 
@@ -326,6 +326,29 @@ compiled-but-never-linked editor object fails the build rather than shipping.
 ---
 
 ## Changelog
+
+### b111 — 2026-10-26
+- **The eleven campaign worlds are real levels.** The placeholders were a floor,
+  four 2-unit walls and five NPCs; they now carry a design intent, a pacing arc,
+  a local tileset, a skyzone def, a patrol graph, cover and verticality, and
+  `Sektor_02` / `Sektor_03` are two-district maps with two routes each.
+  `Wiki/World-Design-Pass.md` holds the standard and the per-level intent.
+- **Two audits, eight progression bugs fixed.** A reachability pass over the
+  collision geometry and a cross-world connection pass found a gate with no
+  floor (Sektor_02 was unfinishable), a sealed sanctum that closed the campaign's
+  last room, two portal arrivals inside rock, an unreachable mezzanine, entities
+  authored inside solids, and pickups on cover taller than the jump. Dessert
+  Dreams and Aethelgard Ruins had the same class of bug in three and two places.
+- **Presentation:** water where it belongs (AlShaddai oasis, Refinery coolant
+  sump, Chasm seep) with real `zone water` physics; a shared prop set in
+  `GameData/Environment/Props` with one `flags=16` box per solid prop; wall trim,
+  paving, eye-height clutter and a painted horizon on the two showcase maps.
+- **The glow halo no longer adds the face twice** (`SetHaloPass`), which was
+  clipping every textured glow surface to white; `BuildFaceMeshes` no longer
+  zeroes UVs. One glow bug remains open on the local raylib 6.0 build — see the
+  engine item in `Wiki/World-Design-Pass.md`.
+- Pistol and rifle pickup icons regenerated: both silhouettes were a white gun
+  on a white background, i.e. a white billboard in every map.
 
 ### b101 — 2026-10-21
 - Two outdoor campaign maps (`Sektor_01_SilentPines`, `KryoArchipel_Severny` /

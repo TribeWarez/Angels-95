@@ -113,13 +113,11 @@ add box 44 19.5 -4 8 8 1 0 1
 # floor into pockets.
 add box -28 6 -6.6 3 2.4 22 24 2 texScaleU=1 texScaleV=4
 add box 18 -2 -6.9 3 1.8 18 -31 2 texScaleU=1 texScaleV=3
-# The shard fissures that used to sit in this wall are gone. Every
-# SURF_GLOW brush whose ONLY texture is the positional texSlot renders
-# its glow face as an untinted WHITE panel - tried the rock slot, a dark
-# slot, a brush-wide surfTexSlot and a 6% glow, and the face stayed
-# white - so the decoration read as white light boxes. The canyon gets
-# its light from the three shard lamps instead. See
-# Wiki/World-Design-Pass.md, open item 6.
+# No shard fissures. A SURF_GLOW brush drawn through the per-face
+# surface path renders as a pure WHITE slab on the local raylib 6.0
+# build - see the OPEN ENGINE ITEM in Wiki/World-Design-Pass.md for the
+# A/B evidence and the six falsified explanations. The canyon is lit by
+# the three shard lamps and the seep instead.
 # Grotto props on the canyon floor: cut stone, so the floor reads as
 # worked rather than natural.
 add box -11 2 -7.1 6 1.8 4 0 3
@@ -170,10 +168,6 @@ add box -20 -20 0.945 2.82 1.89 1.92 0 flags=16
 #
 # --- atmosphere ---
 # Mixture of dust and cold vapour off the shards.
-# No mist column here. An UNTEXTURED particle draws as an opaque
-# white quad, and this emitter's size curve GROWS (0.2 to 1.6), so
-# it read as a white card hanging in the canyon. Re-add it once the
-# particle texture work lands.
 # The shards are the canyon's only light: three lamps follow the wall.
 # The seep catches the shard light.
 # Bridge and rim.
@@ -223,10 +217,12 @@ npc Walker -8 38 0 0
 npc Skaarj 10 40 0 0
 light directional -90 20 45 255 210 170 0.8
 light directional 50 -30 60 110 130 175 0.25
+ParticleEmitter mist -20 0 -7 14 2.5 1.2 24 0.2 1.6 200 210 225 170 185 210 -0.2 7 0 0 1 0
+ParticleEmitter mist 16 8 -7 12 2.5 1.2 24 0.2 1.6 200 210 225 170 185 210 -0.2 7 0 0 1 0
 particles 1 70 0.9 200 196 186 0.3 0.1
-light point -34 -2 -4 120 200 255 0.7 16 flare=0 corona=0
-light point 0 -2 -4 120 200 255 0.7 16 flare=0 corona=0
-light point 30 -2 -4 120 200 255 0.7 16 flare=0 corona=0
+light point -34 0 -4 120 200 255 0.38 14 flare=0 corona=0
+light point 0 0 -4 120 200 255 0.38 14 flare=0 corona=0
+light point 30 0 -4 120 200 255 0.38 14 flare=0 corona=0
 light point -6 8 -7 120 200 255 0.55 14 flare=0 corona=0
 light point 0 6 6 255 220 180 0.4 18
 light point 0 -34 6 255 220 180 0.35 16

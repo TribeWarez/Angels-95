@@ -1461,6 +1461,11 @@ void OzoneLoader::DrawGlowGeometry(Camera3D& camera) {
 
     BeginBlendMode(BLEND_ADDITIVE);
     rlDisableDepthMask();
+    // Emit only the emissive term for this pass. Adding the whole lit face a
+    // second time is what made every textured glow surface read as a white
+    // card: a 0.6 base became 1.2 and clipped, and surfGlowScale could not help
+    // because it only ever scaled the emissive addend.
+    sm.SetHaloPass(1);
     for (auto& r : m_renderables) {
         if (!r.loaded || (r.surfaceFlags & SURF_COLLISION_PROXY)) continue;
         if (r.typeId == (int)OzonePrimitiveType::HEIGHTMAP) continue;
@@ -1477,6 +1482,7 @@ void OzoneLoader::DrawGlowGeometry(Camera3D& camera) {
     }
     rlEnableDepthMask();
     EndBlendMode();
+    sm.SetHaloPass(0);
 }
 
 // ---------------------------------------------------------------------------
@@ -2392,8 +2398,18 @@ static void BuildFaceMeshes(OzoneRenderable& r) {
             oz::surface::ApplyUVTransform(uvBase, src.vertexCount,
                                           fp.uvScaleU, fp.uvScaleV,
                                           fp.uvOffsetU, fp.uvOffsetV, m.texcoords);
+        } else if (src.texcoords) {
+            // NEVER zero the UVs. A face whose texcoords are all (0,0) samples a
+            // single texel, so it renders as a flat slab of that texture's corner -
+            // visually indistinguishable from "untextured white", and impossible to
+            // diagnose from the frame. This is the only place a surface-flagged
+            // brush gets its UVs, so it must always copy something real.
+            memcpy(m.texcoords, src.texcoords, uvCount * sizeof(float));
         } else {
             memset(m.texcoords, 0, uvCount * sizeof(float));
+            OZ_WARN("Surface: brush at (%.1f, %.1f, %.1f) has no texcoords at all; "
+                    "face %d will render flat", r.position.x, r.position.y,
+                    r.position.z, f);
         }
 
         UploadMesh(&m, false);

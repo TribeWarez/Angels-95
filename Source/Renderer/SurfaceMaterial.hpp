@@ -90,6 +90,21 @@ public:
     // asserting a pass set the gain it meant to.
     float GetFullBright() const { return m_fullBright; }
 
+    // Halo pass switch, set by DrawGlowGeometry around its additive re-draw.
+    //
+    // Without it the halo adds the WHOLE FACE a second time, so any textured
+    // glow surface saturates: base 0.6 + base 0.6 clips to white, which is why
+    // a glowing window strip or a shard fissure read as a white card no matter
+    // how small `surfGlowScale` was (the scale only ever moved the emissive
+    // term, while the duplicated base did the damage). With the switch on,
+    // Surface.fs outputs only `uGlow * uGlowScale` - what a halo is supposed to
+    // be - and keeps the fog/gamma/alpha path.
+    //
+    // Uploaded immediately, for the same reason SetFullBright is: the caller
+    // sets it from inside the draw passes, after the frame's UpdateFrame.
+    void SetHaloPass(int on);
+    int GetHaloPass() const { return m_haloPass; }
+
     // Bracket a translucent / masked / modulated / two-sided draw. No-op for
     // flags that do not change GL state.
     void BeginSurfaceState(const surface::SurfaceProps& p);
@@ -113,6 +128,7 @@ private:
     int m_glowLoc = -1;
     int m_glowScaleLoc = -1;
     int m_fullBrightLoc = -1;
+    int m_haloPassLoc = -1;
 
     // Fog uniforms — Surface.fs declares and uses all five, but none were
     // cached, so surface-flagged brushes fogged at the shader defaults (10/100,
@@ -147,6 +163,7 @@ private:
     // Full-bright gain. Default 1.0 so a shader that somehow misses the upload
     // still renders a full-value unlit surface rather than a black one.
     float m_fullBright = 1.0f;
+    int   m_haloPass = 0;
 
     // Blend/depth/cull state actually changed by the currently open bracket, so
     // EndSurfaceState restores exactly what it found instead of guessing.

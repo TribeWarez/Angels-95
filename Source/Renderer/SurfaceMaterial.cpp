@@ -51,6 +51,7 @@ void SurfaceMaterial::CacheLocations() {
     m_glowLoc      = GetShaderLocation(m_shader, "uGlow");
     m_glowScaleLoc = GetShaderLocation(m_shader, "uGlowScale");
     m_fullBrightLoc = GetShaderLocation(m_shader, "uFullBright");
+    m_haloPassLoc = GetShaderLocation(m_shader, "uHaloPass");
     // Surface.fs declares and uses all five fog uniforms (see the SF_NO_FOG block
     // in its fragment stage) but none were cached here, so surface-flagged
     // brushes always fogged at the GLSL defaults — 10/100 with density 1 —
@@ -110,6 +111,23 @@ void SurfaceMaterial::SetFullBright(float gain) {
     m_fullBright = gain;
     if (m_shader.id > 0 && m_fullBrightLoc >= 0)
         SetShaderValue(m_shader, m_fullBrightLoc, &m_fullBright, SHADER_UNIFORM_FLOAT);
+}
+
+// SetHaloPass - the same immediate-upload rule as SetFullBright, and for the
+// same structural reason: DrawGlowGeometry flips it from inside the draw pass,
+// long after the frame's single UpdateFrame flush.
+//
+// The halo pass exists to bloom a glow, not to re-draw the face. Adding the
+// whole face a second time meant `lit + lit` - a 0.6-textured surface reached
+// 1.2 and clipped - so every glowing wall, window strip and shard fissure was
+// a white card regardless of `surfGlowScale`. The shader now replaces `lit`
+// with the emissive term while this is on.
+void SurfaceMaterial::SetHaloPass(int on) {
+    on = on ? 1 : 0;
+    if (m_haloPass == on) return;
+    m_haloPass = on;
+    if (m_shader.id > 0 && m_haloPassLoc >= 0)
+        SetShaderValue(m_shader, m_haloPassLoc, &m_haloPass, SHADER_UNIFORM_INT);
 }
 
 void SurfaceMaterial::UpdateFrame(std::vector<LightNode>& lights,

@@ -161,8 +161,6 @@ add box 0 -37.5 3 4 6 1 0 3
 #
 # --- atmosphere ---
 # Motes rising off the core: the grid has weather, it is just not water.
-# No mist here either, for the same reason: a growing untextured
-# particle is a white card. The core light carries the atmosphere.
 # The core column is the key light.
 # Axis lights, one per bridge.
 # Entry and exit markers.
@@ -210,6 +208,7 @@ npc Walker -4 0 6 0
 npc Skaarj 0 30 6 0
 npc Brute -30 0 6 0
 light directional 0 0 60 100 120 180 0.18
+ParticleEmitter mist 3.2 0 7 16 2.0 1.2 16 0.15 1.2 150 200 255 90 150 220 -0.3 6 0 0 1 0
 light point 0 0 18 130 190 255 1.4 40
 light point 6.5 0 8.5 130 190 255 0.9 20
 light point 0 20 8 60 140 255 0.6 20

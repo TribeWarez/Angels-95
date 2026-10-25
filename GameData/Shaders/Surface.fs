@@ -1,6 +1,6 @@
-#version 330
+﻿#version 330
 
-// Surface.fs — LitFog.fs plus the UT99-style per-face surface properties.
+// Surface.fs â€” LitFog.fs plus the UT99-style per-face surface properties.
 //
 // Why a separate shader instead of adding uniforms to LitFog.fs:
 //   * Lighting.vs/LitFog.fs is used by every mesh, particle, pickup, projectile
@@ -72,6 +72,13 @@ uniform float uGlowScale    = 1.0;
 // OzoneLoader::DrawZoneGeometry. A per-pass scalar rather than a per-face one, so
 // it is uploaded once per pass instead of once per draw.
 uniform float uFullBright   = 1.0;
+
+// Set by DrawGlowGeometry around its additive re-draw of a glowing face. When
+// it is 1 the fragment stage emits ONLY the emissive term (see the SF_GLOW
+// block below), because the halo is meant to bloom the glow, not to add the
+// whole face a second time - that second add took a mid-grey texture to 1.2,
+// clipped, and made every textured glow surface read as a white card.
+uniform int   uHaloPass     = 0;
 
 // --- baked material maps (Material/OzMaterial.hpp) --------------------------
 // Same four uniforms as LitFog.fs; the two programs are hand-maintained copies
@@ -354,6 +361,13 @@ void main()
     // Baked emissive gate, same placement/order as LitFog.fs.
     if (uHasEmissive == 1)
         lit += texture(emissiveMap, uv).rgb * uEmissiveScale;
+
+    // Halo pass: emit the emissive term only. Everything after this point (gamma,
+    // fog, alpha) still applies, so a distant glow still recedes. Without this
+    // the halo added the whole lit face a second time and every textured glow
+    // surface clipped to white.
+    if (uHaloPass == 1)
+        lit = uGlow * uGlowScale;
 
     lit = pow(max(lit, vec3(0.0)), vec3(1.0 / 2.2));
 
