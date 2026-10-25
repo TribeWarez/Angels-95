@@ -697,10 +697,25 @@ jobs:
       - name: Install units and restart the services
         run: |
           set -euo pipefail
-          # The remote script validates both binaries, renders the units for
-          # DEPLOY_PATH, restarts them and dumps journal output on failure.
+          # Publish the remote script's output to the run summary: job logs need
+          # an authenticated session, but the check-run summary is public on a
+          # public repo, so a failed rollout stays diagnosable from the API.
+          set +e
           ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-            "sudo -n bash '$DEPLOY_PATH/System/deploy-remote.sh' '$DEPLOY_PATH'"
+            "sudo -n bash '$DEPLOY_PATH/System/deploy-remote.sh' '$DEPLOY_PATH'" \
+            2>&1 | tee /tmp/deploy-remote.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo "### Remote deploy failed (exit $rc)"
+              echo ""
+              echo '```'
+              sed -n '1,250p' /tmp/deploy-remote.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit "$rc"
+          fi
 
       - name: Deployment summary
         run: |
