@@ -14,6 +14,7 @@
 #include "../Pawn/OzPawnSystem.hpp"
 #include "../Pawn/AngelPlayer/SlotBar.hpp"
 #include "../Renderer/CombatFX.hpp"
+#include "../Renderer/CombatFeedback.hpp"
 #include "../GameplayFlags.hpp"
 #include "../World/OzOzoneLoader.hpp"
 #endif
@@ -259,8 +260,13 @@ int LightningEntityManager::FireSelectedWeapon(const Vector3& origin, const Vect
                         // ApplyPawnDamage deliberately skips these pawns.
                         ReportMeleeHit(*target, (int)projectileDamage, reach,
                                        staminaCost, origin, direction);
+                        // The kill is the server's call, so confirm the connect
+                        // only (no amber kill tint from a client guess).
+                        oz::CombatFeedback::Instance().ConfirmHit(false);
                     } else {
                         PawnSystem::Instance().ApplyPawnDamage(*target, (int)projectileDamage);
+                        oz::CombatFeedback::Instance().ConfirmHit(
+                            target->state == PawnState::DEAD);
                     }
                 }
             }

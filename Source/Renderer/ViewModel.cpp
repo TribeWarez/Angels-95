@@ -159,8 +159,11 @@ void ViewModel::SetWeapon(const EntityDef* def, int variantIndex) {
     m_scale    = VmStatFloat(def, "viewmodel_scale", 1.0f);
     m_recoilMax = VmStatFloat(def, "recoil", 1.0f);
     m_reloadSeconds = VmStatFloat(def, "reload_time", 1.2f);
-    m_clipFps = VmStatFloat(def, "viewmodel_anim_fps", 30.0f);
-    if (m_clipFps <= 0.0f) m_clipFps = 30.0f;
+    // raylib resamples glTF clips at 60 fps, so that is the default conversion
+    // rate; 30 halved the Fire/Idle playback rate of every gun that did not
+    // author viewmodel_anim_fps.
+    m_clipFps = VmStatFloat(def, "viewmodel_anim_fps", kSkeletalClipFps);
+    if (m_clipFps <= 0.0f) m_clipFps = kSkeletalClipFps;
 
     std::string key = def->name + "|" + mesh + "|" + tex + "|" +
                       VmStatStr(def, "viewmodel_attachment", SiblingAdditionalMeshes(mesh));

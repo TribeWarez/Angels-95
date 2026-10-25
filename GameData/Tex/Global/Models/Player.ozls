@@ -2,12 +2,15 @@ entity "Player" : upgrade {
     // Player character model used to render players in the world.
     // Plague Arcanist: rigged GLB with its own embedded textures, so `texture` is
     // omitted (PlayerModel only falls back to the legacy PNG for the default mesh).
-    // mesh_type is static on purpose - the GLB's 10 clips are unnamed mixamo takes
-    // whose semantics are unknown, and guessing an idle/walk mapping would leave
-    // the character playing an arbitrary animation. Rename the clips (editor
-    // Anim panel) and set anim_idle / anim_chase here to switch it to skeletal.
+    // The 10 embedded clips are unnamed-in-meaning mixamo takes, but their names
+    // are real ("Armature|Armature.00N|...", truncated to 31 chars by raylib's
+    // char[32] ModelAnimation.name). The two used here were picked by measuring
+    // each take's joint motion: .002 is the calmest loop (idle) and .008 has the
+    // highest leg cadence (a step cycle). Both are safe to change here.
     mesh = "GameData/Pawn/Player/Plague_Arcanist.glb"
-    mesh_type = "static"
+    mesh_type = "skeletal"
+    anim_idle = "Armature.002"
+    anim_chase = "Armature.008"
     // Base walk-speed multiplier (sprint/crouch scale this at runtime).
     movement_speed = 1.4
     stats {

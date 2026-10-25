@@ -8,6 +8,14 @@ namespace oz {
 // The Model + clips are shared via MeshCache; the caller owns playback state
 // (clip index + elapsed time) and calls ApplyPose immediately before drawing so
 // that N instances of one def do not fight over the shared pose buffers.
+
+// raylib resamples every glTF/GLB animation to a fixed rate and defines
+// keyframeCount = duration*GLTF_FRAMERATE + 1 (rmodels.c). Seconds -> frame MUST
+// use that same rate: the default here was 30 while raylib resamples at 60, so
+// every shipped clip played at HALF speed and ClipSeconds() reported twice its
+// real duration. IQM/M3D are not shipped content (they carry their own rate).
+inline constexpr float kSkeletalClipFps = 60.0f;
+
 class SkeletalMesh : public Mesh {
 public:
     SkeletalMesh() = default;
@@ -23,19 +31,43 @@ public:
     // Case-insensitive exact match, then substring; -1 when not found.
     int FindClip(const std::string& name) const;
 
-    // Clip length (keyframes / fps). fps defaults to 30 (raylib has no fps).
-    float ClipSeconds(int index, float fps = 30.0f) const;
+    // The clip a caller should play for `preferred`: that name when it resolves,
+    // otherwise "Idle", otherwise clip 0. -1 only when the asset has no clips.
+    //
+    // Every fallback used to be a bare `if (clip < 0) clip = 0`, which is only
+    // correct when index 0 happens to be an idle. It is not, in general: the two
+    // shipped guns export Fire first, and the mixamo player takes are numbered
+    // in authoring order. So "animate this asset, no clip name authored" played
+    // a gunshot or an arbitrary take on a loop instead of the idle.
+    int ResolveClip(const std::string& preferred) const;
 
-    // Apply a looping pose at `timeSeconds` (default 30 fps keyframe rate).
+    // Clip length in seconds (keyframes / fps). fps defaults to the rate raylib
+    // resamples glTF animations at.
+    float ClipSeconds(int index, float fps = kSkeletalClipFps) const;
+
+    // Keyframe count for a clip (the panel's "frame N / M" readout). -1 when the
+    // index is out of range.
+    int ClipFrameCount(int index) const;
+
+    // Apply a looping pose at `timeSeconds`.
     // No-op when the clip index is invalid or the skeleton does not match.
-    void ApplyPose(int clipIndex, float timeSeconds, float fps = 30.0f) const;
+    void ApplyPose(int clipIndex, float timeSeconds, float fps = kSkeletalClipFps) const;
 
     // See oz::Mesh: true only on a GPU-skinning raylib build.
     bool NeedsShaderSkinning() const override;
 
+    // True when every vertex bone index fits the one skeleton raylib loaded.
+    // Computed once at load (BoneIdsFitSkeleton) so a multi-skin asset can be
+    // rejected before raylib indexes model.boneMatrices out of range.
+    bool SkeletonFits() const { return m_skeletonFits; }
+
 private:
     ModelAnimation* m_anims = nullptr;
     int m_animCount = 0;
+    bool m_skeletonFits = true;
+    // ApplyPose is const (apply-pose-then-draw from a shared asset), so the
+    // "this clip can never play" warning is latched through a mutable flag.
+    mutable bool m_invalidWarned = false;
 };
 
 // True when every vertex boneId across every submesh fits the ONE skeleton

@@ -15,8 +15,11 @@
 #include "../Source/Particle/OzParticleSimulationManager.hpp"
 #include "../Source/Pawn/PickupItems.hpp"
 #include "../Source/Renderer/CombatFX.hpp"
+#include "../Source/Renderer/CombatFeedback.hpp"
+#include "../Source/GameplayFlags.hpp"
 #include <cstdio>
 #include <cassert>
+#include <cmath>
 
 static int tests_total = 0, tests_passed = 0;
 #define TEST(name) do { tests_total++; fprintf(stdout, "  TEST: %s ... ", name);
@@ -1041,6 +1044,75 @@ static int test_light_crud() {
 // pose array, which is why playback used to be hard-disabled for every
 // weapon. Free function over a raw Model so it is testable without a GL
 // context; ViewModel::SetWeapon declines skeletal playback when it fails.
+static int test_dead_pawn_keeps_drawing_until_corpse_timer_expires() {
+    TEST("A dead pawn stays active (death clip) for kPawnCorpseSeconds, then despawns");
+    reset_pawn_system();
+    auto& ps = PawnSystem::Instance();
+    PawnDef def;
+    def.name = "CorpseTestBot";
+    def.maxHealth = 10;
+    ps.RegisterDef(def);
+    const int id = ps.Spawn({2, 0, 3}, "CorpseTestBot");
+    CHECK(id >= 0);
+    Pawn* p = ps.Get(id);
+    CHECK(p != nullptr);
+
+    // ApplyPawnDamage used to set active=false on the same frame it fired
+    // on_death. DrawAll skips inactive pawns, so the DEAD branch - and with it
+    // every `anim_death` a def can author - was unreachable, and no corpse was
+    // ever drawn. The pawn must stay active until the corpse window closes.
+    const bool gore = g_goreEnabled;
+    g_goreEnabled = false;              // no gib burst in a headless suite
+    ps.ApplyPawnDamage(*p, 1000);
+    g_goreEnabled = gore;
+
+    CHECK(p->state == PawnState::DEAD);
+    CHECK(p->active);
+    CHECK(ps.Get(id) != nullptr);        // still returned -> DrawAll still draws it
+    CHECK_APROX(p->deadTimer, kPawnCorpseSeconds, 0.001f);
+
+    ps.Update({0, 0, 0}, 1.0f, nullptr);
+    CHECK(ps.Get(id) != nullptr);        // one second in, still a body
+    ps.Update({0, 0, 0}, kPawnCorpseSeconds, nullptr);
+    CHECK(ps.Get(id) == nullptr);        // window closed -> despawned (slot freed)
+    PASS(); return 0; END_TEST();
+}
+
+static int test_combat_feedback_cues() {
+    TEST("CombatFeedback: hit/damage timers decay, damage bearing is right-handed");
+    auto& cf = oz::CombatFeedback::Instance();
+    cf.Reset();
+    CHECK(!cf.HitActive());
+    cf.ConfirmHit(false);
+    CHECK(cf.HitActive());
+    cf.Update(0.1f);                 // still inside kHitSeconds (0.22)
+    CHECK(cf.HitActive());
+    cf.Update(1.0f);
+    CHECK(!cf.HitActive());          // expired
+
+    // A source directly to the player's RIGHT must land at +PI/2: the arc is
+    // drawn with 0 = ahead and + = right, and the old cross-product sign had it
+    // mirrored (a hit from the right pointed left).
+    cf.Reset();
+    const Vector3 cam = {0, 0, 0};
+    const Vector3 fwd = {0, 0, -1};   // raylib forward is -Z
+    cf.DamageFrom({5, 0, 0}, cam, fwd);
+    CHECK(cf.DamageActive());
+    CHECK_APROX(cf.DamageAngle(), 3.14159265f * 0.5f, 0.01f);
+
+    cf.DamageFrom({-5, 0, 0}, cam, fwd);
+    CHECK_APROX(cf.DamageAngle(), -3.14159265f * 0.5f, 0.01f);
+
+    cf.DamageFrom({0, 0, -9}, cam, fwd);   // dead ahead
+    CHECK_APROX(cf.DamageAngle(), 0.0f, 0.01f);
+
+    cf.Update(0.5f);
+    CHECK(cf.DamageActive());
+    cf.Update(1.0f);
+    CHECK(!cf.DamageActive());
+    PASS(); return 0; END_TEST();
+}
+
 static int test_bone_ids_fit_skeleton() {
     TEST("BoneIdsFitSkeleton rejects multi-skin boneIds");
 
@@ -1129,6 +1201,8 @@ int main() {
     failures += test_projectile_expiry();
     failures += test_projectile_pawn_collision();
     failures += test_projectile_miss();
+    failures += test_dead_pawn_keeps_drawing_until_corpse_timer_expires();
+    failures += test_combat_feedback_cues();
     failures += test_bone_ids_fit_skeleton();
 
     fprintf(stdout, "==================\n");

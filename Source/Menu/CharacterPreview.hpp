@@ -176,8 +176,8 @@ private:
             skeletal = false;
         }
         if (skeletal)
-            mesh = oz::MeshCache::Instance().GetSkeletal(meshPath, texPath,
-                                                         "GameData/", true);
+            mesh = oz::MeshCache::Instance().GetSkeletalChecked(meshPath, texPath,
+                                                               "GameData/", true);
         else
             mesh = oz::MeshCache::Instance().GetStatic(meshPath, texPath,
                                                        "GameData/", true);
@@ -219,9 +219,7 @@ private:
         // so 180 faces the camera. Same correction PlayerModel applies.
         mt.yaw = yaw;
         if (skel && skel->ClipCount() > 0) {
-            int clip = -1;
-            if (!def.animIdle.empty()) clip = skel->FindClip(def.animIdle);
-            if (clip < 0) clip = 0;
+            const int clip = skel->ResolveClip(def.animIdle);
             skel->ApplyPose(clip, GetTime());
         }
         mesh->Draw(mt, m_shader);

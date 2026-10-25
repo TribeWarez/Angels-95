@@ -403,6 +403,12 @@ struct DefStatRow {
     // Queueing either would delay the write a frame for no benefit.
     bool actionAnimSave = false;
     bool actionAnimRefresh = false;
+    // Panel message: refresh ONLY the live time/frame readout and the scrubber.
+    // The structural refresh is WM_USER+50 (PopulateAnimPanel), which rebuilds the
+    // clip list and therefore re-selects a row; doing that every frame while a
+    // clip plays made the list unusable. 0x0400 is WM_USER on Win32; this header
+    // deliberately does not include <windows.h>.
+    static constexpr unsigned int kAnimPanelTick = 0x0400 + 51;
     // Vertex definition tool (Phase C)
     bool animEditVerts = false;         // vertex-edit mode active
     std::vector<int> animSelVerts;      // selected global vertex indices

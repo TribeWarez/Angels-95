@@ -2,6 +2,13 @@ entity "rifle_01" : weapon {
     mesh = "Fbx_Files/Rifle_01.glb"
     texture = "Textures/Rifle_01_Albedo.png"
     icon = "Textures/Rifle_01_silhouette.png"
+    // The GLB is rigged with Idle/Fire/Reload clips. `mesh_type = "skeletal"`
+    // makes the WORLD PICKUP use them (PawnSystem::DrawEntities plays anim_idle
+    // on a dropped weapon); the view-model picks its own path via
+    // viewmodel_skeletal, so this does not affect the held gun. Before this the
+    // pickup was loaded as a static mesh and stood in its bind pose.
+    mesh_type = "skeletal"
+    anim_idle = "Idle"
     stats {
         damage = 20
         fire_rate = 0.12

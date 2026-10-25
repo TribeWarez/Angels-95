@@ -74,6 +74,16 @@ int AnimatedMesh::FindClip(const std::string& name) const {
     return -1;
 }
 
+int AnimatedMesh::ResolveClip(const std::string& preferred) const {
+    if (m_anim.clips.empty()) return -1;
+    if (!preferred.empty()) {
+        const int wanted = FindClip(preferred);
+        if (wanted >= 0) return wanted;
+    }
+    const int idle = FindClip("Idle");
+    return (idle >= 0) ? idle : 0;
+}
+
 void AnimatedMesh::UploadOffsets(const std::vector<float>& denseOffsets) {
     if (!m_valid || m_vertexCount <= 0) return;
 

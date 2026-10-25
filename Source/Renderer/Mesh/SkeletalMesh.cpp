@@ -25,6 +25,18 @@ bool SkeletalMesh::LoadSkeletal(const std::string& meshPath, const std::string& 
                                 const std::string& baseDir, bool applyPointFilter) {
     if (!Mesh::Load(meshPath, texPath, baseDir, applyPointFilter)) return false;
 
+    // Measure the skin/skeleton fit once. raylib keeps only the FIRST skin of a
+    // multi-skin glTF, so a mesh whose bone indices belong to another skin runs
+    // off the end of model.boneMatrices during CPU skinning - garbage geometry
+    // or a crash, with nothing in the log. Consumers that do not intend to force
+    // playback go through MeshCache::GetSkeletalChecked and get a static mesh.
+    m_skeletonFits = BoneIdsFitSkeleton(m_model);
+    if (!m_skeletonFits) {
+        OZ_WARN("SkeletalMesh: '%s' bone indices do not fit its %d-bone skeleton "
+                "(multi-skin glTF? raylib loads one skin) - stays static unless forced",
+                meshPath.c_str(), OZ_MODEL_BONE_COUNT(m_model));
+    }
+
     int count = 0;
     m_anims = LoadModelAnimations(m_diskPath.c_str(), &count);
     m_animCount = (m_anims && count > 0) ? count : 0;
@@ -57,12 +69,28 @@ int SkeletalMesh::FindClip(const std::string& name) const {
     return -1;
 }
 
+int SkeletalMesh::ResolveClip(const std::string& preferred) const {
+    if (m_animCount <= 0) return -1;
+    if (!preferred.empty()) {
+        const int wanted = FindClip(preferred);
+        if (wanted >= 0) return wanted;
+    }
+    const int idle = FindClip("Idle");
+    if (idle >= 0) return idle;
+    return 0;
+}
+
 float SkeletalMesh::ClipSeconds(int index, float fps) const {
     if (index < 0 || index >= m_animCount) return 0.0f;
     int frames = OZ_ANIM_KEYFRAME_COUNT(m_anims[index]);
     if (frames <= 0) return 0.0f;
-    if (fps <= 0.0f) fps = 30.0f;
+    if (fps <= 0.0f) fps = kSkeletalClipFps;
     return (float)frames / fps;
+}
+
+int SkeletalMesh::ClipFrameCount(int index) const {
+    if (index < 0 || index >= m_animCount) return -1;
+    return OZ_ANIM_KEYFRAME_COUNT(m_anims[index]);
 }
 
 void SkeletalMesh::ApplyPose(int clipIndex, float timeSeconds, float fps) const {
@@ -70,9 +98,20 @@ void SkeletalMesh::ApplyPose(int clipIndex, float timeSeconds, float fps) const 
     const ModelAnimation& anim = m_anims[clipIndex];
     const int frames = OZ_ANIM_KEYFRAME_COUNT(anim);
     if (frames <= 0) return;
-    if (!IsModelAnimationValid(m_model, anim)) return;
+    // A mismatch (a skin dropped by raylib because the glTF declared several, or
+    // a clip taken from a different rig) used to be a silent no-op: the model
+    // just stood in its bind pose with nothing in the log to say why. Warn once
+    // per asset - this runs once per instance per frame.
+    if (!IsModelAnimationValid(m_model, anim)) {
+        if (!m_invalidWarned) {
+            m_invalidWarned = true;
+            OZ_WARN("SkeletalMesh: clip '%s' (%d bones) does not match '%s' (%d bones) - animation cannot play",
+                    anim.name, anim.boneCount, m_diskPath.c_str(), OZ_MODEL_BONE_COUNT(m_model));
+        }
+        return;
+    }
 
-    if (fps <= 0.0f) fps = 30.0f;
+    if (fps <= 0.0f) fps = kSkeletalClipFps;
     float frame = std::fmod(timeSeconds * fps, (float)frames);
     if (frame < 0.0f) frame += (float)frames;
     UpdateModelAnimation(m_model, anim, frame);

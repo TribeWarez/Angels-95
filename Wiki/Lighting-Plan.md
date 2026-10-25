@@ -361,17 +361,23 @@ weapon fires, and *which* 8 changes as transients expire. Dust_Ravine already sh
 
 Recorded because they were found in the same audit and would otherwise be lost:
 
-1. `LitFog.fs` runs a *second* full 32-iteration light loop per fragment purely to
-   tint fog. `Surface.fs` has no equivalent, so a fogged surface brush disagrees with
-   a fogged wall next to it.
-2. `DetailTexture` in `LitFog.fs` has no CPU uploader, so it defaults to unit 0 - the
-   diffuse map - and multiplies albedo by the diffuse texture resampled at
+1. **FIXED.** `LitFog.fs` ran a *second* full 32-iteration light loop per fragment
+   purely to tint fog, and `Surface.fs` had no equivalent, so a fogged surface brush
+   disagreed with a fogged wall next to it. The in-scatter is now accumulated inside
+   the existing shading loop (`scatterAccum`) in **both** programs, with identical
+   body and constants, and `mix(lit, fogColor + scatterAccum, fogFactor)` is the same
+   expression in each.
+2. **FIXED.** `DetailTexture` in `LitFog.fs` had no CPU uploader, so it sampled unit 0 -
+   the diffuse map - and multiplied albedo by the diffuse texture resampled at
    `fragWorldPos.xz * 16`, on every fragment of every mesh, particle, pickup,
-   projectile and the view-model.
-3. `Core.hpp:1533` puts `DrawLights()` in `if (Debug)` and the whole
+   projectile and the view-model. It is now gated on `uHasDetail` (default 0); nothing
+   uploads a detail map, so the block is skipped. Bind a map **and** set the flag
+   together or detail silently stays off.
+3. **FIXED.** `Core.hpp` put `DrawLights()` in `if (Debug)` and the whole
    `DrawAll`/`DrawEntities`/`DrawLightFlares`/view-model chain in the `else`, so
-   `debug=1` removes NPCs, props, particles, wind, flares, the view-model and all
-   simulation - and disables the *good* light gizmos, which live in `DrawEntities`.
+   `debug=1` removed NPCs, props, particles, wind, flares, the view-model and all
+   simulation - and disabled the *good* light gizmos, which live in `DrawEntities`.
+   The debug overlay is now additive: the game block always runs.
 4. `restore_ambient` sets `{1,1,1,1}` under a comment claiming it matches the
    default, which is `{0.1,0.1,0.1,1}` - a script leaves the world 10x brighter.
 5. `GameData/Pawn/Lights/Light.Point.ozls` and `Light.Spot.ozls` are cited by name

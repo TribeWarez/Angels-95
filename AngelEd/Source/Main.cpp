@@ -2103,6 +2103,7 @@ AngelTechEditor.DrawModel = false;
                 // Release the previous target so it resumes normal playback.
                 if (MeshObjectNode* old = PawnSystem::Instance().GetMeshObject(g_editorPanels.animTargetMesh)) {
                     old->animPaused = false;
+                    old->animPreview = false;   // stop previewing a GLB clip
                     old->editPose.reset();
                 }
                 g_editorPanels.animTargetMesh = selMesh;
@@ -2240,6 +2241,16 @@ AngelTechEditor.DrawModel = false;
             if (tn && !tn->animFile.empty()) {
                 tn->animPaused = !g_editorPanels.animPlaying;
                 if (g_editorPanels.animPlaying) g_editorPanels.animTime = tn->animTime;
+            } else if (tn && AnimTargetSkeletal()) {
+                // Read-only preview of an embedded GLB clip. The clip NAME goes
+                // to previewClip, never animClip (which the world exports), and
+                // the node owns the playback clock - DrawEntities advances it
+                // while unpaused. Scrubbing pushes the panel time the other way.
+                tn->animPreview = true;
+                tn->previewClip = g_editorPanels.animClipName;
+                tn->animPaused = !g_editorPanels.animPlaying;
+                if (g_editorPanels.animPlaying) g_editorPanels.animTime = tn->animTime;
+                else tn->animTime = g_editorPanels.animTime;
             }
         }
         // Ctrl+Z / Ctrl+Y while the anim tool is active. Posts the SAME events the
@@ -2257,6 +2268,18 @@ AngelTechEditor.DrawModel = false;
         if (g_editorPanels.actionAnimRefresh) {
             g_editorPanels.actionAnimRefresh = false;
             RefreshAnimPanel();
+        }
+        // Live playback readout (~10 Hz). The panel's tick message only rewrites
+        // the time/frame line + scrubber; RefreshAnimPanel would rebuild the clip
+        // list and lose the selection. Throttled so the Win32 queue is not fed a
+        // message every frame.
+        {
+            static int s_animTickFrame = 0;
+            if (g_editorPanels.animPlaying && g_editorPanels.hAnimPanel &&
+                (++s_animTickFrame % 6) == 0) {
+                PostMessageA((HWND)g_editorPanels.hAnimPanel,
+                             EditorPanelState::kAnimPanelTick, 0, 0);
+            }
         }
 
         // Apply active texture to selected entity (from context menu)

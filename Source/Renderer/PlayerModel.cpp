@@ -80,7 +80,7 @@ PlayerModel::Entry& PlayerModel::EnsureLoaded(const std::string& characterId) {
     TryResolveAsset(id, meshPath, texPath, skeletal);
 
     e.mesh = skeletal
-        ? MeshCache::Instance().GetSkeletal(meshPath, texPath, kBaseDir, true)
+        ? MeshCache::Instance().GetSkeletalChecked(meshPath, texPath, kBaseDir, true)
         : MeshCache::Instance().GetStatic(meshPath, texPath, kBaseDir, true);
 
     if (e.mesh && e.mesh->Valid()) {

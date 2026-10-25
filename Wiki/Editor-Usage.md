@@ -366,7 +366,14 @@ animation for `Mesh.Skeletal` entities — the text `.ozanim` format
 (`Source/Package/Anim/`, raylib-free):
 
 - **Clip list** — New/Delete clips, per-clip FPS + loop toggle
-- **Transport** — Play / Pause / Stop + timeline scrub
+- **Transport** — Play / Pause / Stop + timeline scrub, with a live
+  `t 0.42 / 1.02 s  |  frame 25 / 61` readout and a scrubber that follows
+  playback (~10 Hz; it does not rebuild the list, so the selection is stable)
+- **GLB preview (read-only)** — select a `Mesh.Skeletal` entity and the panel
+  lists the clips embedded in its GLB instead. Play/Pause/Stop and the scrubber
+  work; New/Delete/Save/Add Key/Edit Verts are disabled because the clip lives
+  inside the asset. The preview never rewrites the entity's authored
+  `anim=` — see `MeshObjectNode::previewClip`
 - **Convert to Animated** (Mesh properties / Entity Properties) — writes a
   default clip under `GameData/Environment/Anims/` and switches the entity to an
   animated mesh

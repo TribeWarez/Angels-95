@@ -28,6 +28,10 @@ public:
     const char* ClipName(int index) const;
     int FindClip(const std::string& name) const;
 
+    // Same contract as oz::SkeletalMesh::ResolveClip: `preferred`, else "Idle",
+    // else clip 0 (-1 only when the file declares no clips).
+    int ResolveClip(const std::string& preferred) const;
+
     // Apply a clip pose at timeSeconds (samples + uploads). No-op if invalid.
     void ApplyVertexPose(int clipIndex, float timeSeconds);
 

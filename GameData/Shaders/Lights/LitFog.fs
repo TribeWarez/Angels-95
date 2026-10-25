@@ -9,9 +9,16 @@ uniform sampler2D texture0;
 uniform vec4 colDiffuse;
 
 // Optional detail texture (bind at application level)
+//
+// GATED on uHasDetail, which no CPU code uploads yet. An unbound sampler2D
+// samples texture unit 0 - the DIFFUSE map - so this block multiplied every
+// mesh/particle/pickup/projectile/view-model fragment's albedo by the diffuse
+// texture resampled at fragWorldPos.xz * 16, i.e. squared albedo, on every lit
+// draw. Leave the gate at its default 0 until an uploader binds a detail map.
 uniform sampler2D DetailTexture;
 uniform vec2 DetailScale = vec2(16.0);
 uniform float DetailBlend = 0.3;
+uniform int uHasDetail = 0;
 
 // --- baked material maps (Material/OzMaterial.hpp) --------------------------
 // Defaults keep every existing draw identical: no material = no normal/emissive
@@ -186,8 +193,9 @@ void main()
 {
     vec4 baseColor = texture(texture0, fragTexCoord);
 
-    // Apply detail texture using world-space UV
-    if (DetailBlend > 0.0) {
+    // Apply detail texture using world-space UV (only when a detail map is
+    // actually bound - see uHasDetail above).
+    if (uHasDetail == 1 && DetailBlend > 0.0) {
         vec2 detailUV = fragWorldPos.xz * DetailScale;
         vec4 detailColor = texture(DetailTexture, detailUV);
         baseColor.rgb = mix(baseColor.rgb, baseColor.rgb * detailColor.rgb, DetailBlend);
@@ -197,6 +205,8 @@ void main()
     vec3 viewDir = normalize(viewPos - fragPosition);
     vec3 lightAccum = vec3(0.0);
     vec3 specAccum = vec3(0.0);
+    // In-scattered light for the fog tint, accumulated in the SAME loop below.
+    vec3 scatterAccum = vec3(0.0);
 
     for (int i = 0; i < MAX_LIGHTS; i++)
     {
@@ -228,6 +238,22 @@ void main()
 
             lightAccum += effColor * NdotL * attenuation * spotFactor;
 
+            // In-scattered light for the fog tint. This used to be a SECOND
+            // full MAX_LIGHTS loop after the gamma step, and Surface.fs had no
+            // equivalent - so a per-face surface brush fogged with plain
+            // fogColor while the lit wall beside it fogged with a torch tint.
+            // Same formula and constants as the old block; keep Surface.fs in
+            // step (tests/Surface.test.cpp enforces the shared constants).
+            if (lights[i].type != LIGHT_DIRECTIONAL) {
+                float ldist = distance(lights[i].position, fragPosition);
+                if (!(lights[i].radius > 0.0 && ldist > lights[i].radius)) {
+                    vec3 scat = applyLightEffect(lights[i].color.rgb, lights[i].intensity,
+                                                 lights[i].effect, lights[i].phase,
+                                                 lights[i].period, 1.0);
+                    scatterAccum += scat * (1.0 / (1.0 + ldist * 0.1)) * 0.3;
+                }
+            }
+
             // Blinn-Phong specular
             if (NdotL > 0.0) {
                 vec3 halfDir = normalize(lightDir + viewDir);
@@ -256,21 +282,9 @@ void main()
     float fogDist = length(viewPos - fragPosition);
     float fogFactor = fogFactorAt(fogDist) * fogIntensity;
 
-    // Light-influenced fog
-    vec3 lightInfluence = vec3(0.0);
-    for (int i = 0; i < MAX_LIGHTS; i++) {
-        if (lights[i].enabled == 1 && lights[i].type != LIGHT_DIRECTIONAL) {
-            float dist = distance(lights[i].position, fragPosition);
-            if (lights[i].radius > 0.0 && dist > lights[i].radius) continue;
-            float influence = 1.0 / (1.0 + dist * 0.1);
-            vec3 effColor = applyLightEffect(lights[i].color.rgb, lights[i].intensity,
-                                              lights[i].effect, lights[i].phase,
-                                              lights[i].period, 1.0);
-            lightInfluence += effColor * influence * 0.3;
-        }
-    }
-
-    vec3 finalFogColor = fogColor + lightInfluence;
+    // Light-influenced fog: the in-scatter was accumulated in the shading loop
+    // above (there used to be a second full light loop here purely for this).
+    vec3 finalFogColor = fogColor + scatterAccum;
     vec3 finalLit = mix(litColor, finalFogColor, fogFactor);
 
     finalColor = vec4(finalLit, baseColor.a);

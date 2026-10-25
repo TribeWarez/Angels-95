@@ -21,6 +21,13 @@
 // Blood/gore on enemy hit and death. Default on; the "Gore" gameplay setting.
 inline bool g_goreEnabled = true;
 
+// Reduced-motion comfort flag, derived from the existing HeadBob toggle (the
+// camera bob is the game's main motion source) and pushed once per frame in
+// Core.hpp - same reason ParticlesEnabled is pushed there: Settings.hpp's
+// globals are per-TU static copies. Consumed by oz::CombatFeedback so the
+// low-health edge cue holds a steady alpha instead of pulsing.
+inline bool g_reducedMotion = false;
+
 // Weapon hand for the first-person view-model: 0 = right, 1 = left. Mirrors the
 // view-model across the camera's YZ plane.
 inline int g_weaponHand = 0;

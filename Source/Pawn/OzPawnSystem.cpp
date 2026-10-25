@@ -3,6 +3,7 @@
 #include "../Package/PackageAssetLoader.hpp"
 #include "../Renderer/EngineBillboard.hpp"
 #include "../Renderer/CombatFX.hpp"
+#include "../Renderer/CombatFeedback.hpp"
 #include "../Renderer/WindShader.hpp"
 #include "../Particle/OzParticleSimulationManager.hpp"
 #include "../Audio/SoundManager.hpp"
@@ -125,6 +126,7 @@ int PawnSystem::Spawn(Vector3 pos, const char* defName) {
 
     p.patrolTimer = 0.0f;
     p.stateTimer = 0.0f;
+    p.deadTimer = 0.0f;
     p.defName = defName;
     // Slots are recycled, so every piece of per-instance state must be reset or
     // a respawned pawn inherits the previous one's hover phase / patrol waypoint
@@ -136,6 +138,8 @@ int PawnSystem::Spawn(Vector3 pos, const char* defName) {
     p.animTime = 0.0f;
     p.forcedClip = -1;
     p.forcedClipTimer = 0.0f;
+    p.netPrevPosition = pos;
+    p.netHasPrev = false;
     p.mesh.reset();
     // Slots are recycled from m_freeIds. If LEM::Spawn below fails, this must
     // not keep pointing at the previous occupant's script entity — Spawn() is
@@ -337,7 +341,12 @@ void PawnSystem::ApplyPawnDamage(Pawn& p, int damage) {
         // pawn is hidden. Gated on the "Gore" setting.
         if (g_goreEnabled)
             CombatFX::Instance().SpawnGibs({p.position.x, p.position.y + 0.6f, p.position.z});
-        p.active = false;
+        // Do NOT deactivate here. `active = false` made the pawn vanish on the
+        // frame it died, which also made the DEAD branch of DrawAll (and so
+        // `anim_death`, which every def is allowed to author) unreachable. The
+        // corpse stays for kPawnCorpseSeconds and Update() despawns it then.
+        p.velocity = {0, 0, 0};
+        p.deadTimer = kPawnCorpseSeconds;
         TransitionState(p, PawnState::DEAD);
     }
 }
@@ -439,6 +448,9 @@ void PawnSystem::UpdateProjectiles(float dt) {
                 if (g_goreEnabled)
                     CombatFX::Instance().SpawnBlood(hitPos, hitNormal, 12, 1.0f);
                 ApplyPawnDamage(pawn, (int)p.damage);
+                // Hit confirmation for the shooter: the impact/blood above is
+                // the 3D half, this drives the crosshair marker.
+                oz::CombatFeedback::Instance().ConfirmHit(pawn.state == PawnState::DEAD);
                 break;
             }
         }
@@ -910,6 +922,14 @@ void PawnSystem::Update(Vector3 playerPos, float dt,
                         oz::physics::PlayerPhysics::CollisionQuery* collision) {
     for (auto& p : m_pawns) {
         if (!p.active) continue;
+        // A corpse is not AI: it stays where it fell and plays the death clip.
+        // The timer has to run before the networkControlled early-out, because
+        // a server-owned pawn's death is signalled from the network layer.
+        if (p.state == PawnState::DEAD) {
+            p.deadTimer -= dt;
+            if (p.deadTimer <= 0.0f) Despawn((int)p.id);
+            continue;
+        }
         // Network-controlled pawns: the server owns AI/position � no local FSM
         // (prevents double simulation and fights over position).
         if (p.networkControlled) continue;
@@ -1013,7 +1033,9 @@ void PawnSystem::Update(Vector3 playerPos, float dt,
 void PawnSystem::DrawAll(Camera3D& camera, Shader litShader) {
     const float dt = GetFrameTime();
     for (auto& p : m_pawns) {
-        if (!p.active || p.state == PawnState::DEAD) continue;
+        // Corpses are drawn (state == DEAD) so the death clip is actually seen;
+        // they are removed by the corpse timer in Update(), not by this skip.
+        if (!p.active) continue;
 
         // Prefer a real 3D model when the pawn def provides one (billboard as
         // fallback keeps old sprite-only defs working). A loaded model uses the
@@ -1040,7 +1062,7 @@ void PawnSystem::DrawAll(Camera3D& camera, Shader litShader) {
                         case PawnState::RETURN: clipName = &def->anim_return; break;
                         case PawnState::DEAD:   clipName = &def->anim_death;  break;
                     }
-                    int wanted = (clipName && !clipName->empty()) ? vmesh->FindClip(*clipName) : -1;
+                    int wanted = vmesh->ResolveClip(clipName ? *clipName : std::string());
                     if (wanted < 0) wanted = 0;
                     if (wanted != p.animClip) { p.animClip = wanted; p.animTime = 0.0f; }
                     p.animTime += dt * (def->anim_speed > 0.0f ? def->anim_speed : 1.0f);
@@ -1066,6 +1088,10 @@ void PawnSystem::DrawAll(Camera3D& camera, Shader litShader) {
                         bob += fabsf(sinf(p.animTime)) * 0.06f;
                     }
                 }
+                // A corpse does not bob: the death clip already collapsed it, and
+                // the hover oscillation read as "still alive" (a dead Floater
+                // floated up and down).
+                if (p.state == PawnState::DEAD) bob = 0.0f;
 
                 oz::MeshTransform t;
                 t.position = {p.position.x, p.position.y + offset + bob, p.position.z};
@@ -1286,7 +1312,9 @@ std::shared_ptr<oz::Mesh> PawnSystem::EnsurePawnMesh(PawnDef& def) {
         mesh = oz::MeshCache::Instance().GetAnimated(meshPath, texPath, def.anim_file,
                                                      def.baseDir, pointFilter);
     else if (def.mesh_type == "skeletal")
-        mesh = oz::MeshCache::Instance().GetSkeletal(meshPath, texPath, def.baseDir, pointFilter);
+        // Checked: a mesh whose bone indices do not fit raylib's single loaded
+        // skeleton comes back as a StaticMesh instead of deforming out of bounds.
+        mesh = oz::MeshCache::Instance().GetSkeletalChecked(meshPath, texPath, def.baseDir, pointFilter);
     else
         mesh = oz::MeshCache::Instance().GetStatic(meshPath, texPath, def.baseDir, pointFilter);
 
@@ -1307,7 +1335,8 @@ void PawnSystem::SyncPawnAnim(Pawn& p, PawnDef* def, float dt) {
     if (!skel || skel->ClipCount() <= 0) return;
 
     // play_clip override: hold a scripted one-shot clip until its timer expires.
-    if (p.forcedClipTimer > 0.0f) {
+    // Death wins over a stale timer, or a corpse holds the attack pose.
+    if (p.state != PawnState::DEAD && p.forcedClipTimer > 0.0f) {
         p.forcedClipTimer -= dt;
         if (p.forcedClip >= 0 && p.forcedClip < skel->ClipCount()) {
             if (p.forcedClip != p.animClip) { p.animClip = p.forcedClip; p.animTime = 0.0f; }
@@ -1324,13 +1353,23 @@ void PawnSystem::SyncPawnAnim(Pawn& p, PawnDef* def, float dt) {
         case PawnState::RETURN: clipName = &def->anim_return; break;
         case PawnState::DEAD:   clipName = &def->anim_death;  break;
     }
-    int wanted = (clipName && !clipName->empty()) ? skel->FindClip(*clipName) : -1;
-    if (wanted < 0) wanted = 0; // first clip as fallback
+    int wanted = skel->ResolveClip(clipName ? *clipName : std::string());
+    if (wanted < 0) return;
     if (wanted != p.animClip) {
         p.animClip = wanted;
         p.animTime = 0.0f;
     }
     p.animTime += dt * (def->anim_speed > 0.0f ? def->anim_speed : 1.0f);
+    if (p.state == PawnState::DEAD) {
+        // Hold the last frame. ApplyPose wraps with fmod (every clip loops by
+        // default), so an unclamped corpse would stand back up and replay the
+        // death clip while it waits to be despawned.
+        const float dur = skel->ClipSeconds(wanted);
+        const float lastFrame = 1.0f / oz::kSkeletalClipFps;
+        if (dur > 0.0f && p.animTime > dur - lastFrame)
+            p.animTime = dur - lastFrame;
+        if (p.animTime < 0.0f) p.animTime = 0.0f;
+    }
 }
 
 int PawnSystem::PlayPawnClip(const std::string& defName, const std::string& clipName,
@@ -1464,7 +1503,7 @@ void PawnSystem::DrawEntities(Camera3D& camera, Shader litShader, Shader windSha
             if (!meshPath.empty()) {
                 std::string baseDir = DefAssetDir(edef->sourcePath);
                 mesh = (edef->meshType == "skeletal")
-                    ? oz::MeshCache::Instance().GetSkeletal(meshPath, texPath, baseDir, true)
+                    ? oz::MeshCache::Instance().GetSkeletalChecked(meshPath, texPath, baseDir, true)
                     : oz::MeshCache::Instance().GetStatic(meshPath, texPath, baseDir, true);
                 auto* skel = dynamic_cast<oz::SkeletalMesh*>(mesh.get());
                 animated = skel && skel->ClipCount() > 0;
@@ -1475,9 +1514,10 @@ void PawnSystem::DrawEntities(Camera3D& camera, Shader litShader, Shader windSha
             float yaw = atan2f(camera.position.x - pos.x, camera.position.z - pos.z) * RAD2DEG;
             if (animated) {
                 auto* skel = static_cast<oz::SkeletalMesh*>(mesh.get());
-                int clip = !edef->animIdle.empty() ? skel->FindClip(edef->animIdle) : 0;
-                if (clip < 0) clip = 0;
-                skel->ApplyPose(clip, (float)GetTime());
+                // Idle by default rather than clip 0: a weapon's first exported
+                // clip is `Fire`, so a pickup with no authored clip name would
+                // mime firing its gun forever.
+                skel->ApplyPose(skel->ResolveClip(edef->animIdle), (float)GetTime());
             }
             oz::MeshTransform t;
             t.position = pos;
@@ -1503,7 +1543,7 @@ void PawnSystem::DrawEntities(Camera3D& camera, Shader litShader, Shader windSha
                 n.mesh = oz::MeshCache::Instance().GetAnimated(
                     n.meshPath, n.texturePath, n.animFile, n.baseDir, true);
             else if (n.skeletal)
-                n.mesh = oz::MeshCache::Instance().GetSkeletal(
+                n.mesh = oz::MeshCache::Instance().GetSkeletalChecked(
                     n.meshPath, n.texturePath, n.baseDir, true);
             else
                 n.mesh = oz::MeshCache::Instance().GetStatic(
@@ -1519,8 +1559,7 @@ void PawnSystem::DrawEntities(Camera3D& camera, Shader litShader, Shader windSha
                 if (n.editPose && n.editPose->size() == (size_t)am->TotalVertexCount() * 3) {
                     am->UploadOffsets(*n.editPose);
                 } else {
-                    int clip = !n.animClip.empty() ? am->FindClip(n.animClip) : 0;
-                    if (clip < 0) clip = 0;
+                    const int clip = am->ResolveClip(n.animClip);
                     if (!n.animPaused)
                         n.animTime += GetFrameTime() * (n.animSpeed > 0.0f ? n.animSpeed : 1.0f);
                     am->ApplyVertexPose(clip, n.animTime);
@@ -1529,9 +1568,15 @@ void PawnSystem::DrawEntities(Camera3D& camera, Shader litShader, Shader windSha
         } else if (n.skeletal) {
             auto* skel = dynamic_cast<oz::SkeletalMesh*>(n.mesh.get());
             if (skel && skel->ClipCount() > 0) {
-                int clip = !n.animClip.empty() ? skel->FindClip(n.animClip) : 0;
-                if (clip < 0) clip = 0;
-                n.animTime += GetFrameTime() * (n.animSpeed > 0.0f ? n.animSpeed : 1.0f);
+                // The animation panel previews a GLB clip through previewClip; the
+                // authored animClip stays untouched so an editor scrub cannot
+                // rewrite what the world exports.
+                const int clip = skel->ResolveClip(n.animPreview ? n.previewClip : n.animClip);
+                // The vertex-keyframe branch above already honoured animPaused;
+                // this one advanced n.animTime unconditionally, so the editor's
+                // Pause button did nothing for a GLB clip.
+                if (!n.animPaused)
+                    n.animTime += GetFrameTime() * (n.animSpeed > 0.0f ? n.animSpeed : 1.0f);
                 skel->ApplyPose(clip, n.animTime);
             }
         }

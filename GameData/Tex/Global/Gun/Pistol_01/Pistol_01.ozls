@@ -2,6 +2,10 @@ entity "pistol_01" : weapon {
     mesh = "FbxFiles/Pistol_01.glb"
     texture = "Textures/Pistol_01_Albedo.png"
     icon = "Textures/Pistol_01_silhouette.png"
+    // Rigged with Idle/Fire/Reload; see Rifle_01.ozls. This drives the world
+    // pickup only (DrawEntities applies anim_idle), not the view-model.
+    mesh_type = "skeletal"
+    anim_idle = "Idle"
     stats {
         damage = 14
         fire_rate = 0.28

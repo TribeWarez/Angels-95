@@ -255,6 +255,11 @@ void main()
     vec3 viewDir = normalize(viewPos - fragPosition);
     vec3 lightAccum = vec3(0.0);
     vec3 specAccum = vec3(0.0);
+    // In-scattered light for the fog tint - identical accumulation to LitFog.fs,
+    // folded into the shading loop instead of a second MAX_LIGHTS pass. Before
+    // this, this shader fogged with plain fogColor while LitFog.fs added a
+    // torch tint, so a per-face brush disagreed with the wall beside it.
+    vec3 scatterAccum = vec3(0.0);
 
     for (int i = 0; i < MAX_LIGHTS; i++)
     {
@@ -285,6 +290,18 @@ void main()
                                               lights[i].period, NdotL);
 
             lightAccum += effColor * NdotL * attenuation * spotFactor;
+
+            // Fog in-scatter, same body/constants as LitFog.fs. Keep the two in
+            // step: tests/Surface.test.cpp pins the shared fog maths.
+            if (lights[i].type != LIGHT_DIRECTIONAL) {
+                float ldist = distance(lights[i].position, fragPosition);
+                if (!(lights[i].radius > 0.0 && ldist > lights[i].radius)) {
+                    vec3 scat = applyLightEffect(lights[i].color.rgb, lights[i].intensity,
+                                                 lights[i].effect, lights[i].phase,
+                                                 lights[i].period, 1.0);
+                    scatterAccum += scat * (1.0 / (1.0 + ldist * 0.1)) * 0.3;
+                }
+            }
 
             if (NdotL > 0.0) {
                 vec3 halfDir = normalize(lightDir + viewDir);
@@ -349,7 +366,7 @@ void main()
     if (!HasFlag(SF_NO_FOG) && !HasFlag(SF_ALPHABLEND)) {
         float fogDist = length(viewPos - fragPosition);
         float fogFactor = fogFactorAt(fogDist) * fogIntensity;
-        lit = mix(lit, fogColor, fogFactor);
+        lit = mix(lit, fogColor + scatterAccum, fogFactor);
     }
 
     if (HasFlag(SF_ALPHABLEND) || HasFlag(SF_TRANSLUCENT))

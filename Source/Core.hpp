@@ -102,6 +102,7 @@ void SaveGame();
     void DrawRemotePlayers3D(Shader litShader);
 
 #include "Renderer/CombatFX.hpp"
+#include "Renderer/CombatFeedback.hpp"
 #include "Renderer/SurfaceMaterial.hpp"
 #include "Renderer/SkyMaterial.hpp"
 #include "Renderer/Skybox.hpp"
@@ -1136,6 +1137,8 @@ void ResetSessionState()
     oz::game::GameManager::Instance().ClearActiveMission();
     oz::ViewModel::Instance().Clear();
     PawnSystem::Instance().m_pickupFeedback = PawnSystem::PickupFeedback{};
+    // Hit marker / damage arc / low-health pulse are per-session transients.
+    oz::CombatFeedback::Instance().Reset();
 
     // Per-world latches that are not owned by LoadWorld's clear block.
     g_activeEnvZone.clear();
@@ -1924,11 +1927,17 @@ if (inSkyZone)
         DrawRemotePlayers3D(AngelTechData.Lights);
     }
 
+    // Debug light gizmos are ADDITIVE. This used to read
+    //   if (Debug) DrawLights(); else { <the whole sim + pawn/prop/particle/
+    //                                     flare/view-model draw chain> }
+    // so debug=1 removed the entire game - NPCs, props, particles, wind, flares,
+    // the view-model and all simulation - and disabled the GOOD light gizmos,
+    // which live in DrawEntities (inside that else). The world is drawn above
+    // either way; only the extra overlay is conditional.
     if (Debug)
     {
         DrawLights();
     }
-    else
     {
         // Fixed 60 Hz timestep for the client simulation. Physics, pawn FSM,
         // projectiles and portal scans advance in discrete 1/60s steps (up to 4
@@ -1956,6 +1965,11 @@ if (inSkyZone)
         // copy of it.
         OzParticleSimulationManager::Instance().SetEnabled(ParticlesEnabled);
         OzParticleSimulationManager::Instance().Update(GetFrameTime());
+
+        // Motion-comfort flag for the HUD cues (see GameplayFlags.hpp): the
+        // HeadBob toggle is the player-facing "less motion" control, so the
+        // low-health edge cue stops pulsing when it is off.
+        g_reducedMotion = !HeadBob;
 
         // Ambient weather spawns around the camera, so it needs the camera and
         // is deliberately NOT part of the manager's Update(): that function is

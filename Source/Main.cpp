@@ -164,6 +164,26 @@ static Color unpack_color(uint32_t packed) {
     };
 }
 
+// Best-effort damage source for the directional indicator. PLAYER_HURT carries
+// no attacker id or position (`PlayerHurtData` is victim/damage/health only), so
+// the nearest live hostile is the best attribution the client can make. If no
+// pawn is alive the arc is simply skipped - a wrong direction is worse than
+// none.
+static void FeedDamageDirection() {
+    const Vector3 cam = AngelTechData.MainCamera.position;
+    Vector3 fwd = Vector3Subtract(AngelTechData.MainCamera.target, cam);
+    fwd.y = 0.0f;
+    const Pawn* best = nullptr;
+    float bestDistSq = 0.0f;
+    for (const Pawn& p : PawnSystem::Instance().GetPawns()) {
+        if (!p.active || p.state == PawnState::DEAD) continue;
+        const float d = Vector3DistanceSqr(p.position, cam);
+        if (!best || d < bestDistSq) { best = &p; bestDistSq = d; }
+    }
+    if (best)
+        oz::CombatFeedback::Instance().DamageFrom(best->position, cam, fwd);
+}
+
 // ---------------------------------------------------------------------------
 // Remote player rendering — drawn inside DrawWorld()'s BeginMode3D pass
 // (called from Core.hpp). TODO: Move into Render/
@@ -229,7 +249,7 @@ void DrawRemotePlayers3D(Shader litShader) {
                     ? cdef->animIdle : (pdef ? pdef->animIdle : "");
                 const std::string chase = (cdef && !cdef->animChase.empty())
                     ? cdef->animChase : (pdef ? pdef->animChase : "");
-                int wanted = moving ? skel->FindClip(chase) : skel->FindClip(idle);
+                int wanted = skel->ResolveClip(moving ? chase : idle);
                 if (wanted < 0) wanted = 0;
                 if (wanted != a.clip) { a.clip = wanted; a.time = 0.0f; }
                 a.time += dt * (rp.stance == net::STANCE_SPRINT ? 1.5f : 1.0f);
@@ -794,6 +814,9 @@ ShowSpellbook = false;
 
     g_client.set_on_player_hurt([](int damage, float remaining_health) {
         LightningEntityManager::Instance().SetPlayerHealth(remaining_health);
+        // Directional damage cue: the vignette below says "you were hit", this
+        // says from where. Best-effort source, see FeedDamageDirection.
+        FeedDamageDirection();
         // Split from death: this fires on every point of damage, and it
         // previously played the death sound for all of them, so a firefight
         // sounded like a montage of deaths. Routed through PlayerController so
@@ -1374,15 +1397,67 @@ ShowSpellbook = false;
                     }
 
                     if (p) {
-                        p->position = { npcs[i].position.x, npcs[i].position.y, npcs[i].position.z };
-                        // Server-owned NPCs die on the server; the client learns
-                        // it here when `active` flips false. Spawn the gore once
-                        // on that transition (the local ApplyPawnDamage path is
-                        // skipped for networkControlled pawns).
-                        if (p->active && !npcs[i].active && g_goreEnabled)
-                            CombatFX::Instance().SpawnGibs(
-                                {p->position.x, p->position.y + 0.6f, p->position.z});
-                        p->active = npcs[i].active;
+                        const Vector3 srvPos = { npcs[i].position.x, npcs[i].position.y, npcs[i].position.z };
+                        // NpcStateUpdateData has always carried `yaw` and `state`;
+                        // this block used to copy only `position`. Because Update()
+                        // returns early for server-owned pawns, `state` stayed IDLE
+                        // and `velocity` stayed zero forever - so every multiplayer
+                        // NPC slid around playing the idle clip and faced whatever
+                        // yaw it spawned with. PawnState and NpcState are the same
+                        // order (IDLE/PATROL/CHASE/RETURN/DEAD).
+                        const int srvState = npcs[i].state;
+                        const PawnState wireState =
+                            (srvState >= 0 && srvState <= (int)PawnState::DEAD)
+                                ? (PawnState)srvState : PawnState::IDLE;
+
+                        // Velocity is not on the wire: derive it from the snapshot
+                        // delta so the static-model walk bob has real motion.
+                        // Packets arrive at ~10 Hz, so keep the last direction
+                        // between them and only zero it once the server says IDLE.
+                        if (p->netHasPrev) {
+                            const Vector3 d = Vector3Subtract(srvPos, p->netPrevPosition);
+                            const float dtf = GetFrameTime();
+                            if (Vector3LengthSqr(d) > 1e-6f && dtf > 0.0f)
+                                p->velocity = Vector3Scale(d, 1.0f / dtf);
+                            else if (wireState == PawnState::IDLE)
+                                p->velocity = {0, 0, 0};
+                        }
+                        p->netPrevPosition = srvPos;
+                        p->netHasPrev = true;
+                        p->position = srvPos;
+                        // The server stores NpcStateUpdateData::yaw in DEGREES
+                        // (GameState::tick_npcs does atan2 * RAD2DEG) and Pawn::yaw
+                        // is degrees too, so this is a straight copy - no RAD2DEG.
+                        p->yaw = npcs[i].yaw;
+
+                        if (p->state != PawnState::DEAD && p->active && !npcs[i].active) {
+                            // Died on the server. Spawn the gore once (the local
+                            // ApplyPawnDamage path is skipped for networkControlled
+                            // pawns) and become a corpse: Update() holds the death
+                            // clip and despawns it after kPawnCorpseSeconds.
+                            if (g_goreEnabled)
+                                CombatFX::Instance().SpawnGibs(
+                                    {p->position.x, p->position.y + 0.6f, p->position.z});
+                            p->velocity = {0, 0, 0};
+                            p->deadTimer = kPawnCorpseSeconds;
+                            p->animClip = -1;   // restart the clip at the death pose
+                            p->state = PawnState::DEAD;
+                        } else if (npcs[i].active) {
+                            // Revived / still alive: trust the server's state.
+                            p->active = true;
+                            if (wireState == PawnState::DEAD) {
+                                // A server that reports DEAD before flipping
+                                // `active` off must still get a corpse window,
+                                // or the pawn is despawned on the same frame.
+                                if (p->state != PawnState::DEAD) {
+                                    p->deadTimer = kPawnCorpseSeconds;
+                                    p->animClip = -1;
+                                }
+                                p->state = PawnState::DEAD;
+                            } else {
+                                p->state = wireState;
+                            }
+                        }
                     } else if (npcs[i].active) {
                         // Spawn with the server-reported def type (falls back to Walker)
                         const char* type = npcs[i].npc_type[0] ? npcs[i].npc_type : "Walker";
@@ -1464,6 +1539,20 @@ ShowSpellbook = false;
                 DrawRectangle(0, band, band, sh - 2 * band, {90, 0, 0, a});
                 DrawRectangle(sw - band, band, band, sh - 2 * band, {90, 0, 0, a});
                 EndBlendMode();
+            }
+        }
+
+        // Combat feedback (2D): hit marker, damage bearing ring, low-health
+        // pulse. Timers advance even when the HUD is hidden so a later capture
+        // cannot show a stale cue; only the drawing is gated.
+        {
+            auto& cf = oz::CombatFeedback::Instance();
+            cf.Update(GetFrameTime());
+            if (!(g_shot.active && g_shot.hideHud)) {
+                auto& lem = LightningEntityManager::Instance();
+                const float maxHp = lem.GetPlayerMaxHealth();
+                const float hp = lem.GetPlayerHealth();
+                cf.Draw(maxHp > 0.0f ? (hp / maxHp) : 1.0f);
             }
         }
 

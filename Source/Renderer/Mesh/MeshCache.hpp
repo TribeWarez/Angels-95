@@ -24,6 +24,16 @@ public:
     std::shared_ptr<Mesh> GetSkeletal(const std::string& meshPath, const std::string& texPath,
                                       const std::string& baseDir, bool pointFilter);
 
+    // Like GetSkeletal, but a mesh whose vertex bone indices do NOT fit the one
+    // skeleton raylib loaded (multi-skin glTF, or a clip from another rig) is
+    // downgraded to a StaticMesh instead. raylib's CPU skinning indexes
+    // model.boneMatrices with the mesh's bone index, so an unfit asset is an
+    // out-of-bounds read that shows up as garbage geometry, not an error.
+    // The view-model deliberately uses GetSkeletal so its `viewmodel_skeletal=1`
+    // override can still force playback past the scan.
+    std::shared_ptr<Mesh> GetSkeletalChecked(const std::string& meshPath, const std::string& texPath,
+                                             const std::string& baseDir, bool pointFilter);
+
     // Returns a vertex-keyframe AnimatedMesh for an external `.ozanim` clip;
     // falls back to a StaticMesh when the clip or mesh cannot be loaded.
     std::shared_ptr<Mesh> GetAnimated(const std::string& meshPath, const std::string& texPath,
@@ -39,6 +49,12 @@ private:
                                       bool skeletal, bool pointFilter);
 
     std::unordered_map<std::string, std::shared_ptr<Mesh>> m_cache;
+    // Failure retry gate. A cache MISS only latches a failure for this long.
+    // Caching nullptr forever meant one unlucky early load (before a package
+    // hot-loaded, or before the .ozls defs registered) pinned that asset to
+    // "missing" for the whole session, and made PlayerModel's own retry
+    // impossible to succeed. Keyed like m_cache.
+    std::unordered_map<std::string, double> m_retryAt;
 };
 
 } // namespace oz

@@ -42,6 +42,12 @@ enum class PawnState : uint8_t {
     DEAD
 };
 
+// How long a dead pawn stays in the world so its `anim_death` clip is visible.
+// A pawn is NOT deactivated on death (that made `PawnState::DEAD` unreachable in
+// DrawAll); it is deactivated and despawned when this expires. The server-owned
+// (multiplayer) path uses the same window.
+inline constexpr float kPawnCorpseSeconds = 6.0f;
+
 // TODO: Gun/WEapon PawnDefs for stat block
 // Template definition shared between spawn calls; stored in an internal
 // registry so Spawn() can be called by name.
@@ -123,6 +129,10 @@ struct Pawn {
 
     float patrolTimer = 0.0f;
     float stateTimer = 0.0f;
+    // Corpse lifetime, counted down while state == DEAD. Reaching 0 despawns the
+    // pawn. Without this the pawn had to be deactivated the instant it died -
+    // which made the DEAD branch of DrawAll (and therefore anim_death) dead code.
+    float deadTimer = 0.0f;
     // Client-side path-node patrol cursor (index into PawnSystem::m_pathNodes).
     // The server already follows PathNode graphs; the client FSM used to ignore
     // them and walk a slow arc instead.
@@ -144,6 +154,12 @@ struct Pawn {
     int netWorldIndex     = -1;
     int netNpcIndex       = -1;
     int netPartitionIndex = -1;
+    // The wire carries position + yaw + state but NOT velocity, so a client-side
+    // server-owned pawn derives its velocity from successive snapshots. That is
+    // what makes the static-model walk bob (and any future blend) see motion;
+    // snapshots arrive at ~10 Hz, so the last direction is held between them.
+    Vector3 netPrevPosition{0, 0, 0};
+    bool    netHasPrev = false;
 
     // Shared render mesh (GameEngine.Mesh.Static/Skeletal) + per-instance anim state.
     std::shared_ptr<oz::Mesh> mesh;
@@ -176,6 +192,12 @@ struct MeshObjectNode {
     float animSpeed = 1.0f;     // playback speed multiplier
     float animTime = 0.0f;
     bool animPaused = false;    // editor scrub: keep animTime fixed while drawing
+    // Editor-only preview of an EMBEDDED GLB clip (the animation panel can list
+    // and scrub those, but they are read-only - the clip lives in the asset).
+    // Kept separate from animClip so previewing never rewrites the clip the world
+    // exports; Main.cpp clears it when the node stops being the anim target.
+    bool animPreview = false;
+    std::string previewClip;
     // Editor-only live vertex pose (dense offsets, vertexCount*3). When set,
     // DrawEntities uploads this instead of sampling the clip. Null at runtime.
     std::shared_ptr<std::vector<float>> editPose;
