@@ -37,19 +37,115 @@ static oz::AnimatedMesh* AnimTargetMesh() {
     return dynamic_cast<oz::AnimatedMesh*>(n->mesh.get());
 }
 
+// Skeletal counterpart: a GLB's embedded clips. Preview/scrub only - the clip
+// lives in the asset, so New/Delete/Save/Add Key/Edit Verts do not apply and the
+// panel disables them (SetSkeletalPreviewMode).
+static oz::SkeletalMesh* AnimTargetSkeletal() {
+    MeshObjectNode* n = PawnSystem::Instance().GetMeshObject(g_editorPanels.animTargetMesh);
+    if (!n || !n->mesh) return nullptr;
+    return dynamic_cast<oz::SkeletalMesh*>(n->mesh.get());
+}
+
+static void SetSkeletalPreviewMode(HWND hwnd, bool skeletal) {
+    static const int kVertexOnly[] = {
+        ID_AN_NEW, ID_AN_DELETE, ID_AN_SAVE, ID_AN_ADDKEY, ID_AN_DELKEY,
+        ID_AN_FPS, ID_AN_LOOP, ID_AN_EDITVERTS, ID_AN_UNDO, ID_AN_REDO,
+        ID_AN_SELALL, ID_AN_CLRSEL };
+    for (int id : kVertexOnly)
+        if (HWND h = GetDlgItem(hwnd, id)) EnableWindow(h, !skeletal);
+}
+
+// Clip-count/verts/duration line built by PopulateAnimPanel. The live readout
+// appends to it instead of rebuilding it, so a per-frame tick does not need to
+// walk the target again.
+static wchar_t s_animStatusInfo[160] = L"";
+
+// Duration of the CURRENT clip for whichever target kind is loaded, plus its
+// frame count (skeletal) or keyframe count (.ozanim) for the readout.
+static float SelectedClipDuration(int* outFrames) {
+    if (outFrames) *outFrames = 0;
+    if (oz::AnimatedMesh* am = AnimTargetMesh()) {
+        const ozanim::Clip* c = am->GetAnimation().FindClip(g_editorPanels.animClipName);
+        if (!c) return 0.0f;
+        if (outFrames) *outFrames = (int)c->keys.size();
+        return c->Duration();
+    }
+    if (oz::SkeletalMesh* sm = AnimTargetSkeletal()) {
+        const int idx = sm->FindClip(g_editorPanels.animClipName);
+        if (idx < 0) return 0.0f;
+        if (outFrames) *outFrames = sm->ClipFrameCount(idx);
+        return sm->ClipSeconds(idx);
+    }
+    return 0.0f;
+}
+
+// Live half of the panel: status line + scrubber position. Called by the tick
+// message while a clip plays, and once from PopulateAnimPanel.
+static void UpdateAnimReadout(HWND hStatus, HWND hTime) {
+    if (!hStatus || !hTime) return;
+    int frames = 0;
+    const float dur = SelectedClipDuration(&frames);
+    const bool skeletal = (AnimTargetSkeletal() != nullptr);
+    wchar_t buf[320];
+    if (dur > 0.0f) {
+        if (skeletal) {
+            int f = (int)((g_editorPanels.animTime / dur) * (float)frames + 0.5f);
+            if (f < 0) f = 0;
+            if (frames > 0 && f > frames - 1) f = frames - 1;
+            swprintf(buf, 320, L"%ls  |  t %.2f / %.2f s  |  frame %d / %d",
+                     s_animStatusInfo, g_editorPanels.animTime, dur, f, frames);
+        } else {
+            swprintf(buf, 320, L"%ls  |  t %.2f / %.2f s  |  %d keys",
+                     s_animStatusInfo, g_editorPanels.animTime, dur, frames);
+        }
+    } else {
+        swprintf(buf, 320, L"%ls", s_animStatusInfo);
+    }
+    SetWindowTextW(hStatus, buf);
+
+    int pos = (dur > 0.0f) ? (int)(g_editorPanels.animTime / dur * 1000.0f) : 0;
+    if (pos < 0) pos = 0;
+    if (pos > 1000) pos = 1000;
+    SendMessage(hTime, SBM_SETPOS, pos, TRUE);
+}
+
 static void PopulateAnimPanel(HWND hwnd, HWND hList, HWND hTime, HWND hFps, HWND hStatus, HWND hLoop) {
     SendMessage(hList, LB_RESETCONTENT, 0, 0);
     MeshObjectNode* n = PawnSystem::Instance().GetMeshObject(g_editorPanels.animTargetMesh);
     oz::AnimatedMesh* am = AnimTargetMesh();
+    oz::SkeletalMesh* sm = am ? nullptr : AnimTargetSkeletal();
+    SetSkeletalPreviewMode(hwnd, sm != nullptr);
 
     if (!n) {
         SetWindowTextA(hStatus, "No mesh selected. Select a GameEngine.Mesh object.");
         return;
     }
-    if (!am) {
+    if (!am && !sm) {
         SetWindowTextA(hStatus, n->animFile.empty()
             ? "Mesh has no anim file. Use \"Convert to Animated\" in Entity Properties."
             : "Anim file not loaded (check the path).");
+        return;
+    }
+
+    // A GLB's embedded clips: read-only preview. ResolveClip picks the current
+    // selection when it exists, else "Idle", else clip 0 - the same policy the
+    // runtime uses, so what you preview is what the pawn/prop will play.
+    if (sm) {
+        for (int i = 0; i < sm->ClipCount(); i++)
+            SendMessageA(hList, LB_ADDSTRING, 0, (LPARAM)sm->ClipName(i));
+        const int cur = sm->ResolveClip(g_editorPanels.animClipName);
+        if (cur >= 0 && sm->ClipCount() > 0) {
+            SendMessage(hList, LB_SETCURSEL, cur, 0);
+            g_editorPanels.animClipName = sm->ClipName(cur);
+        }
+        swprintf(s_animStatusInfo, 160, L"%d clip(s) | skeletal GLB (read-only)",
+                 sm->ClipCount());
+        char fb[32];
+        snprintf(fb, sizeof(fb), "%g", oz::kSkeletalClipFps);
+        SetWindowTextA(hFps, fb);
+        SendMessage(hLoop, BM_SETCHECK, BST_CHECKED, 0);
+        g_editorPanels.animFps = oz::kSkeletalClipFps;
+        UpdateAnimReadout(hStatus, hTime);
         return;
     }
 
@@ -64,24 +160,16 @@ static void PopulateAnimPanel(HWND hwnd, HWND hList, HWND hTime, HWND hFps, HWND
     }
 
     const ozanim::Clip* clip = am->GetAnimation().FindClip(g_editorPanels.animClipName);
-    float dur = clip ? clip->Duration() : 0.0f;
-    wchar_t buf[128];
-    if (clip) swprintf(buf, 128, L"%d clip(s) | %d verts | dur %.2fs", am->ClipCount(),
-                       am->TotalVertexCount(), dur);
-    else      swprintf(buf, 128, L"%d clip(s) | %d verts", am->ClipCount(), am->TotalVertexCount());
-    SetWindowTextW(hStatus, buf);
-
+    swprintf(s_animStatusInfo, 160, L"%d clip(s) | %d verts",
+             am->ClipCount(), am->TotalVertexCount());
     if (clip) {
         char fb[32]; snprintf(fb, sizeof(fb), "%g", clip->fps);
         SetWindowTextA(hFps, fb);
         SendMessage(hLoop, BM_SETCHECK, clip->loop ? BST_CHECKED : BST_UNCHECKED, 0);
         g_editorPanels.animFps = clip->fps;
         g_editorPanels.animLoop = clip->loop;
-        int pos = (dur > 0.0f) ? (int)(g_editorPanels.animTime / dur * 1000.0f) : 0;
-        if (pos < 0) pos = 0;
-        if (pos > 1000) pos = 1000;
-        SendMessage(hTime, SBM_SETPOS, pos, TRUE);
     }
+    UpdateAnimReadout(hStatus, hTime);
 }
 
 // Build an AnimIntent from the panel's CURRENT state and post it.
@@ -154,6 +242,12 @@ static LRESULT CALLBACK AnimPanelProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
         PopulateAnimPanel(hwnd, hList, hTime, hFps, hStatus, hLoop);
         if (hEditBtn)
             SendMessage(hEditBtn, BM_SETCHECK, g_editorPanels.animEditVerts ? BST_CHECKED : BST_UNCHECKED, 0);
+        break;
+    case EditorPanelState::kAnimPanelTick:
+        // Playback tick: time/frame line + scrubber only. The structural
+        // refresh (WM_USER+50) rebuilds the list and would drop its selection
+        // every frame.
+        UpdateAnimReadout(hStatus, hTime);
         break;
     case WM_HSCROLL: {
         if ((HWND)l == hTime) {

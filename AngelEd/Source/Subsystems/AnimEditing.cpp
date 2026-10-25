@@ -15,7 +15,7 @@ static void EnsureMeshNodeLoaded(MeshObjectNode* n) {
     if (!n->animFile.empty())
         n->mesh = oz::MeshCache::Instance().GetAnimated(n->meshPath, n->texturePath, n->animFile, n->baseDir, true);
     else if (n->skeletal)
-        n->mesh = oz::MeshCache::Instance().GetSkeletal(n->meshPath, n->texturePath, n->baseDir, true);
+        n->mesh = oz::MeshCache::Instance().GetSkeletalChecked(n->meshPath, n->texturePath, n->baseDir, true);
     else
         n->mesh = oz::MeshCache::Instance().GetStatic(n->meshPath, n->texturePath, n->baseDir, true);
 }
@@ -26,11 +26,27 @@ static oz::AnimatedMesh* AnimTarget() {
     return dynamic_cast<oz::AnimatedMesh*>(n->mesh.get());
 }
 
+// The panel's read-only GLB preview target (see UI/Panels/AnimPanel.cpp). A
+// second 4-line accessor rather than a shared header: AnimPanel is compiled into
+// UiShell.cpp and this into Main.cpp, and both fragments already carry their own
+// AnimTarget accessor for the same reason.
+static oz::SkeletalMesh* AnimTargetSkeletal() {
+    MeshObjectNode* n = PawnSystem::Instance().GetMeshObject(g_editorPanels.animTargetMesh);
+    if (!n || !n->mesh) return nullptr;
+    return dynamic_cast<oz::SkeletalMesh*>(n->mesh.get());
+}
+
 static float AnimDuration() {
-    oz::AnimatedMesh* am = AnimTarget();
-    if (!am) return 0.0f;
-    const ozanim::Clip* c = am->GetAnimation().FindClip(g_editorPanels.animClipName);
-    return c ? c->Duration() : 0.0f;
+    if (oz::AnimatedMesh* am = AnimTarget()) {
+        const ozanim::Clip* c = am->GetAnimation().FindClip(g_editorPanels.animClipName);
+        return c ? c->Duration() : 0.0f;
+    }
+    // Skeletal: the GLB clip's length in seconds (raylib's 60 fps resample).
+    if (oz::SkeletalMesh* sm = AnimTargetSkeletal()) {
+        const int idx = sm->FindClip(g_editorPanels.animClipName);
+        return idx >= 0 ? sm->ClipSeconds(idx) : 0.0f;
+    }
+    return 0.0f;
 }
 
 // World position of a mesh vertex (local = base + offset, then node TRS).
@@ -135,7 +151,9 @@ static void ApplyAnimIntents(const std::vector<ed::Event>& events) {
         // signal, so it neither needs nor wants the target-mismatch guard below.
         if (ev.kind == ed::Ev::AnimScrub) {
             MeshObjectNode* tn = PawnSystem::Instance().GetMeshObject(ai.meshId);
-            if (!tn || tn->animFile.empty()) continue;
+            if (!tn) continue;
+            // A skeletal GLB has no .ozanim file but IS scrubbable (read-only).
+            if (tn->animFile.empty() && !AnimTargetSkeletal()) continue;
             const float dur = AnimDuration();
             // ai.time is the slider position 0..1, captured at post time.
             g_editorPanels.animTime = (dur > 0.0f) ? ai.time * dur : 0.0f;
