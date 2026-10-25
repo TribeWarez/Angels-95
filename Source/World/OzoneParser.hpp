@@ -33,6 +33,7 @@ enum class OzonePrimitiveType : uint8_t {
     ENTITY_PARTICLE_EMITTER, // GameEngine.ParticleEmitter (local 3D particles)
     ENTITY_PATH_NODE,    // GameEngine.PathNode (NPC waypoint)
     ENTITY_WIND_ZONE,    // WindZone (foliage wind region)
+    ENTITY_DOOR,         // GameEngine.Door (keyed door)
     ENTITY_TRIGGER,      // GameEngine.Trigger (volume -> EventBus trigger.enter/exit)
     SKYBOX,             // skybox (projected inner faces, render-only)
     HEIGHTMAP,           // Terrain heightmap (grayscale image)
@@ -62,6 +63,10 @@ struct OzonePrimitive {
     float animSpeed = 1.0f;         // GameEngine.Mesh.Skeletal: playback speed
     bool pathLoop = false;          // GameEngine.PathNode: loop to first node
     bool meshWind = false;          // GameEngine.Mesh.*: foliage wind-affection flag
+    // GameEngine.Door: keyed door attributes
+    std::string doorKey;            // key name required to open (empty = unlocked)
+    std::string doorAnim;           // .ozanim clip to play on open
+    bool doorLocked = false;        // starts locked
     bool hasPhysics = false;        // zones: PhysicsInfo kwargs were authored
     oz::physics::PhysicsInfo physics; // zones: overrides (defaults when !hasPhysics)
     // Light optional attributes. Authored as named kwargs (effect=/flare=/

@@ -255,13 +255,21 @@ static void send_world_change(net::NetworkPlayer& player, int world_index, bool 
     wcd.spawnY = 0.0f;
     wcd.spawnZ = 0.0f;
     // Authoritative spawn (first playerstart) so the client arrives on the floor
-    // instead of the origin.
+    // instead of the origin, plus the mission this world implements (co-op
+    // narrative beats; see WorldChangeData::mission).
     if (world_index >= 0 && world_index < g_game_state.world_count()) {
         const auto& ws = g_game_state.worlds()[(size_t)world_index];
         if (ws.has_spawn) {
             wcd.spawnX = ws.spawn_x;
             wcd.spawnY = ws.spawn_y;
             wcd.spawnZ = ws.spawn_z;
+        }
+        if (!ws.mission.empty()) {
+            if (!net::MissionNameFits(ws.mission))
+                OZ_WARN("WORLD_CHANGE: mission name '%s' is %zu chars - the wire field "
+                        "holds %zu; the client's beat will use a truncated name",
+                        ws.mission.c_str(), ws.mission.size(), net::kMissionNameMax - 1);
+            strncpy(wcd.mission, ws.mission.c_str(), sizeof(wcd.mission) - 1);
         }
     }
 
@@ -654,6 +662,35 @@ static void on_server_message(const net::NetworkMessage& msg,
                 send_world_change(const_cast<net::NetworkPlayer&>(sender), want,
                                   /*accepted=*/true);
                 break;
+            }
+
+            // Campaign completion IS this door. Leaving a mission world through
+            // the portal that leads to its `next` world is what finishes the
+            // mission, so the authored arcs run to their own landmarks (the
+            // shrine, the tower top, the rig) instead of being cut short by an
+            // objective counter.
+            //
+            // The whole party moves with the player who opened it: the arc is
+            // coordinated, and leaving teammates behind in a completed world
+            // would split the session. `mission_skipped` worlds are behind a
+            // --mission pin and are never completed.
+            if (g_game_state.campaign_enabled()) {
+                WorldState* from = g_game_state.get_world(sp->world_index);
+                WorldState* to   = g_game_state.get_world(want);
+                if (from && to && g_game_state.complete_mission_at_exit(*from, *to)) {
+                    OZ_INFO("COOP: mission '%s' complete at its exit -> '%s'",
+                            from->mission.c_str(), to->name.c_str());
+                    for (const auto& np : g_game_server->players()) {
+                        if (np.id == sender.id) continue;
+                        ServerPlayer* other = g_game_state.get_player(np.id);
+                        if (!other || other->world_index != sp->world_index) continue;
+                        other->world_index = want;
+                        other->position = NetVec3{ 0.0f, 0.0f, 0.0f };
+                        send_world_change(const_cast<net::NetworkPlayer&>(np), want,
+                                          /*accepted=*/true);
+                        send_pickup_snapshot(np, want);
+                    }
+                }
             }
 
             const int previous = sp->world_index;
@@ -1342,53 +1379,19 @@ int main(int argc, char** argv) {
             acc -= kTickInterval;
             g_game_state.tick(static_cast<float>(kTickInterval));
 
-            // Coordinated COOP mission transition: when a world's objectives are
-            // all complete, move every player in that world to the mission's
-            // `next` world (GameManager graph). Fires once per world. --campaign
-            // only — with the default OFF no objectives were seeded, so the loop
-            // would never fire anyway; the explicit gate keeps that true even if
-            // another objective source appears later.
+            // Mission completion is SPATIAL, not a countdown: a campaign world
+            // is marked complete when a player leaves it through the door that
+            // leads to the mission's `next` world (the REQUEST_WORLD handler
+            // below). This loop used to advance the whole server the instant
+            // every objective was ticked, which fired after ~5 of a map's
+            // 12/18/19 NPCs and teleported players out of the middle of the
+            // level: the arcs the maps are built around (the shrine, the tower
+            // climb, the annex) were never reached and the authored exit
+            // portals were decoys.
             //
-            // The frontier test is GameState::IsFrontier, the same one join
-            // placement uses: worlds behind a --mission starting point are
-            // mission_skipped and are never entered or advanced through.
-            if (g_game_state.campaign_enabled()) {
-                auto& gm = oz::game::GameManager::Instance();
-                if (gm.Loaded()) {
-                    for (auto& ws : g_game_state.worlds()) {
-                        if (!GameState::IsFrontier(ws)) continue;
-                        bool allDone = true;
-                        for (const auto& o : ws.objectives)
-                            if (o.target > 0 && o.progress < o.target) { allDone = false; break; }
-                        if (!allDone) continue;
-                        // Resolve the next world BEFORE marking transitioned so a
-                        // missing/unknown `next` cannot soft-lock the mission.
-                        const std::string nextWorld = gm.NextMissionWorld(ws.mission);
-                        if (nextWorld.empty()) {
-                            OZ_WARN("COOP: world '%s' mission '%s' has no next world — mission stalled",
-                                    ws.name.c_str(), ws.mission.c_str());
-                            continue;
-                        }
-                        int nextIdx = -1;
-                        for (int i = 0; i < g_game_state.world_count(); i++)
-                            if (g_game_state.worlds()[(size_t)i].name == nextWorld) { nextIdx = i; break; }
-                        if (nextIdx < 0) {
-                            OZ_WARN("COOP: world '%s' next world '%s' not loaded — mission stalled",
-                                    ws.name.c_str(), nextWorld.c_str());
-                            continue;
-                        }
-                        ws.mission_transitioned = true;
-                        for (const auto& np : g_game_server->players()) {
-                            ServerPlayer* sp = g_game_state.get_player(np.id);
-                            if (!sp || sp->world_index != ws.world_index) continue;
-                            sp->world_index = nextIdx;
-                            send_world_change(const_cast<net::NetworkPlayer&>(np), nextIdx, true);
-                        }
-                        OZ_INFO("COOP: world '%s' objectives complete -> advancing to '%s'",
-                                ws.name.c_str(), nextWorld.c_str());
-                    }
-                }
-            }
+            // Objectives still advance (damage_npc / collect_pickup) and are
+            // broadcast as OBJECTIVE_STATE. They are the route's progress
+            // read-out; they do not end the mission.
 
             // Broadcast pickups that just respawned to all clients
             {

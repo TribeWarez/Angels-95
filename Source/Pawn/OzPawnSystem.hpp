@@ -226,6 +226,19 @@ struct PathNode {
     float radius = 1.0f;
 };
 
+// GameEngine.Door — keyed door. Client-side copy for editor placement/round-trip;
+// runtime open state + collision removal are driven by the key world flag.
+struct DoorNode {
+    uint32_t id = 0;
+    std::string meshPath;
+    Vector3 position{0, 0, 0};
+    float yaw = 0.0f;
+    std::string keyName;   // required key (empty = unlocked)
+    std::string animClip;  // .ozanim clip played on open
+    bool locked = false;
+    bool open = false;
+};
+
 // Player start node - position and orientation for player spawn
 struct PlayerStartNode {
     uint32_t id = 0;
@@ -521,6 +534,14 @@ public:
     std::vector<WindZoneNode>& GetWindZones() { return m_windZones; }
     const std::vector<WindZoneNode>& GetWindZones() const { return m_windZones; }
     WindZoneNode* GetWindZone(int id);
+
+    // GameEngine.Door
+    int AddDoor(const DoorNode& node);
+    void RemoveDoor(int id);
+    void ClearDoors();
+    std::vector<DoorNode>& GetDoors() { return m_doors; }
+    const std::vector<DoorNode>& GetDoors() const { return m_doors; }
+    DoorNode* GetDoor(int id);
     // Combined wind at a world point: (dirX, dirZ, strength, frequency).
     Vector4 SampleWind(Vector3 worldPos) const;
 
@@ -594,6 +615,7 @@ private:
     std::vector<ParticleEmitterNode> m_particleEmitters;
     std::vector<PathNode> m_pathNodes;
     std::vector<WindZoneNode> m_windZones;
+    std::vector<DoorNode> m_doors;
     std::vector<MeshObjectNode> m_meshObjects;
     uint32_t m_nextEntityId = 1;
     uint32_t m_nextLightId = 1;

@@ -335,6 +335,20 @@ static bool ParseOzoneEntity(const OzonePrimitive& prim,
             }
             return true;
         }
+        case OzonePrimitiveType::ENTITY_DOOR: {
+            // door <meshPath> x y z yaw [key=] [anim=] [locked=]
+            if (prim.args.size() >= 5) {
+                DoorNode d;
+                d.meshPath = StripQuotes(prim.meshPath);
+                d.position = {prim.args[0], prim.args[2], prim.args[1]}; // Z-up -> Y-up
+                d.yaw = prim.args[3];
+                d.keyName = prim.doorKey;
+                d.animClip = StripQuotes(prim.doorAnim);
+                d.locked = prim.doorLocked;
+                out.doors.push_back(d);
+            }
+            return true;
+        }
         case OzonePrimitiveType::ENTITY_TRIGGER: {
             // trigger <def> minX minY minZ maxX maxY maxZ [once] [team=N]
             // args[0..5] = bounds, args[6] = once, args[7] = team (see OzoneParser).
@@ -643,6 +657,9 @@ void InjectPathNodes(const oz::boxed::BoxedInjectContext& c) {
 void InjectWindZones(const oz::boxed::BoxedInjectContext& c) {
     for (const auto& n : c.entities->windZones) c.pawns->AddWindZone(n);
 }
+void InjectDoors(const oz::boxed::BoxedInjectContext& c) {
+    for (const auto& n : c.entities->doors) c.pawns->AddDoor(n);
+}
 void InjectParticleEmitters(const oz::boxed::BoxedInjectContext& c) {
     for (const auto& n : c.entities->particleEmitters) c.pawns->AddParticleEmitter(n);
 }
@@ -677,6 +694,7 @@ void RegisterEngineBoxedTypes() {
     r.Register(BoxedTypeDesc{"Mesh.Skeletal",   "engine", &InjectMeshObjects});
     r.Register(BoxedTypeDesc{"PathNode",        "engine", &InjectPathNodes});
     r.Register(BoxedTypeDesc{"WindZone",        "engine", &InjectWindZones});
+    r.Register(BoxedTypeDesc{"door",            "engine", &InjectDoors});
     r.Register(BoxedTypeDesc{"ParticleEmitter", "engine", &InjectParticleEmitters});
     r.Register(BoxedTypeDesc{"emitter",         "engine", &InjectEmitters});
     r.Register(BoxedTypeDesc{"trigger",         "engine", &InjectTriggers});

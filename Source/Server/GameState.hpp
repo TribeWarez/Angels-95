@@ -318,6 +318,11 @@ struct WorldState {
     struct Objective {
         std::string id;
         std::string type;   // kill / collect / reach / survive / ... (from the def)
+        // Optional filter: the NPC def (kill) or pickup name (collect) that
+        // counts. Authored as `target` on the `: objective` def and read by
+        // GameState::AdvanceObjectivesByType. Empty = any kill / any pickup,
+        // which is what the fallback ClearArea objective uses.
+        std::string targetName;
         int progress = 0;
         int target = 1;
     };
@@ -455,9 +460,12 @@ public:
 
     // Advance a world objective (COOP). Returns true if progress changed.
     bool AdvanceObjective(WorldState& ws, const std::string& id, int delta);
-    // Advance every objective of a given type (kill / collect). Returns the
+    // Advance every objective of a given type (kill / collect). A non-empty
+    // targetName restricts it to objectives whose `target` matches that NPC def
+    // or pickup name, so `kill Walker` no longer counts a Brute. Returns the
     // number advanced.
-    int AdvanceObjectivesByType(WorldState& ws, const std::string& type, int delta);
+    int AdvanceObjectivesByType(WorldState& ws, const std::string& type, int delta,
+                                const std::string& targetName = std::string());
 
     // Award a kill to the scoring system. killer_id == victim_id is a
     // suicide (applies suicidePenalty). killer_id == UINT32_MAX with
@@ -511,6 +519,13 @@ public:
     // both sides.
     void set_campaign_enabled(bool on) { m_campaignEnabled = on; }
     bool campaign_enabled() const { return m_campaignEnabled; }
+
+    // Campaign completion IS the authored exit: mark `from` complete when `to`
+    // is the world its mission's `next` points at. Objectives do NOT gate this
+    // (they are the route's progress read-out), and `mission_skipped` worlds
+    // (behind a --mission pin) never complete. Returns true when it just
+    // completed; Server's REQUEST_WORLD handler then moves the party.
+    bool complete_mission_at_exit(WorldState& from, const WorldState& to);
 
     // `--mission <name>` (implies --campaign): pin the arc's starting frontier
     // to a named mission instead of the campaign's first one. Set BEFORE

@@ -532,6 +532,22 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
                 try { prim.args.push_back(std::stof(s)); }
                 catch (...) { break; }
             }
+        } else if (type_name == "door") {
+            prim.type = OzonePrimitiveType::ENTITY_DOOR;
+            // door <meshPath> x y z yaw [key=<name>] [anim=<clip>] [locked=1]
+            std::string tok;
+            if (ls >> tok) prim.meshPath = tok;
+            float v;
+            for (int i = 0; i < 5 && (ls >> v); i++) prim.args.push_back(v);
+            std::string s;
+            while (ls >> s) {
+                if (s.rfind("key=", 0) == 0) { prim.doorKey = s.substr(4); }
+                else if (s.rfind("anim=", 0) == 0) { prim.doorAnim = s.substr(5); }
+                else if (s.rfind("locked=", 0) == 0) { prim.doorLocked = (std::stof(s.substr(7)) != 0.0f); }
+                else {
+                    try { prim.args.push_back(std::stof(s)); } catch (...) { break; }
+                }
+            }
         } else if (type_name == "trigger") {
             prim.type = OzonePrimitiveType::ENTITY_TRIGGER;
             // trigger <def> minX minY minZ maxX maxY maxZ [once] [team=N]

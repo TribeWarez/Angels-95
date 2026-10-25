@@ -344,6 +344,9 @@ const StatSpec kPlayerStats[] = {
     // Rendered height for remote-player bodies, in engine units. Negative =
     // authored scale, no normalisation. See PlayerModel::NormalisedScale.
     {"model_height",           0, "Model Height", "Progression"},
+    // Weapon granted at LightningEntityManager::Init (session start). String,
+    // author it quote-free and space-free like every other def name.
+    {"starting_weapon",        1, "Starting Weapon", "Progression"},
     {"jump_sound",             3, "Jump Sound", "Audio"},
     {"jump_volume",            0, "Jump Volume", "Audio"},
     {"land_sound",             3, "Land Sound", "Audio"},
@@ -432,12 +435,13 @@ const StatSpec kMissionStats[] = {
     {"next",                 1, "Next Mission", "Objectives"},
 };
 
-// `type` drives server-side advancement (GameState::AdvanceObjectivesByType);
-// `count` is the target both GameManager (client seeding) and GameState
-// (server seeding) read. Shipped ids are kill/collect; `target` (the stats
-// key, e.g. "Walker") has no reader on either side.
+// `type` drives server-side advancement (GameState::AdvanceObjectivesByType)
+// and the client's local store; `target` filters it by NPC def (kill) or pickup
+// name (collect), and empty means "anything". `count` is the target both
+// GameManager (client seeding) and GameState (server seeding) read.
 const StatSpec kObjectiveStats[] = {
     {"type",                 1, "Type", "Objective"},
+    {"target",               1, "Target", "Objective"},
     {"count",                0, "Count", "Objective"},
 };
 

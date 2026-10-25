@@ -197,6 +197,7 @@ struct OzoneEntitySet {
     std::vector<MeshObjectNode>      meshObjects;
     std::vector<PathNode>            pathNodes;
     std::vector<WindZoneNode>        windZones;
+    std::vector<DoorNode>            doors;
     std::vector<ParticleEmitterNode> particleEmitters;
     std::vector<EmitterNode>         emitters;
     std::vector<TriggerNode>         triggers;
@@ -209,6 +210,7 @@ struct OzoneEntitySet {
         return playerStarts.empty() && pickups.empty() && zones.empty() &&
                skyZones.empty() && portals.empty() && lights.empty() &&
                meshObjects.empty() && pathNodes.empty() && windZones.empty() &&
+                doors.empty() &&
                particleEmitters.empty() && emitters.empty() && triggers.empty() &&
                pawnSpawns.empty();
     }
@@ -216,6 +218,7 @@ struct OzoneEntitySet {
         return playerStarts.size() + pickups.size() + zones.size() +
                skyZones.size() + portals.size() + lights.size() +
                meshObjects.size() + pathNodes.size() + windZones.size() +
+                doors.size() +
                particleEmitters.size() + emitters.size() + triggers.size() +
                pawnSpawns.size();
     }

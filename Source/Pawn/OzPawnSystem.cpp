@@ -1261,6 +1261,32 @@ WindZoneNode* PawnSystem::GetWindZone(int id) {
     return nullptr;
 }
 
+// ---------------------------------------------------------------------------
+// Doors (keyed)
+// ---------------------------------------------------------------------------
+int PawnSystem::AddDoor(const DoorNode& node) {
+    DoorNode n = node;
+    if (n.id == 0) n.id = m_nextEntityId++;
+    m_doors.push_back(n);
+    return (int)n.id;
+}
+
+void PawnSystem::RemoveDoor(int id) {
+    auto it = std::remove_if(m_doors.begin(), m_doors.end(),
+        [id](const DoorNode& n) { return n.id == (uint32_t)id; });
+    m_doors.erase(it, m_doors.end());
+}
+
+void PawnSystem::ClearDoors() {
+    m_doors.clear();
+}
+
+DoorNode* PawnSystem::GetDoor(int id) {
+    for (auto& n : m_doors)
+        if (n.id == (uint32_t)id) return &n;
+    return nullptr;
+}
+
 Vector4 PawnSystem::SampleWind(Vector3 worldPos) const {
     Vector3 dir = {0, 0, 0};
     float strength = 0.0f;

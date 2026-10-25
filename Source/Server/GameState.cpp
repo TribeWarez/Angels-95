@@ -248,6 +248,14 @@ void GameState::init_worlds(const std::string& gamedata_dir,
                     o.id = objName;
                     o.type = otype;
                     o.target = target;
+                    // `target` (the NPC def / pickup name) was authored on every
+                    // def and read by nothing, so `kill 5` counted 5 of anything
+                    // — a Walkers-only objective was satisfied by a Brute, and
+                    // Objective_CollectRelics by a health vial.
+                    if (od) {
+                        auto nit = od->stats.strings.find("target");
+                        if (nit != od->stats.strings.end()) o.targetName = nit->second;
+                    }
                     // OBJECTIVE_STATE carries the id in a fixed 32-byte field
                     // (strncpy at the send site). A longer def name truncates
                     // on the wire with no error anywhere - fail loudly here,
@@ -290,6 +298,18 @@ void GameState::init_worlds(const std::string& gamedata_dir,
 // The walk is the MISSION GRAPH (FirstMissionWorld -> NextMissionWorld), not
 // world-list order: the world list comes from a directory scan and its order
 // has nothing to do with mission progression.
+bool GameState::complete_mission_at_exit(WorldState& from, const WorldState& to) {
+    if (!m_campaignEnabled) return false;
+    if (from.mission.empty() || from.mission_transitioned || from.mission_skipped)
+        return false;
+    auto& gm = oz::game::GameManager::Instance();
+    if (!gm.Loaded()) return false;
+    const std::string nextWorld = gm.NextMissionWorld(from.mission);
+    if (nextWorld.empty() || to.name != nextWorld) return false;
+    from.mission_transitioned = true;
+    return true;
+}
+
 void GameState::apply_starting_mission() {
     if (!m_campaignEnabled || m_startingMission.empty()) return;
 
@@ -1121,9 +1141,10 @@ bool GameState::collect_pickup(uint32_t player_id, int pickup_id, int world_inde
     // Mark pickup inactive
     pickup->active = false;
     pickup->respawn_timer = 0.0f;
-    // COOP: advance every "collect" objective in the player's world.
+    // COOP: advance every "collect" objective in the player's world whose
+    // `target` names this pickup (or every one when it names none).
     if (WorldState* cws = get_world(world_index))
-        AdvanceObjectivesByType(*cws, "collect", 1);
+        AdvanceObjectivesByType(*cws, "collect", 1, pickup->typeName);
     OZ_INFO("Player %s collected pickup %d (type %s) worth %d",
             player->name, pickup_id, pickup_type_str(pickup->type), pickup->value);
     return true;
@@ -1169,9 +1190,11 @@ void GameState::damage_npc(ServerNPC& npc, int amount, uint32_t killer_id,
         npc.state = NpcState::DEAD;
         npc.death_timer = 0.0f;
         OZ_INFO("NPC killed at (%.2f, %.2f, %.2f)", npc.position.x, npc.position.y, npc.position.z);
-        // COOP: advance every "kill" objective in the world.
+        // COOP: advance every matching "kill" objective in the world. The NPC
+        // def name is passed so a target-filtered objective only counts its own
+        // kind; an objective with no target keeps counting every death.
         if (world_index >= 0 && world_index < (int)m_worlds.size())
-            AdvanceObjectivesByType(m_worlds[(size_t)world_index], "kill", 1);
+            AdvanceObjectivesByType(m_worlds[(size_t)world_index], "kill", 1, npc.typeName);
         if (killer_id != UINT32_MAX) {
             add_xp(killer_id, XP_PER_KILL);
             OZ_INFO("Killer %u awarded %d XP for NPC kill", killer_id, XP_PER_KILL);
@@ -1211,10 +1234,15 @@ bool GameState::AdvanceObjective(WorldState& ws, const std::string& id, int delt
     return false;
 }
 
-int GameState::AdvanceObjectivesByType(WorldState& ws, const std::string& type, int delta) {
+int GameState::AdvanceObjectivesByType(WorldState& ws, const std::string& type, int delta,
+                                      const std::string& targetName) {
     int n = 0;
     for (auto& o : ws.objectives) {
         if (o.type != type) continue;
+        // An objective with no target counts anything (the ClearArea fallback);
+        // one with a target only counts that NPC def / pickup name.
+        if (!o.targetName.empty() && o.targetName != "*" && o.targetName != targetName)
+            continue;
         if (o.target > 0 && o.progress >= o.target) continue;
         o.progress += delta;
         if (o.target > 0 && o.progress > o.target) o.progress = o.target;

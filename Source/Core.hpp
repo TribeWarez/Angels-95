@@ -351,6 +351,7 @@ auto LoadWorld()
         PawnSystem::Instance().ClearParticleEmitters();
         PawnSystem::Instance().ClearPathNodes();
         PawnSystem::Instance().ClearWindZones();
+        PawnSystem::Instance().ClearDoors();
         // Sky zones are per-world too. This call was missing, so every transition
         // kept the previous world's zones (all worlds are authored near the
         // origin, so the old zone matched first and won) and leaked its sky
