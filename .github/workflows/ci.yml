@@ -641,7 +641,11 @@ jobs:
           # Smoke-test on the runner before anything is copied: same glibc base
           # as the VPS (ubuntu:24.04), and it catches a truncated artifact.
           ./stage/System/AngelServ --version
-          [ -f stage/System/AngelMaster ] && ./stage/System/AngelMaster --version
+          # `[ -f x ] && run` as the LAST line of a `set -e` script exits 1 when
+          # x is absent (DEPLOY_MASTER=false), which failed the whole bundle step.
+          if [ -f stage/System/AngelMaster ]; then
+            ./stage/System/AngelMaster --version
+          fi
 
       - name: Install the SSH key
         uses: webfactory/ssh-agent@v0.9.0
