@@ -557,9 +557,10 @@ jobs:
   # Optional repository variables:
   #   DEPLOY_PORT          SSH port, default 22
   #   DEPLOY_PATH          install root, default /srv/angels95
-  #   DEPLOY_MASTER        true (default) ships both daemons; false ships only
-  #                        AngelServ, for hosts whose public listing is the
-  #                        separate TribeWarez/angels95-master-server deployment
+  #   DEPLOY_MASTER        false (default) ships only AngelServ; true also ships
+  #                        AngelMaster. The public listing normally runs the
+  #                        separate TribeWarez/angels95-master-server deployment,
+  #                        and two masters cannot share UDP 27900.
   #
   # The VPS needs: rsync, curl (HTTPS master uplink) and passwordless sudo for
   # `bash <DEPLOY_PATH>/System/deploy-remote.sh`, which installs/restarts the
@@ -581,10 +582,11 @@ jobs:
       DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
       DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
       DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/srv/angels95' }}
-      # Set the DEPLOY_MASTER repository variable to false when the public
-      # listing is served elsewhere (the hosted master lives in
-      # TribeWarez/angels95-master-server); the job then ships only AngelServ.
-      DEPLOY_MASTER: ${{ vars.DEPLOY_MASTER || 'true' }}
+      # The in-repo master is OPT-IN. The public listing normally runs the
+      # separate TribeWarez/angels95-master-server deployment, and two masters
+      # cannot share UDP 27900; default false ships only AngelServ. Set this
+      # variable to true only on a host that should run AngelMaster itself.
+      DEPLOY_MASTER: ${{ vars.DEPLOY_MASTER || 'false' }}
     steps:
       - uses: actions/checkout@v4
 

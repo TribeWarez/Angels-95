@@ -242,14 +242,16 @@ worldchecks, the GLIBC 2.39 gate) passes. The `deploy` job in
    with journal output if one does not become active.
 
 Deploys are gated on the `production` GitHub environment, so the repository can
-require a reviewer before a rollout. By default both `AngelServ` and
-`AngelMaster` are shipped; set the repository variable `DEPLOY_MASTER` to
-`false` when the public listing is the separate
+require a reviewer before a rollout. By default only `AngelServ` is shipped: the
+public listing normally runs the separate
 [`TribeWarez/angels95-master-server`](https://github.com/TribeWarez/angels95-master-server)
-deployment and this host should run only the game server. The deploy only
-manages units it is given, so if a host previously ran `angels95-master` and you
-then switch `DEPLOY_MASTER` off, stop it once by hand
-(`sudo systemctl disable --now angels95-master`).
+deployment and two masters cannot share UDP `27900`. Set the repository variable
+`DEPLOY_MASTER` to `true` only on a host that should run the in-repo
+`AngelMaster` itself. A deploy that does not ship `angels95-master.service`
+automatically runs `systemctl disable --now angels95-master` if that unit was
+installed by an earlier deploy, so switching the flag off also stops a
+stale/crash-looping master (e.g. one that lost the `27900` port to the hosted
+master).
 
 #### One-time VPS setup
 
@@ -298,7 +300,7 @@ Variables:
 |---|---|---|
 | `DEPLOY_PORT` | `22` | SSH port |
 | `DEPLOY_PATH` | `/srv/angels95` | install root; holds `System/` and `GameData/` |
-| `DEPLOY_MASTER` | `true` | ship `AngelMaster` too; set `false` for a game-server-only host |
+| `DEPLOY_MASTER` | `false` | also ship `AngelMaster`; leave `false` when the public listing runs in `angels95-master-server` (two masters cannot share UDP 27900) |
 
 #### Rollback and manual redeploy
 

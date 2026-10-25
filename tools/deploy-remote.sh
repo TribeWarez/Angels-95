@@ -55,6 +55,21 @@ fi
 [ -n "$units" ] || { echo "ERROR: no unit files in $sys" >&2; exit 1; }
 echo "--------------------"
 
+# A unit this bundle NO LONGER ships must be stopped, not left running. The
+# usual case is switching DEPLOY_MASTER to false on a host that installed the
+# master on an earlier deploy: leaving it enabled keeps a crash loop alive
+# (e.g. 27900 already owned by the hosted master) and the next deploy fails
+# again. Only our two known unit names are touched.
+for unit in angels95-serv.service angels95-master.service; do
+    case " $units " in
+        *" $unit "*) continue ;;
+    esac
+    if [ -f "$unit_dir/$unit" ]; then
+        echo "Not shipping $unit - disabling the previously installed copy"
+        systemctl disable --now "$unit" >/dev/null 2>&1 || true
+    fi
+done
+
 for unit in $units; do
     # The checked-in units carry the documented /srv/angels95 default; render
     # them to wherever this install actually lives.
@@ -75,15 +90,27 @@ systemctl enable $units >/dev/null 2>&1 || true
 systemctl restart $units
 
 # Restart=on-failure loops, so "activating" is not success. Give each unit a
-# short window, then dump why it failed.
+# short window, then a stability check: a crash-looping unit is briefly "active"
+# between restarts, which is exactly the misleading state the b105 master deploy
+# hit (UDP 27900 already in use -> active for 2ms -> exit 1 -> restart).
+# Then dump why it failed.
 for unit in $units; do
     ok=0
     for _ in $(seq 1 20); do
-        if systemctl is-active --quiet "$unit"; then ok=1; break; fi
+        if systemctl is-active --quiet "$unit" && ! systemctl is-failed --quiet "$unit"; then
+            ok=1
+            break
+        fi
         sleep 0.5
     done
+    if [ "$ok" -eq 1 ]; then
+        sleep 2
+        if ! systemctl is-active --quiet "$unit" || systemctl is-failed --quiet "$unit"; then
+            ok=0
+        fi
+    fi
     if [ "$ok" -ne 1 ]; then
-        echo "ERROR: $unit did not become active" >&2
+        echo "ERROR: $unit did not stay active" >&2
         systemctl --no-pager --lines=0 status "$unit" >&2 || true
         journalctl -u "$unit" -n 60 --no-pager >&2 || true
         exit 1
