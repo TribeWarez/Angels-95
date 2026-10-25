@@ -47,10 +47,24 @@ static int test_active_mission() {
     CHECK(world == "Sektor_01_SilentPines");
     CHECK(gm.ActiveMission() == "Sektor_01_SilentPines");
     CHECK(gm.ActiveSector() == "Sefirah_1_TerranPrime");
+    // The mission's OWN objective, resolved from its def. Pinned through the
+    // mission rather than a hard-coded id: the old test named the scaffold
+    // Objective_ClearArea and would pass only while every mission shared it.
+    const oz::game::MissionDef* m = gm.FindMission("Sektor_01_SilentPines");
+    CHECK(m != nullptr && !m->objectives.empty());
+    const std::string objId =
+        (m && !m->objectives.empty()) ? m->objectives.front() : std::string();
     const oz::events::ObjectiveState* ob =
-        oz::events::ObjectiveSystem::Instance().Get("Objective_ClearArea");
+        oz::events::ObjectiveSystem::Instance().Get(objId);
     CHECK(ob != nullptr);
-    CHECK_EQ(ob->target, 5);
+    if (ob) CHECK_EQ(ob->target, 4);   // Objective_S01_GorgeWatch count
+    // The local store carries the def's type/target so single-player filters
+    // kills with the same rule the server applies.
+    CHECK(!gm.ActiveObjectives().empty());
+    if (!gm.ActiveObjectives().empty()) {
+        CHECK(gm.ActiveObjectives()[0].type == "kill");
+        CHECK(gm.ActiveObjectives()[0].target == "Walker");
+    }
     PASS(); return 0; END_TEST();
 }
 
@@ -92,6 +106,24 @@ static int test_campaign_save_versioning() {
     PASS(); return 0; END_TEST();
 }
 
+static int test_local_objective_advance() {
+    TEST("local objectives filter by target and by the fact that produced them");
+    auto& gm = oz::game::GameManager::Instance();
+    gm.SetActiveMission("Sektor_01_SilentPines");
+    auto& objs = oz::events::ObjectiveSystem::Instance();
+    const std::string id =
+        gm.ActiveObjectives().empty() ? std::string() : gm.ActiveObjectives()[0].id;
+    CHECK(!id.empty());
+
+    gm.AdvanceLocalObjectives("kill", "Brute");          // wrong NPC def
+    CHECK(objs.Get(id) != nullptr && objs.Get(id)->progress == 0);
+    gm.AdvanceLocalObjectives("collect", "HealthVial");  // wrong fact type
+    CHECK(objs.Get(id) != nullptr && objs.Get(id)->progress == 0);
+    gm.AdvanceLocalObjectives("kill", "Walker");
+    CHECK(objs.Get(id) != nullptr && objs.Get(id)->progress == 1);
+    PASS(); return 0; END_TEST();
+}
+
 int main() {
     fprintf(stdout, "GameManager Tests:\n");
     LightningEntityRegistry::Instance().Init();
@@ -101,6 +133,7 @@ int main() {
     failures += test_hierarchy_loads();
     failures += test_known_sector_mission();
     failures += test_active_mission();
+    failures += test_local_objective_advance();
     failures += test_campaign_state_roundtrip();
     failures += test_campaign_save_versioning();
     fprintf(stdout, "\n%d/%d tests passed.\n", tests_passed, tests_total);

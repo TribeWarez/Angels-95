@@ -1,0 +1,15 @@
+// Objective_S02_RelayGuard — Sektor_02_MegacityGrid route objective.
+//
+// Skaarj hold the relay hall and the substation, which are the two interiors
+// the north avenue's read points at. 6 Skaarj ship; 4 is the count reachable
+// without clearing every district.
+entity "Objective_S02_RelayGuard" : objective {
+    stats {
+        type = kill
+        target = Skaarj
+        count = 4
+    }
+    actions {
+        on_complete { msg "The relay hall is quiet. The tower is next." }
+    }
+}

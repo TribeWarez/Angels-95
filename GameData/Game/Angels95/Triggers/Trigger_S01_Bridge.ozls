@@ -1,0 +1,16 @@
+// Trigger_S01_Bridge — SilentPines, the bridge approach.
+//
+// One def per authored threshold, not one shared template: the shipped maps all
+// used Trigger_EnterVolume, so a pine gorge, a city avenue and a military gate
+// each said the same line ("You feel a shift in the signal..."). A trigger line
+// is the only voice a district has without a dialogue system.
+entity "Trigger_S01_Bridge" : trigger {
+    stats {
+        topic = trigger.enter
+        once = 1
+        team = 0
+    }
+    actions {
+        on_enter { msg "The bridge answers underfoot. The shrine is across the water." }
+    }
+}

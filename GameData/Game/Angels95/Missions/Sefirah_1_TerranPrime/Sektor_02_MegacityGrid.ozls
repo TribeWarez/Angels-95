@@ -1,15 +1,18 @@
 // Sektor_02_MegacityGrid — Sefirah 1 (Terran Prime). Dense urban signal relays.
-// SCAFFOLD (Phase 0): EntityType::MISSION, no runtime consumer yet.
+//
+// Completion is spatial (the relay tower's top is the authored exit), so the
+// mission does not pre-empt the two-district route. See Sektor_01 for the
+// runtime consumers and the beat wiring.
 entity "Sektor_02_MegacityGrid" : mission {
     stats {
         sector = Sefirah_1_TerranPrime
         world = Sektor_02_MegacityGrid
         mode = campaign
-        objectives = Objective_ClearArea
+        objectives = Objective_S02_RelayGuard
         next = Sektor_03_AegisBaseAlpha
     }
     actions {
-        on_start    { msg "MegacityGrid: mission start (scaffold)" }
-        on_complete { msg "MegacityGrid: mission complete (scaffold)" }
+        on_start    { msg "Megacity Grid. The relays are still warm; the streets are not yours." }
+        on_complete { msg "The tower is quiet. Aegis Base lies north." }
     }
 }

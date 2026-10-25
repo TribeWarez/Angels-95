@@ -1,0 +1,23 @@
+{
+  "name": "sefirah1-exit-threshold",
+  "duration_ms": 2600,
+  "phases": [
+    {"id": "birth", "start_ms": 0, "end_ms": 260},
+    {"id": "rise", "start_ms": 260, "end_ms": 1900},
+    {"id": "fade", "start_ms": 1900, "end_ms": 2600}
+  ],
+  "layers": [
+    {"id": "threshold-column", "type": "pooled-particles", "max_particles": 26, "draw_calls": 1},
+    {"id": "threshold-sparks", "type": "pooled-particles", "max_particles": 6, "draw_calls": 1}
+  ],
+  "budgets": {
+    "max_particles": 32,
+    "max_draw_calls": 2,
+    "max_overdraw": 2,
+    "max_blur_radius": 0
+  },
+  "reduced_motion": {
+    "enabled": true,
+    "behavior": "ambient emitters are gated by the Particles master toggle ([AngelTech.Render] particles_enabled); with it off the exits lose their shimmer and no replacement motion is substituted, while gameplay bursts still draw"
+  }
+}

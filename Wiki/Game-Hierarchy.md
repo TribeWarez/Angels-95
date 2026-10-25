@@ -304,7 +304,7 @@ hardcoded switch. Game types register from `Source/Game/GameBoxedTypes.cpp`.
   on the server; the default OFF is classic per-world co-op — no objectives
   seeded (neither a `: mission` def nor the `ClearArea` fallback, which
   arrived in the same work and is campaign content too), joiners land in
-  world 0, and the transition below never fires. The flag lives on
+  world 0, and the completion below never fires. The flag lives on
   `GameState` (not argv) so unit tests pin both sides. With the flag ON:
   per-world rules live in `WorldState`
   (last-world-wins bug fixed; world 0 mirrors into the global match). Server
@@ -313,12 +313,27 @@ hardcoded switch. Game types register from `Source/Game/GameBoxedTypes.cpp`.
   to the `OBJECTIVE_STATE` wire field (`net::ObjectiveIdFits` /
   `net::kObjectiveIdMax`, warned once at seed time — a longer id would
   truncate on the wire with no error anywhere). Objectives are advanced by
-  gameplay — `kill` on NPC death, `collect` on pickup — and broadcast as
-  `OBJECTIVE_STATE` (~1 Hz) which the client mirrors and shows in the HUD. The
-  server reads each world's first `playerstart` and sends it in `WORLD_CHANGE`,
-  and the client loads the world + applies the spawn on a server-driven switch.
-  When a world's objectives all complete, the server **coordinated-transitions**
-  every player in it to the mission's `next` world.
+  gameplay — `kill` on NPC death, `collect` on pickup — and a def's `target`
+  (NPC def / pickup name) now FILTERS that: `kill 4 Walker` no longer counts a
+  Brute, and a `collect` objective no longer counts any pickup. The filtered
+  progress is broadcast as `OBJECTIVE_STATE` (~1 Hz), which the client mirrors
+  and shows in the HUD. The server reads each world's first `playerstart` and
+  sends it in `WORLD_CHANGE`, and the client loads the world + applies the spawn
+  on a server-driven switch.
+  **Completion is spatial, not a kill count.** A world is complete when a player
+  leaves it through the portal that leads to the mission's `next` world
+  (`REQUEST_WORLD`); the world is marked transitioned and every player still in
+  it moves with them. The old loop advanced the whole server the instant every
+  objective was ticked (~5 kills of a map's 12–19 NPCs) and teleported players
+  out of the middle of the level — the authored exits were decoys. Objectives
+  remain the route's progress read-out, not a toll.
+  **Single-player has no server**, so the client seeds the same objectives
+  locally (`GameManager::SetActiveMission` keeps each def's `type`/`target`) and
+  advances them from `entity.death` / `pickup.collect`; the HUD shows those rows
+  when no server store exists. Mission `on_start`/`on_complete` are emitted on the
+  bus as `mission.start` / `mission.complete`, which the LEM bridge resolves to
+  the def's actions (the district's `say` owns the one on-screen text slot, so
+  the OBJECTIVES row is the durable read-out).
   **Open:** party/lobby, and server-side *scripted* objectives (the server has no
   LightningScript runtime — objectives come from the defs, not from script
   bodies).

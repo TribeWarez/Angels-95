@@ -23,6 +23,11 @@ entity "Player" : upgrade {
         // MUST stay inside stats { }: PlayerModel reads stats.floats, and a
         // top-level key here is dropped by the parser (with a warning).
         model_height = 3.0
+        // Weapon the session starts with (LightningEntityManager::
+        // EnsureStartingWeapon). A def that omits it falls back to pistol_01
+        // in code — an unarmed start is never intended, and the campaign's
+        // first map ships no sidearm.
+        starting_weapon = pistol_01
         health = 100
         max_health = 100
         mana = 0

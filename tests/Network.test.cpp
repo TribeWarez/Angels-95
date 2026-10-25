@@ -705,6 +705,11 @@ static int test_world_change_roundtrip() {
             net::WorldChangeData wcd{};
             wcd.world_index = assignedWorld;   // where the player ACTUALLY is
             wcd.accepted = ok ? 1 : 0;
+            // Both tails present, as the real server sends them.
+            wcd.spawnX = 1.5f;
+            wcd.spawnY = 0.5f;
+            wcd.spawnZ = -2.5f;
+            strncpy(wcd.mission, "Sektor_02_MegacityGrid", sizeof(wcd.mission) - 1);
             net::NetworkMessage out;
             out.magic = net::MAGIC;
             out.type = static_cast<uint32_t>(net::MessageType::WORLD_CHANGE);
@@ -722,15 +727,28 @@ static int test_world_change_roundtrip() {
         ccbs.on_connected = [] {};
         ccbs.on_disconnected = [] {};
         int lastWorld = -1, lastAccepted = -1, worldChanges = 0;
+        std::string lastMission;
+        net::NetVec3 lastSpawn{0, 0, 0};
+        bool haveSpawn = false;
         ccbs.on_message_received = [&](const net::NetworkMessage& msg) {
             if (static_cast<net::MessageType>(msg.type) !=
                 net::MessageType::WORLD_CHANGE) return;
             if (msg.size < net::kWorldChangeSizeBase) return;
-            net::WorldChangeData wcd;
+            net::WorldChangeData wcd{};
             memcpy(&wcd, msg.payload, sizeof(wcd));
             lastWorld = wcd.world_index;
             lastAccepted = wcd.accepted;
             worldChanges++;
+            // Each tail is read only when its own gate is satisfied — the same
+            // rule the client applies.
+            if (msg.size >= net::kWorldChangeSizeWithSpawn) {
+                lastSpawn = net::NetVec3{ wcd.spawnX, wcd.spawnY, wcd.spawnZ };
+                haveSpawn = true;
+            }
+            if (msg.size >= net::kWorldChangeSizeWithMission) {
+                wcd.mission[sizeof(wcd.mission) - 1] = '\0';
+                lastMission = wcd.mission;
+            }
         };
         client.set_callbacks(std::move(ccbs));
         if (!client.connect("127.0.0.1", port)) { printf("FAIL: client.connect\n"); return 1; }
@@ -783,6 +801,18 @@ static int test_world_change_roundtrip() {
         if (worldChanges == changesBefore) { printf("FAIL: re-request of current world went unanswered\n"); return 1; }
         if (acceptedCount != 2) { printf("FAIL: re-request should be accepted, got %d accepts\n", acceptedCount); return 1; }
 
+        // Both optional tails survived the wire, and the spawn did not lose a
+        // component to the world/mission gate split.
+        if (!haveSpawn || lastSpawn.x != 1.5f || lastSpawn.y != 0.5f || lastSpawn.z != -2.5f) {
+            printf("FAIL: spawn tail not round-tripped (have=%d %.1f %.1f %.1f)\n",
+                   (int)haveSpawn, lastSpawn.x, lastSpawn.y, lastSpawn.z);
+            return 1;
+        }
+        if (lastMission != "Sektor_02_MegacityGrid") {
+            printf("FAIL: mission tail not round-tripped ('%s')\n", lastMission.c_str());
+            return 1;
+        }
+
         client.disconnect();
         for (int i = 0; i < 400; ++i) { server.update(); client.update(); }
     }
@@ -822,6 +852,26 @@ static int test_world_change_without_spawn_tail() {
     // A short message must PASS the gate, and a truncated one must not.
     if (baseSize < offsetof(net::WorldChangeData, accepted)) {
         printf("FAIL: base size excludes the accepted flag\n");
+        return 1;
+    }
+
+    // Each optional tail has its OWN boundary. Adding the mission field must not
+    // move the spawn gate: if it did, a server that predates the mission field
+    // would look like it had no spawn either, and the client would arrive at the
+    // origin instead of the world's playerstart.
+    if (net::kWorldChangeSizeWithSpawn != offsetof(net::WorldChangeData, mission) ||
+        net::kWorldChangeSizeWithMission != sizeof(net::WorldChangeData)) {
+        printf("FAIL: mission-tail constants do not bracket the mission field\n");
+        return 1;
+    }
+    if (!(net::kWorldChangeSizeBase < net::kWorldChangeSizeWithSpawn &&
+          net::kWorldChangeSizeWithSpawn < net::kWorldChangeSizeWithMission)) {
+        printf("FAIL: tails are not ordered base < spawn < mission\n");
+        return 1;
+    }
+    if (!net::MissionNameFits("Sektor_02_MegacityGrid") ||
+        net::MissionNameFits(std::string(net::kMissionNameMax, 'x'))) {
+        printf("FAIL: MissionNameFits boundary\n");
         return 1;
     }
     printf("PASS\n");

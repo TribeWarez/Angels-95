@@ -1,0 +1,11 @@
+// Trigger_S02_Gate — MegacityGrid, the north gate into the relay plaza.
+entity "Trigger_S02_Gate" : trigger {
+    stats {
+        topic = trigger.enter
+        once = 1
+        team = 0
+    }
+    actions {
+        on_enter { msg "The gate threshold — the relay plaza opens beyond." }
+    }
+}

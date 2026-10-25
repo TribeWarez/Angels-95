@@ -372,8 +372,9 @@ add box 30 -44 1.08 3.22 2.16 2.18 0 flags=16
 #
 # --- routing ---
 # Two once-triggers, both clear of the spawn volume.
-# Exit: the top of the relay tower. The destination spawn is the
-# Sektor_03 yard at its origin, which is open ground there.
+# Exit: the top of the relay tower. The destination spawn is
+# Sektor_03_AegisBaseAlpha's authored playerstart (0 -46 0), just inside its
+# south gate, so the base's gate-yard read survives the transition.
 
 # ============================================================================
 # Entities
@@ -394,6 +395,9 @@ pickup pistol_01 26 31 1 30
 pickup rifle_01 12 0 7 20
 pickup Medkit 3 5 3.4 45
 pickup ManaVial -30 -30 7 30
+# The market roof pays the optional climb (design §3: "grass, coin, a brute -
+# pure choice"). The coin was only in the substation before.
+pickup Coin -40 -36 6.2 30
 pickup Coin 49 0 1 30
 pickup HealthVial 7 48 1 30
 pickup etheral_waver 34 111 2.2 60
@@ -463,6 +467,12 @@ light point -40 88 5.4 255 210 160 0.4 16 effect=2
 light point 34 111 7 160 210 255 0.6 16
 light point 0 88 22 120 210 255 1 26
 light point -9 88 11 255 205 150 0.4 14 effect=4
-trigger Trigger_EnterVolume -6 -16 0 6 -12 6 once
-trigger Trigger_EnterVolume -6 56 0 6 60 6 once
-portal Sektor_03_AegisBaseAlpha -4 84 20 4 92 26 0 0 0 bidir
+# --- Exit threshold (design/GAME_DESIGN.md §4: "the exit portal (shimmer)") ---
+# The tower top is the way out, so it gets the only cold-cyan emitter in the
+# district: every other light here is sodium orange. 26 + 6 live particles,
+# untextured (shared soft sprite, one batch). Spec: design/vfx-sefirah1-exits.json.
+ParticleEmitter mist 0 88 20.1 10 2.4 0.5 8 0.05 0.3 150 225 255 60 150 235 0.1 2.2 0 0 1 0
+ParticleEmitter sparks 0 88 20.2 6 1.0 0.4 75 0.09 0.02 200 240 255 90 180 255 0.2 2.6 0 0 1 0
+trigger Trigger_S02_Avenue -6 -16 0 6 -12 6 once
+trigger Trigger_S02_Gate -6 56 0 6 60 6 once
+portal Sektor_03_AegisBaseAlpha -4 84 20 4 92 26 0 -46 0 bidir

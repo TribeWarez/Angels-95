@@ -1,0 +1,15 @@
+// Objective_S03_HangarBreach — Sektor_03_AegisBaseAlpha route objective.
+//
+// The Brutes are the base's heavy line (yard, hangar, motor pool, annex). 5
+// ship; 3 is enough to break the route through the compound without turning
+// the mission into a full clear.
+entity "Objective_S03_HangarBreach" : objective {
+    stats {
+        type = kill
+        target = Brute
+        count = 3
+    }
+    actions {
+        on_complete { msg "The compound's heavy line is broken." }
+    }
+}

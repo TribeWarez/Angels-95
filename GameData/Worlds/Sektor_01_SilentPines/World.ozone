@@ -64,6 +64,15 @@ add box 85.6 0 1 0.3 2.4 12 0 texPath=GameData/Tex/Global/EFX/waterfall_streaks.
 add box 80 -11.6 -0.3 12 0.2 0.8 0 texPath=GameData/Tex/Global/EFX/foam.png texScaleU=6 texScaleV=1 flags=788480 surfAlpha=0.75 panU=0.2
 add box 80 11.6 -0.3 12 0.2 0.8 0 texPath=GameData/Tex/Global/EFX/foam.png texScaleU=6 texScaleV=1 flags=788480 surfAlpha=0.75 panU=0.2
 
+# --- Cliff rim: a 1.4-high broken rock lip along the plateau's east edge, with
+# the stair mouth left open at y -3..3. Without it the "descent" is optional by
+# accident - you could walk straight off the edge for an 18-unit drop, and this
+# build has no fall damage. It reads the same as a natural rim, does not block
+# the valley view (eye 19.8, lip 19.4), and makes leaving the plateau a
+# deliberate choice (the stair, or a jump).
+add box -70.6 -36.5 18.7 1.2 1.4 67 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.5 texScaleV=2
+add box -70.6 36.5 18.7 1.2 1.4 67 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.5 texScaleV=2
+
 # --- Descent: 19 solid columns, 0.9 drop each, from the plateau edge to the floor ---
 add box -68.5 0 8.55 3 17.1 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
 add box -65.5 0 8.1 3 16.2 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
@@ -132,8 +141,9 @@ pickup rifle_01 30 20 0.7 30
 pickup etheral_waver 67 37 1.9 30
 pickup Ammo 17 0 1 30
 pickup Medkit 60 -30 0.7 30
-pickup Powerup 67 33 0.7 30
-pickup Key 50 20 0.7 30
+# No `Key` / `Powerup` in this act: neither has a consumer beyond XP and there is
+# no locked door or power-up state in the runtime, so they read as loot that does
+# nothing. Both defs stay available for the sector that actually builds one.
 npc Skaarj -96 10 18
 npc Walker -88 -8 18
 npc Skaarj 0 20 0
@@ -161,10 +171,27 @@ zone water 8 -70 -2 26 70 2 1 name=silentpines_river gravity=18 jump=9 terminal=
 zone water 74 -12 -2 86 12 2 1 name=silentpines_pool gravity=18 jump=9 terminal=60 water_gravity=7 water_drag=0.92 swim_up=4.5 ladder_speed=6 fly_mult=1.5
 zone reverb 59 29 0 75 45 9 1 name=silentpines_shrine gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
 
-# Threshold at the bridge approach (off both playerstarts).
-trigger Trigger_EnterVolume -3 -9 0 -1 9 8 once
-# Campaign exit behind the shrine. Spawn lands inside Sektor_02_MegacityGrid's floor.
-portal Sektor_02_MegacityGrid 75 38 0 79 42 6 0 0 1 bidir
+# Threshold at the bridge approach (off both playerstarts). Per-district def:
+# the line belongs to THIS map (see Game/Angels95/Triggers/Trigger_S01_Bridge).
+trigger Trigger_S01_Bridge -3 -9 0 -1 9 8 once
+# Campaign exit behind the shrine. The arrival point is
+# Sektor_02_MegacityGrid's authored playerstart (0 -34 0): entering a district
+# must land on its gate, or the arrival skips the south-avenue read the map is
+# built around. The bidir return portal is placed at that same point by the
+# client, so it reads as the way back rather than a pad in the junction.
+portal Sektor_02_MegacityGrid 75 38 0 79 42 6 0 -34 0 bidir
+
+# --- Exit threshold (design/GAME_DESIGN.md §4: "the exit portal (shimmer)") ---
+# Two co-located ambient emitters, warm gold to match the shrine's torches and
+# deliberately unlike every combat effect. 26 + 6 live particles; both are
+# untextured so they share the generated soft sprite (one batch). Gated by the
+# Particles master toggle like every other OZONE emitter.
+# Spec + budgets: design/vfx-sefirah1-exits.json.
+ParticleEmitter mist 77 40 0.3 10 2.6 0.55 10 0.05 0.32 255 232 176 236 176 96 0.10 1.9 0 0 1 0
+ParticleEmitter sparks 77 40 0.4 5 1.1 0.35 70 0.10 0.02 255 246 214 255 186 120 0.25 2.2 0 0 1 0
+# The altar keeps a small light of its own, so the sword (the branch reward)
+# reads from the bridge before the player commits to the shrine.
+ParticleEmitter mist 67 37 2.2 6 2.2 0.35 8 0.04 0.22 255 226 160 255 190 110 -0.06 1.0 0 0 1 0
 
 # Falls mist (direction is authored Z-up: 0 0 1 = up, negative gravity settles it)
 ParticleEmitter mist 84 -4 0.2 18 2.5 1.8 22 0.2 1.8 230 235 240 190 200 215 -0.5 8 0 0 1 0

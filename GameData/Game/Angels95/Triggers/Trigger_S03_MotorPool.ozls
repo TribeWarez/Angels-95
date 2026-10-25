@@ -1,0 +1,11 @@
+// Trigger_S03_MotorPool — AegisBaseAlpha, the north gate into the motor pool.
+entity "Trigger_S03_MotorPool" : trigger {
+    stats {
+        topic = trigger.enter
+        once = 1
+        team = 0
+    }
+    actions {
+        on_enter { msg "The motor pool. The annex sits behind it." }
+    }
+}

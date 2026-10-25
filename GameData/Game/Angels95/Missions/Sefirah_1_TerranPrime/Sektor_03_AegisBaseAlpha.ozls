@@ -1,15 +1,18 @@
 // Sektor_03_AegisBaseAlpha — Sefirah 1 (Terran Prime). Rogue portal research.
-// SCAFFOLD (Phase 0): EntityType::MISSION, no runtime consumer yet.
+//
+// Completion is spatial: the rig in the containment annex is the exit. The
+// empty-cradle beat in the hangar is the level's own narrative payload, so the
+// mission line only names the district. See Sektor_01 for the runtime wiring.
 entity "Sektor_03_AegisBaseAlpha" : mission {
     stats {
         sector = Sefirah_1_TerranPrime
         world = Sektor_03_AegisBaseAlpha
         mode = campaign
-        objectives = Objective_ClearArea
+        objectives = Objective_S03_HangarBreach
         next = KryoArchipel_Severny
     }
     actions {
-        on_start    { msg "AegisBaseAlpha: mission start (scaffold)" }
-        on_complete { msg "AegisBaseAlpha: mission complete (scaffold)" }
+        on_start    { msg "Aegis Base Alpha. The cradle is empty — the machine moved." }
+        on_complete { msg "The rig is open. Step through." }
     }
 }

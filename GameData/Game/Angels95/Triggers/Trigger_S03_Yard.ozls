@@ -1,0 +1,11 @@
+// Trigger_S03_Yard — AegisBaseAlpha, the gate yard inside the south fence.
+entity "Trigger_S03_Yard" : trigger {
+    stats {
+        topic = trigger.enter
+        once = 1
+        team = 0
+    }
+    actions {
+        on_enter { msg "Aegis Base Alpha. The hangar doors are open." }
+    }
+}

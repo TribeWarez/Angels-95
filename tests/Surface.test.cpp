@@ -936,10 +936,10 @@ static void test_dead_flags_are_still_dead() {
         SURF_FAKEBACKDROP, SURF_INVISIBLE, SURF_MASKED, SURF_TRANSLUCENT,
         SURF_ALPHABLEND, SURF_MODULATED, SURF_TWO_SIDED, SURF_UNLIT,
         SURF_FAKE_LIT, SURF_GLOW, SURF_PAN_U, SURF_PAN_V,
-        SURF_NO_FOG, SURF_NO_BSP_CUTS, SURF_PORTAL,
+        SURF_NO_FOG, SURF_NO_BSP_CUTS, SURF_PORTAL, SURF_OCCLUDER,
     };
     const int liveCount = (int)(sizeof(live) / sizeof(live[0]));
-    check(liveCount == 15, "15 flags are live and offered as enabled checkboxes");
+    check(liveCount == 16, "16 flags are live and offered as enabled checkboxes");
 
     bool overlap = false;
     for (int i = 0; i < liveCount; i++)

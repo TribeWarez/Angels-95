@@ -1347,6 +1347,49 @@ static int test_starting_mission_skips_earlier_worlds() {
     PASS(); return 0; END_TEST();
 }
 
+// The campaign rule this whole pass is about: a world is completed by LEAVING
+// through the door that leads to its mission's `next` world — not by a kill
+// count, and not by any other world change (a return portal, a manual jump).
+static int test_mission_completes_at_its_exit() {
+    TEST("a mission completes at its authored exit, not at a kill count");
+    LightningEntityRegistry::Instance().Init();
+    auto& gm = oz::game::GameManager::Instance();
+    gm.Init();
+    CHECK(gm.Loaded());
+
+    GameState gs;
+    gs.set_campaign_enabled(true);
+    gs.init_worlds("GameData", {"Sektor_01_SilentPines",
+                                "Sektor_02_MegacityGrid",
+                                "Sektor_03_AegisBaseAlpha"});
+    CHECK_EQ(gs.world_count(), 3);
+    WorldState& s1 = gs.worlds()[0];
+    WorldState& s2 = gs.worlds()[1];
+    WorldState& s3 = gs.worlds()[2];
+    CHECK_STR(s1.mission, "Sektor_01_SilentPines");
+    CHECK(!s1.objectives.empty());
+    // Objectives at 0/4: completion must not depend on them.
+    CHECK_EQ(s1.objectives.empty() ? -1 : s1.objectives[0].progress, 0);
+
+    // Leaving for a world that is NOT this mission's next one: no completion.
+    CHECK(!gs.complete_mission_at_exit(s1, s3));
+    CHECK(!s1.mission_transitioned);
+
+    // The authored exit (S01 -> S02): completes exactly once.
+    CHECK(gs.complete_mission_at_exit(s1, s2));
+    CHECK(s1.mission_transitioned);
+    CHECK(!gs.complete_mission_at_exit(s1, s2));
+
+    // The flag gates the rule: a non-campaign server never completes anything.
+    GameState plain;
+    plain.set_campaign_enabled(false);
+    plain.init_worlds("GameData", {"Sektor_01_SilentPines", "Sektor_02_MegacityGrid"});
+    CHECK_EQ(plain.world_count(), 2);
+    CHECK(plain.worlds()[0].objectives.empty());     // OFF seeds none
+    CHECK(!plain.complete_mission_at_exit(plain.worlds()[0], plain.worlds()[1]));
+    PASS(); return 0; END_TEST();
+}
+
 // An unknown name must not silently start earlier than asked. GameState itself
 // only warns (Server.cpp turns the same condition into a startup error before
 // init_worlds is ever reached), so pin "no worlds skipped" here.
@@ -1603,6 +1646,51 @@ static int test_tdm_team_friendly_fire_and_scoring() {
     PASS(); return 0; END_TEST();
 }
 
+// A `kill` objective with `target` set must count only that NPC def, and a
+// `collect` objective only that pickup. Every objective used to count every
+// death / every pickup, so "kill 4 Walkers" was satisfied by Brutes and
+// Objective_CollectRelics by a health vial.
+static int test_objective_target_filter() {
+    TEST("objectives honour their target filter (kill by def, collect by name)");
+    GameState gs;
+    WorldState ws = make_test_world(0);
+
+    WorldState::Objective walkers;
+    walkers.id = "GorgeWatch"; walkers.type = "kill"; walkers.target = 2;
+    walkers.targetName = "Walker";
+    ws.objectives.push_back(walkers);
+
+    WorldState::Objective vials;
+    vials.id = "Relics"; vials.type = "collect"; vials.target = 2;
+    vials.targetName = "HealthVial";
+    ws.objectives.push_back(vials);
+
+    WorldState::Objective any;
+    any.id = "ClearArea"; any.type = "kill"; any.target = 10;  // no target
+    ws.objectives.push_back(any);
+
+    // A Brute satisfies only the untargeted objective.
+    CHECK_EQ(gs.AdvanceObjectivesByType(ws, "kill", 1, "Brute"), 1);
+    CHECK_EQ(ws.objectives[0].progress, 0);
+    CHECK_EQ(ws.objectives[2].progress, 1);
+
+    // A Walker satisfies both the targeted one and the untargeted one.
+    CHECK_EQ(gs.AdvanceObjectivesByType(ws, "kill", 1, "Walker"), 2);
+    CHECK_EQ(ws.objectives[0].progress, 1);
+    CHECK_EQ(ws.objectives[2].progress, 2);
+
+    // collect is filtered by pickup name, not by pickup type.
+    CHECK_EQ(gs.AdvanceObjectivesByType(ws, "collect", 1, "ManaVial"), 0);
+    CHECK_EQ(ws.objectives[1].progress, 0);
+    CHECK_EQ(gs.AdvanceObjectivesByType(ws, "collect", 1, "HealthVial"), 1);
+    CHECK_EQ(ws.objectives[1].progress, 1);
+
+    // Progress never runs past the target count.
+    gs.AdvanceObjectivesByType(ws, "kill", 5, "Walker");
+    CHECK_EQ(ws.objectives[0].progress, 2);
+    PASS(); return 0; END_TEST();
+}
+
 int main() {
     // Unbuffered: when a suite dies without a summary line, a piped stdout keeps
     // the last "TEST:" line in the log, which is what names the culprit (the
@@ -1646,6 +1734,7 @@ int main() {
     failures += test_campaign_gates_frontier_placement();
     failures += test_plain_coop_default_world();
     failures += test_campaign_gates_objective_seeding();
+    failures += test_objective_target_filter();
     failures += test_starting_mission_flag_roundtrip();
     failures += test_starting_mission_pins_frontier();
     // The integration test inits the real hierarchy (LightningEntityRegistry::
@@ -1653,6 +1742,7 @@ int main() {
     // registry, and the unknown-name case runs after it with the hierarchy
     // genuinely loaded.
     failures += test_starting_mission_skips_earlier_worlds();
+    failures += test_mission_completes_at_its_exit();
     failures += test_starting_mission_unknown_is_inert();
     failures += test_frontier_placement_walks_mission_graph();
 

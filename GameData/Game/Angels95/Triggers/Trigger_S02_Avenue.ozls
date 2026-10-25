@@ -1,0 +1,11 @@
+// Trigger_S02_Avenue — MegacityGrid, the south avenue into the crossroads.
+entity "Trigger_S02_Avenue" : trigger {
+    stats {
+        topic = trigger.enter
+        once = 1
+        team = 0
+    }
+    actions {
+        on_enter { msg "The crossroads ahead. The tower stands past the north gate." }
+    }
+}

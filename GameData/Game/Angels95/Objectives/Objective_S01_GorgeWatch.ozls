@@ -1,0 +1,17 @@
+// Objective_S01_GorgeWatch — Sektor_01_SilentPines route objective.
+//
+// `type = kill` is what GameState advances on an NPC death, and `target` names
+// the NPC def that counts (Walker). Before `target` had a reader, every "kill"
+// objective counted ANY death, so "clear the area" was satisfied by whatever
+// was nearest. `count` must stay reachable from the map's own population
+// (SilentPines ships 6 Walkers).
+entity "Objective_S01_GorgeWatch" : objective {
+    stats {
+        type = kill
+        target = Walker
+        count = 4
+    }
+    actions {
+        on_complete { msg "The path down the gorge is quiet." }
+    }
+}

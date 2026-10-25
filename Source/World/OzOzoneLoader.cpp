@@ -1759,6 +1759,13 @@ void OzoneLoader::Draw(Camera3D& camera, bool cullBackfaces) {
 void OzoneLoader::DrawWorldGeometry(Camera3D& camera) {
     FrustumPlane planes[6];
     BuildFrustum(camera, planes);
+    // Zone-based PVS: collect the camera's active zones (+ adjacent via portals
+    // is approximated by all zones overlapping the camera point). Renderables
+    // whose centre lies in none of those zones are skipped.
+    BoundingBox camBox = { {camera.position.x-0.1f, camera.position.y-0.1f, camera.position.z-0.1f},
+                           {camera.position.x+0.1f, camera.position.y+0.1f, camera.position.z+0.1f} };
+    auto activeZones = ZoneManager::Instance().GetActiveZones(camera.position, camBox);
+    std::vector<ZoneVolumeNode*> activeZonePtrs = activeZones;
     for (auto& r : m_renderables) {
         if (!r.loaded) continue;
         // Collision proxies are never drawn in-game, whatever the editor toggle
@@ -1768,6 +1775,52 @@ void OzoneLoader::DrawWorldGeometry(Camera3D& camera) {
                             r.bounds.min.y < r.bounds.max.y ||
                             r.bounds.min.z < r.bounds.max.z) &&
             !AabbInFrustum(planes, r.bounds)) continue;
+        // PVS filter: if zones exist and the camera is in a subset of them,
+        // skip renderables that lie inside a zone that is NOT active. Renderables
+        // outside every zone are always drawn.
+        if (!ZoneManager::Instance().GetZones().empty() && !activeZonePtrs.empty() &&
+            activeZonePtrs.size() < ZoneManager::Instance().GetZones().size()) {
+            Vector3 c = { (r.bounds.min.x+r.bounds.max.x)*0.5f,
+                          (r.bounds.min.y+r.bounds.max.y)*0.5f,
+                          (r.bounds.min.z+r.bounds.max.z)*0.5f };
+            bool inAnyZone = false;
+            bool inActive = false;
+            for (auto& z : ZoneManager::Instance().GetZones()) {
+                if (c.x >= z.bounds.min.x && c.x <= z.bounds.max.x &&
+                    c.y >= z.bounds.min.y && c.y <= z.bounds.max.y &&
+                    c.z >= z.bounds.min.z && c.z <= z.bounds.max.z) {
+                    inAnyZone = true;
+                    for (auto* a : activeZonePtrs) if (a->id == z.id) { inActive = true; break; }
+                }
+            }
+            if (inAnyZone && !inActive) continue;
+        }
+        // Portal-plane occlusion: occluder brushes (SURF_OCCLUDER) hide
+        // renderables on their far side relative to the camera.
+        {
+            bool occluded = false;
+            for (auto& o : m_renderables) {
+                if (!o.loaded || !(o.surfaceFlags & SURF_OCCLUDER)) continue;
+                if (o.bounds.min.x >= o.bounds.max.x && o.bounds.min.y >= o.bounds.max.y && o.bounds.min.z >= o.bounds.max.z) continue;
+                Vector3 oc = { (o.bounds.min.x+o.bounds.max.x)*0.5f,
+                               (o.bounds.min.y+o.bounds.max.y)*0.5f,
+                               (o.bounds.min.z+o.bounds.max.z)*0.5f };
+                // normal = thinnest axis
+                float ex = o.bounds.max.x - o.bounds.min.x;
+                float ey = o.bounds.max.y - o.bounds.min.y;
+                float ez = o.bounds.max.z - o.bounds.min.z;
+                Vector3 n = {0,1,0};
+                if (ex <= ey && ex <= ez) n = {1,0,0};
+                else if (ez <= ex && ez <= ey) n = {0,0,1};
+                Vector3 rc = { (r.bounds.min.x+r.bounds.max.x)*0.5f,
+                               (r.bounds.min.y+r.bounds.max.y)*0.5f,
+                               (r.bounds.min.z+r.bounds.max.z)*0.5f };
+                float dCam = (camera.position.x-oc.x)*n.x + (camera.position.y-oc.y)*n.y + (camera.position.z-oc.z)*n.z;
+                float dR   = (rc.x-oc.x)*n.x + (rc.y-oc.y)*n.y + (rc.z-oc.z)*n.z;
+                if (dCam * dR < 0) { occluded = true; break; }
+            }
+            if (occluded) continue;
+        }
         if (r.typeId == (int)OzonePrimitiveType::HEIGHTMAP && m_hmReady) {
             DrawModelEx(m_hmModel, m_hmPosition, (Vector3){0,1,0}, 0,
                         (Vector3){m_hmScale, m_hmScale, m_hmScale}, WHITE);

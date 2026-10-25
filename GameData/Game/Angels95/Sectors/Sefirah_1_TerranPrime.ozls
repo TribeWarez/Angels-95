@@ -1,12 +1,16 @@
 // Sefirah 1 — Terran Prime (Materia 1.0)
 // Numerology node 1: the Origin / physical anchor.
-// Role: safe hub, beginner questing, guild creation, trade.
-// SCAFFOLD (Phase 0): EntityType::SECTOR, no runtime consumer yet.
+// Role: frontier. The campaign's first act: three combat districts (gorge,
+// megacity, research base) that teach the loop and hand the player to Sefirah 2.
+// This sector was authored as a "hub" (safe town, guilds, trade) but ships no
+// hub content: no talkable NPC, vendor, trade or guild surface exists in the
+// runtime, so the claim was retired rather than left standing. A hub belongs in
+// a later sector once there is something to do in it.
 entity "Sefirah_1_TerranPrime" : sector {
     stats {
         numerology = 1
         theme = terran_prime
-        role = hub
+        role = frontier
         skybox = GameData/Tex/Global/Sky/sky_day.png
         missions = Sektor_01_SilentPines,Sektor_02_MegacityGrid,Sektor_03_AegisBaseAlpha
     }

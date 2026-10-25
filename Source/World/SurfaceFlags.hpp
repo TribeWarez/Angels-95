@@ -57,6 +57,7 @@ namespace surface {
 // --- reserved / pre-existing -----------------------------------------------
 inline constexpr uint32_t SURF_FAKEBACKDROP      = (1u << 3);
 inline constexpr uint32_t SURF_COLLISION_PROXY   = (1u << 4);
+inline constexpr uint32_t SURF_OCCLUDER          = (1u << 5); // portal-plane occluder
 
 // Gain the sky pass applies to a SURF_FAKEBACKDROP face.
 //
@@ -449,6 +450,7 @@ inline int SeedInertSurfaceValues(SurfaceProps& p) {
 // ---------------------------------------------------------------------------
 using oz::surface::SURF_FAKEBACKDROP;
 using oz::surface::SURF_COLLISION_PROXY;
+using oz::surface::SURF_OCCLUDER;
 using oz::surface::kBackdropGain;
 using oz::surface::kFullBrightGain;
 using oz::surface::SURF_INVISIBLE;
