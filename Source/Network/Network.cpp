@@ -89,6 +89,7 @@ const char* message_type_string(MessageType type) {
         case MessageType::REQUEST_WORLD:    return "REQUEST_WORLD";
         case MessageType::WORLD_CHANGE:     return "WORLD_CHANGE";
         case MessageType::PLAYER_PROFILE:   return "PLAYER_PROFILE";
+case MessageType::REQUEST_CHUNK:    return "REQUEST_CHUNK";
         case MessageType::WEAPON_AMMO:      return "WEAPON_AMMO";
         case MessageType::SERVER_CHALLENGE: return "SERVER_CHALLENGE";
         case MessageType::CLIENT_AUTH:      return "CLIENT_AUTH";

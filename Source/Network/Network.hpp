@@ -148,6 +148,9 @@ enum class MessageType : uint32_t {
     // characters.cfg and fall back to the default model. A new MessageType is
     // forward/backward compatible by definition, so no PROTOCOL_VERSION bump.
     PLAYER_PROFILE = 32,
+    // Client -> server: request a world chunk by index. Server answers with a
+    // WORLD_CHANGE-style payload scoped to that chunk (Phase 6 scaffold).
+    REQUEST_CHUNK = 33,
 };
 
 // Melee stamina: the server keeps its own pool per player so a swinging client
