@@ -45,6 +45,12 @@ static constexpr int HOTBAR_SIZE = 8;
     }
 
     void Init();
+
+    // Grant the Player def's `starting_weapon` if the hotbar is entirely empty.
+    // Called once per session after the menu has resolved it (a Continue
+    // restores a hotbar and is left alone). See the .cpp for why this is not
+    // part of Init().
+    void EnsureStartingWeapon();
     void Update(float dt);
 
     // --- Lifecycle ---
