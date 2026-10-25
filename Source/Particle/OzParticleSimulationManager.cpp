@@ -391,17 +391,6 @@ void OzParticleSimulationManager::DrawInstanced(Camera3D& camera,
                     // shader's texture0 sampled something else (invisible fire).
                     rlActiveTextureSlot(0);
                     rlEnableTexture(texId);
-                    static int s_td = 0;
-                    if (s_td < 3) {
-                        typedef void (*PFNGETINT)(unsigned int, int*);
-                        auto gi = (PFNGETINT)rlGetProcAddress("glGetIntegerv");
-                        int act = -1, bound = -1;
-                        if (gi) { gi(0x84E0, &act); gi(0x8069, &bound); }
-                        OZ_INFO("PTEX tex=%u active=0x%X bound=%d texloc=%d",
-                                texId, act, bound,
-                                GetShaderLocation(m_instShader, "texture0"));
-                        s_td++;
-                    }
                     rlUpdateVertexBuffer(m_instVbo, m_instData.data(),
                                          (int)(m_instData.size() * sizeof(float)), 0);
                     rlDrawVertexArrayInstanced(0, 6, count);
