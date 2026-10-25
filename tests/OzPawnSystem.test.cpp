@@ -1245,6 +1245,24 @@ static int test_combat_feedback_cues() {
     CHECK(cf.DamageActive());
     cf.Update(1.0f);
     CHECK(!cf.DamageActive());
+
+    // Floating damage numbers: a zero/negative amount must not occupy a slot (a
+    // "0" hugging the target reads as a miss), and the pool must expire on its
+    // own timer so a captured frame cannot show a number from a previous fight.
+    cf.Reset();
+    CHECK(cf.ActiveDamageNumberCount() == 0);
+    cf.SpawnDamageNumber({0, 1, 0}, 0);
+    cf.SpawnDamageNumber({0, 1, 0}, -5);
+    CHECK(cf.ActiveDamageNumberCount() == 0);
+    cf.SpawnDamageNumber({0, 1, 0}, 17, false);
+    cf.SpawnDamageNumber({0, 1, 0}, 42, true);
+    CHECK(cf.ActiveDamageNumberCount() == 2);
+    cf.Update(0.5f);                       // still inside kNumberSeconds (0.85)
+    CHECK(cf.ActiveDamageNumberCount() == 2);
+    cf.Update(0.5f);
+    CHECK(cf.ActiveDamageNumberCount() == 0);
+    cf.Reset();
+    CHECK(cf.ActiveDamageNumberCount() == 0);
     PASS(); return 0; END_TEST();
 }
 

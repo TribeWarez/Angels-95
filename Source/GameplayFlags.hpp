@@ -36,3 +36,10 @@ inline int g_weaponHand = 0;
 // page; PlayerMovement multiplies its per-controller MouseSensitivity by this.
 inline float g_mouseSensitivity = 1.0f;
 inline bool  g_invertY = false;
+
+// In-game HUD / inventory scale. Pushed once per frame from Core.hpp out of the
+// SAME persisted value the menu already uses ([AngelTech.HUD] ui_scale ->
+// Settings.hpp's UiScale), so there is one UI scale control instead of two that
+// can disagree. InventoryBehaviour reads this mirror because it is a separate
+// TU and Settings.hpp's globals are per-TU static copies.
+inline float g_hudScale = 1.0f;

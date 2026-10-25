@@ -451,6 +451,10 @@ void PawnSystem::UpdateProjectiles(float dt) {
                 // Hit confirmation for the shooter: the impact/blood above is
                 // the 3D half, this drives the crosshair marker.
                 oz::CombatFeedback::Instance().ConfirmHit(pawn.state == PawnState::DEAD);
+                // ...and the floating number, which this path can afford because
+                // the damage amount and the contact point are both local facts.
+                oz::CombatFeedback::Instance().SpawnDamageNumber(
+                    hitPos, (int)p.damage, pawn.state == PawnState::DEAD);
                 break;
             }
         }

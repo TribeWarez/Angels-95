@@ -2,6 +2,11 @@
 
 ![Angels95 Title Splash](GameData/Tex/Title/menu_heading.png)
 
+[![Latest release](https://img.shields.io/github/v/release/TribeWarez/Angels-95?color=blue&label=release)](https://github.com/TribeWarez/Angels-95/releases/latest)
+[![SourceForge downloads](https://img.shields.io/sourceforge/dt/angels-95.svg)](https://sourceforge.net/projects/angels-95/files/latest/download)
+[![Build](https://github.com/TribeWarez/Angels-95/actions/workflows/ci.yml/badge.svg)](https://github.com/TribeWarez/Angels-95/actions/workflows/ci.yml)
+
+
 Angels95 is a **multiplayer game world** built on **AngelTech** — the engine that
 began life as the OmegaTech Engine. It is a persistent, server-authoritative realm
 where players explore partitioned worlds, collect power-ups, level up, and fight
@@ -15,10 +20,6 @@ aesthetics, a custom **OZONE** world format, a
 (`AngelEd`), and a dedicated standalone server (`AngelServ`) with no raylib
 dependency.
 
-Current release: **b111**.
-
-[![Download Angels 95](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/angels-95/files/latest/download)
-[![Download Angels 95](https://img.shields.io/sourceforge/dt/angels-95.svg)](https://sourceforge.net/projects/angels-95/files/latest/download)
 
 **Download:** [SourceForge](https://sourceforge.net/projects/angels-95/files/latest/download)
 · [GitHub Releases](https://github.com/TribeWarez/Angels-95/releases/latest)

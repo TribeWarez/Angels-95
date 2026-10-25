@@ -19,6 +19,9 @@
 #include "Renderer/CullState.hpp"
 #include "Particle/OzParticleSimulationManager.hpp"
 #include "Pawn/AngelPlayer/PlayerController.hpp"
+// LoadWorld() resets the HUD's per-world transients (XP baseline / banners), so
+// the behaviour has to be visible here, not only from Main.cpp.
+#include "Pawn/AngelPlayer/InventoryBehaviour.hpp"
 #include "Script/LightningEntityRegistry.hpp"
 #include "Script/LightningEntityManager.hpp"
 #include "Events/EventBus.hpp"
@@ -279,6 +282,10 @@ auto LoadWorld()
     // Reset cross-world state that would otherwise persist across LoadWorld calls
     g_damageCooldown = 0.0f;
     g_activeEnvZone.clear();
+    // HUD transients (XP baseline, "+N XP" flash, level-up banner) are per-world:
+    // a world that starts the player at different XP must not read the difference
+    // as a gain on the first HUD frame.
+    InventoryBehaviour::Instance().ResetHudTracking();
     // Audio (world music, zone ambience, reverb hook, script sound cache) owns
     // its own per-world reset.
     SoundManager::Instance().ResetWorldAudio();
@@ -1183,6 +1190,10 @@ void ResetSessionState()
     g_returnPortalId = -1;
 }
 
+// Defined below UpdateEntitiesSim's helpers; declared here because the mission
+// launch path (PlayHomeScreen) runs before it in this translation unit.
+static void EmitMissionBeat(const char* topic, const std::string& mission);
+
 void PlayHomeScreen()
 {
     // Re-open the title video if a previous menu visit released it.
@@ -1209,6 +1220,7 @@ void PlayHomeScreen()
 
     TitleMenu menu;
     if (g_menuShotPage >= 0) menu.SetStartPage(g_menuShotPage);
+    if (g_menuShotPractice) menu.SetStartPlayTab(1);   // Practice = 1
 
     int menuShotFrames = 0;
     while (!menu.Tick() && !WindowShouldClose())
@@ -1274,7 +1286,10 @@ void PlayHomeScreen()
         // actually chose instead of the previous session's.
         if (!menu.ShouldStartServer() && menu.GetSelectedMission() &&
             oz::game::GameManager::Instance().Loaded()) {
-            oz::game::GameManager::Instance().SetActiveMission(menu.GetSelectedMission());
+            const std::string mission = menu.GetSelectedMission();
+            oz::game::GameManager::Instance().SetActiveMission(mission);
+            // Authored mission-start beat (mission def on_start).
+            EmitMissionBeat("mission.start", mission);
         }
         strncpy(g_world_to_load, menu.GetSelectedWorld(), sizeof(g_world_to_load) - 1);
         g_world_to_load[sizeof(g_world_to_load) - 1] = '\0';
@@ -1326,6 +1341,26 @@ void PlayHomeScreen()
     AngelTechData.Deaths = 1;
 }
 
+// Emit an authored mission beat.
+//
+// The text lives on the mission def's `on_start` / `on_complete` actions and
+// LightningEntityManager's bus bridge resolves `mission.start` -> on_start
+// (falling back to the last topic segment), so no new hook is involved.
+//
+// TextSystem holds ONE big line, and the district's own skyzone `say` fires on
+// the first sim step of a load and takes that slot. The mission line is still
+// committed to the message log, and the always-visible OBJECTIVES row (fed by
+// the local ObjectiveSystem in single-player, OBJECTIVE_STATE in co-op) is the
+// durable read-out.
+static void EmitMissionBeat(const char* topic, const std::string& mission)
+{
+    if (mission.empty()) return;
+    oz::events::Event ev;
+    ev.topic = topic;
+    ev.s0 = mission;
+    oz::events::EventBus::Instance().Emit(ev);
+}
+
 void UpdateEntitiesSim(float dt)
 {
     Vector3 playerPos = AngelTechData.MainCamera.position;
@@ -1357,6 +1392,25 @@ void UpdateEntitiesSim(float dt)
             } else {
                 g_portalHasReturn = false;
             }
+
+            // Campaign completion IS this door. Leaving through the portal that
+            // leads to the active mission's `next` world completes the mission
+            // and advances the local mission (the server does the same for
+            // co-op, so both ends agree). Non-mission portals — including the
+            // transient return portal a bidir crossing drops — do not match.
+            {
+                auto& gm = oz::game::GameManager::Instance();
+                const std::string active = gm.ActiveMission();
+                if (gm.Loaded() && !active.empty()) {
+                    const std::string nextWorld = gm.NextMissionWorld(active);
+                    if (!nextWorld.empty() && nextWorld == portal->targetWorld) {
+                        EmitMissionBeat("mission.complete", active);
+                        if (const oz::game::MissionDef* nm = gm.FindMissionByWorld(nextWorld))
+                            gm.SetActiveMission(nm->name);
+                    }
+                }
+            }
+
             strncpy(g_world_to_load, portal->targetWorld.c_str(), sizeof(g_world_to_load) - 1);
             g_world_to_load[sizeof(g_world_to_load) - 1] = '\0';
             g_portalSpawnPos = portal->targetSpawn;
@@ -2034,6 +2088,11 @@ if (inSkyZone)
         // HeadBob toggle is the player-facing "less motion" control, so the
         // low-health edge cue stops pulsing when it is off.
         g_reducedMotion = !HeadBob;
+
+        // In-game HUD/inventory scale, from the same persisted UI scale the menu
+        // uses. Settings.hpp's UiScale is a per-TU static, so the HUD (a
+        // different TU) reads the inline mirror instead.
+        g_hudScale = UiScale;
 
         // Ambient weather spawns around the camera, so it needs the camera and
         // is deliberately NOT part of the manager's Update(): that function is

@@ -66,6 +66,11 @@ public:
         m_damage = fmaxf(0.0f, m_damage - dt / kDamageSeconds);
         m_lowPulse += dt;
         if (m_lowPulse > 100.0f) m_lowPulse = 0.0f;   // keep the phase bounded
+        for (auto& n : m_numbers) {
+            if (!n.active) continue;
+            n.age += dt;
+            if (n.age >= kNumberSeconds) n.active = false;
+        }
     }
 
     // World/session reset: drop every transient so a level change cannot show
@@ -75,12 +80,62 @@ public:
         m_hitIsKill = false;
         m_damageAngle = 0.0f;
         m_lowPulse = 0.0f;
+        for (auto& n : m_numbers) n.active = false;
+    }
+
+    // A floating damage number at a world position. Called from the two places
+    // that KNOW both the amount and the contact point: the local melee resolve
+    // (LightningEntityManager's ranged/melee dispatch) and the local projectile
+    // hit (PawnSystem::UpdateProjectiles). Server-authoritative MP NPC damage
+    // has neither number nor position on the client, so MP shows no numbers -
+    // the hit marker is still there, and inventing a number would be a lie.
+    void SpawnDamageNumber(Vector3 at, int amount, bool killed = false) {
+        if (amount <= 0) return;
+        DamageNumber& n = m_numbers[m_nextNumber];
+        m_nextNumber = (m_nextNumber + 1) % kMaxNumbers;
+        n.world  = at;
+        n.amount = amount;
+        n.age    = 0.0f;
+        n.killed = killed;
+        n.active = true;
+    }
+
+    // Live damage numbers, projected to the screen. Sized off the framebuffer so
+    // a number is legible at 720p and does not become a billboard at 4K.
+    void DrawDamageNumbers(const Camera3D& cam) const {
+        const int sw = GetScreenWidth(), sh = GetScreenHeight();
+        for (const auto& n : m_numbers) {
+            if (!n.active) continue;
+            const float t = n.age / kNumberSeconds;                 // 0..1
+            // Rise + a small outward drift gives overlapping hits separation
+            // without needing per-number random state.
+            const Vector3 lift = {n.world.x, n.world.y + 0.30f + t * 1.1f, n.world.z};
+            const Vector2 s = GetWorldToScreen(lift, cam);
+            if (s.x < -80.0f || s.y < -80.0f ||
+                s.x > (float)sw + 80.0f || s.y > (float)sh + 80.0f) continue;
+            const float fade = t < 0.65f ? 1.0f : (1.0f - (t - 0.65f) / 0.35f);
+            const int fs = (int)fmaxf(13.0f, sh * 0.022f) + (n.killed ? 3 : 0);
+            const char* txt = TextFormat("%d", n.amount);
+            const int w = MeasureText(txt, fs);
+            const int x = (int)s.x - w / 2, y = (int)s.y;
+            const unsigned char a = (unsigned char)(255.0f * fmaxf(0.0f, fade));
+            DrawText(txt, x + 1, y + 1, fs, Color{0, 0, 0, (unsigned char)(a * 0.7f)});
+            DrawText(txt, x, y, fs,
+                     n.killed ? Color{255, 190, 60, a} : Color{255, 240, 205, a});
+        }
     }
 
     // For tests/callers: are the transient cues live?
     bool HitActive() const { return m_hit > 0.0f; }
     bool DamageActive() const { return m_damage > 0.0f; }
     float DamageAngle() const { return m_damageAngle; }
+    // Live floating damage numbers. Exposed so a test can pin the pool's
+    // lifecycle (spawn -> expire) without reaching into the private array.
+    int ActiveDamageNumberCount() const {
+        int n = 0;
+        for (const auto& d : m_numbers) if (d.active) n++;
+        return n;
+    }
 
     // `healthFrac` is remaining/max (1.0 when unknown). Call once per frame,
     // after the world pass and before/with the rest of the HUD.
@@ -95,6 +150,16 @@ private:
     static constexpr float kKillSeconds = 0.40f;
     static constexpr float kDamageSeconds = 0.90f;
     static constexpr float kLowHealth = 0.30f;   // fraction that starts the pulse
+    static constexpr float kNumberSeconds = 0.85f;
+    static constexpr int   kMaxNumbers = 16;     // fixed pool, no allocation
+
+    struct DamageNumber {
+        Vector3 world = {0, 0, 0};
+        int     amount = 0;
+        float   age = 0.0f;
+        bool    killed = false;
+        bool    active = false;
+    };
 
     float m_hit = 0.0f;
     float m_kill = 0.0f;
@@ -102,6 +167,8 @@ private:
     float m_damageAngle = 0.0f;   // radians, 0 = ahead, + = to the right
     float m_lowPulse = 0.0f;
     bool  m_hitIsKill = false;
+    DamageNumber m_numbers[kMaxNumbers];
+    int   m_nextNumber = 0;
 
     // Edge bands, additive, breathing. Deliberately weaker than the single-hit
     // DamageFlash so the two do not read as the same event: the flash is "just

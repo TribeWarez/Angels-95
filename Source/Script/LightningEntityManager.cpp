@@ -267,6 +267,12 @@ int LightningEntityManager::FireSelectedWeapon(const Vector3& origin, const Vect
                         PawnSystem::Instance().ApplyPawnDamage(*target, (int)projectileDamage);
                         oz::CombatFeedback::Instance().ConfirmHit(
                             target->state == PawnState::DEAD);
+                        // Local sim knows the amount AND the contact point, so it
+                        // can show a real number. The server-owned path above
+                        // cannot (it has neither), which is why MP shows only the
+                        // hit marker.
+                        oz::CombatFeedback::Instance().SpawnDamageNumber(
+                            hitPos, (int)projectileDamage, target->state == PawnState::DEAD);
                     }
                 }
             }
@@ -831,8 +837,55 @@ void LightningEntityManager::Init() {
         OZ_WARN("LightningEntityManager: could not spawn player entity");
     }
 
+    // Starting weapon is granted by EnsureStartingWeapon(), called once the
+    // session's loadout is settled: a Continue restores the saved hotbar and
+    // must not also receive a free pistol, and Init() runs before the menu.
+
     OZ_INFO("LightningEntityManager: ready, registry has %d defs",
             LightningEntityRegistry::Instance().Count());
+}
+
+// ---------------------------------------------------------------------------
+// EnsureStartingWeapon — grant the session's starting weapon when unarmed
+// ---------------------------------------------------------------------------
+//
+// The hotbar starts empty and nothing filled it, so every session opened with
+// empty hands. Sektor_01_SilentPines (the campaign's first map) ships no pistol
+// pickup at all, so its first minute was a walk past the valley's NPCs with no
+// way to fight. The def owns the choice (`starting_weapon` on Player.ozls) so a
+// future class can change it without touching code; the fallback keeps a def
+// that forgot the key from reintroducing the unarmed start.
+//
+// Called AFTER the menu resolves a session (Core/PlayHomeScreen -> Main), not
+// from Init(): a Continue restores the saved hotbar and must not be handed a
+// free pistol, and Init() runs before the menu exists.
+void LightningEntityManager::EnsureStartingWeapon() {
+    for (int s = 0; s < HOTBAR_SIZE; s++)
+        if (m_hotbar[s] >= 0) return;   // already armed (save restore, script)
+
+    std::string starting = "pistol_01";
+    if (const EntityDef* pdef = LightningEntityRegistry::Instance().Find("Player")) {
+        auto it = pdef->stats.strings.find("starting_weapon");
+        if (it != pdef->stats.strings.end() && !it->second.empty())
+            starting = it->second;
+    }
+
+    const int slot = HotbarFirstFreeSlot();
+    const int weaponIdx = Spawn(starting);
+    if (weaponIdx < 0) {
+        OZ_WARN("LightningEntityManager: starting weapon '%s' could not be spawned",
+                starting.c_str());
+    } else if (slot < 0 || !HotbarPlaceFirstFree(weaponIdx)) {
+        Despawn(weaponIdx);
+        OZ_WARN("LightningEntityManager: starting weapon '%s' could not be placed",
+                starting.c_str());
+    } else {
+        // Slot 0 is the initial selection, so the common case needs no
+        // SelectSlot call (and therefore no boot-time equip sound).
+        SelectSlot(slot);
+        OZ_INFO("LightningEntityManager: starting weapon '%s' in slot %d",
+                starting.c_str(), slot);
+    }
 }
 
 // ---------------------------------------------------------------------------

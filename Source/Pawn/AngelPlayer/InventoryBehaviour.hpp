@@ -52,6 +52,15 @@ public:
     void OnItemCollected(int item_id, int quantity);
     void OnWeaponCollected(const char* weapon_def_name);
 
+    // XP / level feedback hooks
+    void OnXpGain(int gained);
+    void OnLevelUp(int newLevel);
+
+    // Drop the XP baseline + every transient banner. Called on world load so a
+    // level change cannot read the previous world's XP as a gain (and the
+    // level-up banner cannot survive a transition).
+    void ResetHudTracking();
+
 private:
     InventoryBehaviour() = default;
 
@@ -73,4 +82,16 @@ private:
     int  m_dragSlot = -1;        // source backpack cell or equipment slot
     std::function<void(const std::string&)> m_messageSink;
     std::function<void()> m_feedbackSink;
+
+    // XP feedback
+    float m_xpFlashTimer = 0.0f;
+    int m_xpFlashGain = 0;
+    float m_levelUpTimer = 0.0f;
+    int m_levelUpLevel = 0;
+    // Last observed values. The HUD is the one place both the single-player and
+    // the networked XP path converge (Main.cpp pushes the server's values into
+    // the same LEM stats the HUD reads), so the gain detection lives here rather
+    // than in two separate call sites. -1 means "not observed yet".
+    int m_lastXp = -1;
+    int m_lastLevel = -1;
 };

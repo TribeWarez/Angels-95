@@ -105,6 +105,12 @@ int g_network_world_index = -1;
 // g_network_world_index, because both come from one JSON payload and must agree.
 static std::vector<std::string> g_serverWorldNames;
 
+// The mission the server's current world implements, from the optional
+// WORLD_CHANGE tail. Used only for the authored start/complete beats; it is NOT
+// bound into GameManager, so a co-op session cannot overwrite a single-player
+// Campaign.sav.
+static std::string g_serverMissionName;
+
 void NetworkRequestWorld(int world_index) {
     if (!g_network_enabled) return;      // offline: nothing to ask
     if (world_index < 0) return;         // unknown world; do not send a bad request
@@ -134,6 +140,22 @@ static std::string g_cliJoinHost;
 // anywhere else, regardless of order).
 static bool g_cliHost = false;
 static std::string g_cliHostMission;   // empty = plain --host, no campaign pin
+
+// Single-player objective progression.
+//
+// Co-op objective state is the server's: it advances on NPC death / pickup
+// collect and the client mirrors OBJECTIVE_STATE. Offline there is no server, so
+// nothing advanced the local ObjectiveSystem and a campaign mission's objective
+// stayed at 0 forever. These two handlers advance it from the facts the engine
+// already emits, with the NPC def / pickup name in s0 (which is what the
+// objective's `target` filter compares against).
+static bool g_localObjectiveBridge = false;
+static void LocalObjectiveFromDeath(const oz::events::Event& ev, void*) {
+    oz::game::GameManager::Instance().AdvanceLocalObjectives("kill", ev.s0);
+}
+static void LocalObjectiveFromPickup(const oz::events::Event& ev, void*) {
+    oz::game::GameManager::Instance().AdvanceLocalObjectives("collect", ev.s0);
+}
 
 static bool ApplyJoinTarget(const char* value)
 {
@@ -381,6 +403,7 @@ static void ExecuteConsoleCommand(const char* cmd) {
                 OZ_WARN("Campaign mission '%s' not found", mission.c_str());
             } else {
                 gm.SetActiveMission(mission);
+                EmitMissionBeat("mission.start", mission);
                 strncpy(g_world_to_load, world.c_str(), sizeof(g_world_to_load) - 1);
                 g_world_to_load[sizeof(g_world_to_load) - 1] = '\0';
                 SetSceneFlag = true;
@@ -585,10 +608,11 @@ int main(int argc, char** argv){
             const std::string page = JoinUri::Lower(argv[++i]);
             if (page == "home") g_menuShotPage = 0;
             else if (page == "play") g_menuShotPage = 1;
+            else if (page == "practice") { g_menuShotPage = 1; g_menuShotPractice = true; }
             else if (page == "multiplayer") g_menuShotPage = 2;
             else if (page == "character") g_menuShotPage = 3;
             else if (page == "settings") g_menuShotPage = 4;
-            else OZ_WARN("Bad --menu-shot page (home|play|multiplayer|character|settings): %s", page.c_str());
+            else OZ_WARN("Bad --menu-shot page (home|play|practice|multiplayer|character|settings): %s", page.c_str());
             g_skipMenu = false;   // menu capture must run the real menu
         } else if (strcmp(arg, "--menu-shot-out") == 0 && i + 1 < argc) {
             g_menuShotOut = argv[++i];
@@ -791,6 +815,7 @@ ShowSpellbook = false;
     g_network_enabled = false;
     g_network_world_index = -1;
     g_serverWorldNames.clear();
+    g_serverMissionName.clear();
     // UI overlays are Main.cpp statics, so the reset cannot live in Core.hpp.
     ShowInventory = false;
     ShowSkillTree = false;
@@ -803,6 +828,19 @@ ShowSpellbook = false;
     g_gamePaused = false;
     g_settingsPausedGame = false;
     g_returnToMenu = false;
+
+    // Arm the session before the world loads. After PlayHomeScreen on purpose:
+    // a Continue has restored its save at that point, so an armed player is left
+    // alone and only an empty hotbar is filled.
+    LightningEntityManager::Instance().EnsureStartingWeapon();
+
+    // Local objective bridge: registered once per process (the bus is not
+    // cleared between sessions, so a per-session Subscribe would stack).
+    if (!g_localObjectiveBridge) {
+        g_localObjectiveBridge = true;
+        oz::events::EventBus::Instance().Subscribe("entity.death", &LocalObjectiveFromDeath, nullptr);
+        oz::events::EventBus::Instance().Subscribe("pickup.collect", &LocalObjectiveFromPickup, nullptr);
+    }
 
     LoadWorld();
     g_client.set_on_chat_received([](const std::string& msg) {
@@ -886,10 +924,37 @@ ShowSpellbook = false;
             OZ_INFO("Network: server moved us to world %d (accepted=%d, was %d)",
                     world_index, (int)accepted, g_network_world_index);
             g_network_world_index = world_index;
+            // Co-op narrative: the mission name rides on WORLD_CHANGE, so a
+            // client that never launched a campaign still gets the authored
+            // beats. `complete` fires before `start` because stepping from one
+            // mission's world into the next is both.
+            {
+                const std::string serverMission = g_client.server_mission();
+                if (!serverMission.empty() && serverMission != g_serverMissionName) {
+                    if (!g_serverMissionName.empty())
+                        EmitMissionBeat("mission.complete", g_serverMissionName);
+                    g_serverMissionName = serverMission;
+                    EmitMissionBeat("mission.start", g_serverMissionName);
+                }
+            }
             // Load the world the server moved us to (index -> name). A
             // server-driven COOP mission transition arrives here.
             if (world_index < (int)g_serverWorldNames.size()) {
                 const std::string& wn = g_serverWorldNames[world_index];
+                // A player who did NOT open the exit door still completes the
+                // mission: the server moves the whole party together. The
+                // requester already advanced at its own portal, so for them the
+                // active mission no longer points at this world.
+                {
+                    auto& gm = oz::game::GameManager::Instance();
+                    const std::string active = gm.ActiveMission();
+                    if (!wn.empty() && gm.Loaded() && !active.empty() &&
+                        gm.NextMissionWorld(active) == wn) {
+                        EmitMissionBeat("mission.complete", active);
+                        if (const oz::game::MissionDef* nm = gm.FindMissionByWorld(wn))
+                            gm.SetActiveMission(nm->name);
+                    }
+                }
                 if (!wn.empty() && wn != g_world_to_load) {
                     strncpy(g_world_to_load, wn.c_str(), sizeof(g_world_to_load) - 1);
                     g_world_to_load[sizeof(g_world_to_load) - 1] = '\0';
@@ -1572,6 +1637,10 @@ ShowSpellbook = false;
                 const float maxHp = lem.GetPlayerMaxHealth();
                 const float hp = lem.GetPlayerHealth();
                 cf.Draw(maxHp > 0.0f ? (hp / maxHp) : 1.0f);
+                // Floating damage numbers sit in the world, so they need the
+                // camera; drawn after the screen-space cues so they overlay the
+                // hit marker rather than being hidden by it.
+                cf.DrawDamageNumbers(AngelTechData.MainCamera);
             }
         }
 
