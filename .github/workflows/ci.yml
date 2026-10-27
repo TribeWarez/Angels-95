@@ -193,6 +193,15 @@ jobs:
           chmod +x release/*
           ls -la release
 
+      # The Linux client is otherwise a bare binary with no game data (same as
+      # the Windows client). This packages GameData -> System/Data and tars the
+      # binaries + data + INIs + run script into one self-contained bundle.
+      - name: Build self-contained Linux bundle (tagged release only)
+        if: startsWith(github.ref, 'refs/tags/b')
+        run: |
+          bash build-linux-bundle.sh "${{ github.ref_name }}"
+          ls -la release
+
       - name: Attach Linux binaries to release
         if: startsWith(github.ref, 'refs/tags/b')
         uses: softprops/action-gh-release@v2
@@ -206,6 +215,11 @@ jobs:
             - `Angels95-Setup-<tag>.exe` - installs the client, the AngelEd editor and
               the servers with the packaged game data. Download this one file, run it,
               and play; no loose `GameData/` checkout is required.
+
+            **Self-contained Linux bundle:**
+            - `System-<tag>-linux-x86_64.tar.gz` - the client, the servers and the
+              packaged game data (`System/Data`). Extract and run `System/run.sh`;
+              no loose `GameData/` checkout is required.
 
             **Runs directly (binary only; AngelServ additionally needs a game-data checkout to serve):**
             - `AngelServ-<tag>-<platform>` - dedicated game server (self-contained; point `--dir` at a `GameData/` with `Worlds/<Name>/World.ozone`)

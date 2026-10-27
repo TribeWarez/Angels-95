@@ -27,8 +27,10 @@ dependency.
 Windows users should grab the **`Angels95-Setup-<tag>.exe`** installer (a single
 self-contained setup that installs the client, the `AngelEd` editor and the
 servers with all packaged game data), or the **`System-<tag>.zip`** full bundle.
-The per-binary assets (`Angels95-<tag>-windows-x86_64.exe`, the Linux client
-binary, `AngelEd-<tag>-windows-x86_64.exe`) carry **no game data** and error with
+Linux users should grab the **`System-<tag>-linux-x86_64.tar.gz`** bundle (client +
+servers + packaged game data; extract and run `System/run.sh`). The per-binary
+assets (`Angels95-<tag>-windows-x86_64.exe`, the Linux client binary,
+`AngelEd-<tag>-windows-x86_64.exe`) carry **no game data** and error with
 "GameData/ dir is missing" unless placed inside a `System/` bundle or a source
 checkout — the server binaries (`AngelServ`/`AngelMaster`/`OzPack`) are
 self-contained and need a `GameData/` checkout to serve.
@@ -385,6 +387,16 @@ make AngelMaster    # master server, no raylib
 make ozpack         # asset packer
 make -j$(nproc)     # all four
 ```
+
+To produce the self-contained Linux release bundle (binaries + packaged game
+data in `System/Data`, as a `release/System-<tag>-linux-x86_64.tar.gz`):
+
+```bash
+./build-linux-bundle.sh <tag>   # runs build-data.sh, assembles System/, tars it
+```
+
+`build-data.sh` is the POSIX mirror of the Windows `build-data.ps1` and packages
+`GameData/` into `System/Data/*.oz*`.
 
 ### Windows
 
