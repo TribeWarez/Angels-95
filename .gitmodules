@@ -1,0 +1,3 @@
+[submodule "setup"]
+	path = setup
+	url = https://github.com/TribeWarez/angels95-setup.git

@@ -23,8 +23,15 @@ dependency.
 
 **Download:** [SourceForge](https://sourceforge.net/projects/angels-95/files/latest/download)
 · [GitHub Releases](https://github.com/TribeWarez/Angels-95/releases/latest)
-· `System-<tag>.zip` is the full Windows bundle; the server binaries are
-self-contained.
+
+Windows users should grab the **`Angels95-Setup-<tag>.exe`** installer (a single
+self-contained setup that installs the client, the `AngelEd` editor and the
+servers with all packaged game data), or the **`System-<tag>.zip`** full bundle.
+The per-binary assets (`Angels95-<tag>-windows-x86_64.exe`, the Linux client
+binary, `AngelEd-<tag>-windows-x86_64.exe`) carry **no game data** and error with
+"GameData/ dir is missing" unless placed inside a `System/` bundle or a source
+checkout — the server binaries (`AngelServ`/`AngelMaster`/`OzPack`) are
+self-contained and need a `GameData/` checkout to serve.
 
 ---
 
@@ -422,6 +429,7 @@ compiled-but-never-linked editor object fails the build rather than shipping.
 - `Source/` — client core, renderer, network, server, master server
   (`Source/Master/`), script, pawn, physics, package, audio, video (`plmpeg`).
 - `AngelEd/` — Win32 level editor.
+- `setup/` — NSIS installer submodule (builds `Angels95-Setup-<tag>.exe`).
 - `GameData/` — worlds, pawn defs, items, guns, textures, sounds.
 - `tests/` — standalone test executables.
 - `Wiki/` — full engine documentation (see Quick Links above).
