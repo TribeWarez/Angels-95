@@ -81,8 +81,9 @@ void PlayerPhysics::UpdateGroundVertical(Camera3D& cam, Motion& motion, float sa
     }
 
     if (!motion.onGround) {
-        // Gravity
-        motion.velocityY += -phys.gravity * dt;
+        // Gravity. Uses the vector form so a gravity zone can retune the fall
+        // (including upward). The default {0,-18,0} reproduces -gravity.
+        motion.velocityY += phys.gravityVector.y * dt;
         // Terminal velocity clamp (bounds the free-fall speed)
         if (motion.velocityY < -phys.terminalVelocity)
             motion.velocityY = -phys.terminalVelocity;

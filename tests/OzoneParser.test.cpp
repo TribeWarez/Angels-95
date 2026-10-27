@@ -1,6 +1,7 @@
 // OzoneParser test — standalone, no raylib dependency
 #include "../Source/World/OzoneParser.hpp"
 #include "../Source/Physics/PhysicsInfo.hpp"
+#include "../Source/World/ZoneTypes.hpp"
 #include <cstdio>
 #include <cmath>
 #include <string>
@@ -351,6 +352,36 @@ static void test_zone_default_physics() {
                 e.size() ? p.physics.gravity : -1.0f);
 }
 
+static void test_zone_gravity_vector() {
+    test_count++;
+    printf("  TEST zone gravity_vector kwarg... ");
+    auto e = OzoneParser::parse_string(
+        "zone gravity -8 -8 -8 8 8 8 1 gravity_vector=(0,0,-18) name=grav_shaft\n");
+    auto& p = e[0];
+    bool ok = e.size() == 1 && p.type == OzonePrimitiveType::ENTITY_ZONE
+        && p.entitySubType == "gravity"
+        && p.name == "grav_shaft"
+        && p.hasPhysics
+        && p.physics.gravityVector.x == 0.0f
+        && p.physics.gravityVector.y == 0.0f
+        && p.physics.gravityVector.z == -18.0f;
+    if (ok) { pass_count++; printf("PASS\n"); }
+    else printf("FAIL: gv=(%f,%f,%f)\n",
+                e.size() ? p.physics.gravityVector.x : -1.0f,
+                e.size() ? p.physics.gravityVector.y : -1.0f,
+                e.size() ? p.physics.gravityVector.z : -1.0f);
+}
+
+static void test_zone_gravity_type() {
+    test_count++;
+    printf("  TEST ZoneType gravity mapping... ");
+    bool ok = ZoneTypeFromString("gravity") == ZoneType::ZONE_GRAVITY
+        && ZoneTypeFromString("GRAVITY") == ZoneType::ZONE_GRAVITY
+        && std::string(ZoneTypeName(ZoneType::ZONE_GRAVITY)) == "gravity";
+    if (ok) { pass_count++; printf("PASS\n"); }
+    else printf("FAIL\n");
+}
+
 // A quoted texPath used to be truncated at the first space: the plain
 // `texPath=` test matched the quoted form before the quote-aware branch could
 // run, so the value silently became `"my` and pointed at a missing file.
@@ -671,6 +702,8 @@ int main() {
     test_mixed_document();
     test_zone_physics_kwargs();
     test_zone_default_physics();
+    test_zone_gravity_vector();
+    test_zone_gravity_type();
     test_texpath_quoted_with_space();
     test_texpath_unquoted_still_works();
     test_texpath_quoted_then_flags();

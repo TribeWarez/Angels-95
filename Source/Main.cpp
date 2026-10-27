@@ -1294,6 +1294,13 @@ ShowSpellbook = false;
                         // old "placeholder, will be applied" comment was stale --
                         // DspReverb exists and is attached.
                         break;
+                    case ZoneType::ZONE_GRAVITY:
+                        // Gravity is driven entirely by the zone's PhysicsInfo
+                        // (gravity_vector= / gravity=), applied in
+                        // PlayerPhysics::UpdateGroundVertical via zonePhysics.
+                        // No flag here: the vector is the state. Horizontal
+                        // gravity + camera re-orientation are follow-up work.
+                        break;
                     default:
                         break;
                 }

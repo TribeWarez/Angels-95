@@ -21,7 +21,8 @@ enum class ZoneType : uint8_t {
     ZONE_SKY = 2,
     ZONE_REVERB = 3,
     ZONE_GAMEPLAY_SOUND = 4,
-    ZONE_PORTAL = 5
+    ZONE_PORTAL = 5,
+    ZONE_GRAVITY = 6
 };
 
 // Zone environment overrides — fog/ambient/reverb applied on zone entry at runtime.
@@ -95,6 +96,7 @@ inline ZoneType ZoneTypeFromString(std::string name) {
     if (name == "gameplay_sound" || name == "sound")
         return ZoneType::ZONE_GAMEPLAY_SOUND;
     if (name == "portal") return ZoneType::ZONE_PORTAL;
+    if (name == "gravity") return ZoneType::ZONE_GRAVITY;
     return ZoneType::ZONE_WATER;   // default
 }
 
@@ -106,6 +108,7 @@ inline const char* ZoneTypeName(ZoneType t) {
         case ZoneType::ZONE_REVERB:           return "reverb";
         case ZoneType::ZONE_GAMEPLAY_SOUND:   return "gameplay_sound";
         case ZoneType::ZONE_PORTAL:           return "portal";
+        case ZoneType::ZONE_GRAVITY:          return "gravity";
     }
     return "water";
 }

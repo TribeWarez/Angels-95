@@ -375,6 +375,31 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
                         continue;
                     } catch (...) {}
                     // Per-zone physics overrides (named kwargs; absent = defaults)
+                    if (s.rfind("gravity_vector=", 0) == 0) {
+                        // "(x,y,z)" or "x,y,z" in ENGINE space (Y-up; -Y is down).
+                        // The token arrives with no embedded spaces (the parser
+                        // splits on whitespace), so commas delimit. Parens are
+                        // stripped before splitting.
+                        std::string val = s.substr(strlen("gravity_vector="));
+                        std::string clean;
+                        for (char c : val) if (c != '(' && c != ')') clean += c;
+                        float comps[3] = {0.0f, 0.0f, 0.0f};
+                        int n = 0;
+                        size_t start = 0;
+                        while (n < 3) {
+                            size_t comma = clean.find(',', start);
+                            std::string tok = clean.substr(start,
+                                comma == std::string::npos ? std::string::npos : comma - start);
+                            if (!tok.empty()) TryFloat(tok, comps[n++]);
+                            else n++; // empty token (e.g. leading comma) -> keep 0
+                            if (comma == std::string::npos) break;
+                            start = comma + 1;
+                        }
+                        prim.hasPhysics = true;
+                        prim.physics.gravityVector = {comps[0], comps[1], comps[2]};
+                        prim.physics.gravity = -comps[1]; // Y magnitude (sign-flipped)
+                        continue;
+                    }
                     if (s.rfind("gravity=", 0) == 0 ||
                         s.rfind("jump=", 0) == 0 ||
                         s.rfind("terminal=", 0) == 0 ||
@@ -393,7 +418,10 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
                         }
                         std::string key = s.substr(0, eq + 1);
                         prim.hasPhysics = true;
-                        if (key == "gravity=")          prim.physics.gravity = v;
+                        if (key == "gravity=") {
+                            prim.physics.gravity = v;
+                            prim.physics.gravityVector.y = -v; // scalar -> straight down
+                        }
                         else if (key == "jump=")        prim.physics.jumpSpeed = v;
                         else if (key == "terminal=")    prim.physics.terminalVelocity = v;
                         else if (key == "water_gravity=") prim.physics.waterGravity = v;
