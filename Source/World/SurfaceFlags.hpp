@@ -57,7 +57,11 @@ namespace surface {
 // --- reserved / pre-existing -----------------------------------------------
 inline constexpr uint32_t SURF_FAKEBACKDROP      = (1u << 3);
 inline constexpr uint32_t SURF_COLLISION_PROXY   = (1u << 4);
-inline constexpr uint32_t SURF_OCCLUDER          = (1u << 5); // portal-plane occluder
+// Portal-plane occluder (Phase 2): a flat `pln` carrying this flag hides
+// brushes on its far side. Bit 0 was historically unallocated (the shipped
+// worlds only use flags=8/16/32768), so it is safe. CPU-side only — no
+// Surface.fs SF_* counterpart, like SURF_PORTAL/MIRROR.
+inline constexpr uint32_t SURF_OCCLUDER          = (1u << 0);
 
 // Gain the sky pass applies to a SURF_FAKEBACKDROP face.
 //

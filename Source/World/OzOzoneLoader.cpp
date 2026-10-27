@@ -1766,6 +1766,32 @@ void OzoneLoader::DrawWorldGeometry(Camera3D& camera) {
                            {camera.position.x+0.1f, camera.position.y+0.1f, camera.position.z+0.1f} };
     auto activeZones = ZoneManager::Instance().GetActiveZones(camera.position, camBox);
     std::vector<ZoneVolumeNode*> activeZonePtrs = activeZones;
+
+    // Portal-plane occluders, collected ONCE (not per renderable): each is a
+    // plane {normal, centre} in engine space. A `pln` carries its authored
+    // normal/position; any other occluder falls back to its thinnest AABB axis.
+    struct Occluder { Vector3 n; Vector3 c; };
+    std::vector<Occluder> occluders;
+    for (auto& o : m_renderables) {
+        if (!o.loaded) continue;
+        if (!(o.surface.def.flags & SURF_OCCLUDER)) continue;
+        Occluder oc;
+        oc.c = { (o.bounds.min.x+o.bounds.max.x)*0.5f,
+                 (o.bounds.min.y+o.bounds.max.y)*0.5f,
+                 (o.bounds.min.z+o.bounds.max.z)*0.5f };
+        if (o.typeId == (int)OzonePrimitiveType::PLANE) {
+            oc.n = {o.planeNX, o.planeNY, o.planeNZ};
+        } else {
+            float ex = o.bounds.max.x - o.bounds.min.x;
+            float ey = o.bounds.max.y - o.bounds.min.y;
+            float ez = o.bounds.max.z - o.bounds.min.z;
+            oc.n = {0,1,0};
+            if (ex <= ey && ex <= ez) oc.n = {1,0,0};
+            else if (ez <= ex && ez <= ey) oc.n = {0,0,1};
+        }
+        occluders.push_back(oc);
+    }
+
     for (auto& r : m_renderables) {
         if (!r.loaded) continue;
         // Collision proxies are never drawn in-game, whatever the editor toggle
@@ -1795,28 +1821,19 @@ void OzoneLoader::DrawWorldGeometry(Camera3D& camera) {
             }
             if (inAnyZone && !inActive) continue;
         }
-        // Portal-plane occlusion: occluder brushes (SURF_OCCLUDER) hide
-        // renderables on their far side relative to the camera.
-        {
+        // Occlusion: a renderable on the far side of any occluder plane is skipped.
+        if (!occluders.empty()) {
+            Vector3 rc = { (r.bounds.min.x+r.bounds.max.x)*0.5f,
+                           (r.bounds.min.y+r.bounds.max.y)*0.5f,
+                           (r.bounds.min.z+r.bounds.max.z)*0.5f };
             bool occluded = false;
-            for (auto& o : m_renderables) {
-                if (!o.loaded || !(o.surfaceFlags & SURF_OCCLUDER)) continue;
-                if (o.bounds.min.x >= o.bounds.max.x && o.bounds.min.y >= o.bounds.max.y && o.bounds.min.z >= o.bounds.max.z) continue;
-                Vector3 oc = { (o.bounds.min.x+o.bounds.max.x)*0.5f,
-                               (o.bounds.min.y+o.bounds.max.y)*0.5f,
-                               (o.bounds.min.z+o.bounds.max.z)*0.5f };
-                // normal = thinnest axis
-                float ex = o.bounds.max.x - o.bounds.min.x;
-                float ey = o.bounds.max.y - o.bounds.min.y;
-                float ez = o.bounds.max.z - o.bounds.min.z;
-                Vector3 n = {0,1,0};
-                if (ex <= ey && ex <= ez) n = {1,0,0};
-                else if (ez <= ex && ez <= ey) n = {0,0,1};
-                Vector3 rc = { (r.bounds.min.x+r.bounds.max.x)*0.5f,
-                               (r.bounds.min.y+r.bounds.max.y)*0.5f,
-                               (r.bounds.min.z+r.bounds.max.z)*0.5f };
-                float dCam = (camera.position.x-oc.x)*n.x + (camera.position.y-oc.y)*n.y + (camera.position.z-oc.z)*n.z;
-                float dR   = (rc.x-oc.x)*n.x + (rc.y-oc.y)*n.y + (rc.z-oc.z)*n.z;
+            for (auto& oc : occluders) {
+                float dCam = (camera.position.x-oc.c.x)*oc.n.x +
+                             (camera.position.y-oc.c.y)*oc.n.y +
+                             (camera.position.z-oc.c.z)*oc.n.z;
+                float dR   = (rc.x-oc.c.x)*oc.n.x +
+                             (rc.y-oc.c.y)*oc.n.y +
+                             (rc.z-oc.c.z)*oc.n.z;
                 if (dCam * dR < 0) { occluded = true; break; }
             }
             if (occluded) continue;

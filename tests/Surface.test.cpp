@@ -13,7 +13,7 @@ using namespace oz::surface;
 // shader parity test and the dead-flag register all index off this list, so a new
 // flag cannot be added to the header without the suite noticing it is unclassified.
 static const uint32_t kAllSurfaceFlags[] = {
-    SURF_FAKEBACKDROP, SURF_COLLISION_PROXY, SURF_INVISIBLE, SURF_MASKED,
+    SURF_OCCLUDER, SURF_FAKEBACKDROP, SURF_COLLISION_PROXY, SURF_INVISIBLE, SURF_MASKED,
     SURF_TRANSLUCENT, SURF_ALPHABLEND, SURF_MODULATED, SURF_TWO_SIDED,
     SURF_UNLIT, SURF_FAKE_LIT, SURF_SPECIAL_LIT, SURF_GLOW, SURF_PORTAL,
     SURF_MIRROR, SURF_ENVIRONMENT, SURF_PAN_U, SURF_PAN_V, SURF_SMALL_WAVY,
@@ -64,8 +64,8 @@ static void test_legacy_bits_stable() {
     for (uint32_t b : kAllSurfaceFlags) if (b == 0 || (b & (b - 1)) != 0) singleBit = false;
     check(singleBit, "every surface flag is exactly one bit wide");
 
-    // Bits 3 and 4 are the pre-existing pair; 5..31 is 27 more.
-    check(kAllSurfaceFlagCount == 29, "the header defines 29 flags");
+    // Bits 3 and 4 are the pre-existing pair; 0 and 5..31 is 29 more.
+    check(kAllSurfaceFlagCount == 30, "the header defines 30 flags");
 }
 
 // ---------------------------------------------------------------------------
