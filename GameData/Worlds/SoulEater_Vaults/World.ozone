@@ -172,6 +172,10 @@ playerstart 0 -46 0 180
 pickup Medkit -6 -40 1 45
 pickup pistol_01 -23 9 2.6 30
 pickup rifle_01 23 9 2.6 30
+# SMG + shotgun mirror the pistol/rifle pair across y=0, at the same chest
+# height (2.6) the weapon pickups in this vault use.
+pickup smg_01 -23 -9 2.6 30
+pickup shotgun_01 23 -9 2.6 30
 pickup HealthVial 23 21 2.6 30
 pickup ManaVial -23 21 2.6 30
 pickup Coin 3 4 2 30

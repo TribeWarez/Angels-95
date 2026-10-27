@@ -124,6 +124,16 @@ void WeaponBehaviour::FireWeapon(Camera3D& cam) {
     bool isMelee = (result == 0);
     float damage = SelectedWeaponStat("damage", 10.0f);
 
+    // A multi-projectile weapon fires a VOLLEY locally (`projectile_count`
+    // pellets, e.g. the shotgun's 8), but PLAYER_ACTION carries ONE direction and
+    // the server spawns ONE projectile from it - it has no weapon-def loader to
+    // learn the pellet count from. Sending the per-pellet damage made a shotgun
+    // deal 1/8 of its point-blank damage in multiplayer. Send the volley total
+    // instead: a client-claimed number the server already treats as a hint, and
+    // the closest single-projectile approximation of the local shot.
+    const int pellets = (int)SelectedWeaponStat("projectile_count", 1.0f);
+    const int volleyDamage = (int)(damage * (float)(pellets > 0 ? pellets : 1));
+
     // Send the trigger to the server. This is the ONLY report the client makes,
     // and the server is authoritative for both weapon kinds.
     //
@@ -146,7 +156,7 @@ void WeaponBehaviour::FireWeapon(Camera3D& cam) {
             m_client->send_weapon_fire(
                 origin.x, origin.y, origin.z,
                 forward.x, forward.y, forward.z,
-                1, (int)damage);
+                1, volleyDamage);
         }
     }
 }

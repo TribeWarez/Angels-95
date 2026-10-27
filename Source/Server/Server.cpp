@@ -126,6 +126,36 @@ static void send_pickup_respawn_msg(const net::NetworkPlayer& player,
     g_game_server->send_message(const_cast<net::NetworkPlayer&>(player), msg);
 }
 
+// Magazine size the server records when a player collects a weapon pickup.
+//
+// The server has NO weapon-def loader: `magazine` lives in the client's `.ozls`
+// and the network layer only ever carries the def NAME. This table is therefore
+// the server's copy of the defs' authored magazines, and it silently drifts if a
+// weapon is retuned on the client. It used to be two strcmps inline at the
+// collect site (automag 12, selenite_blade 0, everything else 12), so a rifle
+// collected in multiplayer was tracked as a 12-round magazine while the client
+// fired 30 - every reload disagreed with the server's accounting.
+//
+// A melee weapon has no magazine (0). Unknown defs keep the old 12.
+static int DefaultMagazineForWeapon(const char* defName) {
+    struct Entry { const char* name; int magazine; };
+    static const Entry kWeapons[] = {
+        { "pistol_01",     15 },   // Pistol_01.ozls
+        { "rifle_01",      30 },   // Rifle_01.ozls
+        { "smg_01",        32 },   // SMG_01.ozls
+        { "shotgun_01",     6 },   // Shotgun_01.ozls
+        { "automag",       12 },   // automag.ozls
+        { "flux_carbine",  24 },   // flux_carbine.ozls
+        { "selenite_blade", 0 },   // melee
+        { "etheral_waver",  0 },   // melee
+    };
+    if (!defName) return 12;
+    for (const Entry& e : kWeapons) {
+        if (strcmp(defName, e.name) == 0) return e.magazine;
+    }
+    return 12;
+}
+
 // Re-send EVERY pickup in one world to a single player, active or not. This is
 // the self-heal path: pickups are otherwise only sent on join and on respawn, so
 // a single lost UDP datagram left a pickup drawn on the floor that could never be
@@ -465,10 +495,10 @@ static void on_server_message(const net::NetworkMessage& msg,
                                 if (pl2->weapon_def[i][0] == '\0') {
                                     strncpy(pl2->weapon_def[i], weapon_def_out, 63);
                                     pl2->weapon_def[i][63] = '\0';
-                                    // Get magazine size from weapon def (default 12 for automag)
-                                    int mag = 12;
-                                    if (strcmp(weapon_def_out, "automag") == 0) mag = 12;
-                                    else if (strcmp(weapon_def_out, "selenite_blade") == 0) mag = 0;
+                                    // Server-side magazine accounting; see
+                                    // DefaultMagazineForWeapon for why this is a
+                                    // table rather than a def lookup.
+                                    int mag = DefaultMagazineForWeapon(weapon_def_out);
                                     pl2->weapon_magazine[i] = mag;
                                     pl2->weapon_ammo[i] = mag;
                                     break;

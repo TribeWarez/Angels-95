@@ -360,8 +360,8 @@ struct DefStatRow {
     bool propMeshWind = false;
     // WindZone editing
     float propWindDirX = 1.0f, propWindDirY = 0.0f, propWindDirZ = 0.0f;
-    float propWindStrength = 1.0f;
-    float propWindFrequency = 1.0f;
+    float propWindStrength = 0.1f;
+    float propWindFrequency = 0.1f;
     float propWindSizeX = 10.0f, propWindSizeY = 10.0f, propWindSizeZ = 10.0f;
 
     // GameEngine.Light editing (Properties panel, SelType::LIGHT). This is now the

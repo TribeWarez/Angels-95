@@ -444,7 +444,18 @@ void auditAssetRefs(const std::string& gameDataRoot) {
 
             std::string key, value;
             size_t eq = t.find('=');
+            // `key = value` ONLY when the left of the '=' is a single token.
+            // Splitting on the first '=' regardless meant a positional line
+            // whose LAST argument carries a kwarg (`Mesh.Static path x y z
+            // scale=3`, or a levelinfo ending in `gametype=1`) produced
+            // key="Mesh.Static path x y z scale", so the line was classified as
+            // an unknown assignment and its path was never audited at all.
+            bool assignment = false;
             if (eq != std::string::npos) {
+                std::string lhs = trim(t.substr(0, eq));
+                assignment = lhs.find_first_of(" \t") == std::string::npos;
+            }
+            if (assignment) {
                 key = trim(t.substr(0, eq));
                 value = t.substr(eq + 1);
             } else {
@@ -455,6 +466,40 @@ void auditAssetRefs(const std::string& gameDataRoot) {
             }
 
             if (isWorld) {
+                // Placed props: `Mesh.Static|Mesh.Skeletal <path> x y z yaw ...`.
+                // This is the one world asset reference that used to go
+                // unchecked - it is neither a levelinfo token nor a
+                // `key = value` def stat - so a typo only surfaced as a prop
+                // that silently failed to load in game, and a case slip only on
+                // Linux. Verified: every shipped world's 147 references resolve.
+                if (key == "Mesh.Static" || key == "Mesh.Skeletal") {
+                    std::istringstream ms(value);
+                    std::string meshPath;
+                    if (!(ms >> meshPath)) continue;
+                    std::string v = unquote(meshPath);
+                    if (!looksLikePath(v)) continue;
+                    refs++;
+                    std::string attempted, onDisk;
+                    RefState st = resolveRefCase(v, fileDir, repoRoot, attempted, onDisk);
+                    if (st == RefState::Exact) continue;
+                    if (st == RefState::CaseMismatch) {
+                        broken++;
+                        char buf[620];
+                        snprintf(buf, sizeof buf,
+                                 "asset reference differs only in CASE: %s:%d  %s %s  ->  "
+                                 "on disk it is '%s' (Windows accepts this, Linux does not)",
+                                 p.c_str(), lineNo, key.c_str(), v.c_str(), onDisk.c_str());
+                        err(buf);
+                        continue;
+                    }
+                    if (allow.count(baseName(v))) { allowed++; continue; }
+                    broken++;
+                    char buf[560];
+                    snprintf(buf, sizeof buf, "unresolved asset reference: %s:%d  %s %s",
+                             p.c_str(), lineNo, key.c_str(), v.c_str());
+                    err(buf);
+                    continue;
+                }
                 if (key != "levelinfo") continue;
                 // levelinfo <7 game-rule numbers> <skybox> [<side skybox>] [gametype=]
                 std::istringstream ts(value);

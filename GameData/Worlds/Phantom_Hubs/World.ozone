@@ -137,6 +137,10 @@ playerstart 10 -46 0 172
 pickup Medkit -30 -20 3.2 45
 pickup pistol_01 8 29 2.6 30
 pickup rifle_01 -26 -46 7 30
+# Both new guns sit on the same 1.6-high ledge as the pistol (x -6..14,
+# y 28..30); 2.6 is its top + 1.0, like the pistol's own height.
+pickup smg_01 2 29 2.6 30
+pickup shotgun_01 12 29 2.6 30
 pickup HealthVial -44 2 1 30
 pickup ManaVial 32 26 1 30
 pickup Coin 0 11 -0.9 30

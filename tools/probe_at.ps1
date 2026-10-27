@@ -1,6 +1,18 @@
 # Probe: which brushes contain a world (x,y) point, in OZONE Z-up space?
-# usage: probe_at.ps1 <world.ozone> <x> <y>
+#
+# usage: probe_at.ps1 -World <world.ozone> -px <x> -py <y>
+#
+# NAME THE NUMBERS. A bare negative argument is parsed by PowerShell as a
+# PARAMETER NAME, so `probe_at.ps1 world.ozone -60 -30` bound nothing, left px/py
+# at 0, and happily printed the brushes containing (0,0) - a silently wrong
+# answer that looks like a real one. `-px -60` binds correctly because the
+# parameter is already waiting for a value, so the guard below refuses a call
+# that lost its coordinates instead of guessing.
 param([string]$World, [double]$px, [double]$py)
+
+if (-not $PSBoundParameters.ContainsKey('px') -or -not $PSBoundParameters.ContainsKey('py')) {
+    throw "probe_at: pass named coordinates (-px <x> -py <y>); a bare '-60' is parsed as a parameter name and would silently probe (0,0)"
+}
 
 $lines = Get-Content $World
 $n = 0

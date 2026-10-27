@@ -15,6 +15,21 @@ clip.
 Usage:
   python merge_glb_anims.py <model.glb> <clipName=anim.glb> [<clipName=anim.glb> ...]
 
+A clip may be built from SEVERAL source files played in sequence by joining them
+with '+'. That is how the shotgun's shell-by-shell reload ships: the pack authors
+ReloadStep and ReloadEnd as separate takes, and the engine plays one "Reload"
+clip, so they are concatenated:
+
+  python merge_glb_anims.py Shotgun_01.glb Fire=Fire.glb Reload=Step.glb+End.glb
+
+Each source's keyframe times are shifted by the running duration and channels
+that animate the same node+property are combined into ONE channel, because glTF
+does not allow two channels to target the same node+path. A 1/60 s gap is left
+between segments so timestamps stay strictly increasing.
+
+A clip whose name the model already carries is skipped, so re-running the
+converter over an already-merged model cannot duplicate Fire/Reload.
+
 Writes the merged model back to <model.glb>.
 """
 import json
@@ -78,11 +93,121 @@ def add_accessor(model, mbin, floats, comps, gltype):
     bv = len(model["bufferViews"])
     model["bufferViews"].append({"buffer": 0, "byteOffset": off, "byteLength": len(data)})
     ac = len(model["accessors"])
-    model["accessors"].append({
+    accessor = {
         "bufferView": bv, "componentType": 5126,
         "count": len(floats) // comps, "type": gltype,
-    })
+    }
+    if len(floats) >= comps:
+        # glTF REQUIRES min/max on an animation sampler's input accessor, and
+        # readers that trust them get a zero-length clip without. Cheap to add
+        # and it makes the merged files validator-clean.
+        accessor["min"] = [min(floats[i::comps]) for i in range(comps)]
+        accessor["max"] = [max(floats[i::comps]) for i in range(comps)]
+    model["accessors"].append(accessor)
     return ac
+
+
+def read_accessor(js, bin_data, accessor_index):
+    """Read a float accessor as (list of tuples, component count).
+
+    Only float accessors are read - FBX2glTF and Blender both write animation
+    times/values as floats, and re-encoding them is what lets a concatenated clip
+    carry its own shifted timeline.
+    """
+    ac = js["accessors"][accessor_index]
+    comps = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}.get(ac["type"])
+    if comps is None or ac.get("componentType", 5126) != 5126:
+        raise ValueError(f"accessor {accessor_index} is {ac.get('type')}/"
+                         f"{ac.get('componentType')}, not a float animation accessor")
+    bv = js["bufferViews"][ac["bufferView"]]
+    off = bv.get("byteOffset", 0) + ac.get("byteOffset", 0)
+    count = ac["count"] * comps
+    flat = struct.unpack_from("<%df" % count, bin_data, off)
+    return [tuple(flat[i * comps:(i + 1) * comps]) for i in range(ac["count"])], comps
+
+
+# A concatenated clip must not share a timestamp between two segments: the last
+# sample of part A sits exactly at part A's duration, so part B starts one frame
+# later instead of on top of it.
+SEAM_GAP = 1.0 / 60.0
+
+
+def merge_sequence(model, mbin, clip_name, part_paths):
+    """Append ONE clip built from part_paths played back to back."""
+    name2node = node_name_index(model)
+    merged = {}      # (node index, property) -> {"times": [...], "values": [...], comps}
+    offset = 0.0
+    for path in part_paths:
+        anim, abin = read_glb(path)
+        anim_nodes = anim.get("nodes", [])
+        part_end = 0.0
+        part_channels = 0
+        for a in anim.get("animations", []):
+            for ch in a.get("channels", []):
+                target = ch.get("target", {})
+                ni = target.get("node")
+                prop = target.get("path")
+                if ni is None or prop not in ("translation", "rotation", "scale"):
+                    continue
+                if ni >= len(anim_nodes):
+                    continue
+                name = anim_nodes[ni].get("name")
+                if name not in name2node:
+                    continue
+                sampler = a["samplers"][ch["sampler"]]
+                if sampler.get("interpolation", "LINEAR") != "LINEAR":
+                    raise ValueError(f"{os.path.basename(path)}: {name}.{prop} uses "
+                                     f"'{sampler.get('interpolation')}' interpolation; "
+                                     f"only LINEAR segments can be concatenated")
+                times, _ = read_accessor(anim, abin, sampler["input"])
+                values, comps = read_accessor(anim, abin, sampler["output"])
+                t = [x[0] for x in times]
+                if t:
+                    part_end = max(part_end, t[-1])
+                slot = merged.setdefault((name2node[name], prop),
+                                         {"times": [], "values": [], "comps": comps})
+                if slot["comps"] != comps:
+                    raise ValueError(f"{name}.{prop}: '{prop}' has {comps} components "
+                                     f"in one segment and {slot['comps']} in another")
+                slot["times"].extend(offset + x for x in t)
+                slot["values"].extend(values)
+                part_channels += 1
+        offset += part_end + SEAM_GAP
+        print(f"  + segment {os.path.basename(path)} ({part_channels} channels, "
+              f"{part_end:.3f}s)")
+
+    if not merged:
+        print(f"  (no usable channels for '{clip_name}')")
+        return set()
+
+    # Every channel must reach the clip's end time. raylib resamples a clip onto
+    # a uniform 60 fps grid and its GetPoseAtTimeGLTF leaves `keyframe` at 0 when
+    # no sample pair brackets the requested time, so a channel that stops early
+    # does not HOLD its last pose - it snaps back to its SECOND keyframe for the
+    # rest of the clip. A target that appears in only one segment would therefore
+    # pop mid-reload, so each one gets a duplicate of its final sample at the clip
+    # end. (This is padding, not interpolation: the value is unchanged.)
+    clip_end = max(slot["times"][-1] for slot in merged.values() if slot["times"])
+    for slot in merged.values():
+        if slot["times"] and slot["times"][-1] < clip_end:
+            slot["times"].append(clip_end)
+            slot["values"].append(slot["values"][-1])
+
+    samplers = []
+    channels = []
+    for (ni, prop), slot in sorted(merged.items()):
+        times_ac = add_accessor(model, mbin, slot["times"], 1, "SCALAR")
+        flat = [v for sample in slot["values"] for v in sample]
+        values_ac = add_accessor(model, mbin, flat, slot["comps"], "VEC%d" % slot["comps"])
+        si = len(samplers)
+        samplers.append({"input": times_ac, "output": values_ac,
+                         "interpolation": "LINEAR"})
+        channels.append({"sampler": si, "target": {"node": ni, "path": prop}})
+    model["animations"].append({"name": clip_name, "samplers": samplers,
+                                "channels": channels})
+    print(f"  + clip '{clip_name}' ({len(part_paths)} segment(s), "
+          f"{len(channels)} channels, {clip_end:.3f}s)")
+    return {ni for (ni, _prop) in merged}
 
 
 def synth_idle(model, mbin, node_indices):
@@ -115,6 +240,66 @@ def synth_idle(model, mbin, node_indices):
     print(f"  + synthesized 'Idle' clip ({len(channels)} channels)")
 
 
+def merge_single(model, mbin, clip_name, anim_path, name2node, animated_nodes):
+    """Append ONE clip copied straight out of its own .glb (remapped by name).
+
+    This is the original path and is deliberately left alone for single-file
+    clips: it copies the source's accessors verbatim instead of re-encoding them,
+    so the shipped Pistol_01/Rifle_01 bytes stay exactly what they always were.
+    """
+    anim, abin = read_glb(anim_path)
+    if not anim.get("animations"):
+        print(f"  (no animations in {os.path.basename(anim_path)})")
+        return
+    base_len = len(mbin)
+    bv_off = len(model["bufferViews"])
+    ac_off = len(model["accessors"])
+
+    for bv in anim.get("bufferViews", []):
+        nbv = dict(bv)
+        nbv["buffer"] = 0
+        nbv["byteOffset"] = bv.get("byteOffset", 0) + base_len
+        model["bufferViews"].append(nbv)
+    for ac in anim.get("accessors", []):
+        nac = dict(ac)
+        if "bufferView" in nac:
+            nac["bufferView"] = nac["bufferView"] + bv_off
+        if "sparse" in nac:  # unsupported; drop sparse (skip winding)
+            nac.pop("sparse", None)
+        model["accessors"].append(nac)
+
+    anim_nodes = anim.get("nodes", [])
+    mapped = 0
+    skipped = 0
+    for a in anim["animations"]:
+        for s in a.get("samplers", []):
+            s["input"] += ac_off
+            s["output"] += ac_off
+        new_channels = []
+        for ch in a.get("channels", []):
+            tgt = ch.get("target", {})
+            ni = tgt.get("node")
+            if ni is not None and ni < len(anim_nodes):
+                nm = anim_nodes[ni].get("name")
+                if nm in name2node:
+                    tgt["node"] = name2node[nm]
+                    animated_nodes.add(name2node[nm])
+                    new_channels.append(ch)
+                    mapped += 1
+                    continue
+            skipped += 1
+        if not new_channels:
+            continue
+        model["animations"].append({
+            "name": clip_name,
+            "samplers": a.get("samplers", []),
+            "channels": new_channels,
+        })
+    mbin.extend(abin)
+    print(f"  + clip '{clip_name}' from {os.path.basename(anim_path)} "
+          f"({mapped} channels mapped, {skipped} skipped)")
+
+
 def merge(model_path, clips):
     model, mbin = read_glb(model_path)
     model.setdefault("bufferViews", [])
@@ -125,59 +310,18 @@ def merge(model_path, clips):
     name2node = node_name_index(model)
     animated_nodes = set()
 
-    for clip_name, anim_path in clips:
-        anim, abin = read_glb(anim_path)
-        if not anim.get("animations"):
-            print(f"  (no animations in {os.path.basename(anim_path)})")
+    for clip_name, part_paths in clips:
+        if any(a.get("name") == clip_name for a in model["animations"]):
+            # Idempotent re-run: the model already carries this clip (Blender
+            # exports include their actions in the base GLB, and convert_fbx.ps1
+            # can be re-run over an already-merged model). Appending it again
+            # would leave two clips with one name and a second copy of the data.
+            print(f"  = clip '{clip_name}' already present, skipping")
             continue
-        base_len = len(mbin)
-        bv_off = len(model["bufferViews"])
-        ac_off = len(model["accessors"])
-
-        for bv in anim.get("bufferViews", []):
-            nbv = dict(bv)
-            nbv["buffer"] = 0
-            nbv["byteOffset"] = bv.get("byteOffset", 0) + base_len
-            model["bufferViews"].append(nbv)
-        for ac in anim.get("accessors", []):
-            nac = dict(ac)
-            if "bufferView" in nac:
-                nac["bufferView"] = nac["bufferView"] + bv_off
-            if "sparse" in nac:  # unsupported; drop sparse (skip winding)
-                nac.pop("sparse", None)
-            model["accessors"].append(nac)
-
-        anim_nodes = anim.get("nodes", [])
-        mapped = 0
-        skipped = 0
-        for a in anim["animations"]:
-            src_name = a.get("name", "Scene")
-            for s in a.get("samplers", []):
-                s["input"] += ac_off
-                s["output"] += ac_off
-            new_channels = []
-            for ch in a.get("channels", []):
-                tgt = ch.get("target", {})
-                ni = tgt.get("node")
-                if ni is not None and ni < len(anim_nodes):
-                    nm = anim_nodes[ni].get("name")
-                    if nm in name2node:
-                        tgt["node"] = name2node[nm]
-                        animated_nodes.add(name2node[nm])
-                        new_channels.append(ch)
-                        mapped += 1
-                        continue
-                skipped += 1
-            if not new_channels:
-                continue
-            model["animations"].append({
-                "name": clip_name,
-                "samplers": a.get("samplers", []),
-                "channels": new_channels,
-            })
-        mbin.extend(abin)
-        print(f"  + clip '{clip_name}' from {os.path.basename(anim_path)} "
-              f"({mapped} channels mapped, {skipped} skipped)")
+        if len(part_paths) == 1:
+            merge_single(model, mbin, clip_name, part_paths[0], name2node, animated_nodes)
+        else:
+            animated_nodes.update(merge_sequence(model, mbin, clip_name, part_paths))
 
     # Ensure an Idle clip exists (from the bind pose) for one-shot returns.
     if animated_nodes and not any(a.get("name") == "Idle" for a in model.get("animations", [])):
@@ -195,10 +339,10 @@ def main():
     clips = []
     for arg in sys.argv[2:]:
         if "=" in arg:
-            name, path = arg.split("=", 1)
+            name, paths = arg.split("=", 1)
         else:
-            name, path = os.path.splitext(os.path.basename(arg))[0], arg
-        clips.append((name, path))
+            name, paths = os.path.splitext(os.path.basename(arg))[0], arg
+        clips.append((name, [p for p in paths.split("+") if p]))
     print(f"Merging into {model_path}")
     merge(model_path, clips)
     return 0

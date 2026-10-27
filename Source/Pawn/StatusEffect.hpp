@@ -18,6 +18,11 @@
 // on NPC_DAMAGE/NPC_STATE plus server-side ticking; do not pretend otherwise by
 // letting the client apply it locally.
 //
+// ApplyStatus returns early too, but it releases any status the pawn already
+// carries BEFORE that exit: a chill applied before a pawn turns server-owned would
+// otherwise keep its speed multiplier forever, because Update() skips those pawns
+// and nothing would reach the expiry that restores it.
+//
 // Raylib-free so a headless test can pin the element->status mapping and the
 // tick/expiry rules.
 // ---------------------------------------------------------------------------

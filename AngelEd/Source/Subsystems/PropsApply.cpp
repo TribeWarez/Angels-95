@@ -349,18 +349,23 @@ void ApplyPanelProperties(const std::vector<ed::Event>& events) {
             }
         } else if (tgtType == SelType::WINDZONE) {
             WindZoneNode* z = PawnSystem::Instance().GetWindZone(tgtIdx);
+            
             if (z) {
                 float sx = g_editorPanels.propWindSizeX;
                 float sy = g_editorPanels.propWindSizeY;
                 float sz = g_editorPanels.propWindSizeZ;
+                
                 if (sx < 0.01f) sx = 1.0f;
                 if (sy < 0.01f) sy = 1.0f;
                 if (sz < 0.01f) sz = 1.0f;
-                z->bounds.min = {px - sx * 0.5f, py - sy * 0.5f, pz - sz * 0.5f};
-                z->bounds.max = {px + sx * 0.5f, py + sy * 0.5f, pz + sz * 0.5f};
+                
+                z->bounds.min = { px - sx * 0.5f, py - sy * 0.5f, pz - sz * 0.5f };
+                z->bounds.max = { px + sx * 0.5f, py + sy * 0.5f, pz + sz * 0.5f };
+                
                 z->direction = {g_editorPanels.propWindDirX,
                                 g_editorPanels.propWindDirY,
                                 g_editorPanels.propWindDirZ};
+
                 if (g_editorPanels.propWindStrength >= 0.0f)
                     z->strength = g_editorPanels.propWindStrength;
                 if (g_editorPanels.propWindFrequency > 0.0f)

@@ -258,6 +258,11 @@ add cyl 320 -403 24 1.5 1.5 6 16 0 texPath=GameData/Worlds/World_endless_snow/oz
 playerstart 0 -410 0.1 180
 pickup pistol_01 -20 -420 1.1 30
 pickup HealthVial 20 -420 1.1 30
+# SMG + shotgun on the open ground around the spawn, mirroring the pistol/vial
+# pair at x=+-20. Ground top is z=0 out here, so 1.1 is the height the rest of
+# the level's ground pickups use.
+pickup smg_01 -60 -420 1.1 30
+pickup shotgun_01 60 -420 1.1 30
 pickup rifle_01 -100 320 1.1 30
 pickup HealthVial -180 360 1.1 30
 pickup etheral_waver -40 50 1.1 30

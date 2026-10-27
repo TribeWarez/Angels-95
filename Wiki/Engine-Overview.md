@@ -392,12 +392,17 @@ and per-weapon `projectile_mesh` /
 `projectile_submesh` / `projectile_scale` / `projectile_color` for drawn
 tracers. `play_clip` also reaches the view-model when the command matches the
 held weapon def. FBX art is converted via `tools/convert_fbx.ps1` (FBX2glTF).
-Weapons that have sibling animation GLBs (Pistol_01, Rifle_01) take the
-**animated** path: `tools/merge_glb_skins.py` collapses FBX2glTF's one-skin-per-
-mesh-part output into a single skin (raylib supports one), then
-`tools/merge_glb_anims.py` merges the Fire/Reload clips and synthesizes Idle.
-Everything else is flattened to a static mesh. `-NoAnimated` forces the old
-flatten-everything behaviour and strips the clips.
+Weapons that have sibling animation GLBs (Pistol_01, Rifle_01, SMG_01,
+Shotgun_01) take the **animated** path: `tools/merge_glb_skins.py` collapses
+FBX2glTF's one-skin-per-mesh-part output into a single skin (raylib supports
+one), then `tools/merge_glb_anims.py` merges the Fire/Reload clips and
+synthesizes Idle. A reload authored as several takes is concatenated into the
+one `Reload` clip the engine plays (`Reload=a.glb+b.glb`; the shotgun ships
+ReloadStep + ReloadEnd that way). Everything else is flattened to a static mesh.
+`-NoAnimated` forces the old flatten-everything behaviour and strips the clips.
+Pickup icons come from each gun's `_silhouette.png`, which must be tinted dark
+(`tools/make_weapon_icon.ps1`) — the pack ships it pure white, i.e. a white
+billboard in every map.
 
 Pickup types come from the LightningScript entity registry (`.ozls` definitions).
 

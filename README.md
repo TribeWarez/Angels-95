@@ -450,6 +450,51 @@ compiled-but-never-linked editor object fails the build rather than shipping.
 
 ## Changelog
 
+### Unreleased
+- **Four guns from the RetroWeaponsPack, two of them new.** `smg_01` (32-round
+  spray, 9mm projectile) and `shotgun_01` (8 buckshot pellets, 6-shell magazine)
+  join `pistol_01`/`rifle_01`: defs, merged Skinned GLBs with Idle/Fire/Reload,
+  pickup icons, projectiles, sounds. Placements in `EngineTest`,
+  `Phantom_Hubs`, `SoulEater_Vaults` and `World_endless_snow`.
+- **A reload can now be authored as several takes.** `merge_glb_anims.py` accepts
+  `Reload=a+b` and concatenates them into the single clip the view-model plays
+  (the shotgun ships ReloadStep + ReloadEnd). Channels that stop early are padded
+  to the clip end, so a target animated in only one segment holds its pose
+  instead of snapping to its second keyframe.
+- **`convert_fbx.ps1`'s animated pass works again.** `$animated` was the same
+  variable as `[switch]$Animated` (PowerShell is case-insensitive), so the pass
+  threw before merging any clip and every converted animated weapon shipped
+  multi-skin and clip-less.
+- **White pickup icons are a white billboard.** `tools/make_weapon_icon.ps1`
+  turns a pack silhouette (pure white on transparency) into the dark 128x128
+  icon the HUD and the world billboard need.
+- Server weapon magazines come from `DefaultMagazineForWeapon()` instead of two
+  inline strcmps that tracked every gun but the automag as 12 rounds.
+- A multi-projectile weapon now sends its **volley** damage to the server, so the
+  shotgun deals 72 in multiplayer instead of one 9-damage pellet (the protocol
+  still carries a single projectile).
+- **Hedge-kit foliage ships, and the first campaign map is reseasoned.**
+  `GameData/Environment/Plant/Bushes/` is the shared home for the pack's greenery;
+  Sektor 01 (a green pine gorge) had been dressed with the kit's **winter** cards,
+  which read as dead sticks in a meadow. It now has a summer hedge run along the
+  hut front, an autumn run up the shrine's east side, and loose shrubs on both
+  banks. KryoArchipel keeps the winter set, which fits the snow.
+- **`WindZone strength` is a displacement in units, not a breeze rating, and four
+  worlds were rigged with 5-7.** `Wind.vs` moves the top of a mesh by up to
+  `strength` units sideways, so 2-unit hedges sheared flat and every pine leaned
+  ~30 degrees. EngineTest, Aethelgard_Ruins, Sektor_01 and KryoArchipel are now
+  0.3 - the value `World_endless_snow` already used and the only one that read as
+  wind. Placed foliage uses `wind=1` only inside a zone.
+- **`worldcheck --asset-refs` now audits `Mesh.Static`/`Mesh.Skeletal` paths in
+  `.ozone` worlds.** That was the one reference kind a prop pass adds and the
+  check skipped, so a wrong path only surfaced as a prop that failed to load (and
+  a case slip only on Linux). The audit also mis-parsed every positional line
+  whose last argument carried a kwarg (`... scale=3`), which is why they were
+  skipped at all.
+- **`tools/probe_at.ps1` silently probed (0,0) for negative coordinates** (a bare
+  `-60` is a PowerShell parameter name). It now requires named `-px/-py` and
+  throws instead of answering the wrong question.
+
 ### b111 — 2026-10-26
 - **The eleven campaign worlds are real levels.** The placeholders were a floor,
   four 2-unit walls and five NPCs; they now carry a design intent, a pacing arc,

@@ -366,7 +366,7 @@ PathNode path_d 260 0 0.5 radius=4 next=path_e
 # path_e sat inside the terminal dais (solid to z=1.5 across x 292.5..299.5).
 PathNode path_e 288 0 0.5 radius=4 next=terminal
 PathNode terminal 290 0 0.5 radius=5 next=arena_d
-WindZone 42 -26 0 76 26 12 1 0 0.3 7 0.5
+WindZone 42 -26 0 76 26 12 1 0 0.3 0.3 0.5
 levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_day.png GameData/Tex/Global/Sky/sky_noon.png
 
 # End of OZONE export – Aethelgard_Ruins (Oasis 333)

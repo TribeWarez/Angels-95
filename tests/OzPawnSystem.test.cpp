@@ -1363,6 +1363,144 @@ static int test_status_chill_slows_and_restores() {
     PASS(); return 0; END_TEST();
 }
 
+// The MP boundary, pinned. A networkControlled pawn's health is the server's:
+// the local sim must not damage it, must not attach a status to it, and must not
+// tick a status it somehow carries. See StatusEffect.hpp - a networked status is
+// a protocol + server change (tails on NPC_DAMAGE/NPC_STATE, server ticking), not
+// something the client may fake with a local DoT.
+static int test_status_is_local_only_on_network_controlled() {
+    TEST("Statuses and local damage skip networkControlled pawns");
+    reset_pawn_system();
+    auto& ps = PawnSystem::Instance();
+    PawnDef def;
+    def.name = "NetBot";
+    def.speed = 2.0f;
+    def.maxHealth = 100;
+    ps.RegisterDef(def);
+    int id = ps.Spawn({0, 0, 0}, "NetBot");
+    Pawn* p = ps.Get(id);
+    CHECK(p != nullptr);
+
+    p->networkControlled = true;
+    const int hp0 = p->health;
+
+    // A status must not attach at all (the guard, not just a skipped tick).
+    ps.ApplyStatus(*p, StatusEffect::Burn, 2.0f, 5, {255, 120, 40, 255});
+    CHECK(p->status == StatusEffect::None);
+    ps.ApplyStatus(*p, StatusEffect::Chill, 2.0f, 0, {160, 220, 255, 255});
+    CHECK(p->status == StatusEffect::None);
+    CHECK_APROX(p->speed, 2.0f, 0.001f);   // no slow left behind either
+
+    // Local damage is the server's call in MP.
+    ps.ApplyPawnDamage(*p, 10);
+    CHECK_EQ(p->health, hp0);
+    CHECK(p->state != PawnState::DEAD);
+
+    // And even a status forced onto the pawn must not tick locally, because
+    // Update() early-outs before the status block for server-owned NPCs.
+    p->status = StatusEffect::Burn;
+    p->statusTimer = 5.0f;
+    p->statusTickTimer = 0.0f;
+    p->statusDamage = 7;
+    ps.Update({100, 0, 0}, 0.5f, nullptr);
+    CHECK_EQ(p->health, hp0);
+    PASS(); return 0; END_TEST();
+}
+
+// Spawn recycles slots, so network ownership is per-instance exactly like the
+// status fields. Despawn does not clear it and Main.cpp stamps it only on the
+// pawns the server just spawned, so without an explicit reset a slot freed by a
+// multiplayer world comes back server-owned in single player: no local FSM, no
+// local damage, no contact damage, and melee reports aimed at a stale netNpcIndex.
+static int test_spawn_clears_network_ownership() {
+    TEST("Spawn resets network ownership on a recycled slot");
+    reset_pawn_system();
+    auto& ps = PawnSystem::Instance();
+    PawnDef def;
+    def.name = "RecycleBot";
+    def.speed = 2.0f;
+    def.maxHealth = 100;
+    ps.RegisterDef(def);
+
+    int first = ps.Spawn({0, 0, 0}, "RecycleBot");
+    int second = ps.Spawn({0, 0, 0}, "RecycleBot");
+    for (int id : {first, second}) {
+        Pawn* p = ps.Get(id);
+        CHECK(p != nullptr);
+        p->networkControlled = true;
+        p->netWorldIndex     = 3;
+        p->netNpcIndex       = 7;
+        p->netPartitionIndex = 1;
+    }
+
+    // The world switch that exposes this: every slot is freed, then the next
+    // world spawns into them. Both actors above are marked, so whichever slot is
+    // handed back carries stale network ownership.
+    ps.DespawnAll();
+    const size_t slotsBefore = ps.GetPawns().size();
+
+    int third = ps.Spawn({0, 0, 0}, "RecycleBot");
+    Pawn* c = ps.Get(third);
+    CHECK(c != nullptr);
+    // Proves the slot really was recycled. Comparing Spawn's return value would
+    // not: it is the monotonic pawn ID, not the slot index, so it never repeats
+    // and such an assertion would pass trivially.
+    CHECK_EQ(ps.GetPawns().size(), slotsBefore);
+    CHECK(c->networkControlled == false);
+    CHECK_EQ(c->netWorldIndex, -1);
+    CHECK_EQ(c->netNpcIndex, -1);
+    CHECK_EQ(c->netPartitionIndex, -1);
+    PASS(); return 0; END_TEST();
+}
+
+// The networkControlled guard in ApplyStatus is an early RETURN, so a status a
+// pawn already carries can outlive the moment it becomes server-owned. Releasing
+// it is not "attaching a status": the local movement change is undone and the
+// pawn is left with none. Without this, a chill applied before the handover
+// halves a server-owned pawn's speed forever - Update() never ticks those pawns,
+// so nothing else can reach the expiry block that restores it.
+static int test_status_released_when_pawn_becomes_server_owned() {
+    TEST("Chill is released when a pawn becomes networkControlled");
+    reset_pawn_system();
+    auto& ps = PawnSystem::Instance();
+    PawnDef def;
+    def.name = "HandoverBot";
+    def.speed = 2.0f;
+    def.maxHealth = 100;
+    ps.RegisterDef(def);
+    int id = ps.Spawn({0, 0, 0}, "HandoverBot");
+    Pawn* p = ps.Get(id);
+    CHECK(p != nullptr);
+
+    // Chilled while local: half speed, as designed.
+    ps.ApplyStatus(*p, StatusEffect::Chill, 5.0f, 0, {160, 220, 255, 255});
+    CHECK(p->status == StatusEffect::Chill);
+    CHECK_APROX(p->speed, 1.0f, 0.001f);
+
+    // Authority flips to the server mid-life.
+    p->networkControlled = true;
+
+    // Any later application must release the local movement change...
+    ps.ApplyStatus(*p, StatusEffect::Burn, 2.0f, 5, {255, 120, 40, 255});
+    CHECK_APROX(p->speed, 2.0f, 0.001f);
+    CHECK_APROX(p->statusBaseSpeed, 0.0f, 0.001f);
+    // ...and must not attach the new status either.
+    CHECK(p->status == StatusEffect::None);
+    CHECK_EQ(p->statusTimer, 0.0f);
+    CHECK_EQ(p->statusDamage, 0);
+
+    // And the released pawn still ticks exactly as the plain MP case does: the
+    // server owns the health, so a forced status must not damage it.
+    p->status = StatusEffect::Burn;
+    p->statusTimer = 5.0f;
+    p->statusTickTimer = 0.0f;
+    p->statusDamage = 9;
+    const int hpNow = p->health;
+    ps.Update({100, 0, 0}, 0.5f, nullptr);
+    CHECK_EQ(p->health, hpNow);
+    PASS(); return 0; END_TEST();
+}
+
 static int test_bone_ids_fit_skeleton() {
     TEST("BoneIdsFitSkeleton rejects multi-skin boneIds");
 
@@ -1460,6 +1598,9 @@ int main() {
     failures += test_status_element_mapping();
     failures += test_status_burn_ticks_and_expires();
     failures += test_status_chill_slows_and_restores();
+    failures += test_status_is_local_only_on_network_controlled();
+    failures += test_spawn_clears_network_ownership();
+    failures += test_status_released_when_pawn_becomes_server_owned();
     failures += test_bone_ids_fit_skeleton();
 
     fprintf(stdout, "==================\n");

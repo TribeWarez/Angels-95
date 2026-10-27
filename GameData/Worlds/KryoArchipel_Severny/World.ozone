@@ -236,7 +236,7 @@ PathNode t3_b 70 0 0.5 radius=4 next=t3_c
 PathNode t3_c 72 -25 0.5 radius=4 next=t3_d
 PathNode t3_d 60 -25 0.5 radius=4 next=t3_a
 
-WindZone -30 -40 8 90 40 26 1 0 0.2 5 0.5
+WindZone -30 -40 8 90 40 26 1 0 0.2 0.3 0.5
 levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_grad_dusk.png GameData/Tex/Global/Sky/sky_grad_dusk.png
 
 # End of OZONE export – KryoArchipel_Severny (Dusk Falls)
