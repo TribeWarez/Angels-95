@@ -13,7 +13,7 @@ using namespace oz::surface;
 // shader parity test and the dead-flag register all index off this list, so a new
 // flag cannot be added to the header without the suite noticing it is unclassified.
 static const uint32_t kAllSurfaceFlags[] = {
-    SURF_OCCLUDER, SURF_FAKEBACKDROP, SURF_COLLISION_PROXY, SURF_INVISIBLE, SURF_MASKED,
+    SURF_OCCLUDER, SURF_QUANTUM, SURF_FAKEBACKDROP, SURF_COLLISION_PROXY, SURF_INVISIBLE, SURF_MASKED,
     SURF_TRANSLUCENT, SURF_ALPHABLEND, SURF_MODULATED, SURF_TWO_SIDED,
     SURF_UNLIT, SURF_FAKE_LIT, SURF_SPECIAL_LIT, SURF_GLOW, SURF_PORTAL,
     SURF_MIRROR, SURF_ENVIRONMENT, SURF_PAN_U, SURF_PAN_V, SURF_SMALL_WAVY,
@@ -65,7 +65,7 @@ static void test_legacy_bits_stable() {
     check(singleBit, "every surface flag is exactly one bit wide");
 
     // Bits 3 and 4 are the pre-existing pair; 0 and 5..31 is 29 more.
-    check(kAllSurfaceFlagCount == 30, "the header defines 30 flags");
+    check(kAllSurfaceFlagCount == 31, "the header defines 31 flags");
 }
 
 // ---------------------------------------------------------------------------
@@ -925,9 +925,13 @@ static void test_dead_flags_are_still_dead() {
         { SURF_INVISIBLE_OCCLUDER, "SURF_INVISIBLE_OCCLUDER" },
         { SURF_FORCE_VIEW_ZONE, "SURF_FORCE_VIEW_ZONE" },
         { SURF_NO_SMOOTH, "SURF_NO_SMOOTH" },
+        // Planned (Phase 7.2): the dynamic-collision side-list exists
+        // (Physics/DynamicCollision.hpp), but the CSG-exclusion + frustum toggle
+        // and the ghostly shader overlay are not wired yet, so it has no consumer.
+        { SURF_QUANTUM, "SURF_QUANTUM" },
     };
     const int deadCount = (int)(sizeof(dead) / sizeof(dead[0]));
-    check(deadCount == 13, "the dead-flag register has 13 entries");
+    check(deadCount == 14, "the dead-flag register has 14 entries");
 
     // The dialog's Flags tab exposes 16 rows: these 15 live flags plus MIRROR
     // shown-but-disabled as "(planned)". SURF_PORTAL moved out of the planned

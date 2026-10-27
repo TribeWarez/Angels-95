@@ -11,6 +11,7 @@
 //   * Rotated brushes collided as their UNROTATED box (the RotatedAabbY tests).
 #include "../Source/Physics/OzBsp.hpp"
 #include "../Source/Physics/WorldChunk.hpp"
+#include "../Source/Physics/DynamicCollision.hpp"
 #include <cstdio>
 #include <cmath>
 #include <vector>
@@ -274,6 +275,49 @@ static int test_volumes_near_box_uses_both_axes() {
     return 0;
 }
 
+// ---------------------------------------------------------------------------
+// Dynamic-collision side-list (doors / quantum obstacles).
+//
+// Toggling a door or quantum brush must not rebuild the CSG world: the side-list
+// holds those AABBs separately and the collision query skips `enabled == false`.
+// ---------------------------------------------------------------------------
+static int test_dynamic_collision() {
+    printf("DynamicCollision\n");
+    using oz::physics::DynamicCollision;
+    using oz::physics::DynamicBlocker;
+    DynamicCollision dc;
+    int door = dc.Add(DynamicBlocker{0, 0, 0, 4, 10, 4, true, 1});
+    int plat = dc.Add(DynamicBlocker{10, 5, 10, 14, 6, 14, true, 2});
+    CHECK(dc.Count() == 2);
+    CHECK(dc.AnyEnabled());
+
+    // Both enabled: both block and both support.
+    CHECK(dc.OverlapsEnabled(1, 1, 1, 3, 3, 3));
+    CHECK(dc.OverlapsEnabled(11, 5, 11, 13, 6, 13));
+    CHECK_NEAR(dc.TopUnder(2, 2, -999.0f), 10.0f, 0.001f);   // door top
+    CHECK_NEAR(dc.TopUnder(12, 12, -999.0f), 6.0f, 0.001f);  // platform top
+
+    // Disable the door: it no longer blocks or supports, the platform still does.
+    dc.SetEnabled(door, false);
+    CHECK(!dc.OverlapsEnabled(1, 1, 1, 3, 3, 3));
+    CHECK_NEAR(dc.TopUnder(2, 2, -999.0f), -999.0f, 0.001f);
+    CHECK(dc.OverlapsEnabled(11, 5, 11, 13, 6, 13));
+
+    // Re-enable: back to solid.
+    dc.SetEnabled(door, true);
+    CHECK(dc.OverlapsEnabled(1, 1, 1, 3, 3, 3));
+    CHECK(dc.AnyEnabled());
+
+    // SetAllEnabled(false) clears everything (e.g. world unload).
+    dc.SetAllEnabled(false);
+    CHECK(!dc.AnyEnabled());
+    CHECK(!dc.OverlapsEnabled(11, 5, 11, 13, 6, 13));
+
+    dc.Clear();
+    CHECK(dc.Count() == 0);
+    return 0;
+}
+
 int main() {
     printf("CSG / collision query tests\n");
     printf("===========================\n");
@@ -285,6 +329,7 @@ int main() {
     failures += test_budget_is_per_brush();
     failures += test_rotated_aabb();
     failures += test_volumes_near_box_uses_both_axes();
+    failures += test_dynamic_collision();
 
     printf("===========================\n");
     printf("%d/%d checks passed, %d failed\n",

@@ -62,6 +62,10 @@ inline constexpr uint32_t SURF_COLLISION_PROXY   = (1u << 4);
 // worlds only use flags=8/16/32768), so it is safe. CPU-side only — no
 // Surface.fs SF_* counterpart, like SURF_PORTAL/MIRROR.
 inline constexpr uint32_t SURF_OCCLUDER          = (1u << 0);
+// Quantum obstacle (Phase 7.2): the brush is solid only when the camera is NOT
+// looking at it. CPU-side collision toggle + ghostly overlay; bit 1 is also
+// historically unallocated. No Surface.fs SF_* counterpart yet.
+inline constexpr uint32_t SURF_QUANTUM           = (1u << 1);
 
 // Gain the sky pass applies to a SURF_FAKEBACKDROP face.
 //
