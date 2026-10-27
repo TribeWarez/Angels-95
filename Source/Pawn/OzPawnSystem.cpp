@@ -15,7 +15,7 @@
 #include "../DebugFlags.hpp"
 #include "../GameplayFlags.hpp"
 #include "../Events/EventBus.hpp"
-#include "../Log.hpp"
+#include "../World/OzOzoneLoader.hpp"
 #include <rlgl.h>
 #include <cmath>
 #include <algorithm>
@@ -378,7 +378,34 @@ PlayerStartNode* PawnSystem::GetFirstPlayerStart() {
 void PawnSystem::RespawnPlayerAtStart(Camera3D& camera) {
     PlayerStartNode* ps = GetFirstPlayerStart();
     if (ps) {
-        camera.position = {ps->position.x, ps->position.y + 2.0f, ps->position.z};
+        float x = ps->position.x;
+        float z = ps->position.z;
+        // Snap the spawn height to the nearest solid surface below the
+        // playerstart instead of trusting the authored Y (+EyeHeight). A
+        // playerstart authored even slightly inside geometry, or a floor whose
+        // top is more than the per-frame step height above the spawn, used to
+        // leave the first ClampToGround pass with no ground in range, so gravity
+        // pulled the player straight through the floor on the first frames.
+        // Iterate every collision volume (not just the 3x3 cell window) so a
+        // floor a cell away is still found.
+        float groundY = ps->position.y;
+        bool found = false;
+        const auto& vols = OzoneLoader::Instance().GetCollisionVolumes();
+        for (const auto& vol : vols) {
+            if (x < vol.aabb.min.x || x > vol.aabb.max.x) continue;
+            if (z < vol.aabb.min.z || z > vol.aabb.max.z) continue;
+            float top = vol.aabb.max.y;
+            if (!found || top > groundY) {
+                // Only consider surfaces at or below the spawn + a generous
+                // tolerance, so a ceiling above the playerstart is never picked.
+                if (top <= ps->position.y + 50.0f) {
+                    groundY = top;
+                    found = true;
+                }
+            }
+        }
+        float feetY = found ? groundY : ps->position.y;
+        camera.position = {x, feetY + 2.0f, z};
         float yawRad = ps->yaw * DEG2RAD;
         camera.target = {camera.position.x + sinf(yawRad), camera.position.y,
                          camera.position.z - cosf(yawRad)};
