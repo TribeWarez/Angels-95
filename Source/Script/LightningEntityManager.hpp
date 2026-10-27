@@ -27,6 +27,14 @@ struct EntityInstance {
     // bound to the same def keep INDEPENDENT cooldowns — a shared instance would
     // let slot 0's cooldown block slot 1's cast.
     int spellSlot = -1;
+    // Wind-up (`cast_time`). A charged cast defers ResolveSpellCast until
+    // castElapsed >= castDuration; origin/dir are captured at the keypress so the
+    // aim is what the player pressed with, not where they drift to.
+    bool    casting = false;
+    float   castElapsed = 0.0f;
+    float   castDuration = 0.0f;
+    Vector3 castOrigin{0, 0, 0};
+    Vector3 castDir{0, 0, -1};
 };
 
 // LightningEntityManager — runtime entity instances + dynamic hotbar + equipment
@@ -289,6 +297,10 @@ static constexpr int HOTBAR_SIZE = 8;
     //   >0  that many projectiles were spawned
     int   CastSpell(int slot, const Vector3& origin, const Vector3& direction);
 
+    // True while `slot`'s spell is in its `cast_time` wind-up. The HUD/tests use
+    // it to tell "charging" from "refused" - both return 0/-1 from CastSpell.
+    bool  IsCasting(int slot) const;
+
     // The spell bar: def names, empty string = empty slot. Persisted in the save
     // blob alongside unlocked skills.
     static constexpr int SPELL_BAR_SIZE = 5;
@@ -336,6 +348,11 @@ static constexpr int HOTBAR_SIZE = 8;
     // which owns the camera the centre comes from. One definition so the test
     // build (compiled without OMEGA_HAVE_PAWNSYSTEM) still links.
     int  ApplyAreaDamage(const Vector3& centre, float radius, int damage);
+
+    // Resolve a cast immediately: spend, cooldown, on_cast, spawn/apply. Public
+    // because the wind-up path in Update() (and the tests) need the phase split.
+    int  ResolveSpellCast(EntityInstance& ent, const Vector3& origin,
+                          const Vector3& direction);
 
     // --- Serialization (for save/load) ---
     std::string SerializeState() const;  // compact string of hotbar + equipment state

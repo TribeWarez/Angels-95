@@ -5,6 +5,10 @@
 #include "../Events/EventBus.hpp"
 #include "../Events/ObjectiveSystem.hpp"
 #include "../Log.hpp"
+// Element identity is raylib-free, so it is included in EVERY build (the
+// OMEGA_TEST_ENV guard below excludes CombatFX, which is where it would
+// otherwise come from).
+#include "../Renderer/SpellElement.hpp"
 // OMEGA_TEST_ENV builds this TU without raylib, so most of it is compiled out.
 // OMEGA_PAWNSYSTEM_TEST (set only by test_pawn_system) opts back in to the
 // PawnSystem/raylib types, because that target links both raylib and
@@ -486,6 +490,16 @@ float LightningEntityManager::GetSpellCooldown(int slot) const {
     return 0.0f;
 }
 
+bool LightningEntityManager::IsCasting(int slot) const {
+    if (slot < 0 || slot >= SPELL_BAR_SIZE) return false;
+    const std::string& name = m_spellBar[slot];
+    if (name.empty()) return false;
+    for (const auto& in : m_instances)
+        if (in.def && in.def->name == name && in.spellSlot == slot)
+            return in.casting;
+    return false;
+}
+
 float LightningEntityManager::GetSpellCost(int slot) const {
     if (slot < 0 || slot >= SPELL_BAR_SIZE) return 0.0f;
     const std::string& name = m_spellBar[slot];
@@ -500,32 +514,58 @@ float LightningEntityManager::GetSpellCost(int slot) const {
     return (c != def->stats.floats.end()) ? c->second : 0.0f;
 }
 
-int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vector3& direction) {
-    EntityInstance* ent = GetSpellInstance(slot);
-    if (!ent || !ent->def) return -1;
-    if (ent->def->type != EntityType::SPELL) return -1;
-    if (ent->cooldownRemaining > 0.0f) return -1;
+// --- spell def lookups shared by the cast entry and the resolve ---------------
+static Color SpellDefColor(const EntityDef* def) {
+    float c[3] = {0.65f, 0.5f, 1.0f};
+    if (def) {
+        auto it = def->stats.vec3s.find("projectile_color");
+        if (it != def->stats.vec3s.end()) {
+            c[0] = it->second[0]; c[1] = it->second[1]; c[2] = it->second[2];
+        }
+    }
+    return Color{(unsigned char)(c[0] * 255.0f),
+                 (unsigned char)(c[1] * 255.0f),
+                 (unsigned char)(c[2] * 255.0f), 255};
+}
 
+static SpellElement SpellDefElement(const EntityDef* def) {
+    if (def) {
+        auto it = def->stats.strings.find("element");
+        if (it != def->stats.strings.end())
+            return SpellElementFromString(it->second);
+    }
+    return SpellElement::Arcane;
+}
+
+// Resolve one cast NOW: spend the cost, set the cooldown, run on_cast and spawn
+// the effect. Split out of CastSpell so a `cast_time` wind-up can defer it.
+int LightningEntityManager::ResolveSpellCast(EntityInstance& ent,
+                                             const Vector3& origin,
+                                             const Vector3& direction) {
+    if (!ent.def || ent.def->type != EntityType::SPELL) return -1;
+
+    auto& inst = ent;
     auto readStat = [&](const std::string& key, float defVal) -> float {
-        auto rit = ent->runtimeStats.find(key);
-        if (rit != ent->runtimeStats.end()) return rit->second;
-        auto dit = ent->def->stats.floats.find(key);
-        return (dit != ent->def->stats.floats.end()) ? dit->second : defVal;
+        auto rit = inst.runtimeStats.find(key);
+        if (rit != inst.runtimeStats.end()) return rit->second;
+        auto dit = inst.def->stats.floats.find(key);
+        return (dit != inst.def->stats.floats.end()) ? dit->second : defVal;
     };
 
     // Cost is resolved from the DEF, not from a runtime stat, so a script cannot
     // `playerstat mana -= N` its way to a free cast: the deduction below is the
     // only one that happens on this path.
     const bool usesPe = [&]{
-        auto it = ent->def->stats.strings.find("cost_type");
-        return it != ent->def->stats.strings.end() &&
+        auto it = inst.def->stats.strings.find("cost_type");
+        return it != inst.def->stats.strings.end() &&
                (it->second == "psychic_energy" || it->second == "pe");
     }();
     const float cost = readStat(usesPe ? "pe_cost" : "mana_cost", 0.0f);
 
-    // Affordability BEFORE any effect is committed. A refused cast spends
-    // nothing, sets no cooldown and runs no script - so mashing the key while
-    // empty cannot bank a free cast for when mana trickles back.
+    // Affordability is checked AGAIN here, not only at the start of the cast.
+    // A wind-up is 0.2-0.6 s long and mana can be spent elsewhere in that time
+    // (another ability, a script, a network sync); resolving anyway would either
+    // drive the pool negative or fire a free spell.
     if (usesPe) { if (!HasPsychicEnergy(cost)) return -1; }
     else        { if (!HasMana(cost)) return -1; }
 
@@ -542,38 +582,15 @@ int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vec
     const bool targetsSelf = readStat("targets_self", 0.0f) > 0.0f;
     const float heal = readStat("heal", 0.0f);
 
-    // Element colour, authored once per spell as `projectile_color`. The INSTANT
-    // (area) branch reads it too, so a nova and its bolts share one palette
-    // instead of the nova being a hardcoded purple burst whatever the spell is.
-    float spellCol[3] = {0.65f, 0.5f, 1.0f};
-    {
-        auto cit = ent->def->stats.vec3s.find("projectile_color");
-        if (cit != ent->def->stats.vec3s.end()) {
-            spellCol[0] = cit->second[0];
-            spellCol[1] = cit->second[1];
-            spellCol[2] = cit->second[2];
-        }
-    }
-    const Color spellColor = {(unsigned char)(spellCol[0] * 255.0f),
-                              (unsigned char)(spellCol[1] * 255.0f),
-                              (unsigned char)(spellCol[2] * 255.0f), 255};
+    const Color spellColor = SpellDefColor(inst.def);
+    const SpellElement spellElement = SpellDefElement(inst.def);
 
-    // Element identity, authored as `element = fire|frost|shock|psychic|holy`.
-    // Absent -> Arcane, so every existing spell keeps its current look. The
-    // colour alone cannot carry this: Arc Bolt and Frost Lance are both blue.
-    SpellElement spellElement = SpellElement::Arcane;
-    {
-        auto eit = ent->def->stats.strings.find("element");
-        if (eit != ent->def->stats.strings.end())
-            spellElement = SpellElementFromString(eit->second);
-    }
-
-    ent->cooldownRemaining = cooldown;
+    inst.cooldownRemaining = cooldown;
     if (usesPe) SpendPsychicEnergy(cost); else SpendMana(cost);
-    RunAction(ent, "on_cast");
+    RunAction(&inst, "on_cast");
 
-    float scriptCd = ent->ctx.TakePendingFloat("__cooldown");
-    if (scriptCd > 0.0f) ent->cooldownRemaining = scriptCd;
+    float scriptCd = inst.ctx.TakePendingFloat("__cooldown");
+    if (scriptCd > 0.0f) inst.cooldownRemaining = scriptCd;
 
 #ifdef OMEGA_HAVE_PAWNSYSTEM
     if (radius > 0.0f || targetsSelf) {
@@ -597,10 +614,9 @@ int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vec
         // on_hit only when something was actually affected, so a whiffed cast
         // does not fire the connect sound. Mirrors the melee !blocked rule.
         if (hits > 0) {
-            RunAction(ent, "on_hit");
-            PlayDefStatSound(ent, "hit_sound", "hit_volume", "hit_pitch");
+            RunAction(&inst, "on_hit");
+            PlayDefStatSound(&inst, "hit_sound", "hit_volume", "hit_pitch");
         }
-        PlayDefStatSound(ent, "cast_sound", "cast_volume", "cast_pitch");
         if (radius > 0.0f) {
             // Two layers instead of one flat burst: a bright core flash at the
             // epicentre plus a wider spark ring, both in the spell's own colour.
@@ -619,11 +635,11 @@ int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vec
     const float spreadDeg = readStat("spread", 0.0f);
 
     std::string projMesh, projTex;
-    const std::string defDir = DefSourceDir(ent->def->sourcePath);
-    auto mit = ent->def->stats.strings.find("projectile_mesh");
-    if (mit != ent->def->stats.strings.end()) projMesh = ResolveDefPath(defDir, mit->second);
-    auto tit = ent->def->stats.strings.find("projectile_texture");
-    if (tit != ent->def->stats.strings.end()) projTex = ResolveDefPath(defDir, tit->second);
+    const std::string defDir = DefSourceDir(inst.def->sourcePath);
+    auto mit = inst.def->stats.strings.find("projectile_mesh");
+    if (mit != inst.def->stats.strings.end()) projMesh = ResolveDefPath(defDir, mit->second);
+    auto tit = inst.def->stats.strings.find("projectile_texture");
+    if (tit != inst.def->stats.strings.end()) projTex = ResolveDefPath(defDir, tit->second);
     const int projSub = (int)readStat("projectile_submesh", 0.0f);
     const float projScale = readStat("projectile_scale", 0.15f);
     const float projYaw = readStat("projectile_yaw", 0.0f);
@@ -667,6 +683,72 @@ int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vec
     (void)damage; (void)reach; (void)heal; (void)targetsSelf;
     return 0;
 #endif  // OMEGA_HAVE_PAWNSYSTEM
+}
+
+// ---------------------------------------------------------------------------
+// CastSpell — the entry point the spell bar calls
+// ---------------------------------------------------------------------------
+//
+// A cast is one or two phases depending on `cast_time` (seconds, default 0):
+//   * 0    -> resolve immediately, exactly as before. Every existing spell is
+//             this case, so nothing changes until an author opts in.
+//   * > 0  -> start a wind-up: NOTHING is spent and no cooldown starts. Update()
+//             resolves it when the timer expires.
+//
+// Why the cost is spent at RESOLVE and not here: spending at the start lets a
+// player with 1 mana start a cast, regen during the wind-up and fire, i.e. the
+// affordability gate stops meaning anything. The trade-off is that mana can be
+// spent by something else mid-wind-up, so ResolveSpellCast re-checks and simply
+// cancels (no spend, no cooldown) if it no longer covers the cost.
+int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vector3& direction) {
+    EntityInstance* ent = GetSpellInstance(slot);
+    if (!ent || !ent->def) return -1;
+    if (ent->def->type != EntityType::SPELL) return -1;
+    if (ent->casting) return -1;                       // one wind-up per instance
+    if (ent->cooldownRemaining > 0.0f) return -1;
+
+    auto readStat = [&](const std::string& key, float defVal) -> float {
+        auto rit = ent->runtimeStats.find(key);
+        if (rit != ent->runtimeStats.end()) return rit->second;
+        auto dit = ent->def->stats.floats.find(key);
+        return (dit != ent->def->stats.floats.end()) ? dit->second : defVal;
+    };
+
+    const bool usesPe = [&]{
+        auto it = ent->def->stats.strings.find("cost_type");
+        return it != ent->def->stats.strings.end() &&
+               (it->second == "psychic_energy" || it->second == "pe");
+    }();
+    const float cost = readStat(usesPe ? "pe_cost" : "mana_cost", 0.0f);
+
+    // Affordability before anything is committed: a refused cast spends nothing,
+    // sets no cooldown and runs no script.
+    if (usesPe) { if (!HasPsychicEnergy(cost)) return -1; }
+    else        { if (!HasMana(cost)) return -1; }
+
+    // The cast sound belongs to the START of the action: it is the telegraph's
+    // audio leg and the only feedback during a wind-up. Projectile spells used
+    // to never play it at all - only the instant branch did, so Arc Bolt, Frost
+    // Lance and Psychic Surge were silent while their defs authored `cast_sound`.
+#ifndef OMEGA_TEST_ENV
+    PlayDefStatSound(ent, "cast_sound", "cast_volume", "cast_pitch");
+#endif
+
+    const float castTime = readStat("cast_time", 0.0f);
+    if (castTime > 0.0f) {
+        ent->casting = true;
+        ent->castElapsed = 0.0f;
+        ent->castDuration = castTime;
+        ent->castOrigin = origin;
+        ent->castDir = direction;
+#ifndef OMEGA_TEST_ENV
+        CombatFX::Instance().BeginCharge(origin, SpellDefColor(ent->def), castTime,
+                                         SpellDefElement(ent->def));
+#endif
+        return 0;
+    }
+
+    return ResolveSpellCast(*ent, origin, direction);
 }
 
 #ifdef OMEGA_HAVE_PAWNSYSTEM
@@ -928,6 +1010,23 @@ void LightningEntityManager::Update(float dt) {
     for (auto& inst : m_instances) {
         if (inst.def == nullptr) continue;
         if (inst.cooldownRemaining > 0) inst.cooldownRemaining -= dt;
+
+        // Wind-up (`cast_time`). Resolve when the timer expires; a refusal at
+        // resolve means mana was spent elsewhere during the wind-up, so the cast
+        // is cancelled with nothing spent and no cooldown.
+        if (inst.casting) {
+            inst.castElapsed += dt;
+            if (inst.castElapsed >= inst.castDuration) {
+                inst.casting = false;
+                const int r = ResolveSpellCast(inst, inst.castOrigin, inst.castDir);
+#ifndef OMEGA_TEST_ENV
+                CombatFX::Instance().ClearCharge();
+#endif
+                if (r < 0)
+                    OZ_INFO("Spell '%s': cast cancelled at resolve (unaffordable)",
+                            inst.def->name.c_str());
+            }
+        }
 
         // Per-frame on_tick hook (only for defs that define it)
         if (inst.ctx.FindJumpLabel("on_tick") >= 0) {
@@ -1500,6 +1599,13 @@ void LightningEntityManager::HandleSpellInput(bool uiBlocking, Camera3D& cam) {
     // Same modal contract as HandleInput: the spellbook and inventory own the
     // keyboard while they are up, or a cast would fire underneath the menu.
     if (uiBlocking) return;
+
+    // Keep an in-flight wind-up anchored to the caster: the camera moves while
+    // the spell charges, and a telegraph left at the keypress position reads as
+    // a bug in the effect rather than as a wind-up.
+#ifndef OMEGA_TEST_ENV
+    CombatFX::Instance().UpdateChargePosition(cam.position);
+#endif
 
     static const KeyboardKey kKeys[SPELL_BAR_SIZE] = {
         KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B

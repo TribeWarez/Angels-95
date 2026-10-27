@@ -147,12 +147,14 @@ public:
         }
         m_bloodCount = 0;
         m_flashes.clear();
+        m_charges.clear();
         m_tracers.clear();
         m_decals.clear();
     }
 
     void ClearAll() {
         m_flashes.clear();
+        m_charges.clear();
         m_tracers.clear();
         m_nextDecal = 0;
         for (auto& d : m_decals) d.age = -1.0f;
@@ -194,6 +196,39 @@ public:
         DrawBillboard(camera, tex, pos, size, color);
         EndBlendMode();
     }
+
+    // --- Charge-up telegraph -------------------------------------------------
+    // A wind-up is a fixed duration, so this is a plain timed entry rather than
+    // a particle system: one growing glow at the caster's hand plus a ground
+    // ring. `BeginCharge` is called when the cast key starts the wind-up and the
+    // entry removes itself when the timer expires; `ClearCharge` is the explicit
+    // cancel path (the resolve was refused, e.g. mana ran out mid-wind-up).
+    //
+    // Reduced motion (`g_reducedMotion`, pushed from the HeadBob setting) holds
+    // the glow at a fixed size and skips the ring - the telegraph must still say
+    // "something is charging", just without the expansion.
+    void BeginCharge(Vector3 camPos, Color color, float duration,
+                     SpellElement element = SpellElement::Arcane) {
+        if (duration <= 0.0f) return;
+        EnsureInit();
+        if (m_charges.size() >= 2) m_charges.erase(m_charges.begin());
+        Charge c;
+        c.pos = camPos;
+        c.color = color;
+        c.elapsed = 0.0f;
+        c.duration = duration;
+        c.element = element;
+        m_charges.push_back(c);
+    }
+
+    // Keep the telegraph on the caster while they move during the wind-up.
+    void UpdateChargePosition(Vector3 camPos) {
+        for (auto& c : m_charges) c.pos = camPos;
+    }
+
+    void ClearCharge() { m_charges.clear(); }
+
+    bool HasCharge() const { return !m_charges.empty(); }
 
     // Add a short-lived effect light to the transient pool. Reuses an inactive
     // slot when one is available, otherwise drops the request (MAX_TRANSIENT_LIGHTS).
@@ -323,6 +358,16 @@ public:
             else
                 i++;
         }
+        // A charge expires on its own timer: the resolve clears it explicitly, so
+        // this only reaps an abandoned wind-up (a cancelled/never-resolved cast).
+        for (size_t i = 0; i < m_charges.size();) {
+            m_charges[i].elapsed += dt;
+            if (m_charges[i].duration <= 0.0f ||
+                m_charges[i].elapsed >= m_charges[i].duration)
+                m_charges.erase(m_charges.begin() + i);
+            else
+                i++;
+        }
         for (size_t i = 0; i < m_tracers.size();) {
             m_tracers[i].life -= dt;
             if (m_tracers[i].life <= 0.0f)
@@ -336,6 +381,34 @@ public:
 
     void Draw3D(Camera3D& camera) {
         EnsureInit();
+
+        // Charge telegraph: a glow at the caster's hand plus a ground ring. Drawn
+        // before the muzzle flashes so an impact on the same frame covers it.
+        if (!m_charges.empty()) {
+            BeginBlendMode(BLEND_ADDITIVE);
+            for (const auto& c : m_charges) {
+                const float dur = c.duration > 0.0f ? c.duration : 1.0f;
+                float t = c.elapsed / dur;
+                if (t < 0.0f) t = 0.0f;
+                if (t > 1.0f) t = 1.0f;
+                const Texture2D tex = m_glowTex[GlowIndex(c.element)];
+                const float size = g_reducedMotion ? 0.95f : (0.45f + 1.15f * t);
+                const unsigned char a = g_reducedMotion
+                    ? (unsigned char)190 : (unsigned char)(110.0f + 145.0f * t);
+                const Color col = {c.color.r, c.color.g, c.color.b, a};
+                if (tex.id != 0) DrawBillboard(camera, tex, c.pos, size, col);
+                // Ground ring, at the caster's feet. The charge is anchored to the
+                // camera origin, which sits PLAYER_EYE_HEIGHT (2.0) above them.
+                if (!g_reducedMotion) {
+                    const float r = 0.40f + 0.85f * t;
+                    const Vector3 feet = {c.pos.x, c.pos.y - 2.0f, c.pos.z};
+                    const Color ring = {c.color.r, c.color.g, c.color.b,
+                                        (unsigned char)(90.0f + 120.0f * t)};
+                    DrawCircle3D(feet, r, {1.0f, 0.0f, 0.0f}, 90.0f, ring);
+                }
+            }
+            EndBlendMode();
+        }
 
         // Muzzle flash: an additive camera-facing glow, not a solid sphere. The
         // old DrawSphere read as a debug ball sitting on the muzzle every shot.
@@ -472,6 +545,9 @@ private:
 
     struct Flash { Vector3 pos; float timer; float duration; Color color;
                    SpellElement element; };
+    struct Charge { Vector3 pos{0, 0, 0}; Color color{255, 255, 255, 255};
+                    float elapsed = 0.0f; float duration = 0.0f;
+                    SpellElement element = SpellElement::Arcane; };
     struct Decal { Vector3 pos{0, 0, 0}; Vector3 normal{0, 1, 0}; float size = 0.35f;
                    Color color{255, 255, 255, 255}; Texture2D tex{0}; float age = -1.0f; };
     struct Tracer { Vector3 a, b; Color color; float life, maxLife; };
@@ -516,6 +592,7 @@ private:
     static constexpr int kMaxBloodTex = 4;
 
     std::vector<Flash> m_flashes;
+    std::vector<Charge> m_charges;
     std::vector<Tracer> m_tracers;
     std::vector<Decal> m_decals;
     size_t m_nextDecal = 0;

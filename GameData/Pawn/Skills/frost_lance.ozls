@@ -14,6 +14,8 @@ entity "frost_lance" : spell {
         projectile_scale = 1.1
         projectile_color = (0.72, 0.92, 1.0)
         element = frost
+        // Five bolts read better after a short wind-up than as an instant spray.
+        cast_time = 0.35
         cast_sound = GameData/Audio/Sounds/Skills/frost_lance.wav
         cast_volume = 0.9
     }

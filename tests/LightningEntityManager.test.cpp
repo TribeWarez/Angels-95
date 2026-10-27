@@ -1092,7 +1092,7 @@ static int test_no_variants_leaves_index() {
 // then re-inits so the player exists.
 static void SetupPlayerAndSpell(const char* spellName, EntityType type,
                                 float manaCost, float peCost, const char* costType,
-                                float cooldown) {
+                                float cooldown, float castTime = 0.0f) {
     auto& reg = LightningEntityRegistry::Instance();
     EntityDef pdef;
     pdef.name = "Player";
@@ -1107,6 +1107,7 @@ static void SetupPlayerAndSpell(const char* spellName, EntityType type,
     if (costType)         sd.stats.strings["cost_type"] = costType;
     sd.stats.floats["cooldown"] = cooldown;
     sd.stats.floats["damage"] = 20.0f;
+    if (castTime > 0.0f) sd.stats.floats["cast_time"] = castTime;
     reg.Register(sd);
 
     LightningEntityManager::Instance().Init();
@@ -1206,6 +1207,57 @@ static int test_cast_spell_rejects_non_spell_def() {
     const Vector3 o = {0, 0, 0}, d = {0, 0, -1};
     CHECK_EQ(em.CastSpell(3, o, d), -1);
     CHECK_APROX(em.GetPlayerMana(), 100.0f, 0.001f);
+    PASS(); return 0; END_TEST();
+}
+
+static int test_cast_time_defers_cost_to_resolve() {
+    TEST("cast_time: wind-up spends nothing until it resolves");
+    SetupPlayerAndSpell("ChargeBolt", EntityType::SPELL, 12.0f, -1.0f, nullptr, 0.5f, 0.4f);
+    auto& em = LightningEntityManager::Instance();
+    em.SetPlayerMana(100.0f);
+    em.SetSpellInSlot(0, "ChargeBolt");
+    const Vector3 o = {0, 0, 0}, d = {0, 0, -1};
+
+    // Accepted, but nothing is spent and no cooldown starts while it charges.
+    CHECK(em.CastSpell(0, o, d) != -1);
+    CHECK(em.IsCasting(0));
+    CHECK_APROX(em.GetPlayerMana(), 100.0f, 0.001f);
+    CHECK(em.GetSpellCooldown(0) <= 0.0f);
+
+    // A second press during the wind-up is refused: no queued cast, no double
+    // spend.
+    CHECK_EQ(em.CastSpell(0, o, d), -1);
+    CHECK_APROX(em.GetPlayerMana(), 100.0f, 0.001f);
+
+    // Halfway: still charging, still nothing spent.
+    em.Update(0.2f);
+    CHECK(em.IsCasting(0));
+    CHECK_APROX(em.GetPlayerMana(), 100.0f, 0.001f);
+
+    // Past cast_time: resolved, spent, cooldown started, not casting any more.
+    em.Update(0.25f);
+    CHECK(!em.IsCasting(0));
+    CHECK_APROX(em.GetPlayerMana(), 88.0f, 0.001f);
+    CHECK(em.GetSpellCooldown(0) > 0.0f);
+    PASS(); return 0; END_TEST();
+}
+
+static int test_cast_time_cancels_when_unaffordable_at_resolve() {
+    TEST("cast_time: a cast that becomes unaffordable resolves as a cancel");
+    SetupPlayerAndSpell("DrainBolt", EntityType::SPELL, 50.0f, -1.0f, nullptr, 0.5f, 0.3f);
+    auto& em = LightningEntityManager::Instance();
+    em.SetPlayerMana(60.0f);
+    em.SetSpellInSlot(0, "DrainBolt");
+    const Vector3 o = {0, 0, 0}, d = {0, 0, -1};
+
+    CHECK(em.CastSpell(0, o, d) != -1);
+    // Something else eats the pool during the wind-up.
+    em.SetPlayerMana(10.0f);
+    em.Update(0.35f);
+    // Cancelled: nothing spent (it could not be), no cooldown, no charge left.
+    CHECK(!em.IsCasting(0));
+    CHECK_APROX(em.GetPlayerMana(), 10.0f, 0.001f);
+    CHECK(em.GetSpellCooldown(0) <= 0.0f);
     PASS(); return 0; END_TEST();
 }
 
@@ -1415,6 +1467,8 @@ int main() {
     // after the test above has registered "Player".
     failures += test_spell_bar_bind_and_init_clear();
     failures += test_cast_spell_spends_mana_and_sets_cooldown();
+    failures += test_cast_time_defers_cost_to_resolve();
+    failures += test_cast_time_cancels_when_unaffordable_at_resolve();
     failures += test_cast_spell_uses_psychic_energy();
     failures += test_cast_spell_rejects_non_spell_def();
     failures += test_spell_bar_serialize_roundtrip();
