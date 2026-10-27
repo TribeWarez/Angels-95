@@ -14,6 +14,9 @@ entity "void_nova" : spell {
         radius = 7.0
         reach = 5.0
         damage = 55
+        // Element colour: the nova's core flash, spark ring and light all use
+        // it, so it matches the spell's icon and the bolts of its school.
+        projectile_color = (0.70, 0.40, 1.0)
         hit_sound = GameData/Audio/Sounds/Skills/void_nova.wav
         hit_volume = 0.9
         cast_sound = GameData/Audio/Sounds/Skills/void_bolt.wav

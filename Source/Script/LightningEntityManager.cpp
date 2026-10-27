@@ -542,6 +542,22 @@ int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vec
     const bool targetsSelf = readStat("targets_self", 0.0f) > 0.0f;
     const float heal = readStat("heal", 0.0f);
 
+    // Element colour, authored once per spell as `projectile_color`. The INSTANT
+    // (area) branch reads it too, so a nova and its bolts share one palette
+    // instead of the nova being a hardcoded purple burst whatever the spell is.
+    float spellCol[3] = {0.65f, 0.5f, 1.0f};
+    {
+        auto cit = ent->def->stats.vec3s.find("projectile_color");
+        if (cit != ent->def->stats.vec3s.end()) {
+            spellCol[0] = cit->second[0];
+            spellCol[1] = cit->second[1];
+            spellCol[2] = cit->second[2];
+        }
+    }
+    const Color spellColor = {(unsigned char)(spellCol[0] * 255.0f),
+                              (unsigned char)(spellCol[1] * 255.0f),
+                              (unsigned char)(spellCol[2] * 255.0f), 255};
+
     ent->cooldownRemaining = cooldown;
     if (usesPe) SpendPsychicEnergy(cost); else SpendMana(cost);
     RunAction(ent, "on_cast");
@@ -575,9 +591,14 @@ int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vec
             PlayDefStatSound(ent, "hit_sound", "hit_volume", "hit_pitch");
         }
         PlayDefStatSound(ent, "cast_sound", "cast_volume", "cast_pitch");
-        if (radius > 0.0f)
+        if (radius > 0.0f) {
+            // Two layers instead of one flat burst: a bright core flash at the
+            // epicentre plus a wider spark ring, both in the spell's own colour.
+            CombatFX::Instance().ArmMuzzleFlash(centre, 0.22f, spellColor);
             CombatFX::Instance().SpawnImpact(centre, hitNormalOrAway(origin, direction),
-                                             Color{180, 150, 255, 255}, 14, 6.0f);
+                                             spellColor, 18, 7.0f);
+            CombatFX::Instance().ArmTransientLight(centre, spellColor, 0.22f, 9.0f);
+        }
         return 0;   // instant: no projectile
     }
 
@@ -596,11 +617,13 @@ int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vec
     const int projSub = (int)readStat("projectile_submesh", 0.0f);
     const float projScale = readStat("projectile_scale", 0.15f);
     const float projYaw = readStat("projectile_yaw", 0.0f);
-    float projCol[3] = {0.65f, 0.5f, 1.0f};
-    auto cit = ent->def->stats.vec3s.find("projectile_color");
-    if (cit != ent->def->stats.vec3s.end()) {
-        projCol[0] = cit->second[0]; projCol[1] = cit->second[1]; projCol[2] = cit->second[2];
-    }
+
+    // Cast layer: a coloured flash + a short forward spark burst at the hand, so
+    // the cast reads at the caster even before the bolt is visible. Without it a
+    // spell had NO cast-side visual at all - the first thing the player saw was
+    // a ball already in flight.
+    CombatFX::Instance().ArmMuzzleFlash(origin, 0.16f, spellColor);
+    CombatFX::Instance().SpawnImpact(origin, direction, spellColor, 8, 5.0f);
 
     for (int i = 0; i < projCount; i++) {
         Vector3 dir = direction;
@@ -624,9 +647,8 @@ int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vec
         p.submesh = projSub;
         p.scale = projScale;
         p.yawOffset = projYaw;
-        p.tint = Color{(unsigned char)(projCol[0] * 255.0f),
-                       (unsigned char)(projCol[1] * 255.0f),
-                       (unsigned char)(projCol[2] * 255.0f), 255};
+        p.tint = spellColor;
+        p.spell = true;
         PawnSystem::Instance().SpawnProjectile(p);
     }
     return projCount;

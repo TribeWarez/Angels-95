@@ -266,6 +266,74 @@ bool LoadFlag = false;
 // g_levelFog itself is declared further down, next to the code that writes it.
 static bool g_levelFogCaptured = false;
 
+// Put the camera's FEET on the ground at its current XZ.
+//
+// `RespawnPlayerAtStart` places the camera at the authored playerstart + eye
+// height and leaves the rest to the per-frame ground clamp, but that clamp only
+// looks `kStepHeight` (1.0) above the feet. A playerstart authored a little
+// inside a floor slab - or above a floor whose top is more than 1 unit over the
+// spawn - therefore found no ground on the first frame and gravity took the
+// player straight down THROUGH the slab. (Symptom: "sometimes you fall through
+// the ground on spawn", map-dependent because it depends on how deeply the
+// playerstart is buried.)
+//
+// Two cases, in order:
+//   1. The spawn point is INSIDE a solid -> lift to the highest such solid's top.
+//      This is the actual fall-through case; a downward ray would hit the slab's
+//      bottom face and answer nothing useful.
+//   2. Otherwise cast down from just above the feet and stop at the first
+//      upward-facing surface, which also settles a mid-air spawn without the
+//      per-frame clamp's 1-unit limit.
+// Only call this AFTER the world's collision volumes are built.
+static bool SnapCameraFeetToGround(Camera3D& cam) {
+    auto& loader = OzoneLoader::Instance();
+    const float eye = PLAYER_EYE_HEIGHT;
+    const float x = cam.position.x;
+    const float z = cam.position.z;
+    float feetY = cam.position.y - eye;
+
+    // Case 1: spawn inside a solid.
+    bool inside = false;
+    float liftTop = feetY;
+    for (const auto& cv : loader.GetCollisionVolumes()) {
+        if (cv.isHeightmap) continue;
+        const auto& b = cv.aabb;
+        if (x < b.min.x || x > b.max.x) continue;
+        if (z < b.min.z || z > b.max.z) continue;
+        if (feetY < b.min.y || feetY > b.max.y) continue;
+        inside = true;
+        if (b.max.y > liftTop) liftTop = b.max.y;
+    }
+    if (inside) {
+        cam.position.y = liftTop + eye + 0.02f;
+        cam.target.y   = cam.position.y;
+        return true;
+    }
+
+    // Case 2: downward cast from just above the feet.
+    const Vector3 top = {x, feetY + 1.0f, z};
+    const Vector3 bottom = {x, feetY - 500.0f, z};
+    bool found = false;
+    float bestY = feetY;
+    for (const auto& cv : loader.GetCollisionVolumes()) {
+        if (cv.isHeightmap) continue;
+        float t = 0.0f;
+        Vector3 n = {0, 1, 0};
+        if (!SegmentVsAABB(top, bottom, cv.aabb, t, n)) continue;
+        if (n.y <= 0.5f) continue;          // side or underside, not a floor
+        const float y = top.y + (bottom.y - top.y) * t;
+        if (!found || y > bestY) { bestY = y; found = true; }
+    }
+    if (loader.HasHeightmap()) {
+        const float gy = loader.SampleHeightmapY(x, z);
+        if (gy <= top.y && (!found || gy > bestY)) { bestY = gy; found = true; }
+    }
+    if (!found) return false;
+    cam.position.y = bestY + eye;
+    cam.target.y   = cam.position.y;
+    return true;
+}
+
 // STILL HARDCODED FILE PATH Loading for Worlds
 // TODO: abreviate into handling by OzOzoneLoader and PawnBased/LightningScript Based object loading  // NOLINT
 
@@ -472,8 +540,14 @@ auto LoadWorld()
 
         // Spawn at the world's playerstart unless resuming from a saved
         // position ("Continue" from the title menu sets SetCameraFlag).
-        if (!SetCameraFlag)
+        if (!SetCameraFlag) {
             PawnSystem::Instance().RespawnPlayerAtStart(AngelTechData.MainCamera);
+            // Settle the spawn onto the actual ground. The per-frame clamp only
+            // reaches kStepHeight above the feet, so a playerstart buried in a
+            // floor slab used to fall straight through it. Runs here because the
+            // collision volumes exist only after the world parsed.
+            SnapCameraFeetToGround(AngelTechData.MainCamera);
+        }
 
         SaveGame();
     }
@@ -1547,6 +1621,7 @@ void UpdateEntitiesSim(float dt)
                 {
                     s_respawnTimer = 0.0f;
                     PawnSystem::Instance().RespawnPlayerAtStart(AngelTechData.MainCamera);
+                    SnapCameraFeetToGround(AngelTechData.MainCamera);
                     // Refill items from save
                     LoadSave();
                 }
@@ -1843,9 +1918,16 @@ static void SweepProjectilesVsWorld(float dt)
             if (!terrainHit)
                 hitPos = Vector3Lerp(p.position, next, bestT);
             p.active = false;
+            // A spell splashes its element colour on the wall; a bullet keeps the
+            // warm spark. The decal is tinted the same way so a frost bolt does
+            // not leave a bullet hole.
+            const Color impactCol = p.spell ? p.tint : Color{255, 180, 60, 255};
             CombatFX::Instance().SpawnImpact(hitPos, bestNormal,
-                                             Color{255, 180, 60, 255}, 12, 6.0f);
-            CombatFX::Instance().AddDecal(hitPos, bestNormal, 0.35f);
+                                             impactCol, p.spell ? 14 : 12,
+                                             p.spell ? 7.0f : 6.0f);
+            CombatFX::Instance().AddDecal(hitPos, bestNormal, 0.35f, impactCol);
+            if (p.spell)
+                CombatFX::Instance().ArmTransientLight(hitPos, p.tint, 0.18f, 6.0f);
         }
     }
 }

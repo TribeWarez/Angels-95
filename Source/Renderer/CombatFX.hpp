@@ -166,7 +166,8 @@ public:
         LitLightning_ClearTransientLights();
     }
 
-    void ArmMuzzleFlash(Vector3 pos, float duration = 0.12f) {
+    void ArmMuzzleFlash(Vector3 pos, float duration = 0.12f,
+                        Color color = {255, 200, 120, 255}) {
         // Reject a non-positive duration at ARM time, not at draw time. Draw3D
         // computes `f.timer / f.duration`; a zero duration there is 0/0 -> NaN,
         // which feeds a NaN radius into DrawSphere and a NaN into the colour
@@ -174,14 +175,26 @@ public:
         // ArmMuzzleFlash did not.
         if (duration <= 0.0f) return;
         EnsureInit();
-        Flash f{pos, duration, duration};
+        Flash f{pos, duration, duration, color};
         if (m_flashes.size() >= 8) m_flashes.erase(m_flashes.begin());
         m_flashes.push_back(f);
         // Also cast real light. The visible flash was an unlit DrawSphere, so it
         // ignored the room entirely: a shot in an unlit corridor lit nothing.
         // Transient lights take priority over world lights in the shader budget,
         // so this cannot be evicted by a busy level.
-        ArmTransientLight(pos, {255, 200, 120, 255}, duration * 1.4f, 7.0f);
+        ArmTransientLight(pos, color, duration * 1.4f, 7.0f);
+    }
+
+    // A soft additive glow drawn AT a world position right now, for something
+    // that moves (a spell projectile's core). The flash list is deliberately not
+    // used: a flash is a one-shot at a fixed point, so a moving round would trail
+    // a string of them behind it. Must be called inside the 3D pass; a missing
+    // glow texture (headless / Init failed) is a no-op rather than a crash.
+    void DrawGlow(const Camera3D& camera, Vector3 pos, Color color, float size) {
+        if (m_glowTex.id == 0 || size <= 0.0f) return;
+        BeginBlendMode(BLEND_ADDITIVE);
+        DrawBillboard(camera, m_glowTex, pos, size, color);
+        EndBlendMode();
     }
 
     // Add a short-lived effect light to the transient pool. Reuses an inactive
@@ -332,10 +345,10 @@ public:
             BeginBlendMode(BLEND_ADDITIVE);
             for (const auto& f : m_flashes) {
                 float t = f.timer / f.duration;   // 1 -> 0 over the flash
-                Color c = {(unsigned char)255,
-                           (unsigned char)(150 + 100 * t),
-                           (unsigned char)(70 * t),
-                           (unsigned char)(220 * t)};
+                Color c = {(unsigned char)(f.color.r > 0 ? f.color.r : 255),
+                           (unsigned char)(f.color.g * (0.55f + 0.45f * t)),
+                           (unsigned char)(f.color.b * t),
+                           (unsigned char)(f.color.a * t)};
                 DrawBillboard(camera, m_glowTex, f.pos, 0.55f + 0.35f * t, c);
             }
             EndBlendMode();
@@ -395,7 +408,7 @@ public:
     size_t FlashCount() const { return m_flashes.size(); }
 
 private:
-    struct Flash { Vector3 pos; float timer; float duration; };
+    struct Flash { Vector3 pos; float timer; float duration; Color color; };
     struct Decal { Vector3 pos{0, 0, 0}; Vector3 normal{0, 1, 0}; float size = 0.35f;
                    Color color{255, 255, 255, 255}; Texture2D tex{0}; float age = -1.0f; };
     struct Tracer { Vector3 a, b; Color color; float life, maxLife; };

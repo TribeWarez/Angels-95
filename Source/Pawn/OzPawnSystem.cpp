@@ -15,7 +15,6 @@
 #include "../DebugFlags.hpp"
 #include "../GameplayFlags.hpp"
 #include "../Events/EventBus.hpp"
-#include "../World/OzOzoneLoader.hpp"
 #include <rlgl.h>
 #include <cmath>
 #include <algorithm>
@@ -378,34 +377,7 @@ PlayerStartNode* PawnSystem::GetFirstPlayerStart() {
 void PawnSystem::RespawnPlayerAtStart(Camera3D& camera) {
     PlayerStartNode* ps = GetFirstPlayerStart();
     if (ps) {
-        float x = ps->position.x;
-        float z = ps->position.z;
-        // Snap the spawn height to the nearest solid surface below the
-        // playerstart instead of trusting the authored Y (+EyeHeight). A
-        // playerstart authored even slightly inside geometry, or a floor whose
-        // top is more than the per-frame step height above the spawn, used to
-        // leave the first ClampToGround pass with no ground in range, so gravity
-        // pulled the player straight through the floor on the first frames.
-        // Iterate every collision volume (not just the 3x3 cell window) so a
-        // floor a cell away is still found.
-        float groundY = ps->position.y;
-        bool found = false;
-        const auto& vols = OzoneLoader::Instance().GetCollisionVolumes();
-        for (const auto& vol : vols) {
-            if (x < vol.aabb.min.x || x > vol.aabb.max.x) continue;
-            if (z < vol.aabb.min.z || z > vol.aabb.max.z) continue;
-            float top = vol.aabb.max.y;
-            if (!found || top > groundY) {
-                // Only consider surfaces at or below the spawn + a generous
-                // tolerance, so a ceiling above the playerstart is never picked.
-                if (top <= ps->position.y + 50.0f) {
-                    groundY = top;
-                    found = true;
-                }
-            }
-        }
-        float feetY = found ? groundY : ps->position.y;
-        camera.position = {x, feetY + 2.0f, z};
+        camera.position = {ps->position.x, ps->position.y + 2.0f, ps->position.z};
         float yawRad = ps->yaw * DEG2RAD;
         camera.target = {camera.position.x + sinf(yawRad), camera.position.y,
                          camera.position.z - cosf(yawRad)};
@@ -470,10 +442,18 @@ void PawnSystem::UpdateProjectiles(float dt) {
                 p.active = false;
                 Vector3 hitNormal = Vector3Normalize(Vector3Scale(p.velocity, -1.0f));
                 Vector3 hitPos = {pawn.position.x, pawn.position.y + 0.5f, pawn.position.z};
+                // Spell bolts use their own element colour and never spray
+                // blood; a bullet keeps the warm spark + gore. Before this the
+                // impact was hardcoded red for every projectile, so a frost
+                // lance hit bled red and read as a gunshot.
+                const Color impactCol = p.spell ? p.tint : Color{200, 30, 30, 255};
                 CombatFX::Instance().SpawnImpact(
-                    hitPos, hitNormal, Color{200, 30, 30, 255}, 10, 4.0f);
-                if (g_goreEnabled)
+                    hitPos, hitNormal, impactCol, p.spell ? 14 : 10,
+                    p.spell ? 6.5f : 4.0f);
+                if (!p.spell && g_goreEnabled)
                     CombatFX::Instance().SpawnBlood(hitPos, hitNormal, 12, 1.0f);
+                if (p.spell)
+                    CombatFX::Instance().ArmTransientLight(hitPos, p.tint, 0.18f, 6.0f);
                 ApplyPawnDamage(pawn, (int)p.damage);
                 // Hit confirmation for the shooter: the impact/blood above is
                 // the 3D half, this drives the crosshair marker.
@@ -537,8 +517,15 @@ void PawnSystem::DrawProjectiles(Camera3D& camera, Shader litShader) {
         // emitted from UpdateProjectiles through CombatFX, so this sphere is
         // just the round itself and should not read as a placeholder ball.
         Color c = p.tint;
-        float radius = 0.12f;
+        float radius = p.spell ? 0.20f : 0.12f;
         DrawSphere(p.position, radius, c);
+        // Spell core: an additive halo AROUND the sphere. A bare DrawSphere is
+        // unlit and flat, which is exactly why every spell read as "an orb of a
+        // different colour". The halo is the cheapest readable upgrade (one
+        // billboard, no light, no particles) and it makes the element colour
+        // visible in a dark corridor without spending a transient light slot.
+        if (p.spell)
+            CombatFX::Instance().DrawGlow(camera, p.position, c, 0.85f);
         // Optional glow sprite
         if (p.sprite && p.sprite->id > 0) {
             DrawBillboard(camera, *p.sprite, p.position, 0.5f, WHITE);

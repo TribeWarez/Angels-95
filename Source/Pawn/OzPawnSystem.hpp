@@ -273,6 +273,11 @@ struct ProjectileNode {
     float yaw = 0.0f;          // degrees; orients the round's long axis along travel
     float yawOffset = 0.0f;    // per-weapon correction (projectile_yaw stat)
     Color tint{255, 200, 50, 255};
+    // True when this round came from a spell (CastSpell) rather than a weapon.
+    // The impact path needs it: a spell bolt must not spray blood and must use
+    // its own element colour for the burst, while a bullet keeps the gore and
+    // the warm spark look.
+    bool spell = false;
 };
 
 // Pickup node - collectible items in the world
