@@ -1287,6 +1287,82 @@ static int test_spell_element_mapping() {
     PASS(); return 0; END_TEST();
 }
 
+static int test_status_element_mapping() {
+    TEST("StatusEffect: fire burns, frost chills, everything else is none");
+    CHECK(StatusForElement(SpellElement::Fire) == StatusEffect::Burn);
+    CHECK(StatusForElement(SpellElement::Frost) == StatusEffect::Chill);
+    CHECK(StatusForElement(SpellElement::Shock) == StatusEffect::None);
+    CHECK(StatusForElement(SpellElement::Psychic) == StatusEffect::None);
+    CHECK(StatusForElement(SpellElement::Arcane) == StatusEffect::None);
+    PASS(); return 0; END_TEST();
+}
+
+static int test_status_burn_ticks_and_expires() {
+    TEST("Burn: damage over time, then expiry stops it");
+    reset_pawn_system();
+    auto& ps = PawnSystem::Instance();
+    PawnDef def;
+    def.name = "BurnBot";
+    def.speed = 2.0f;
+    def.maxHealth = 100;
+    ps.RegisterDef(def);
+    int id = ps.Spawn({0, 0, 0}, "BurnBot");
+    Pawn* p = ps.Get(id);
+    CHECK(p != nullptr);
+
+    const int hp0 = p->health;
+    ps.ApplyStatus(*p, StatusEffect::Burn, 2.0f, 5, {255, 120, 40, 255});
+    CHECK(p->status == StatusEffect::Burn);
+
+    // One tick per kStatusTickSeconds (0.5). The player is far away so the FSM
+    // never engages and cannot change the health itself.
+    const Vector3 farPlayer = {100, 0, 0};
+    ps.Update(farPlayer, 0.5f, nullptr);
+    CHECK_EQ(p->health, hp0 - 5);
+    ps.Update(farPlayer, 0.5f, nullptr);
+    CHECK_EQ(p->health, hp0 - 10);
+    ps.Update(farPlayer, 0.5f, nullptr);
+    CHECK_EQ(p->health, hp0 - 15);
+
+    // Past the 2.0 s duration: the last frame ticks, then the status clears.
+    ps.Update(farPlayer, 0.6f, nullptr);
+    CHECK(p->status == StatusEffect::None);
+    const int hpAfter = p->health;
+    ps.Update(farPlayer, 1.0f, nullptr);
+    CHECK_EQ(p->health, hpAfter);          // no further damage after expiry
+    PASS(); return 0; END_TEST();
+}
+
+static int test_status_chill_slows_and_restores() {
+    TEST("Chill: halves speed while active and restores it on expiry");
+    reset_pawn_system();
+    auto& ps = PawnSystem::Instance();
+    PawnDef def;
+    def.name = "ChillBot";
+    def.speed = 2.0f;
+    def.maxHealth = 100;
+    ps.RegisterDef(def);
+    int id = ps.Spawn({0, 0, 0}, "ChillBot");
+    Pawn* p = ps.Get(id);
+    CHECK(p != nullptr);
+
+    ps.ApplyStatus(*p, StatusEffect::Chill, 1.0f, 0, {160, 220, 255, 255});
+    CHECK(p->status == StatusEffect::Chill);
+    CHECK_APROX(p->speed, 1.0f, 0.001f);
+
+    ps.Update({100, 0, 0}, 1.1f, nullptr);   // past the 1.0 s duration
+    CHECK(p->status == StatusEffect::None);
+    CHECK_APROX(p->speed, 2.0f, 0.001f);
+
+    // Replacing a chill with a burn must undo the slow, not leave it stuck.
+    ps.ApplyStatus(*p, StatusEffect::Chill, 1.0f, 0, {160, 220, 255, 255});
+    CHECK_APROX(p->speed, 1.0f, 0.001f);
+    ps.ApplyStatus(*p, StatusEffect::Burn, 1.0f, 1, {255, 120, 40, 255});
+    CHECK(p->status == StatusEffect::Burn);
+    CHECK_APROX(p->speed, 2.0f, 0.001f);
+    PASS(); return 0; END_TEST();
+}
+
 static int test_bone_ids_fit_skeleton() {
     TEST("BoneIdsFitSkeleton rejects multi-skin boneIds");
 
@@ -1381,6 +1457,9 @@ int main() {
     failures += test_dead_pawn_keeps_drawing_until_corpse_timer_expires();
     failures += test_combat_feedback_cues();
     failures += test_spell_element_mapping();
+    failures += test_status_element_mapping();
+    failures += test_status_burn_ticks_and_expires();
+    failures += test_status_chill_slows_and_restores();
     failures += test_bone_ids_fit_skeleton();
 
     fprintf(stdout, "==================\n");

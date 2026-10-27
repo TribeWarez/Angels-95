@@ -139,6 +139,14 @@ int PawnSystem::Spawn(Vector3 pos, const char* defName) {
     p.forcedClipTimer = 0.0f;
     p.netPrevPosition = pos;
     p.netHasPrev = false;
+    // Status effects are per-instance too. A recycled slot must not inherit a
+    // live burn (it would damage the new occupant) or a chill speed reduction
+    // (it would move at half speed forever).
+    p.status = StatusEffect::None;
+    p.statusTimer = 0.0f;
+    p.statusTickTimer = 0.0f;
+    p.statusDamage = 0;
+    p.statusBaseSpeed = 0.0f;
     p.mesh.reset();
     // Slots are recycled from m_freeIds. If LEM::Spawn below fails, this must
     // not keep pointing at the previous occupant's script entity — Spawn() is
@@ -330,6 +338,43 @@ const Pawn* PawnSystem::ResolveMeleeTarget(const Vector3& origin,
     return best;
 }
 
+// ---------------------------------------------------------------------------
+// ApplyStatus — burn / chill, single-status and refresh-on-reapply
+// ---------------------------------------------------------------------------
+namespace {
+constexpr float kStatusTickSeconds = 0.5f;   // burn DoT cadence
+constexpr float kChillSpeedMul    = 0.5f;   // frost movement multiplier
+}
+
+void PawnSystem::ApplyStatus(Pawn& p, StatusEffect s, float duration,
+                             int tickDamage, Color color) {
+    if (!p.active || p.state == PawnState::DEAD) return;
+    if (s == StatusEffect::None || duration <= 0.0f) return;
+    // Server-owned pawns take damage server-side; a local DoT would be a second,
+    // client-authoritative source of truth. See StatusEffect.hpp.
+    if (p.networkControlled) return;
+
+    // Replacing a status must undo the previous one's movement change first, or
+    // a chill overwritten by a burn leaves the pawn permanently slowed.
+    if (p.status == StatusEffect::Chill && p.statusBaseSpeed > 0.0f)
+        p.speed = p.statusBaseSpeed;
+
+    p.status = s;
+    p.statusTimer = duration;
+    p.statusTickTimer = 0.0f;      // first tick on the next Update
+    p.statusDamage = tickDamage > 0 ? tickDamage : 0;
+    p.statusColor = color;
+    if (s == StatusEffect::Chill) {
+        if (p.statusBaseSpeed <= 0.0f) p.statusBaseSpeed = p.speed;
+        p.speed = p.statusBaseSpeed * kChillSpeedMul;
+    }
+
+    // One-shot application burst so the effect is visible at the moment it lands.
+    CombatFX::Instance().SpawnImpact(
+        {p.position.x, p.position.y + 0.7f, p.position.z},
+        {0.0f, 1.0f, 0.0f}, color, 8, 3.0f);
+}
+
 void PawnSystem::ApplyPawnDamage(Pawn& p, int damage) {
     if (!p.active || p.state == PawnState::DEAD) return;
     // Server-owned NPCs take damage via NPC_DAMAGE relay, not local hits
@@ -459,6 +504,18 @@ void PawnSystem::UpdateProjectiles(float dt) {
                     CombatFX::Instance().ArmMuzzleFlash(hitPos, 0.16f, p.tint, p.element);
                 }
                 ApplyPawnDamage(pawn, (int)p.damage);
+                // Elemental condition: fire burns, frost chills. Applied after the
+                // damage so a killing blow does not start a DoT on a corpse (the
+                // status apply rejects a DEAD pawn).
+                if (p.spell) {
+                    const StatusEffect st = StatusForElement(p.element);
+                    if (st != StatusEffect::None) {
+                        const float dur = (st == StatusEffect::Burn) ? 4.0f : 2.5f;
+                        const int tickDmg = (st == StatusEffect::Burn)
+                            ? (int)fmaxf(1.0f, p.damage * 0.05f) : 0;
+                        ApplyStatus(pawn, st, dur, tickDmg, p.tint);
+                    }
+                }
                 // Hit confirmation for the shooter: the impact/blood above is
                 // the 3D half, this drives the crosshair marker.
                 oz::CombatFeedback::Instance().ConfirmHit(pawn.state == PawnState::DEAD);
@@ -955,6 +1012,30 @@ void PawnSystem::Update(Vector3 playerPos, float dt,
         // Network-controlled pawns: the server owns AI/position � no local FSM
         // (prevents double simulation and fights over position).
         if (p.networkControlled) continue;
+
+        // Timed status (burn / chill). Ticked before the FSM so a burn kill stops
+        // the pawn on the frame it dies; local pawns only, matching ApplyStatus.
+        if (p.status != StatusEffect::None) {
+            p.statusTimer -= dt;
+            p.statusTickTimer -= dt;
+            if (p.statusTickTimer <= 0.0f) {
+                p.statusTickTimer = kStatusTickSeconds;
+                if (p.status == StatusEffect::Burn && p.statusDamage > 0)
+                    ApplyPawnDamage(p, p.statusDamage);   // handles death/corpse
+                // A light tell while the status lasts: a burst per tick, so it
+                // reads as a continuing condition rather than a one-off hit.
+                CombatFX::Instance().SpawnImpact(
+                    {p.position.x, p.position.y + 0.7f, p.position.z},
+                    {0.0f, 1.0f, 0.0f}, p.statusColor, 2, 1.2f);
+            }
+            if (p.statusTimer <= 0.0f) {
+                if (p.status == StatusEffect::Chill && p.statusBaseSpeed > 0.0f)
+                    p.speed = p.statusBaseSpeed;   // undo the slow
+                p.status = StatusEffect::None;
+                p.statusDamage = 0;
+            }
+            if (p.state == PawnState::DEAD) continue;
+        }
 
         // Snapshot for the horizontal-collision rollback below: the FSM ticks
         // move x/z directly, so the pre-tick position is what a wall test must

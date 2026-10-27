@@ -1,6 +1,7 @@
 #pragma once
 #include "LightningEntityDef.hpp"
 #include "../Pawn/EquipSlots.hpp"
+#include "../Renderer/SpellElement.hpp"
 #include "LightningScriptContext.hpp"
 #include "raylib.h"
 #include "raymath.h"   // Vector3Normalize in the stamina helpers
@@ -347,7 +348,9 @@ static constexpr int HOTBAR_SIZE = 8;
     // Public because the `apply_area_damage` opcode is drained by Core.hpp,
     // which owns the camera the centre comes from. One definition so the test
     // build (compiled without OMEGA_HAVE_PAWNSYSTEM) still links.
-    int  ApplyAreaDamage(const Vector3& centre, float radius, int damage);
+    int  ApplyAreaDamage(const Vector3& centre, float radius, int damage,
+                         SpellElement element = SpellElement::Arcane,
+                         Color tint = WHITE);
 
     // Resolve a cast immediately: spend, cooldown, on_cast, spawn/apply. Public
     // because the wind-up path in Update() (and the tests) need the phase split.

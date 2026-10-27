@@ -609,7 +609,7 @@ int LightningEntityManager::ResolveSpellCast(EntityInstance& ent,
             if (cur < maxHp) { SetPlayerHealth(fminf(cur + heal, maxHp)); hits = 1; }
         }
         if (radius > 0.0f)
-            hits += ApplyAreaDamage(centre, radius, (int)damage);
+            hits += ApplyAreaDamage(centre, radius, (int)damage, spellElement, spellColor);
 
         // on_hit only when something was actually affected, so a whiffed cast
         // does not fire the connect sound. Mirrors the melee !blocked rule.
@@ -759,7 +759,8 @@ int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vec
 // owns their health (see ApplyPawnDamage), so damaging them here would be a
 // second, client-authoritative source of truth - exactly the duplicate-damage
 // bug WeaponBehaviour used to have.
-int LightningEntityManager::ApplyAreaDamage(const Vector3& centre, float radius, int damage) {
+int LightningEntityManager::ApplyAreaDamage(const Vector3& centre, float radius, int damage,
+                                            SpellElement element, Color tint) {
     if (radius <= 0.0f || damage <= 0.0f) return 0;
     int hits = 0;
     for (const Pawn& p : PawnSystem::Instance().GetPawns()) {
@@ -770,7 +771,19 @@ int LightningEntityManager::ApplyAreaDamage(const Vector3& centre, float radius,
         const Vector3 body = Vector3Add(p.position, Vector3{0.0f, 1.0f, 0.0f});
         if (Vector3Distance(body, centre) > radius) continue;
         Pawn* target = PawnSystem::Instance().Get((int)p.id);
-        if (target) { PawnSystem::Instance().ApplyPawnDamage(*target, damage); hits++; }
+        if (target) {
+            PawnSystem::Instance().ApplyPawnDamage(*target, damage);
+            // An area spell applies its element to everything it touches, not
+            // just to the pawn the impact visual happened to cover.
+            const StatusEffect st = StatusForElement(element);
+            if (st != StatusEffect::None) {
+                const float dur = (st == StatusEffect::Burn) ? 4.0f : 2.5f;
+                const int tickDmg = (st == StatusEffect::Burn)
+                    ? (int)fmaxf(1.0f, (float)damage * 0.05f) : 0;
+                PawnSystem::Instance().ApplyStatus(*target, st, dur, tickDmg, tint);
+            }
+            hits++;
+        }
     }
     return hits;
 }

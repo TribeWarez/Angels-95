@@ -2,6 +2,7 @@
 #include "raylib.h"
 #include "../Renderer/LitLightning.hpp"
 #include "../Renderer/SpellElement.hpp"
+#include "StatusEffect.hpp"
 #include "../Renderer/Mesh/MeshCache.hpp"
 #include "../Physics/PhysicsInfo.hpp"
 #include "../Physics/PlayerPhysics.hpp"
@@ -141,6 +142,16 @@ struct Pawn {
     // Hover phase for `hover` defs (Floater). Visual only: it never writes
     // position.y, so collision/ground queries stay stable.
     float hoverPhase = 0.0f;
+
+    // Timed condition (see Pawn/StatusEffect.hpp). Single-status, refreshed on
+    // reapply, local pawns only. `statusBaseSpeed` is the pre-chill speed, so
+    // expiry can restore it without guessing at the def's value.
+    StatusEffect status = StatusEffect::None;
+    float statusTimer = 0.0f;
+    float statusTickTimer = 0.0f;
+    int   statusDamage = 0;         // per burn tick
+    float statusBaseSpeed = 0.0f;   // speed before the chill multiplier
+    Color statusColor{255, 255, 255, 255};
 
     Texture2D sprite;       // billboard frame (loaded externally)
     Sound scream;           // aggro sound (loaded externally)
@@ -427,6 +438,12 @@ public:
     // Apply damage to a pawn and transition to DEAD (with on_death script
     // hook) when its health drops to 0. Used by projectile hits and melee.
     void ApplyPawnDamage(Pawn& p, int damage);
+
+    // Apply (or replace) a timed status. `tickDamage` is per burn tick and is
+    // ignored for chill. A dead/inactive pawn is left alone. Single-status: a
+    // different status replaces the old one and clears its movement change.
+    void ApplyStatus(Pawn& p, StatusEffect s, float duration, int tickDamage,
+                     Color color);
 
     // play_clip opcode: force a named skeletal clip on every active pawn whose
     // def matches `defName`, for `hold` seconds (the FSM clip resumes after).
