@@ -13,6 +13,7 @@ entity "psychic_surge" : spell {
         projectile_count = 1
         projectile_scale = 1.6
         projectile_color = (0.85, 0.45, 1.0)
+        element = psychic
         cast_sound = GameData/Audio/Sounds/Skills/psychic_surge.wav
         cast_volume = 1.0
     }

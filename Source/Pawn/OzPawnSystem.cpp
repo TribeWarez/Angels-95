@@ -452,8 +452,12 @@ void PawnSystem::UpdateProjectiles(float dt) {
                     p.spell ? 6.5f : 4.0f);
                 if (!p.spell && g_goreEnabled)
                     CombatFX::Instance().SpawnBlood(hitPos, hitNormal, 12, 1.0f);
-                if (p.spell)
+                if (p.spell) {
                     CombatFX::Instance().ArmTransientLight(hitPos, p.tint, 0.18f, 6.0f);
+                    // Element-shaped flash at the contact, so a frost hit shows a
+                    // shard and a shock hit a star even in the same colour.
+                    CombatFX::Instance().ArmMuzzleFlash(hitPos, 0.16f, p.tint, p.element);
+                }
                 ApplyPawnDamage(pawn, (int)p.damage);
                 // Hit confirmation for the shooter: the impact/blood above is
                 // the 3D half, this drives the crosshair marker.
@@ -525,7 +529,7 @@ void PawnSystem::DrawProjectiles(Camera3D& camera, Shader litShader) {
         // billboard, no light, no particles) and it makes the element colour
         // visible in a dark corridor without spending a transient light slot.
         if (p.spell)
-            CombatFX::Instance().DrawGlow(camera, p.position, c, 0.85f);
+            CombatFX::Instance().DrawGlow(camera, p.position, c, 0.85f, p.element);
         // Optional glow sprite
         if (p.sprite && p.sprite->id > 0) {
             DrawBillboard(camera, *p.sprite, p.position, 0.5f, WHITE);

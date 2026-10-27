@@ -1266,6 +1266,27 @@ static int test_combat_feedback_cues() {
     PASS(); return 0; END_TEST();
 }
 
+static int test_spell_element_mapping() {
+    TEST("SpellElement: string mapping is explicit, unknown -> Arcane");
+    // The element is IDENTITY, not colour: Arc Bolt and Frost Lance are both
+    // blue, so deriving it from the tint would collapse them. Every spelling an
+    // author might reasonably use maps to the same value, and an unknown token
+    // degrades to Arcane instead of silently becoming "fire".
+    CHECK(SpellElementFromString("fire") == SpellElement::Fire);
+    CHECK(SpellElementFromString("flame") == SpellElement::Fire);
+    CHECK(SpellElementFromString("frost") == SpellElement::Frost);
+    CHECK(SpellElementFromString("ice") == SpellElement::Frost);
+    CHECK(SpellElementFromString("shock") == SpellElement::Shock);
+    CHECK(SpellElementFromString("lightning") == SpellElement::Shock);
+    CHECK(SpellElementFromString("psychic") == SpellElement::Psychic);
+    CHECK(SpellElementFromString("void") == SpellElement::Psychic);
+    CHECK(SpellElementFromString("holy") == SpellElement::Holy);
+    CHECK(SpellElementFromString("") == SpellElement::Arcane);
+    CHECK(SpellElementFromString("banana") == SpellElement::Arcane);
+    CHECK(SpellElementFromString("shock") != SpellElementFromString("frost"));
+    PASS(); return 0; END_TEST();
+}
+
 static int test_bone_ids_fit_skeleton() {
     TEST("BoneIdsFitSkeleton rejects multi-skin boneIds");
 
@@ -1359,6 +1380,7 @@ int main() {
     failures += test_projectile_miss();
     failures += test_dead_pawn_keeps_drawing_until_corpse_timer_expires();
     failures += test_combat_feedback_cues();
+    failures += test_spell_element_mapping();
     failures += test_bone_ids_fit_skeleton();
 
     fprintf(stdout, "==================\n");

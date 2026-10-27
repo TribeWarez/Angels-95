@@ -558,6 +558,16 @@ int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vec
                               (unsigned char)(spellCol[1] * 255.0f),
                               (unsigned char)(spellCol[2] * 255.0f), 255};
 
+    // Element identity, authored as `element = fire|frost|shock|psychic|holy`.
+    // Absent -> Arcane, so every existing spell keeps its current look. The
+    // colour alone cannot carry this: Arc Bolt and Frost Lance are both blue.
+    SpellElement spellElement = SpellElement::Arcane;
+    {
+        auto eit = ent->def->stats.strings.find("element");
+        if (eit != ent->def->stats.strings.end())
+            spellElement = SpellElementFromString(eit->second);
+    }
+
     ent->cooldownRemaining = cooldown;
     if (usesPe) SpendPsychicEnergy(cost); else SpendMana(cost);
     RunAction(ent, "on_cast");
@@ -594,7 +604,7 @@ int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vec
         if (radius > 0.0f) {
             // Two layers instead of one flat burst: a bright core flash at the
             // epicentre plus a wider spark ring, both in the spell's own colour.
-            CombatFX::Instance().ArmMuzzleFlash(centre, 0.22f, spellColor);
+            CombatFX::Instance().ArmMuzzleFlash(centre, 0.22f, spellColor, spellElement);
             CombatFX::Instance().SpawnImpact(centre, hitNormalOrAway(origin, direction),
                                              spellColor, 18, 7.0f);
             CombatFX::Instance().ArmTransientLight(centre, spellColor, 0.22f, 9.0f);
@@ -622,7 +632,7 @@ int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vec
     // the cast reads at the caster even before the bolt is visible. Without it a
     // spell had NO cast-side visual at all - the first thing the player saw was
     // a ball already in flight.
-    CombatFX::Instance().ArmMuzzleFlash(origin, 0.16f, spellColor);
+    CombatFX::Instance().ArmMuzzleFlash(origin, 0.16f, spellColor, spellElement);
     CombatFX::Instance().SpawnImpact(origin, direction, spellColor, 8, 5.0f);
 
     for (int i = 0; i < projCount; i++) {
@@ -649,6 +659,7 @@ int LightningEntityManager::CastSpell(int slot, const Vector3& origin, const Vec
         p.yawOffset = projYaw;
         p.tint = spellColor;
         p.spell = true;
+        p.element = spellElement;
         PawnSystem::Instance().SpawnProjectile(p);
     }
     return projCount;

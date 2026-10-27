@@ -1,6 +1,7 @@
 #pragma once
 #include "raylib.h"
 #include "../Renderer/LitLightning.hpp"
+#include "../Renderer/SpellElement.hpp"
 #include "../Renderer/Mesh/MeshCache.hpp"
 #include "../Physics/PhysicsInfo.hpp"
 #include "../Physics/PlayerPhysics.hpp"
@@ -278,6 +279,9 @@ struct ProjectileNode {
     // its own element colour for the burst, while a bullet keeps the gore and
     // the warm spark look.
     bool spell = false;
+    // Element identity (halo shape, future status effect). Only meaningful when
+    // `spell` is set; guns stay Arcane.
+    SpellElement element = SpellElement::Arcane;
 };
 
 // Pickup node - collectible items in the world

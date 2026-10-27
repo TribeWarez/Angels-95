@@ -24,6 +24,8 @@
 #include "raymath.h"
 #include "rlgl.h"      // rlBegin/rlSetTexture/rlDisableDepthMask for surface decals
 #include "LitLightning.hpp"
+#include "SpellElement.hpp"
+#include "../GameplayFlags.hpp"
 #include "../Particle/OzParticleSimulationManager.hpp"
 #include "../Package/PackageAssetLoader.hpp"
 #include "../Log.hpp"
@@ -104,23 +106,13 @@ public:
         m_decalTex = LoadTextureFromImage(img);
         UnloadImage(img);
 
-        // A separate soft glow for the muzzle flash. The decal texture has a
-        // dark core (it is a scorch mark); a flash wants a bright centre.
-        Image glow = GenImageColor(64, 64, BLANK);
-        Color* gp = (Color*)glow.data;
-        for (int y = 0; y < 64; y++) {
-            for (int x = 0; x < 64; x++) {
-                float dx = (x - 31.5f) / 31.5f;
-                float dy = (y - 31.5f) / 31.5f;
-                float r = sqrtf(dx * dx + dy * dy);
-                if (r > 1.0f) r = 1.0f;
-                float a = 1.0f - r;
-                a = a * a;   // tighter falloff, brighter core
-                gp[y * 64 + x] = {255, 255, 255, (unsigned char)(255.0f * a)};
-            }
-        }
-        m_glowTex = LoadTextureFromImage(glow);
-        UnloadImage(glow);
+        // Soft glows, one per spell element. They are generated rather than
+        // authored: a 64x64 alpha falloff is cheap, deterministic, needs no
+        // build-data/package wiring, and a missing PNG cannot silently turn a
+        // spell into a square. The shape is what makes frost read as frost
+        // independently of its tint - see SpellElement.hpp.
+        for (int i = 0; i < kGlowShapeCount; i++)
+            m_glowTex[i] = LoadTextureFromImage(MakeGlowImage((SpellElement)i));
 
         // Blood splat decals. The authored art is JPG (no alpha) painted on a
         // black background; raylib's decoder rejects the shipped JPGs, so they
@@ -145,7 +137,10 @@ public:
 
     void Shutdown() {
         if (m_decalTex.id != 0) { UnloadTexture(m_decalTex); m_decalTex = {0}; }
-        if (m_glowTex.id != 0)  { UnloadTexture(m_glowTex);  m_glowTex = {0}; }
+        for (auto& t : m_glowTex) {
+            if (t.id != 0) UnloadTexture(t);
+            t = Texture2D{0};
+        }
         for (int i = 0; i < m_bloodCount; i++) {
             if (m_bloodTex[i].id != 0) UnloadTexture(m_bloodTex[i]);
             m_bloodTex[i] = Texture2D{0};
@@ -167,7 +162,8 @@ public:
     }
 
     void ArmMuzzleFlash(Vector3 pos, float duration = 0.12f,
-                        Color color = {255, 200, 120, 255}) {
+                        Color color = {255, 200, 120, 255},
+                        SpellElement element = SpellElement::Arcane) {
         // Reject a non-positive duration at ARM time, not at draw time. Draw3D
         // computes `f.timer / f.duration`; a zero duration there is 0/0 -> NaN,
         // which feeds a NaN radius into DrawSphere and a NaN into the colour
@@ -175,7 +171,7 @@ public:
         // ArmMuzzleFlash did not.
         if (duration <= 0.0f) return;
         EnsureInit();
-        Flash f{pos, duration, duration, color};
+        Flash f{pos, duration, duration, color, element};
         if (m_flashes.size() >= 8) m_flashes.erase(m_flashes.begin());
         m_flashes.push_back(f);
         // Also cast real light. The visible flash was an unlit DrawSphere, so it
@@ -190,10 +186,12 @@ public:
     // used: a flash is a one-shot at a fixed point, so a moving round would trail
     // a string of them behind it. Must be called inside the 3D pass; a missing
     // glow texture (headless / Init failed) is a no-op rather than a crash.
-    void DrawGlow(const Camera3D& camera, Vector3 pos, Color color, float size) {
-        if (m_glowTex.id == 0 || size <= 0.0f) return;
+    void DrawGlow(const Camera3D& camera, Vector3 pos, Color color, float size,
+                  SpellElement element = SpellElement::Arcane) {
+        const Texture2D tex = m_glowTex[GlowIndex(element)];
+        if (tex.id == 0 || size <= 0.0f) return;
         BeginBlendMode(BLEND_ADDITIVE);
-        DrawBillboard(camera, m_glowTex, pos, size, color);
+        DrawBillboard(camera, tex, pos, size, color);
         EndBlendMode();
     }
 
@@ -349,7 +347,9 @@ public:
                            (unsigned char)(f.color.g * (0.55f + 0.45f * t)),
                            (unsigned char)(f.color.b * t),
                            (unsigned char)(f.color.a * t)};
-                DrawBillboard(camera, m_glowTex, f.pos, 0.55f + 0.35f * t, c);
+                const Texture2D tex = m_glowTex[GlowIndex(f.element)];
+                if (tex.id != 0)
+                    DrawBillboard(camera, tex, f.pos, 0.55f + 0.35f * t, c);
             }
             EndBlendMode();
         }
@@ -408,7 +408,70 @@ public:
     size_t FlashCount() const { return m_flashes.size(); }
 
 private:
-    struct Flash { Vector3 pos; float timer; float duration; Color color; };
+    static constexpr int kGlowShapeCount = 6;   // one per SpellElement value
+
+    static int GlowIndex(SpellElement e) {
+        const int i = (int)e;
+        return (i >= 0 && i < kGlowShapeCount) ? i : 0;
+    }
+
+    // A 64x64 white alpha sprite. The SHAPE is the element's identity: a soft
+    // radial for arcane/holy, a teardrop for fire, a six-arm shard for frost and
+    // a four-point star for shock. Generated at Init so there is no art to lose
+    // and no package entry to keep in sync.
+    static Image MakeGlowImage(SpellElement e) {
+        Image img = GenImageColor(64, 64, BLANK);
+        Color* px = (Color*)img.data;
+        for (int y = 0; y < 64; y++) {
+            for (int x = 0; x < 64; x++) {
+                float dx = (x - 31.5f) / 31.5f;
+                float dy = (y - 31.5f) / 31.5f;
+                float r = sqrtf(dx * dx + dy * dy);
+                if (r > 1.0f) r = 1.0f;
+                float core = (1.0f - r) * (1.0f - r);
+                float a = core;
+                switch (e) {
+                    case SpellElement::Fire: {
+                        // Teardrop: brighter above the centre, tail below.
+                        a = core * (0.55f + 0.45f * (1.0f - (dy + 1.0f) * 0.5f));
+                        break;
+                    }
+                    case SpellElement::Frost: {
+                        // Six-arm shard: cos(6*theta) sharpened into spikes.
+                        float th = atan2f(dy, dx);
+                        float arms = 0.5f + 0.5f * cosf(6.0f * th);
+                        arms = powf(arms, 6.0f);
+                        a = core * (0.25f + 0.95f * arms);
+                        break;
+                    }
+                    case SpellElement::Shock: {
+                        // Four-point star, sharper and shorter than frost.
+                        float th = atan2f(dy, dx);
+                        float arms = 0.5f + 0.5f * cosf(4.0f * th);
+                        arms = powf(arms, 10.0f);
+                        a = core * (0.20f + 1.10f * arms);
+                        break;
+                    }
+                    case SpellElement::Psychic: {
+                        // Concentric ring: a mind-effect, not a flame.
+                        float ring = expf(-powf((r - 0.55f) / 0.16f, 2.0f));
+                        a = core * (0.30f + 0.85f * ring);
+                        break;
+                    }
+                    case SpellElement::Holy:
+                    case SpellElement::Arcane:
+                        break;   // plain radial
+                }
+                if (a > 1.0f) a = 1.0f;
+                if (a < 0.0f) a = 0.0f;
+                px[y * 64 + x] = {255, 255, 255, (unsigned char)(255.0f * a)};
+            }
+        }
+        return img;
+    }
+
+    struct Flash { Vector3 pos; float timer; float duration; Color color;
+                   SpellElement element; };
     struct Decal { Vector3 pos{0, 0, 0}; Vector3 normal{0, 1, 0}; float size = 0.35f;
                    Color color{255, 255, 255, 255}; Texture2D tex{0}; float age = -1.0f; };
     struct Tracer { Vector3 a, b; Color color; float life, maxLife; };
@@ -456,9 +519,9 @@ private:
     std::vector<Tracer> m_tracers;
     std::vector<Decal> m_decals;
     size_t m_nextDecal = 0;
+    Texture2D m_glowTex[kGlowShapeCount]{};
 
     Texture2D m_decalTex{0};
-    Texture2D m_glowTex{0};
     Texture2D m_bloodTex[kMaxBloodTex]{};
     int m_bloodCount = 0;
 };
