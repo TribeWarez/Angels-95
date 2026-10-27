@@ -1,4 +1,4 @@
-#include "OzPawnSystem.hpp"
+﻿#include "OzPawnSystem.hpp"
 #include "../Renderer/OzAssetMapper.hpp"
 #include "../Package/PackageAssetLoader.hpp"
 #include "../Renderer/EngineBillboard.hpp"
@@ -139,6 +139,18 @@ int PawnSystem::Spawn(Vector3 pos, const char* defName) {
     p.forcedClipTimer = 0.0f;
     p.netPrevPosition = pos;
     p.netHasPrev = false;
+    // Network ownership is per-instance too, and Despawn does NOT clear it: the
+    // server stamps it on a freshly spawned NPC (Main.cpp), so a slot recycled
+    // from an earlier multiplayer world would come back server-owned in single
+    // player - no local FSM (the NPC stands still), no local damage (ApplyPawnDamage
+    // returns early, so a melee swing cannot kill it), no contact damage
+    // (IsPlayerAttacked skips it), and MELEE_HIT reports aimed at the previous
+    // occupant's netNpcIndex on a server that is not there. The identity fields
+    // travel with the flag, so they are reset together.
+    p.networkControlled = false;
+    p.netWorldIndex     = -1;
+    p.netNpcIndex       = -1;
+    p.netPartitionIndex = -1;
     // Status effects are per-instance too. A recycled slot must not inherit a
     // live burn (it would damage the new occupant) or a chill speed reduction
     // (it would move at half speed forever).
@@ -350,14 +362,28 @@ void PawnSystem::ApplyStatus(Pawn& p, StatusEffect s, float duration,
                              int tickDamage, Color color) {
     if (!p.active || p.state == PawnState::DEAD) return;
     if (s == StatusEffect::None || duration <= 0.0f) return;
-    // Server-owned pawns take damage server-side; a local DoT would be a second,
-    // client-authoritative source of truth. See StatusEffect.hpp.
-    if (p.networkControlled) return;
 
     // Replacing a status must undo the previous one's movement change first, or
     // a chill overwritten by a burn leaves the pawn permanently slowed.
-    if (p.status == StatusEffect::Chill && p.statusBaseSpeed > 0.0f)
-        p.speed = p.statusBaseSpeed;
+    //
+    // This runs BEFORE the networkControlled guard below and releases the status
+    // outright, because that guard is an early RETURN: anything after it is
+    // skipped. A chilled pawn that becomes server-owned mid-life would otherwise
+    // keep the 0.5x speed forever - Update() early-outs for those pawns too, so
+    // nothing would ever reach the expiry block that restores it.
+    if (p.status != StatusEffect::None) {
+        if (p.status == StatusEffect::Chill && p.statusBaseSpeed > 0.0f)
+            p.speed = p.statusBaseSpeed;
+        p.status = StatusEffect::None;
+        p.statusTimer = 0.0f;
+        p.statusTickTimer = 0.0f;
+        p.statusDamage = 0;
+        p.statusBaseSpeed = 0.0f;
+    }
+
+    // Server-owned pawns take damage server-side; a local DoT would be a second,
+    // client-authoritative source of truth. See StatusEffect.hpp.
+    if (p.networkControlled) return;
 
     p.status = s;
     p.statusTimer = duration;
@@ -1387,27 +1413,51 @@ DoorNode* PawnSystem::GetDoor(int id) {
 }
 
 Vector4 PawnSystem::SampleWind(Vector3 worldPos) const {
-    Vector3 dir = {0, 0, 0};
-    float strength = 0.0f;
-    float freq = 1.0f;
+    Vector3 dirAccum = {0.0f, 0.0f, 0.0f};
+    float strengthAccum = 0.0f;
+    float freqAccum = 0.0f;
+    float weightSum = 0.0f;
+
     for (const auto& z : m_windZones) {
         if (!z.active) continue;
+
+        // Hard AABB test (keep for now)
         if (worldPos.x < z.bounds.min.x || worldPos.x > z.bounds.max.x ||
             worldPos.y < z.bounds.min.y || worldPos.y > z.bounds.max.y ||
-            worldPos.z < z.bounds.min.z || worldPos.z > z.bounds.max.z) continue;
-        dir.x += z.direction.x * z.strength;
-        dir.z += z.direction.z * z.strength;
-        strength += z.strength;
-        freq = z.frequency;
+            worldPos.z < z.bounds.min.z || worldPos.z > z.bounds.max.z)
+            continue;
+
+        float w = z.strength;
+        if (w <= 0.0f) continue;
+
+        dirAccum.x += z.direction.x * w;
+        dirAccum.z += z.direction.z * w;
+        strengthAccum += w;
+        freqAccum += z.frequency * w;
+        weightSum += w;
     }
-    if (strength <= 0.0f) return {0, 0, 0, 0};
-    float len = sqrtf(dir.x * dir.x + dir.z * dir.z);
-    if (len > 1e-4f) { dir.x /= len; dir.z /= len; }
-    return {dir.x, dir.z, strength, freq};
+
+    if (weightSum < 1e-5f)
+        return {0.0f, 0.0f, 0.0f, 0.0f};
+
+    // Normalize direction
+    float len = sqrtf(dirAccum.x * dirAccum.x + dirAccum.z * dirAccum.z);
+    if (len > 1e-4f) {
+        dirAccum.x /= len;
+        dirAccum.z /= len;
+    }
+
+    // Average strength + hard safety clamp
+    float strength = strengthAccum / weightSum;
+    strength = std::min(strength, 2.5f);          // ← tune this (1.5 – 3.0)
+
+    float freq = freqAccum / weightSum;
+
+    return {dirAccum.x, dirAccum.z, strength, freq};
 }
 
 // ---------------------------------------------------------------------------
-// ClearWeaponPickupCache � release every cached render mesh asset
+// ClearWeaponPickupCache - release every cached render mesh asset
 // ---------------------------------------------------------------------------
 void PawnSystem::ClearWeaponPickupCache() {
     for (auto& p : m_pawns) p.mesh.reset();

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "raylib.h"
 #include "../Renderer/LitLightning.hpp"
 #include "../Renderer/SpellElement.hpp"
@@ -222,8 +222,8 @@ struct WindZoneNode {
     uint32_t id = 0;
     BoundingBox bounds;
     Vector3 direction{1, 0, 0};  // wind direction (XZ used for sway)
-    float strength = 1.0f;       // sway amplitude
-    float frequency = 1.0f;      // gust frequency
+    float strength = 0.1f;       // sway amplitude
+    float frequency = 0.1f;      // gust frequency
     bool active = true;
 };
 

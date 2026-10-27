@@ -56,12 +56,28 @@ void main()
 
     vec3 pos = skinnedPos.xyz;
 
-    // Sway scales with height above the mesh base so trunks/roots stay planted.
+    // --- Wind displacement (replace the old block) ---
     float h = clamp((pos.y - windBaseY) / max(windHeight, 0.001), 0.0, 1.0);
-    float sway = h * h;
-    float phase = windTime * windParams.w + pos.x * 0.15 + pos.z * 0.15;
-    float gust = 0.7 + 0.3 * sin(phase);
-    vec2 off = windParams.xy * (windParams.z * gust * sway);
+    float sway = h * h;                    // still quadratic
+
+    // Stronger spatial variation so neighboring vertices differ
+    float phase1 = windTime * windParams.w + pos.x * 0.7 + pos.z * 0.5;
+    float phase2 = windTime * windParams.w * 1.7 + pos.x * 1.3 - pos.z * 0.9;
+
+    // Two-layer motion (main sway + smaller gusts)
+    float mainSway = sin(phase1);
+    float turbulence = sin(phase2) * 0.35;
+
+    float gust = 0.65 + 0.35 * mainSway + turbulence;
+
+    // Clamp strength so it can never explode
+    float strength = min(windParams.z, 1.8);   // tune this value
+
+    vec2 off = windParams.xy * (strength * gust * sway);
+
+    // Optional safety clamp on the actual displacement
+    off = clamp(off, vec2(-0.8), vec2(0.8));
+
     pos.x += off.x;
     pos.z += off.y;
 
