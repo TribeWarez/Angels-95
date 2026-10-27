@@ -376,14 +376,17 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
                     } catch (...) {}
                     // Per-zone physics overrides (named kwargs; absent = defaults)
                     if (s.rfind("gravity_vector=", 0) == 0) {
-                        // "(x,y,z)" or "x,y,z" in ENGINE space (Y-up; -Y is down).
+                        // "(x,y,z)" or "x,y,z" authored in OZONE space (Z-up).
                         // The token arrives with no embedded spaces (the parser
                         // splits on whitespace), so commas delimit. Parens are
-                        // stripped before splitting.
+                        // stripped before splitting. Stored in ENGINE space
+                        // (Y-up): engine(x,y,z) = ozone(x,z,y), matching the
+                        // loader's bounds conversion, so PhysicsInfo stays
+                        // engine-space end to end.
                         std::string val = s.substr(strlen("gravity_vector="));
                         std::string clean;
                         for (char c : val) if (c != '(' && c != ')') clean += c;
-                        float comps[3] = {0.0f, 0.0f, 0.0f};
+                        float comps[3] = {0.0f, 0.0f, 0.0f}; // ozone (x, y, z)
                         int n = 0;
                         size_t start = 0;
                         while (n < 3) {
@@ -396,8 +399,10 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
                             start = comma + 1;
                         }
                         prim.hasPhysics = true;
-                        prim.physics.gravityVector = {comps[0], comps[1], comps[2]};
-                        prim.physics.gravity = -comps[1]; // Y magnitude (sign-flipped)
+                        // ozone (x, y, z) -> engine (x, z, y)
+                        prim.physics.gravityVector = {comps[0], comps[2], comps[1]};
+                        // `gravity` stays the magnitude of "down" (ozone -z).
+                        prim.physics.gravity = -comps[2];
                         continue;
                     }
                     if (s.rfind("gravity=", 0) == 0 ||
@@ -420,7 +425,7 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
                         prim.hasPhysics = true;
                         if (key == "gravity=") {
                             prim.physics.gravity = v;
-                            prim.physics.gravityVector.y = -v; // scalar -> straight down
+                            prim.physics.gravityVector = {0.0f, -v, 0.0f}; // straight down
                         }
                         else if (key == "jump=")        prim.physics.jumpSpeed = v;
                         else if (key == "terminal=")    prim.physics.terminalVelocity = v;

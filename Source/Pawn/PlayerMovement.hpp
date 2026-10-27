@@ -42,6 +42,39 @@ public:
     bool inWater = false;
     bool isClimbing = false;   // inside a `zone ladder`; gravity suspended
 
+    // --- Gravity-zone smoothing (Phase 7.1) ---
+    // The vertical integrator falls along the active zone's gravity VECTOR, but
+    // a hard swap at a zone boundary teleports the fall. These three fields lerp
+    // the effective gravity from the old vector to the new one over ~0.3 s so a
+    // gravity-zone entry reads as a push, not a snap. All in ENGINE space (Y-up).
+    Vector3 gravityFrom{0.0f, -18.0f, 0.0f};
+    Vector3 gravityTarget{0.0f, -18.0f, 0.0f};
+    float   gravityBlend = 1.0f;   // 0..1; 1 = fully settled at target
+    static constexpr float kGravityLerpSeconds = 0.3f;
+
+    // Effective gravity, smoothstep-eased between gravityFrom and gravityTarget.
+    Vector3 EffectiveGravity() const {
+        float s = gravityBlend;
+        s = s * s * (3.0f - 2.0f * s); // smoothstep
+        return { gravityFrom.x + (gravityTarget.x - gravityFrom.x) * s,
+                 gravityFrom.y + (gravityTarget.y - gravityFrom.y) * s,
+                 gravityFrom.z + (gravityTarget.z - gravityFrom.z) * s };
+    }
+    // Point the target at a new gravity vector. No-op when it is (practically)
+    // the same as the current target, so a stable zone costs nothing per step.
+    void RetargetGravity(const Vector3& target) {
+        if (fabsf(target.x - gravityTarget.x) < 0.01f &&
+            fabsf(target.y - gravityTarget.y) < 0.01f &&
+            fabsf(target.z - gravityTarget.z) < 0.01f) return;
+        gravityFrom = EffectiveGravity();
+        gravityTarget = target;
+        gravityBlend = 0.0f;
+    }
+    void AdvanceGravity(float dt) {
+        if (gravityBlend < 1.0f)
+            gravityBlend = fminf(1.0f, gravityBlend + dt / kGravityLerpSeconds);
+    }
+
     // --- Controller tuning ---
     float BaseSpeed = 5.4f;          // units/sec at movement_speed == 1
     float SprintMultiplier = 1.6f;   // hold Shift

@@ -358,18 +358,21 @@ static void test_zone_gravity_vector() {
     auto e = OzoneParser::parse_string(
         "zone gravity -8 -8 -8 8 8 8 1 gravity_vector=(0,0,-18) name=grav_shaft\n");
     auto& p = e[0];
+    // OZONE Z-up (0,0,-18) == "straight down" -> engine Y-up (0,-18,0).
     bool ok = e.size() == 1 && p.type == OzonePrimitiveType::ENTITY_ZONE
         && p.entitySubType == "gravity"
         && p.name == "grav_shaft"
         && p.hasPhysics
         && p.physics.gravityVector.x == 0.0f
-        && p.physics.gravityVector.y == 0.0f
-        && p.physics.gravityVector.z == -18.0f;
+        && p.physics.gravityVector.y == -18.0f
+        && p.physics.gravityVector.z == 0.0f
+        && p.physics.gravity == 18.0f;
     if (ok) { pass_count++; printf("PASS\n"); }
-    else printf("FAIL: gv=(%f,%f,%f)\n",
+    else printf("FAIL: gv=(%f,%f,%f) g=%f\n",
                 e.size() ? p.physics.gravityVector.x : -1.0f,
                 e.size() ? p.physics.gravityVector.y : -1.0f,
-                e.size() ? p.physics.gravityVector.z : -1.0f);
+                e.size() ? p.physics.gravityVector.z : -1.0f,
+                e.size() ? p.physics.gravity : -1.0f);
 }
 
 static void test_zone_gravity_type() {
