@@ -1,0 +1,124 @@
+{
+  "name": "angels95-ozls",
+  "displayName": "Angels95 LightningScript & Pawn Defs",
+  "description": "LightningScript (.ozls) and pawn definition (.cfg) support for Angels95 / OmegaTech: syntax highlighting, Outline/Symbols tree and a structure tree view.",
+  "version": "1.0.0",
+  "publisher": "TribeWarez",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "keywords": [
+    "ozls",
+    "lightningscript",
+    "angels95",
+    "omegatech",
+    "pawn",
+    "entity",
+    "outline"
+  ],
+  "activationEvents": [
+    "onLanguage:ozls",
+    "onLanguage:ozpawn",
+    "onView:angels95OzdStructure"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "ozls",
+        "aliases": [
+          "LightningScript",
+          "ozls"
+        ],
+        "extensions": [
+          ".ozls"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "ozpawn",
+        "aliases": [
+          "Angel Pawn Def",
+          "Pawn CFG"
+        ],
+        "filenamePatterns": [
+          "**/PawnDefs/*.cfg",
+          "**/Pawn/Player/characters.cfg"
+        ],
+        "configuration": "./pawn-language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ozls",
+        "scopeName": "source.ozls",
+        "path": "./syntaxes/ozls.tmLanguage.json"
+      },
+      {
+        "language": "ozpawn",
+        "scopeName": "source.ozpawn",
+        "path": "./syntaxes/ozpawn.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "ozls",
+        "path": "./snippets/ozls.json"
+      },
+      {
+        "language": "ozpawn",
+        "path": "./snippets/ozpawn.json"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "angels95OzdStructure",
+          "name": "LightningScript",
+          "when": "editorLangId == ozls || editorLangId == ozpawn"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "angels95Ozd.refresh",
+        "title": "Refresh LightningScript Tree",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "angels95Ozd.reveal",
+        "title": "Reveal in LightningScript Tree"
+      },
+      {
+        "command": "angels95Ozd.openWorkspaceDef",
+        "title": "Open Def"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "angels95Ozd.refresh",
+          "when": "view == angels95OzdStructure",
+          "group": "navigation@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "angels95Ozd.reveal",
+          "when": "false"
+        },
+        {
+          "command": "angels95Ozd.openWorkspaceDef",
+          "when": "false"
+        }
+      ]
+    }
+  }
+}

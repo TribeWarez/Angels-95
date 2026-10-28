@@ -96,6 +96,66 @@ void PawnSystem::RegisterDef(const PawnDef& def) {
 }
 
 // ---------------------------------------------------------------------------
+// UpdateDef / RemoveDef — editor hot reload
+// ---------------------------------------------------------------------------
+bool PawnSystem::UpdateDef(const PawnDef& def) {
+    PawnDef* existing = FindDef(def.name.c_str());
+    if (!existing) return false;
+
+    // Fields that decide WHICH asset is loaded. A change here invalidates the
+    // mesh each live pawn of this def already resolved.
+    const bool assetChanged =
+        existing->model_path    != def.model_path    ||
+        existing->model_texture != def.model_texture ||
+        existing->mesh_type     != def.mesh_type     ||
+        existing->anim_file     != def.anim_file     ||
+        existing->model_scale   != def.model_scale;
+    // The billboard sprite is loaded per pawn at Spawn(), so it needs the same
+    // treatment as the mesh when its path changes.
+    const bool spriteChanged = existing->sprite_path != def.sprite_path;
+
+    *existing = def;
+    // The bounds-derived ground offset belongs to the OLD mesh. PawnDef is
+    // copied wholesale, so a stale "resolved" flag would keep the next asset
+    // floating by the previous model's pivot offset.
+    existing->ground_offset_resolved = false;
+    existing->auto_ground_offset = 0.0f;
+
+    // Spawn() copies the movement/combat knobs onto the instance, so an edit
+    // would otherwise only affect FUTURE spawns. Health is instance state and is
+    // intentionally not reset.
+    for (auto& p : m_pawns) {
+        if (!p.active) continue;
+        if (FindDef(p.defName.c_str()) != existing) continue;
+        p.speed       = def.speed;
+        p.aggroRange  = def.aggroRange;
+        p.attackRange = def.attackRange;
+        p.damage      = def.damage;
+        if (assetChanged) p.mesh.reset();
+        if (spriteChanged) {
+            if (p.sprite.id > 0) UnloadTexture(p.sprite);
+            p.sprite = Texture2D{0};
+            if (!def.sprite_path.empty())
+                p.sprite = LoadTextureWithFallback(def.sprite_path.c_str());
+            if (p.sprite.id == 0) {
+                const std::string fallback =
+                    std::string("GameData/Pawn/Pawns/") + def.name + ".png";
+                p.sprite = LoadTextureWithFallback(fallback.c_str());
+            }
+        }
+    }
+    return true;
+}
+
+bool PawnSystem::RemoveDef(const char* name) {
+    PawnDef* def = FindDef(name);
+    if (!def) return false;
+    // FindDef returned a pointer into m_defs, so the erase slot is its index.
+    m_defs.erase(m_defs.begin() + (def - m_defs.data()));
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // Spawn
 // ---------------------------------------------------------------------------
 int PawnSystem::Spawn(Vector3 pos, const char* defName) {
@@ -410,7 +470,7 @@ void PawnSystem::ApplyPawnDamage(Pawn& p, int damage) {
         // Gore on death: a gib burst at the body plus a ground splat, before the
         // pawn is hidden. Gated on the "Gore" setting.
         if (g_goreEnabled)
-            CombatFX::Instance().SpawnGibs({p.position.x, p.position.y + 0.6f, p.position.z});
+            CombatFX::Instance().SpawnGibs({p.position.x, p.position.y, p.position.z});
         // Do NOT deactivate here. `active = false` made the pawn vanish on the
         // frame it died, which also made the DEAD branch of DrawAll (and so
         // `anim_death`, which every def is allowed to author) unreachable. The
@@ -1437,7 +1497,7 @@ Vector4 PawnSystem::SampleWind(Vector3 worldPos) const {
         weightSum += w;
     }
 
-    if (weightSum < 1e-5f)
+    if (weightSum < 1e-5f) 
         return {0.0f, 0.0f, 0.0f, 0.0f};
 
     // Normalize direction

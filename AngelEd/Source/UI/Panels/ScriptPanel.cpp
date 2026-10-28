@@ -170,10 +170,43 @@ static void BuildScriptDetail(int sel, std::string& out) {
     BuildDefSummary(defs[e.defIndex], e.path, -1, out);
 }
 
+void RefreshScriptManager() {
+    std::string keep;
+    HWND list = g_editorPanels.hScriptMgr
+        ? GetDlgItem((HWND)g_editorPanels.hScriptMgr, ID_SCRIPT_LIST) : nullptr;
+    HWND detail = g_editorPanels.hScriptMgr
+        ? GetDlgItem((HWND)g_editorPanels.hScriptMgr, ID_SCRIPT_DETAIL) : nullptr;
+    if (list) {
+        const int sel = (int)SendMessage(list, LB_GETCURSEL, 0, 0);
+        if (sel >= 0 && sel < (int)g_scripts.size()) keep = g_scripts[sel].name;
+    }
+
+    ScanScriptFiles();   // repopulates the listbox via WM_USER + 50
+
+    if (list && !keep.empty()) {
+        // LB_RESETCONTENT drops the selection, and a programmatic LB_SETCURSEL
+        // does not send LBN_SELCHANGE - so restore BOTH the row and the detail
+        // text here. Without this a hot reload makes the next "Edit" act on a
+        // different def while the detail pane still describes the old one.
+        for (int i = 0; i < (int)g_scripts.size(); i++) {
+            if (g_scripts[i].name != keep) continue;
+            SendMessage(list, LB_SETCURSEL, i, 0);
+            if (detail) {
+                std::string text;
+                BuildScriptDetail(i, text);
+                SetWindowTextA(detail, text.c_str());
+            }
+            break;
+        }
+    }
+}
+
 void ShowScriptManager(bool show) {
     g_editorPanels.showScriptMgr = show;
     if (g_editorPanels.hScriptMgr) {
-        if (show) SendMessage((HWND)g_editorPanels.hScriptMgr, WM_USER + 50, 0, 0);
+        // Reopening is also the moment a def created/edited OUTSIDE the editor
+        // first becomes visible, so rescan rather than repainting a stale list.
+        if (show) RefreshScriptManager();
         ShowWindow((HWND)g_editorPanels.hScriptMgr, show ? SW_SHOW : SW_HIDE);
     }
 }

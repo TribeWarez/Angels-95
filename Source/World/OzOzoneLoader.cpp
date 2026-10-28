@@ -1,6 +1,7 @@
 #include "OzOzoneLoader.hpp"
 #include "rlgl.h"
 #include "OzoneFrustum.hpp"
+#include "../GameplayFlags.hpp"
 #include "../Renderer/OzAssetMapper.hpp"
 #include "../Renderer/SurfaceMaterial.hpp"
 #include "../Renderer/CullState.hpp"
@@ -2709,11 +2710,32 @@ void OzoneLoader::SetWorldAmbient(float r, float g, float b, float a) {
 
 void OzoneLoader::SetWorldFog(const float color[3], float start, float end,
                               float density, float intensity) {
-    if (color) {
-        m_worldFogColor[0] = color[0];
-        m_worldFogColor[1] = color[1];
-        m_worldFogColor[2] = color[2];
+    // --- player fog tuning ---------------------------------------------------
+    // Applied HERE because this is the single store every fog path writes
+    // through: level defaults, skyzone on_enter/on_exit, script set_fog /
+    // restore_fog and the volumetric env-zone path all end up in this function,
+    // and the three shader programs read the values back out of it (LitFog and
+    // Wind each frame, SurfaceMaterial via SetFog). Applying an override at the
+    // four call sites instead is how the ambient/fog asymmetry bug happened.
+    //
+    // g_fogDensityScale always applies (it is a "how thick is the haze" knob
+    // that composes with the level). g_fogOverride replaces the AUTHORED values,
+    // so a level's fog is only discarded when the player asked for that.
+    float c[3] = { m_worldFogColor[0], m_worldFogColor[1], m_worldFogColor[2] };
+    if (color) { c[0] = color[0]; c[1] = color[1]; c[2] = color[2]; }
+    if (g_fogOverride) {
+        start   = g_fogStart;
+        end     = g_fogEnd;
+        density = g_fogDensity;
+        c[0] = g_fogColorR / 255.0f;
+        c[1] = g_fogColorG / 255.0f;
+        c[2] = g_fogColorB / 255.0f;
     }
+    density *= g_fogDensityScale;
+
+    m_worldFogColor[0] = c[0];
+    m_worldFogColor[1] = c[1];
+    m_worldFogColor[2] = c[2];
     m_worldFogStart = start;
     m_worldFogEnd = end;
     m_worldFogDensity = density;

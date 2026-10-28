@@ -27,8 +27,19 @@ static constexpr float kViewModelTargetSize = 0.55f;
 //
 // Rendering either at scale 1.0 is wrong: the pistol is a speck and the weaver
 // fills the screen. Rather than hand-tuning every def, fit the loaded mesh to
-// the target size and let viewmodel_scale act as a relative tuning multiplier on
-// top of that.
+// the target size and let viewmodel_scale act as a RELATIVE HELD LENGTH on top
+// of that.
+//
+// The fit normalises the LONGEST axis, so `viewmodel_scale` reads as "how long
+// is this in the hand, where 1.0 is 0.55 units" - it is NOT a uniform size
+// multiplier. That is what makes a pistol at 1.0 as long as a rifle at 1.0 and
+// therefore absurdly large; the shipped defs use ~0.62 for a handgun, ~0.76 for
+// an SMG and ~0.95 for a rifle/shotgun.
+//
+// The forward offset matters as much as the length: the offset places the
+// model's CENTRE, so the near end sits at (offset.z - length/2) from the eye. At
+// 0.45 with a 0.55-long gun that is 0.17 - the grip is inside your face and the
+// perspective does the rest. Ship offsets that leave the near end >= ~0.5.
 static float ComputeFitScale(const BoundingBox& b) {
     const float ex = std::fabs(b.max.x - b.min.x);
     const float ey = std::fabs(b.max.y - b.min.y);
@@ -226,7 +237,13 @@ void ViewModel::SetWeapon(const EntityDef* def, int variantIndex) {
         std::string attachPath = VmStatStr(def, "viewmodel_attachment", SiblingAdditionalMeshes(mesh));
         if (!attachPath.empty() &&
             VmAssetExists(ResolveMeshAsset(baseDir, attachPath))) {
-            auto a = MeshCache::Instance().GetStatic(attachPath, "", baseDir, true);
+            // Give the attachment the WEAPON's texture. It used to load with an
+            // empty texPath, and the additional-mesh GLB carries no material
+            // texture of its own, so the magazine rendered as an untextured white
+            // slab tinted by the nearest light - a bright yellow-green block
+            // hanging off the pistol grip and off the SMG's stock.
+            std::string attachTex = VmStatStr(def, "texture", "");
+            auto a = MeshCache::Instance().GetStatic(attachPath, attachTex, baseDir, true);
             if (a && a->Valid() && a->MeshCount() > 0) {
                 m_attach = a;
                 m_attachCenter = ComputeCenter(a->Bounds());
@@ -419,7 +436,8 @@ void ViewModel::Draw(Camera3D& camera, Shader litShader) {
                 MatrixScale(fitScale * scaleMul, fitScale * scaleMul, fitScale * scaleMul),
                 MatrixTranslate(pivotOff.x, pivotOff.y, pivotOff.z)));
     };
-    Matrix world = MatrixMultiply(buildLocal(m_center, off, 1.0f), camWorld);
+    Matrix local = buildLocal(m_center, off, 1.0f);
+    Matrix world = MatrixMultiply(local, camWorld);
 
     if (m_skel && m_active >= 0)
         m_skel->ApplyPose(m_active, m_time, m_clipFps);
@@ -428,27 +446,64 @@ void ViewModel::Draw(Camera3D& camera, Shader litShader) {
         OZ_INFO("[CHAIN] VM::Draw pre-DrawMatrix key='%s' recoil=%.2f reloadT=%.2f",
                 m_key.c_str(), m_recoil, m_reloadT);
 
-    // Fail loudly instead of silently: a view-model off-screen is
-    // indistinguishable from a broken one, which is exactly how the
+    // Fail loudly instead of silently: a view-model that is not on screen at all
+    // is indistinguishable from a broken one, which is exactly how the
     // multiply-order bug survived. Warn once per weapon key.
+    //
+    // This used to derive the near depth from `-m_offset.z`, but the camera-space
+    // z of the model is NEGATIVE for anything in front (`off.z = -m_offset.z`),
+    // so every weapon computed a negative depth and reported "behind=1" - a false
+    // alarm on all of them, which is how a real one would be missed. Transform the
+    // fitted box's corners by the SAME local matrix the draw uses and count how
+    // many land inside the frustum: no sign guessing, and it accounts for the
+    // 90-degree yaw that swaps the box's extents.
+    //
+    // The test is "NO corner visible", not "any corner outside". A shipped
+    // view-model deliberately runs its grip off the bottom-right edge (that is
+    // what makes a gun with no hand model read as held), so a per-corner
+    // out-of-frame test warned on every weapon and would have drowned a real
+    // one. Behind-the-eye is still checked separately.
     if (m_key != s_frustumWarned) {
-        const float fit = ComputeFitScale(m_mesh->Bounds()) * m_scale;
-        const Vector3 c = m_center;
-        // Nearest point of the fitted box along -Z (forward) in view space.
-        const float nearest = -m_offset.z - 0.5f * fit;
-        const float halfH = std::fmax(0.5f * fit, 0.5f * (m_mesh->Bounds().max.y -
-                                                          m_mesh->Bounds().min.y) * fit);
-        const float halfW = halfH;
-        const float limH = std::tan(camera.fovy * 0.5f * DEG2RAD) * std::fmax(nearest, 0.01f);
-        const float limW = limH * ((float)GetScreenWidth() / (float)GetScreenHeight());
-        const float dx = std::fmax(0.0f, std::fabs(off.x + c.x * fit) - limW);
-        const float dy = std::fmax(0.0f, std::fabs(off.y + c.y * fit) - limH);
-        const float behind = (nearest + 0.5f * fit) <= 0.0f;
-        if (dx > 0.0f || dy > 0.0f || behind) {
-            OZ_WARN("ViewModel '%s' is off-screen (off=(%.3f, %.3f, %.3f) nearest=%.3f "
-                    "limW=%.3f limH=%.3f excessX=%.3f excessY=%.3f behind=%d)",
-                    m_key.c_str(), off.x, off.y, off.z, nearest, limW, limH, dx, dy,
-                    behind ? 1 : 0);
+        const BoundingBox& b = m_mesh->Bounds();
+        const float tanHalf = std::tan(camera.fovy * 0.5f * DEG2RAD);
+        const float aspect = (float)GetScreenWidth() /
+                             (float)std::fmax(1.0f, (float)GetScreenHeight());
+        float nearestDepth = 1e9f;
+        int visibleCorners = 0;
+        bool behind = false;
+        for (int corner = 0; corner < 8; ++corner) {
+            const Vector3 p = {
+                (corner & 1) ? b.max.x : b.min.x,
+                (corner & 2) ? b.max.y : b.min.y,
+                (corner & 4) ? b.max.z : b.min.z,
+            };
+            const Vector3 v = Vector3Transform(p, local);
+            // Forward is -Z in view space, so this corner's depth is -v.z.
+            const float depth = -v.z;
+            if (depth <= 0.0f) behind = true;
+            const float d = std::fmax(depth, 0.01f);
+            nearestDepth = std::fmin(nearestDepth, depth);
+            if (depth > 0.0f && std::fabs(v.x) <= tanHalf * aspect * d &&
+                std::fabs(v.y) <= tanHalf * d) {
+                visibleCorners++;
+            }
+        }
+        const bool fullyOutside = (visibleCorners == 0);
+        if (behind || fullyOutside) {
+            OZ_WARN("ViewModel '%s' is off-screen (nearest=%.3f visibleCorners=%d "
+                    "behind=%d) - check viewmodel_offset in the weapon def",
+                    m_key.c_str(), nearestDepth, visibleCorners, behind ? 1 : 0);
+            s_frustumWarned = m_key;
+        }
+        // A weapon whose near end is close to the eye is not "off-screen", so the
+        // check above misses it: it is on screen and enormous, with the grip
+        // smeared by a near-field perspective blowup. That is what the shipped
+        // pistol did (0.17 units from the eye) and it read as a broken asset
+        // rather than as a bad offset. Keep the near end >= ~0.4.
+        if (!behind && nearestDepth < 0.4f) {
+            OZ_WARN("ViewModel '%s' sits too close to the eye (nearest=%.3f) - the "
+                    "grip will fill the frame and stretch; push viewmodel_offset.z "
+                    "out so (z - length/2) >= 0.5", m_key.c_str(), nearestDepth);
             s_frustumWarned = m_key;
         }
     }
@@ -462,7 +517,14 @@ void ViewModel::Draw(Camera3D& camera, Shader litShader) {
     // Detachable magazine (sibling `_AdditionalMeshes.glb`). Drawn with the same
     // transform; during a reload it drops out of the well and is reinserted, so
     // the gun is never seen firing with an empty mag well.
-    if (m_attach && m_attach->Valid() && m_magMesh >= 0) {
+    //
+    // Drawn ONLY while a reload is in flight. The attachment is a separate model
+    // authored at its own origin, and the automatic probe cannot know where the
+    // well is, so drawing it permanently put a stray magazine slab next to the
+    // grip (visible as a bright block on the pistol and the SMG). During the
+    // reload it is the thing the animation is about; the rest of the time the
+    // weapon model reads as complete.
+    if (m_attach && m_attach->Valid() && m_magMesh >= 0 && m_reloadT > 0.0f) {
         // Camera-space nudge/scale so an attachment authored in a different
         // pivot can be corrected without re-exporting the asset.
         const EntityDef* wdef = ent ? ent->def : nullptr;

@@ -801,6 +801,10 @@ static void OpenPropertiesForSelection() {
 // is safe; the switch there is what guarantees they cannot drift.
 static bool AdoptSelection(const ed::Selection& pick) {
     if (!pick.valid()) return false;
+    // Adopting a hierarchy selection cancels a pending placement ghost: the ghost
+    // and the selection gizmo share DrawModel, and leaving the placement armed
+    // would make the next viewport click place a copy instead of selecting.
+    g_placementArmed = false;
     g_sel.type = (SelType)pick.ref.kind;
     g_sel.index = pick.ref.index;
     g_sel.name = pick.name;

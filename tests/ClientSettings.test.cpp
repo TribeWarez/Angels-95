@@ -155,7 +155,7 @@ static void TestSchemaListsEverySection() {
     const char* owned[] = { clientcfg::kWindow, clientcfg::kRender,
                             clientcfg::kAudio, clientcfg::kGameplay,
                             clientcfg::kInput, clientcfg::kHud,
-                            clientcfg::kDebug };
+                            clientcfg::kNetwork, clientcfg::kDebug };
     for (const char* s : owned) {
         int hits = 0;
         for (const std::string& listed : clientcfg::kSectionOrder)
@@ -164,7 +164,74 @@ static void TestSchemaListsEverySection() {
     }
     // Bindings and master URLs are read/written by their own modules, but the
     // client's writer must emit them in a known place too.
-    CHECK(clientcfg::kSectionOrder.size() >= 9);
+    CHECK(clientcfg::kSectionOrder.size() >= 10);
+}
+
+// The Network section's two keys. Easy to get wrong in a way nothing notices:
+// Save writes ping_interval, Load reads a differently-spelled key, and the value
+// silently resets to the default on every launch.
+static void TestNetworkKeysRoundTrip() {
+    printf("network keys round-trip\n");
+    IniConfig cfg;
+    cfg.SetFloat(clientcfg::kNetwork, "ping_interval", 12.5f);
+    cfg.SetBool(clientcfg::kNetwork, "show_net_stats", true);
+    // A HUD key too: SaveOrdered only emits sections that hold keys, and the
+    // ordering assertion below needs both blocks present.
+    cfg.SetInt(clientcfg::kHud, "crosshair_size", 14);
+    CHECK(cfg.SaveOrdered(kTmp, clientcfg::kSectionOrder));
+
+    IniConfig back;
+    CHECK(back.Load(kTmp));
+    CHECK(back.GetFloat(clientcfg::kNetwork, "ping_interval", -1.0f) == 12.5f);
+    CHECK(back.GetBool(clientcfg::kNetwork, "show_net_stats", false) == true);
+    // Section placement: the network block belongs with the player settings,
+    // before the debug block.
+    const std::string text = ReadAll(kTmp);
+    CHECK(text.find("[AngelTech.Network]") != std::string::npos);
+    CHECK(text.find("[AngelTech.HUD]") < text.find("[AngelTech.Network]"));
+    CHECK(text.find("[AngelTech.Network]") < text.find("[AngelTech.Debug]"));
+}
+
+// The new Render keys from Advanced Options > Lighting/Fog. All of them are
+// read by the shader-upload path, so a Save/Load spelling drift would silently
+// reset a player's look every launch.
+static void TestLightingAndFogKeysRoundTrip() {
+    printf("lighting + level fog keys round-trip\n");
+    IniConfig cfg;
+    cfg.SetFloat(clientcfg::kRender, "light_ambient_boost", 2.5f);
+    cfg.SetFloat(clientcfg::kRender, "light_specular_scale", 0.25f);
+    cfg.SetFloat(clientcfg::kRender, "light_softness", 1.0f);
+    cfg.SetBool(clientcfg::kRender, "dynamic_lights", false);
+    cfg.SetBool(clientcfg::kRender, "fog_override", true);
+    cfg.SetFloat(clientcfg::kRender, "fog_density_scale", 2.0f);
+    cfg.SetFloat(clientcfg::kRender, "fog_start", 42.0f);
+    cfg.SetFloat(clientcfg::kRender, "fog_end", 900.0f);
+    cfg.SetFloat(clientcfg::kRender, "fog_density", 0.0075f);
+    cfg.SetInt(clientcfg::kRender, "fog_color_r", 12);
+    cfg.SetInt(clientcfg::kRender, "fog_color_g", 34);
+    cfg.SetInt(clientcfg::kRender, "fog_color_b", 56);
+    CHECK(cfg.SaveOrdered(kTmp, clientcfg::kSectionOrder));
+
+    IniConfig back;
+    CHECK(back.Load(kTmp));
+    CHECK(back.GetFloat(clientcfg::kRender, "light_ambient_boost", -1.0f) == 2.5f);
+    CHECK(back.GetFloat(clientcfg::kRender, "light_specular_scale", -1.0f) == 0.25f);
+    CHECK(back.GetFloat(clientcfg::kRender, "light_softness", -1.0f) == 1.0f);
+    CHECK(back.GetBool(clientcfg::kRender, "dynamic_lights", true) == false);
+    CHECK(back.GetBool(clientcfg::kRender, "fog_override", false) == true);
+    CHECK(back.GetFloat(clientcfg::kRender, "fog_density_scale", -1.0f) == 2.0f);
+    CHECK(back.GetFloat(clientcfg::kRender, "fog_start", -1.0f) == 42.0f);
+    CHECK(back.GetFloat(clientcfg::kRender, "fog_end", -1.0f) == 900.0f);
+    CHECK(back.GetFloat(clientcfg::kRender, "fog_density", -1.0f) == 0.0075f);
+    CHECK(back.GetInt(clientcfg::kRender, "fog_color_r", -1) == 12);
+    CHECK(back.GetInt(clientcfg::kRender, "fog_color_g", -1) == 34);
+    CHECK(back.GetInt(clientcfg::kRender, "fog_color_b", -1) == 56);
+    // `fog_density` (level haze rate) must NOT collide with the older
+    // `fog_intensity` (post-process overlay blend) - both live in the same
+    // section and both are user-visible.
+    cfg.SetFloat(clientcfg::kRender, "fog_intensity", 0.75f);
+    CHECK(cfg.GetFloat(clientcfg::kRender, "fog_intensity", -1.0f) == 0.75f);
+    CHECK(cfg.GetFloat(clientcfg::kRender, "fog_density", -1.0f) == 0.0075f);
 }
 
 int main() {
@@ -174,6 +241,8 @@ int main() {
     TestSaveOrdered();
     TestMigration();
     TestSchemaListsEverySection();
+    TestNetworkKeysRoundTrip();
+    TestLightingAndFogKeysRoundTrip();
     std::remove(kTmp);
 
     if (g_fail == 0) {

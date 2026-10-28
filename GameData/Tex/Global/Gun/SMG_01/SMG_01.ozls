@@ -27,11 +27,11 @@ entity "smg_01" : weapon {
         projectile_scale = 12.0
         projectile_color = (1.0, 0.92, 0.55)
         // See ViewModel.cpp: the fit scale normalises the longest axis, so this
-        // is a relative multiplier (rifle 1.3, pistol 1.0). Slightly under the
-        // rifle, so the SMG reads as the smaller, lighter weapon.
-        viewmodel_offset = (0.26, -0.2, 0.5)
-        viewmodel_rot = (0, 90, 0)
-        viewmodel_scale = 1.15
+        // is a held-length multiplier (rifle 0.95, pistol 0.62). The SMG sits
+        // between them and far enough forward that its near end clears the eye.
+        viewmodel_offset = (0.30, -0.24, 0.72)
+        viewmodel_rot = (0, 110, 0)
+        viewmodel_scale = 0.76
         // Sound stats: quote-free, space-free asset paths. Pitched up from the
         // rifle's shot to read as a lighter, faster weapon.
         fire_sound = GameData/Audio/Sounds/Guns/machgf3b.wav

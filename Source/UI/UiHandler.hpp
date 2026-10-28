@@ -11,6 +11,7 @@ struct MenuBarCallbacks {
     std::function<void()> onSaveGame;
     std::function<void()> onQuit;
     std::function<void()> onToggleSettings;
+    std::function<void()> onToggleAdvancedSettings;
     std::function<void()> onAbout;
 };
 

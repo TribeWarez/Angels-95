@@ -39,6 +39,7 @@
 #include "../PlayerProfile.hpp"
 #include "MenuStyle.hpp"
 #include "MenuMetrics.hpp"
+#include "AdvancedOptions.hpp"
 #include "CharacterRoster.hpp"
 #include "CharacterPreview.hpp"
 #include "ServerBrowserModel.hpp"
@@ -275,7 +276,9 @@ public:
         HandleGlobalInput();
         // A modal owns all clicks. Pages still draw behind it, but their
         // immediate-mode buttons must not activate through the dim layer.
-        if (m_showAbout || m_confirmDelete) m_suppressClick = true;
+        // The Advanced Options tree is the same kind of surface (opened from the
+        // native menu bar), so it takes the click lock too.
+        if (m_showAbout || m_confirmDelete || advopts::g_open) m_suppressClick = true;
 
         // The live preview renders into its own render texture before the 2D
         // pass. Rendering it inside BeginDrawing would be legal but makes the
@@ -304,6 +307,9 @@ public:
         if (m_showAbout) DrawAboutModal();
         if (m_confirmDelete) DrawDeleteProfileModal();
         DrawToast();
+        // Advanced Options, above every page and modal: it is where the native
+        // Settings menu lands, and it is the same panel the in-game overlay uses.
+        if (advopts::g_open) advopts::Draw();
         EndDrawing();
 
         return m_done || m_exit;

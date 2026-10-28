@@ -143,6 +143,9 @@ public:
     // Status
     bool is_connected() const { return m_client.is_connected(); }
     int get_ping_ms() const { return m_client.get_ping_ms(); }
+    // Ping cadence, seconds between PING samples. The Advanced Options dialog
+    // drives this from [AngelTech.Network] ping_interval.
+    void set_ping_interval(double seconds) { m_client.set_ping_interval(seconds); }
     const std::string& get_server_ip() const { return m_client.get_server_ip(); }
 
     // Identity the server accepted for us (protocol v2). Valid only after the

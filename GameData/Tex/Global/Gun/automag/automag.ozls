@@ -18,9 +18,10 @@ entity "automag" : weapon {
         // at -Z, the barrel tip at +Z). The view-model's forward is -Z, so the
         // default rotation pointed the gun back at the camera. A 180 deg yaw is
         // the whole difference; the offsets are the stock hand position.
-        viewmodel_offset = (0.22, -0.18, 0.45)
-        viewmodel_rot = (0, 180, 0)
-        viewmodel_scale = 1.0
+        // Same held-size convention as Pistol_01.ozls (this OBJ is pistol-class).
+        viewmodel_offset = (0.28, -0.23, 0.68)
+        viewmodel_rot = (0, 200, 0)
+        viewmodel_scale = 0.62
     }
     actions {
         on_fire {

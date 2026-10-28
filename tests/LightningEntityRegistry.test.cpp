@@ -5,6 +5,11 @@
 #include "../Source/Script/LightningScriptParser.hpp"
 #include <cstdio>
 #include <cassert>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+
+namespace fs = std::filesystem;
 
 static int tests_total = 0, tests_passed = 0;
 #define TEST(name) do { tests_total++; fprintf(stdout, "  TEST: %s ... ", name);
@@ -175,6 +180,87 @@ static int test_load_world_overrides_trigger_is_global() {
     PASS(); return 0; END_TEST();
 }
 
+// A world-scoped name dropped by a previous world's load must come BACK when its
+// own world is opened. The promote/drop loop can only re-point names already in
+// the by-name map, so before the resurrection pass a name that only WorldB
+// defines was unreachable for the rest of the session after one visit to WorldA.
+static int test_load_world_overrides_restores_dropped_name() {
+    TEST("LoadWorldOverrides: a dropped world's def returns with its world");
+    auto& reg = LightningEntityRegistry::Instance();
+
+    EntityDef zone;
+    zone.name = "testreg_zone_worldb";
+    zone.type = EntityType::SKYZONE;
+    zone.sourcePath = "GameData/Worlds/WorldB/testreg_zone_worldb.ozls";
+    reg.Register(zone);
+
+    reg.LoadWorldOverrides("GameData/Worlds/WorldA");
+    CHECK_NULL(reg.Find("testreg_zone_worldb"));
+
+    reg.LoadWorldOverrides("GameData/Worlds/WorldB");
+    CHECK_PTR(reg.Find("testreg_zone_worldb"));
+    PASS(); return 0; END_TEST();
+}
+
+// Editor hot reload: ReloadFile replaces a file's defs in place. The pointer
+// identity assertion is the load-bearing one - LightningEntityManager instances
+// and SkyZoneNode::def hold the address Find() returned, so a reload that
+// re-inserted the def would leave them observing a different (or freed) entry.
+static int test_reload_file_edits_in_place() {
+    TEST("ReloadFile: edits a def in place and keeps the Find() pointer");
+    auto& reg = LightningEntityRegistry::Instance();
+
+    std::error_code ec;
+    const fs::path dir = fs::temp_directory_path() / "angels95_registry_reload";
+    fs::create_directories(dir, ec);
+    const fs::path file = dir / "reload_probe.ozls";
+
+    auto write = [&](const char* body) {
+        std::ofstream out(file, std::ios::binary | std::ios::trunc);
+        out << body;
+    };
+
+    write("entity \"reload_probe\" : weapon {\n"
+          "    stats { damage = 5 }\n"
+          "}\n");
+
+    auto firstResult = reg.ReloadFile(file.string());
+    CHECK(firstResult.ok);
+    CHECK_EQ(firstResult.added.size(), 1);
+    const EntityDef* first = reg.Find("reload_probe");
+    CHECK_PTR(first);
+    CHECK(first->stats.floats.at("damage") == 5.0f);
+
+    write("entity \"reload_probe\" : weapon {\n"
+          "    stats { damage = 42 }\n"
+          "}\n");
+
+    auto secondResult = reg.ReloadFile(file.string());
+    CHECK(secondResult.ok);
+    CHECK_EQ(secondResult.changed.size(), 1);
+    const EntityDef* second = reg.Find("reload_probe");
+    CHECK(second == first);                     // same registry node
+    CHECK(second->stats.floats.at("damage") == 42.0f);
+
+    // A half-written / broken file must keep the last good definition: an editor
+    // saving mid-edit must not make the entity vanish from the panel.
+    write("this is not an entity\n");
+    auto broken = reg.ReloadFile(file.string());
+    CHECK(!broken.ok);
+    CHECK_PTR(reg.Find("reload_probe"));
+    CHECK(reg.Find("reload_probe")->stats.floats.at("damage") == 42.0f);
+
+    // Deleting the file IS a removal.
+    fs::remove(file, ec);
+    auto removed = reg.ReloadFile(file.string());
+    CHECK(removed.ok);
+    CHECK_EQ(removed.removed.size(), 1);
+    CHECK_NULL(reg.Find("reload_probe"));
+
+    fs::remove_all(dir, ec);
+    PASS(); return 0; END_TEST();
+}
+
 int main() {
     fprintf(stdout, "LightningEntityRegistry Tests:\n");
     fprintf(stdout, "==============================\n");
@@ -188,6 +274,8 @@ int main() {
     failures += test_get_all_keys();
     failures += test_load_world_overrides_type_classification();
     failures += test_load_world_overrides_trigger_is_global();
+    failures += test_load_world_overrides_restores_dropped_name();
+    failures += test_reload_file_edits_in_place();
     fprintf(stdout, "==============================\n");
     fprintf(stdout, "%d/%d passed, %d failed\n",
             tests_passed, tests_total, tests_total - tests_passed);

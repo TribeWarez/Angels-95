@@ -713,7 +713,12 @@ static void PopulatePropertiesPanel(HWND hwnd) {
     // rows (Pos/Rot/Size/Tex) and 96 for everything from the first group header on,
     // which put a visible 22px step in the value column at the boundary. Every row
     // below uses this, including addSection's headers.
-    const int lw = 96;
+    //
+    // 120, not 96: a STATIC clips its text at the control rect, so the longest
+    // instance labels ("Ambient Intensity:", "Water Gravity:") were cut short and
+    // ran straight into the value field - the "Ladder Speed:6.000000" overlap. If
+    // you add a longer label, widen this rather than shortening the label.
+    const int lw = 120;
 
     // Title label
     {
@@ -846,10 +851,19 @@ static void PopulatePropertiesPanel(HWND hwnd) {
     // which cannot express an exact value and gives no way to type one — so a
     // value round-tripped from a file could only be nudged, never entered. These
     // are plain fields (typeable, exact) with the picker as the convenience path.
+    // Colour row: label + R/G/B channel boxes (+ optional Pick button).
+    //
+    // ADVANCES `*yPtr`, like addCheckBox. It used to take `ly` by value and leave
+    // the cursor alone, so the NEXT row was created at the same y: its label and
+    // value field were painted over the R and G boxes, leaving only the blue
+    // channel sticking out to the right of an unrelated value ("Fog Density:
+    // [1.000000] [41]"). Every colour row in the panel - zone fog, zone ambient,
+    // map particle colour - was broken the same way.
     auto addColorRow = [&](const wchar_t* label, int idR, int idG, int idB,
                            int r, int g, int b,
-                           int lx, int ly, int lw_, int ew_, int rowH_,
+                           int lx, int* yPtr, int lw_, int ew_, int rowH_,
                            int rightEdge) {
+        const int ly = *yPtr;
         CreateLabel(hwnd, label, lx, ly, lw_, 20, 0);
         const int cw = 52;
         auto chan = [&](int id, int v, int off) {
@@ -867,6 +881,7 @@ static void PopulatePropertiesPanel(HWND hwnd) {
         if (px + 70 <= rightEdge - 10) {
             CreateButton(hwnd, L"Pick...", px, ly, 70, 22, idR + 10000);
         }
+        *yPtr += rowH_;
         return px;
     };
 
@@ -1089,7 +1104,7 @@ static void PopulatePropertiesPanel(HWND hwnd) {
                     g_editorPanels.propZoneApplyFog, &y, rowH);
         addColorRow(L"Fog Color:", ID_PP_ZENV_FOG_R, ID_PP_ZENV_FOG_G, ID_PP_ZENV_FOG_B,
                     g_editorPanels.propZoneFogR, g_editorPanels.propZoneFogG,
-                    g_editorPanels.propZoneFogB, x, y, lw, ew, rowH, rc.right);
+                    g_editorPanels.propZoneFogB, x, &y, lw, ew, rowH, rc.right);
         addField(L"Fog Density:", ID_PP_ZENV_FOG_DENS, g_editorPanels.propZoneFogDensity);
         addField(L"Fog Start:", ID_PP_ZENV_FOG_START, g_editorPanels.propZoneFogStart);
         addField(L"Fog End:", ID_PP_ZENV_FOG_END, g_editorPanels.propZoneFogEnd);
@@ -1097,7 +1112,7 @@ static void PopulatePropertiesPanel(HWND hwnd) {
                     g_editorPanels.propZoneApplyAmbient, &y, rowH);
         addColorRow(L"Ambient Color:", ID_PP_ZENV_AMB_R, ID_PP_ZENV_AMB_G, ID_PP_ZENV_AMB_B,
                     g_editorPanels.propZoneAmbR, g_editorPanels.propZoneAmbG,
-                    g_editorPanels.propZoneAmbB, x, y, lw, ew, rowH, rc.right);
+                    g_editorPanels.propZoneAmbB, x, &y, lw, ew, rowH, rc.right);
         addField(L"Ambient Intensity:", ID_PP_ZENV_AMB_INT, g_editorPanels.propZoneAmbIntensity);
         addSection("Reverb");
         addField(L"Mix:", ID_PP_ZENV_REVERB_MIX, g_editorPanels.propZoneReverbMix);
@@ -1267,7 +1282,7 @@ static void PopulatePropertiesPanel(HWND hwnd) {
         addField(L"Speed:", ID_PP_MAP_PSPEED, g_editorPanels.propMapParticleSpeed);
         addColorRow(L"Fog/Color:", ID_PP_MAP_PR, ID_PP_MAP_PG, ID_PP_MAP_PB,
                     g_editorPanels.propMapParticleR, g_editorPanels.propMapParticleG,
-                    g_editorPanels.propMapParticleB, x, y, lw, ew, rowH, rc.right);
+                    g_editorPanels.propMapParticleB, x, &y, lw, ew, rowH, rc.right);
         // Wind had NO control at all before (ID_SF_PAR_WINDX/Z were declared and
         // never created), so a wind value in a world file could only ever be
         // preserved, never authored.
@@ -1737,7 +1752,8 @@ case WM_USER + 50: {
 static void FillDefBlock(const std::string& defName, const std::string& fallbackPath) {
     using DefField = EditorPanelState::DefField;
     auto& P = g_editorPanels;
-    P.propDefPath.clear(); P.propDefTitle.clear(); P.propDefSource.clear();
+    P.propDefPath.clear(); P.propDefName = defName; P.propDefTitle.clear();
+    P.propDefSource.clear();
     P.propDefNote.clear();
     P.propDefPawnFields.clear(); P.propDefFields.clear(); P.propDefActions.clear();
     P.propDefEditable.clear(); P.propDefPendingEdits.clear();
@@ -1881,6 +1897,25 @@ static void FillDefBlock(const std::string& defName, const std::string& fallback
     }
 }
 
+// Hot reload: re-derive the def section of the OPEN panel from the registry.
+//
+// The caller decides WHETHER the def it is looking at is the one that changed
+// (it compares the file path); this function only knows how to rebuild.
+void RefreshOpenDefProperties() {
+    if (!g_editorPanels.hPropsPanel || !g_editorPanels.showPropsPanel) return;
+    if (g_editorPanels.propDefName.empty()) return;
+    // Filling the block clears propDefPendingEdits, which the Apply pass drains.
+    // A file saved by the author while the user has unsaved row edits must not
+    // silently Cancel them (or worse, let Apply write a value derived from the
+    // reloaded default). Leave the panel alone in that case.
+    if (!g_editorPanels.propDefPendingEdits.empty()) return;
+
+    const std::string name = g_editorPanels.propDefName;
+    FillDefBlock(name, "");
+    // Rebuild the controls from the freshly filled state vectors.
+    SendMessage((HWND)g_editorPanels.hPropsPanel, WM_USER + 50, 0, 0);
+}
+
 void ShowPropertiesPanel(bool show) {
     g_editorPanels.showPropsPanel = show;
     if (show && g_editorPanels.hPropsPanel) {
@@ -1891,6 +1926,7 @@ void ShowPropertiesPanel(bool show) {
         g_editorPanels.propRotation = g_editorPanels.propsTargetRotation;
         g_editorPanels.propScale = g_editorPanels.propsTargetScale;
         g_editorPanels.propDefPath.clear();
+        g_editorPanels.propDefName.clear();
         g_editorPanels.propDefTitle.clear();
         g_editorPanels.propDefSource.clear();
         g_editorPanels.propDefNote.clear();

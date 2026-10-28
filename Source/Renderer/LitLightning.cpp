@@ -1,5 +1,7 @@
 #include "LitLightning.hpp"
 #include "rlights/rlights.h"
+#include "ShadingTuning.hpp"
+#include "../GameplayFlags.hpp"
 #include "../Log.hpp"
 #include <cmath>
 
@@ -72,7 +74,12 @@ static Light BuildRLight(const LightNode& node, Shader shader, int index) {
     // `lights[i].period` and use `<= 0` to mean "do not animate", so the missing
     // member left every torch / fire / water / lamp rendering as a steady light
     // with a correct colour tint and no flicker whatsoever.
-    light.period = node.period;
+    //
+    // Advanced Options > Lighting > "Dynamic Lights" is the player switch for
+    // that animation, and this is the only place a light's period reaches the
+    // wire: uploading 0 is what the shader already treats as "static", so the
+    // toggle needs no new uniform and no branch in either fragment shader.
+    light.period = g_dynamicLights ? node.period : 0.0f;
 
     // Never assigned before. `Light light = {0}` left this 0 == LIGHT_EFFECT_NONE,
     // so applyLightEffect()'s four tint branches were unreachable: a torch was
@@ -271,4 +278,10 @@ void LitLightning_UpdateFrame(std::vector<LightNode>& lights, Shader shader,
     static int uTimeLoc = GetShaderLocation(shader, "uTime");
     float timeVal = (float)GetTime();
     SetShaderValue(shader, uTimeLoc, &timeVal, SHADER_UNIFORM_FLOAT);
+
+    // Player shading knobs (Advanced Options > Lighting). Uploaded with the rest
+    // of the frame-level lighting state so every program that shares this model
+    // gets the same curve; SurfaceMaterial::UpdateFrame does the same for its
+    // own program.
+    oz::ApplyShadingTuning(shader);
 }

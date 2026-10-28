@@ -116,3 +116,6 @@ __pycache__/
 
 # Orchestrator deepwork session state (git-local but OpenCode-readable)
 .slim/deepwork/
+
+# VS Code extension packaging output (tools/vscode/package-vsix.ps1)
+tools/vscode/dist/

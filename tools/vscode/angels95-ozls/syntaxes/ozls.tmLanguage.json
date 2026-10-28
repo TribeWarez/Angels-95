@@ -1,0 +1,519 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vscode-json-schemas/main/schemas/textmate-grammar.json",
+  "name": "LightningScript",
+  "scopeName": "source.ozls",
+  "fileTypes": [
+    "ozls"
+  ],
+  "patterns": [
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#entity-header-valid"
+    },
+    {
+      "include": "#entity-header-unknown"
+    },
+    {
+      "include": "#stats-block"
+    },
+    {
+      "include": "#actions-block"
+    },
+    {
+      "include": "#variants-block"
+    },
+    {
+      "include": "#top-keys"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#punctuation"
+    }
+  ],
+  "repository": {
+    "comment": {
+      "comment": "LightningScriptParser::SkipWhitespace accepts // and # at a token start. The parser is token-driven, so an indented comment is fine.",
+      "match": "(?<!\\S)(//|#).*$",
+      "name": "comment.line.lightningscript"
+    },
+    "entity-header-valid": {
+      "match": "(\\bentity\\b)(\\s+)(\")([^\"]*)(\")(\\s*)(:)(\\s*)(weapon|armor|consumable|upgrade|pickup|projectile|skyzone|pawn|Mesh\\.Static|Mesh\\.Skeletal|ParticleEmitter|WindZone|skill|GameUI|light|gametype|spell|game|campaign|sector|mission|objective|trigger|event)\\b",
+      "captures": {
+        "1": {
+          "name": "keyword.declaration.entity.ozls"
+        },
+        "3": {
+          "name": "punctuation.definition.string.begin.ozls"
+        },
+        "4": {
+          "name": "entity.name.class.def.ozls"
+        },
+        "5": {
+          "name": "punctuation.definition.string.end.ozls"
+        },
+        "7": {
+          "name": "punctuation.separator.colon.ozls"
+        },
+        "9": {
+          "name": "support.class.entity-type.ozls"
+        }
+      }
+    },
+    "entity-header-unknown": {
+      "comment": "Any other type token is UNKNOWN and the def is dropped by ParseAll/Register.",
+      "match": "(\\bentity\\b)(\\s+)(\")([^\"]*)(\")(\\s*)(:)(\\s*)([A-Za-z_][A-Za-z0-9_.]*)",
+      "captures": {
+        "1": {
+          "name": "keyword.declaration.entity.ozls"
+        },
+        "3": {
+          "name": "punctuation.definition.string.begin.ozls"
+        },
+        "4": {
+          "name": "entity.name.class.def.ozls"
+        },
+        "5": {
+          "name": "punctuation.definition.string.end.ozls"
+        },
+        "7": {
+          "name": "punctuation.separator.colon.ozls"
+        },
+        "9": {
+          "name": "invalid.illegal.entity-type.ozls"
+        }
+      }
+    },
+    "stats-block": {
+      "begin": "\\b(stats)\\b(\\s*)(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.other.block.ozls"
+        },
+        "3": {
+          "name": "punctuation.definition.block.begin.ozls"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.block.end.ozls"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "include": "#stat-entry"
+        },
+        {
+          "include": "#vec3"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        }
+      ]
+    },
+    "stat-entry": {
+      "match": "^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(?==)",
+      "captures": {
+        "1": {
+          "name": "entity.other.attribute-name.stat.ozls"
+        }
+      }
+    },
+    "actions-block": {
+      "begin": "\\b(actions)\\b(\\s*)(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.other.block.ozls"
+        },
+        "3": {
+          "name": "punctuation.definition.block.begin.ozls"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.block.end.ozls"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "include": "#hook-block"
+        }
+      ]
+    },
+    "hook-block": {
+      "comment": "Action names become script labels. Dots/dashes still highlight, and the diagnostics flag them as unreachable.",
+      "begin": "^\\s*([A-Za-z0-9_.-]+)\\s*(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "entity.name.function.hook.ozls"
+        },
+        "2": {
+          "name": "punctuation.definition.block.begin.ozls"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.block.end.ozls"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#if-block"
+        },
+        {
+          "include": "#else-block"
+        },
+        {
+          "include": "#script-line"
+        }
+      ]
+    },
+    "if-block": {
+      "begin": "^(\\s*)(if)\\b([^{]*)(\\{)",
+      "beginCaptures": {
+        "2": {
+          "name": "keyword.control.opcode.ozls"
+        },
+        "3": {
+          "name": "meta.condition.ozls",
+          "patterns": [
+            {
+              "include": "#variables"
+            },
+            {
+              "include": "#strings"
+            },
+            {
+              "include": "#numbers"
+            },
+            {
+              "include": "#operators"
+            },
+            {
+              "include": "#punctuation"
+            }
+          ]
+        },
+        "4": {
+          "name": "punctuation.definition.block.begin.ozls"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.block.end.ozls"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#if-block"
+        },
+        {
+          "include": "#else-block"
+        },
+        {
+          "include": "#script-line"
+        }
+      ]
+    },
+    "else-block": {
+      "begin": "(\\belse\\b)([^{]*)(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.opcode.ozls"
+        },
+        "2": {
+          "name": "meta.condition.ozls",
+          "patterns": [
+            {
+              "include": "#variables"
+            },
+            {
+              "include": "#numbers"
+            },
+            {
+              "include": "#operators"
+            },
+            {
+              "include": "#punctuation"
+            }
+          ]
+        },
+        "3": {
+          "name": "punctuation.definition.block.begin.ozls"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.block.end.ozls"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#if-block"
+        },
+        {
+          "include": "#else-block"
+        },
+        {
+          "include": "#script-line"
+        }
+      ]
+    },
+    "variants-block": {
+      "begin": "\\b(variants)\\b(\\s*)(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.other.block.ozls"
+        },
+        "3": {
+          "name": "punctuation.definition.block.begin.ozls"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.block.end.ozls"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "include": "#variant-block"
+        },
+        {
+          "include": "#variant-block-bare"
+        }
+      ]
+    },
+    "variant-block": {
+      "begin": "^\\s*(\")([^\"]*)(\")\\s*(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.begin.ozls"
+        },
+        "2": {
+          "name": "entity.name.class.variant.ozls"
+        },
+        "3": {
+          "name": "punctuation.definition.string.end.ozls"
+        },
+        "4": {
+          "name": "punctuation.definition.block.begin.ozls"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.block.end.ozls"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "include": "#variant-key"
+        },
+        {
+          "include": "#strings"
+        }
+      ]
+    },
+    "variant-key": {
+      "match": "^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(?==)",
+      "captures": {
+        "1": {
+          "name": "entity.other.attribute-name.variant.ozls"
+        }
+      }
+    },
+    "variant-block-bare": {
+      "begin": "^\\s*([A-Za-z0-9_]+)\\s*(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "entity.name.class.variant.ozls"
+        },
+        "2": {
+          "name": "punctuation.definition.block.begin.ozls"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.block.end.ozls"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "include": "#variant-key"
+        },
+        {
+          "include": "#strings"
+        }
+      ]
+    },
+    "script-line": {
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "include": "#label"
+        },
+        {
+          "include": "#opcode"
+        },
+        {
+          "include": "#hook-reference"
+        },
+        {
+          "include": "#variables"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "opcode": {
+      "match": "^\\s*(var|if|else|endif|goto|jump|stop|end|say|msg|wtflag|rtflag|toggle_flag|set_cooldown|play_sound|set_fog|restore_fog|set_ambient|restore_ambient|set_skybox|restore_skybox|spawn_pawn|spawn_pickup|heal|damage|playerstat|consume|emit_event|objective|set_worldflag|get_worldflag|give_xp|teleport|change_world|grant_item|apply_area_damage|spawn_projectile|play_clip)\\b",
+      "captures": {
+        "1": {
+          "name": "keyword.control.opcode.ozls"
+        }
+      }
+    },
+    "hook-reference": {
+      "match": "\\bon_[A-Za-z0-9_]+\\b",
+      "name": "entity.name.function.hook.reference.ozls"
+    },
+    "label": {
+      "match": "^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(:)(?!:)",
+      "captures": {
+        "1": {
+          "name": "entity.name.label.ozls"
+        },
+        "2": {
+          "name": "punctuation.separator.colon.ozls"
+        }
+      }
+    },
+    "variables": {
+      "patterns": [
+        {
+          "match": "\\$(flag\\d+|result)\\b",
+          "name": "variable.language.ozls"
+        },
+        {
+          "match": "\\$[A-Za-z_][A-Za-z0-9_]*",
+          "name": "variable.other.ozls"
+        }
+      ]
+    },
+    "top-keys": {
+      "comment": "Only these keys exist at entity-body level. Anything else warns and is dropped — put it inside stats { }.",
+      "match": "\\b(mesh|texture|icon|skybox|music|mesh_type|anim_idle|anim_patrol|anim_chase|anim_return|anim_death|anim_speed|movement_speed|fog_color|ambient_light|fog_density|mesh_override|texture_override)\\b",
+      "captures": {
+        "1": {
+          "name": "entity.other.attribute-name.top-level.ozls"
+        }
+      }
+    },
+    "strings": {
+      "name": "string.quoted.double.ozls",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": []
+    },
+    "vec3": {
+      "comment": "Vec3 is written name = (r, g, b). A leading 'vec3' keyword is INVALID and breaks the rest of the stats block.",
+      "match": "(\\()\\s*(-?\\d+(?:\\.\\d+)?)\\s*([,;])\\s*(-?\\d+(?:\\.\\d+)?)\\s*([,;])\\s*(-?\\d+(?:\\.\\d+)?)\\s*(\\))",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.vector.begin.ozls"
+        },
+        "2": {
+          "name": "constant.numeric.vec3.ozls"
+        },
+        "3": {
+          "name": "punctuation.separator.vector.ozls"
+        },
+        "4": {
+          "name": "constant.numeric.vec3.ozls"
+        },
+        "5": {
+          "name": "punctuation.separator.vector.ozls"
+        },
+        "6": {
+          "name": "constant.numeric.vec3.ozls"
+        },
+        "7": {
+          "name": "punctuation.definition.vector.end.ozls"
+        }
+      }
+    },
+    "numbers": {
+      "match": "(?<![\\w.$])-?\\d+(?:\\.\\d+)?",
+      "name": "constant.numeric.ozls"
+    },
+    "operators": {
+      "match": "(==|!=|>=|<=|&&|\\|\\||[+\\-*/]=?|=|>|<)",
+      "name": "keyword.operator.ozls"
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "match": "[{}()]",
+          "name": "punctuation.definition.block.ozls"
+        },
+        {
+          "match": ",",
+          "name": "punctuation.separator.comma.ozls"
+        },
+        {
+          "match": ":",
+          "name": "punctuation.separator.colon.ozls"
+        }
+      ]
+    }
+  }
+}

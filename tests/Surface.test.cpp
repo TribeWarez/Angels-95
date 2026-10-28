@@ -545,6 +545,174 @@ static std::string ExtractFogFn(const std::string& src) {
     return tight;
 }
 
+// A shader that does not COMPILE is silent at runtime: raylib logs one warning,
+// keeps shader.id == 0 and every draw falls back to the default shader - no
+// lighting, no fog, no gamma, no emissive. That is exactly how LitFog.fs shipped
+// with an unclosed `main` (a brace was lost while retuning the attenuation): the
+// whole world rendered flat and unlit and nothing in the suite noticed, because
+// the parity checks below only compare text that was still present.
+static void test_shaders_braces_balance() {
+    struct File { const char* path; };
+    const File files[] = {
+        { "GameData/Shaders/Lights/LitFog.fs" },
+        { "GameData/Shaders/Surface.fs" },
+        { "GameData/Shaders/Sky.fs" },
+        { "GameData/Shaders/Lights/Wind.vs" },
+        { "GameData/Shaders/Lights/Lighting.vs" },
+        { "GameData/Shaders/Sky.vs" },
+        { "GameData/Shaders/Surface.vs" },
+    };
+    for (const File& f : files) {
+        const std::string src = ReadFile(f.path);
+        if (src.empty()) { printf("  SKIP  %s (not found from cwd)\n", f.path); continue; }
+
+        // Strip line comments so an unbalanced brace inside a comment cannot
+        // produce a phantom failure (or hide a real one).
+        const std::string body = StripLineComments(src);
+        int depth = 0;
+        int minDepth = 0;
+        for (char c : body) {
+            if (c == '{') depth++;
+            else if (c == '}') { depth--; if (depth < minDepth) minDepth = depth; }
+        }
+        check(depth == 0,
+              (std::string(f.path) + " has balanced braces - an unbalanced shader " +
+               "does not compile and raylib silently falls back to the default " +
+               "shader, which renders the whole game unlit and unfogged").c_str());
+        check(minDepth == 0,
+              (std::string(f.path) + " never closes a block it did not open").c_str());
+    }
+}
+
+// LitFog.fs and Surface.fs are two hand-maintained copies of one lighting model.
+// The fog curve has been pinned for a while; the LIGHT model was not, so
+// retuning attenuation/specular in one file left the other behind and a
+// surface-flagged brush lit differently from the wall beside it, in the same
+// frame. Compare the shared pieces by BODY, not by constants.
+static void test_lighting_model_parity() {
+    const std::string lit  = ReadFile("GameData/Shaders/Lights/LitFog.fs");
+    const std::string surf = ReadFile("GameData/Shaders/Surface.fs");
+    if (lit.empty() || surf.empty()) {
+        printf("  SKIP  lighting model parity (a shader not found from cwd)\n");
+        return;
+    }
+
+    auto extractFn = [](const std::string& src, const char* signature) {
+        const size_t at = src.find(signature);
+        if (at == std::string::npos) return std::string();
+        const size_t open = src.find('{', at);
+        if (open == std::string::npos) return std::string();
+        int depth = 0;
+        size_t i = open;
+        for (; i < src.size(); i++) {
+            if (src[i] == '{') depth++;
+            else if (src[i] == '}') { depth--; if (depth == 0) { i++; break; } }
+        }
+        std::string body = src.substr(at, i - at);
+        std::string noComment;
+        for (size_t p = 0; p < body.size(); p++) {
+            if (body[p] == '/' && p + 1 < body.size() && body[p+1] == '/') {
+                while (p < body.size() && body[p] != '\n') p++;
+                noComment += ' ';
+            } else {
+                noComment += body[p];
+            }
+        }
+        std::string tight;
+        for (char c : noComment)
+            if (c != ' ' && c != '\t' && c != '\r' && c != '\n') tight += c;
+        return tight;
+    };
+
+    const char* fns[] = { "float lightAttenuation(", "float fresnelSchlick(",
+                          "float spotCone(" };
+    for (const char* fn : fns) {
+        const std::string a = extractFn(lit, fn);
+        const std::string b = extractFn(surf, fn);
+        check(!a.empty() && a == b,
+              (std::string(fn) + " is identical in LitFog.fs and Surface.fs").c_str());
+    }
+
+    // The specular model: same exponent AND same gain in both programs.
+    check(lit.find("pow(NdotH, 12.0) * 0.25") != std::string::npos &&
+          surf.find("pow(NdotH, 12.0) * 0.25") != std::string::npos,
+          "LitFog.fs and Surface.fs use the same specular exponent/gain");
+    check(lit.find("spec * F * attenuation") != std::string::npos &&
+          surf.find("spec * F * attenuation") != std::string::npos,
+          "both shaders apply the Fresnel term to the specular");
+
+    // Shared constants are #defines so a retune is one number in two files.
+    auto defineInt = [](const std::string& src, const char* name) {
+        const std::string want = std::string("#define ") + name;
+        size_t p = src.find(want);
+        if (p == std::string::npos) return -1;
+        p += want.size();
+        while (p < src.size() && (src[p] == ' ' || src[p] == '\t')) p++;
+        return (int)(atof(src.c_str() + p) * 1000.0);
+    };
+    const int lAmb = defineInt(lit, "AMBIENT_GAIN");
+    const int sAmb = defineInt(surf, "AMBIENT_GAIN");
+    const int lDes = defineInt(lit, "DESATURATION");
+    const int sDes = defineInt(surf, "DESATURATION");
+    check(lAmb > 0 && lAmb == sAmb,
+          "AMBIENT_GAIN is defined in both shaders with the same value");
+    check(lDes > 0 && lDes == sDes,
+          "DESATURATION is defined in both shaders with the same value");
+    check(lit.find("ambient.rgb * AMBIENT_GAIN") != std::string::npos &&
+          surf.find("amb.rgb * AMBIENT_GAIN") != std::string::npos,
+          "both shaders add ambient through AMBIENT_GAIN (not a bare literal)");
+
+    // --- player shading knobs (Advanced Options > Lighting) -----------------
+    // Three uniforms that MUST exist in both programs and MUST be uploaded by
+    // one C++ site. A GLSL uniform nobody uploads renders on its default and is
+    // invisible to every constant-parity check - that is how `period` shipped
+    // frozen for as long as it did.
+    const char* knobs[] = { "uAmbientBoost", "uSpecularScale", "uLightSoftness" };
+    for (const char* k : knobs) {
+        const std::string decl = std::string("uniform float ") + k;
+        check(lit.find(decl) != std::string::npos,
+              (std::string("LitFog.fs declares ") + k).c_str());
+        check(surf.find(decl) != std::string::npos,
+              (std::string("Surface.fs declares ") + k +
+               " - a surface brush would otherwise use the GLSL default while the "
+               "room around it used the player's setting").c_str());
+    }
+    check(lit.find("uAmbientBoost") != std::string::npos &&
+          surf.find("* uAmbientBoost") != std::string::npos &&
+          lit.find("* uAmbientBoost") != std::string::npos,
+          "both shaders MULTIPLY the ambient term by uAmbientBoost");
+    check(lit.find("specAccum * uSpecularScale") != std::string::npos &&
+          surf.find("specAccum * uSpecularScale") != std::string::npos,
+          "both shaders scale the specular by uSpecularScale");
+    // lightAttenuation's body parity above already pins uLightSoftness; assert it
+    // is actually referenced so a future body rewrite cannot quietly ignore it.
+    check(lit.find("1.0 + uLightSoftness") != std::string::npos,
+          "uLightSoftness shapes the attenuation curve, not just decorates it");
+
+    const std::string tuning = ReadFile("Source/Renderer/ShadingTuning.hpp");
+    if (tuning.empty()) {
+        printf("  SKIP  shading-tuning uploader (not found from cwd)\n");
+    } else {
+        for (const char* k : knobs) {
+            check(tuning.find(std::string("\"") + k + "\"") != std::string::npos,
+                  (std::string("ShadingTuning.hpp uploads ") + k).c_str());
+        }
+        check(tuning.find("SetShaderValue") != std::string::npos,
+              "ShadingTuning.hpp actually calls SetShaderValue");
+        // Every program that runs this lighting model must call it, or one of the
+        // three drifts to the GLSL defaults.
+        const std::string lit_cpp = ReadFile("Source/Renderer/LitLightning.cpp");
+        const std::string surf_cpp = ReadFile("Source/Renderer/SurfaceMaterial.cpp");
+        const std::string core_hpp = ReadFile("Source/Core.hpp");
+        check(!lit_cpp.empty() && lit_cpp.find("ApplyShadingTuning") != std::string::npos,
+              "the LitFog program gets the shading tuning");
+        check(!surf_cpp.empty() && surf_cpp.find("ApplyShadingTuning") != std::string::npos,
+              "the Surface program gets the shading tuning");
+        check(!core_hpp.empty() && core_hpp.find("ApplyShadingTuning") != std::string::npos,
+              "the Wind program (Wind.vs + LitFog.fs) gets the shading tuning");
+    }
+}
+
 static void test_fog_curve_parity() {
     const std::string lit  = ReadFile("GameData/Shaders/Lights/LitFog.fs");
     const std::string surf = ReadFile("GameData/Shaders/Surface.fs");
@@ -1560,6 +1728,8 @@ int main() {
     test_shader_bit_parity();
     test_light_budget_parity();
     test_light_uniform_upload_parity();
+    test_shaders_braces_balance();
+    test_lighting_model_parity();
     test_fog_curve_parity();
     test_skybox_has_one_implementation();
     test_full_bright_is_not_batched();

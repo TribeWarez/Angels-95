@@ -23,6 +23,7 @@ dependency.
 
 **Download:** [SourceForge](https://sourceforge.net/projects/angels-95/files/latest/download)
 · [GitHub Releases](https://github.com/TribeWarez/Angels-95/releases/latest)
+· [Forum](https://angels95.tribewarez.com)
 
 Windows users should grab the **`Angels95-Setup-<tag>.exe`** installer (a single
 self-contained setup that installs the client, the `AngelEd` editor and the
@@ -37,6 +38,26 @@ self-contained and need a `GameData/` checkout to serve.
 
 ---
 
+## Community — Forum
+
+**→ [angels95.tribewarez.com](https://angels95.tribewarez.com)**
+
+The Angels95 community network runs on **AETHERNET**, the project's own forum
+(opened September 2026). It is the place to **discuss the game, report bugs and
+drop maps** — the whole network can see what you post, so keep it clean.
+
+- **Bugs** — crashes, broken maps, multiplayer problems. Include the build tag
+  from the title footer (`b111`, …) and what you were doing.
+- **Maps & content** — `.ozone` worlds, `.ozpak` packages, screenshots.
+- **Everything else** — feedback, server hosting, feature ideas.
+
+The [GitHub issue tracker](https://github.com/TribeWarez/Angels-95/issues) still
+works for filing a bug in the open; the forum is where the community gathers.
+`angels95.tribewarez.com` also serves the master server the client browses with
+(**Multiplayer → Join → Source: Internet**).
+
+---
+
 ## Showcase
 
 All shots captured in-engine via `--shot` mode (PS1-style, HUD-free). The six
@@ -44,37 +65,13 @@ curated showcase worlds come first, then the campaign arc added in b101 and
 rebuilt in b111 — two frames each, taken at the spawn and at the landmark the
 level is built around.
 
-### Citadel Ruins
 
-A ruined hill-citadel — roofed courtyard, four corner towers, a gatehouse
-over the south gate, and watch balconies over a collar of sand.
+### Editor 
 
-<img src="GameData/Screenshots/CitadelRuins_1.png" width="32%" alt="Citadel Ruins — evening over the roofed courtyard" />
-<img src="GameData/Screenshots/CitadelRuins_2.png" width="32%" alt="Citadel Ruins — gatehouse and corner towers" />
-<img src="GameData/Screenshots/CitadelRuins_3.png" width="32%" alt="Citadel Ruins — watch balconies over the sand collar" />
-
-### Dessert Dreams
-
-Sun-baked desert oasis at midday — sandstone arches and columns under a noon
-sky.
-
-<img src="GameData/Screenshots/Dessert_Dreams_1.png" width="32%" alt="Dessert Dreams — oasis basin at midday" />
-<img src="GameData/Screenshots/Dessert_Dreams_2.png" width="32%" alt="Dessert Dreams — sandstone arches" />
-<img src="GameData/Screenshots/Dessert_Dreams_3.png" width="32%" alt="Dessert Dreams — columns above the sand" />
-
-### Dust Ravine
-
-Desert fortress — halls, corridors, underground tunnels and three outdoor
-areas under a daylight sky.
-
-<img src="GameData/Screenshots/Dust_Ravine_1.png" width="32%" alt="Dust Ravine — fortress ramparts" />
-<img src="GameData/Screenshots/Dust_Ravine_2.png" width="32%" alt="Dust Ravine — interior hall" />
-<img src="GameData/Screenshots/Dust_Ravine_3.png" width="32%" alt="Dust Ravine — outdoor courtyard" />
+<img src="GameData/Screenshots/Editopr.png" width="32%" alt="Editor" />
+<img src="GameData/Screenshots/AngelEd_b122.png" width="32%" alt="Editor Version b122" />
 
 ### Engine Test
-
-Small functional/test scene — five chambers, a great hall and a courtyard,
-one zone of every zone type, and a portal to Dust Ravine.
 
 <img src="GameData/Screenshots/EngineTest_1.png" width="32%" alt="Engine Test — chamber with tileset brushes" />
 <img src="GameData/Screenshots/EngineTest_2.png" width="32%" alt="Engine Test — great hall" />
@@ -82,106 +79,24 @@ one zone of every zone type, and a portal to Dust Ravine.
 
 ### Sektor 01 — SilentPines
 
-The campaign opener: a cliff-top arrival overlooking a forested gorge, a stepped
-descent, a river and bridge, a waterfall into a plunge pool, and Nali-style
-shrine ruins in the pine valley.
-
 <img src="GameData/Screenshots/Sektor_01_SilentPines_1.png" width="32%" alt="SilentPines — arrival ledge over the gorge" />
 <img src="GameData/Screenshots/Sektor_01_SilentPines_2.png" width="32%" alt="SilentPines — the waterfall and plunge pool" />
 <img src="GameData/Screenshots/Sektor_01_SilentPines_3.png" width="32%" alt="SilentPines — shrine terrace and pines" />
 
 ### KryoArchipel — Dusk Falls
 
-Three dusk-lit cascade terraces at 16, 8 and 0, two waterfalls into pools that
-sit under their falls, a ruined aqueduct you can walk over, stepping stones
-through the basin, and a lookout exit.
-
 <img src="GameData/Screenshots/KryoArchipel_Severny_1.png" width="32%" alt="Dusk Falls — upper terrace at dusk" />
 <img src="GameData/Screenshots/KryoArchipel_Severny_2.png" width="32%" alt="Dusk Falls — the cascade and aqueduct" />
 <img src="GameData/Screenshots/KryoArchipel_Severny_3.png" width="32%" alt="Dusk Falls — basin and stepping stones" />
 
-## Campaign
-
-The Sefirot arc: fourteen connected worlds on one portal chain, with objectives,
-a campaign save and a campaign Host/Join pane. The eleven below were placeholder
-rooms until b111; each now has a design intent, a pacing arc and a landmark it is
-built around — the full brief for every one is in
-[`Wiki/World-Design-Pass.md`](Wiki/World-Design-Pass.md).
-
-### Sektor 02 — Megacity Grid
-A crossroads district and a relay plaza beyond the gate. The tower is visible
-over the wall from the spawn; the west stair leads to a ring deck, then the
-tower top where the exit is.
-
-<img src="GameData/Screenshots/Sektor_02_MegacityGrid_1.png" width="49%" alt="Megacity Grid — the south avenue and the rail deck" />
-<img src="GameData/Screenshots/Sektor_02_MegacityGrid_2.png" width="49%" alt="Megacity Grid — through the north gate to the relay tower" />
-
-### Sektor 03 — Aegis Base Alpha
-A compound, a motor pool and a containment annex. The hangar's portal cradle is
-empty — the machine was moved north, and the way off the base is through it.
-
-<img src="GameData/Screenshots/Sektor_03_AegisBaseAlpha_1.png" width="49%" alt="Aegis Base Alpha — the yard and the hangar doors" />
-<img src="GameData/Screenshots/Sektor_03_AegisBaseAlpha_2.png" width="49%" alt="Aegis Base Alpha — the containment annex and the portal rig" />
-
-### AlShaddai Metropolis
-A fortified desert sanctuary with an arcade, a dry well turned oasis, and a wall
-walk over the bazaar. The caravan gate is the exit.
-
-<img src="GameData/Screenshots/AlShaddai_Metropolis_1.png" width="49%" alt="AlShaddai — the gate, the paved processional and the well" />
-<img src="GameData/Screenshots/AlShaddai_Metropolis_2.png" width="49%" alt="AlShaddai — the oasis basin and its kerbed rim" />
-
-### Chasm of Forgotten Memories
-Two rims, three routes: the bridge, an upper crossing, and the canyon floor with
-its seep and the stair back up to the shrine.
-
-<img src="GameData/Screenshots/Chasm_ForgottenMemories_1.png" width="49%" alt="Chasm — the bridge and the shrine obelisks" />
-<img src="GameData/Screenshots/Chasm_ForgottenMemories_2.png" width="49%" alt="Chasm — the canyon seep under the bridge" />
-
 ### Refinery Complex 02B
-A tank farm, a pipe hall with a burning furnace, catwalks over the floor, and a
-coolant sump in the yard. The control room is the exit.
-
 <img src="GameData/Screenshots/Refinery_Complex_02B_1.png" width="49%" alt="Refinery — the yard, the tanks and the pipe hall" />
 <img src="GameData/Screenshots/Refinery_Complex_02B_2.png" width="49%" alt="Refinery — the coolant sump" />
 
 ### Digital Purgatory
-A grid deck under a monolith forest, a raised core disc with light bridges, and
-four platforms that each hold something you want.
 
 <img src="GameData/Screenshots/Digital_Purgatory_1.png" width="49%" alt="Digital Purgatory — the monolith forest and the core" />
 <img src="GameData/Screenshots/Digital_Purgatory_2.png" width="49%" alt="Digital Purgatory — the core disc and its bridges" />
-
-### Phantom Hubs
-An interchange with no timetable: platforms, an empty track trench, a concourse
-mezzanine and the departure board that still updates.
-
-<img src="GameData/Screenshots/Phantom_Hubs_1.png" width="49%" alt="Phantom Hubs — the concourse and the departure board" />
-<img src="GameData/Screenshots/Phantom_Hubs_2.png" width="49%" alt="Phantom Hubs — the platforms and the track trench" />
-
-### Soul Eater Vaults
-A nave with six side vaults and a lit soul well at its centre; the sealed door at
-the far end is the way on.
-
-<img src="GameData/Screenshots/SoulEater_Vaults_1.png" width="49%" alt="Soul Eater Vaults — the antechamber and the nave door" />
-<img src="GameData/Screenshots/SoulEater_Vaults_2.png" width="49%" alt="Soul Eater Vaults — the nave and the soul well" />
-
-### Citadel Astral Mind
-An island deck that broke free of its ground, four satellites on 4-wide bridges,
-and a shattered plain twenty units below with a stair back up.
-
-<img src="GameData/Screenshots/Citadel_AstralMind_1.png" width="49%" alt="Citadel Astral Mind — the island deck and the spire" />
-<img src="GameData/Screenshots/Citadel_AstralMind_2.png" width="49%" alt="Citadel Astral Mind — the bridges and the shattered plain" />
-
-### Esoteric Altar Chambers
-The last room of the arc: an antechamber, a symmetrical rite hall with two
-chapels, and a sanctum whose roof breaks over the altar.
-
-<img src="GameData/Screenshots/Esoteric_Altar_Chambers_1.png" width="49%" alt="Esoteric Altar Chambers — the antechamber and the lit door" />
-<img src="GameData/Screenshots/Esoteric_Altar_Chambers_2.png" width="49%" alt="Esoteric Altar Chambers — the rite hall" />
-
-### Near Death Threshold
-One bridge over a mirror field, standing stones either side, and a far gate. Drop
-to the field and the reversed bridge takes you the long way round.
 
 <img src="GameData/Screenshots/NearDeath_Threshold_1.png" width="49%" alt="Near Death Threshold — the bridge and the far gate" />
 <img src="GameData/Screenshots/NearDeath_Threshold_2.png" width="49%" alt="Near Death Threshold — the mirror field from the bridge" />
@@ -267,6 +182,7 @@ to the field and the reversed bridge takes you the long way round.
 
 | Topic | Page |
 |---|---|
+| **Community forum, bug reports, maps** | **[angels95.tribewarez.com](https://angels95.tribewarez.com)** |
 | Quick developer reference | [AGENTS.md](AGENTS.md) |
 | Gameplay, controls, HUD, mechanics | [Core Game](Wiki/Core-Game.md) |
 | Architecture, source tree, key classes | [Engine Overview](Wiki/Engine-Overview.md) |
@@ -451,6 +367,87 @@ compiled-but-never-linked editor object fails the build rather than shipping.
 ## Changelog
 
 ### Unreleased
+- **The community forum is now linked from the README.** `angels95.tribewarez.com`
+  (AETHERNET) is where the community discusses the game, reports bugs and shares
+  maps; it is linked from the download line, its own **Community — Forum**
+  section and the Quick Links table. The same host serves the master the Internet
+  server browser talks to.
+- **View-model: no more floating prop, no more stray magazine slab.** The shipped
+  offsets are now angular rather than per-weapon guesses — `(0.28,-0.23,0.68)`
+  pistol, `(0.30,-0.24,0.72)` SMG, `(0.32,-0.26,0.77)` rifle/shotgun — which puts
+  every gun ~23° right / ~19° down with the grip running off the bottom-right
+  edge, the pose that makes a weapon with **no hand model** read as held. Yaw is
+  110° (was 90°, which rendered the gun end-on). The detachable magazine is now
+  loaded with the weapon's own texture and drawn **only during a reload**: an
+  empty texture path had it rendering as an untextured white slab tinted by the
+  nearest light (the bright yellow-green block on the pistol grip and the SMG
+  stock).
+- **Blood no longer paints a card over the enemy.** `CombatFX::SpawnBlood` also
+  called `AddDecal(hitPos, dir, 0.55)` — and every caller is a *pawn* hit, so the
+  decal was built in the plane of the shot: a 0.55-unit blood card flat against
+  the camera, centred on the enemy, drawn after the pawn. That is the "shooting
+  an enemy hides its mesh" report. Actors get particles; decals stay for world
+  surfaces. `test_pawn_system` pins it.
+- **The gib ground-pool sits on the floor.** `SpawnGibs` now takes the pawn's feet
+  and places the pool at `feet.y + 0.02`; it used to be passed the body centre
+  and subtract 0.9, which buried it 0.3 under the floor or floated it over a
+  ledge.
+- **Advanced Options > Display > Rendering > Lighting is now a live branch.** Three
+  new uniforms in **both** fragment shaders, uploaded once per program per frame by
+  `Source/Renderer/ShadingTuning.hpp`: `Ambient Boost` (ambient term), `Specular
+  Scale` (Blinn-Phong highlight) and `Light Softness` (widens the attenuation curve,
+  0 = authored). Defaults are 1/1/0, i.e. the authored look until a slider moves.
+  `Dynamic Lights` stops every torch/fire/lamp flicker by uploading `period 0`,
+  which the shaders already treat as static.
+- **Fog is now editable without fighting the level art.** `Level Fog Density`
+  multiplies whatever haze a skyzone authored (always applied), and `Override Level
+  Fog` replaces start/end/density/colour. The override lands in
+  `OzoneLoader::SetWorldFog` - the one store every fog path writes through - and
+  LitFog is re-synced from that store per frame, so the world, surface-flagged
+  brushes and foliage all agree (verified A/B: 3x density, 3x ambient, softness 1
+  renders visibly thicker haze, wider light pools and lifted shadows).
+- **The parity suite now catches "declared but never uploaded".** `test_lighting_model_parity`
+  asserts both shaders declare the three uniforms, both multiply by them, the single
+  uploader names them, and all three programs (LitFog, Surface, Wind) call it.
+- **Advanced Options: a UT99-style settings tree, wired to real settings.** New
+  `Source/Menu/AdvancedOptions.hpp` (category tree left, live properties right),
+  opened from **Settings → Advanced Options...** in the native menu bar and from
+  the console's **`/advanced`** (the only entry point without a native menu). It
+  covers Display (Fog/Effects/Quality/Window), Audio, Input, Network, Game
+  (Gameplay/HUD) and Debug, plus a **Network** section with `Ping Interval`
+  (drives the live PING cadence), `Show Network Stats` (corner ping/world/player
+  readout) and read-only status rows.
+  - Only settings with a real consumer get a row. Shadow Quality, Detail
+    Textures, and the whole Netspeed/Client-Rate/Actor-Replication/Simulated
+    Lag/Packet-Loss vocabulary do not exist in this engine, so they are absent
+    rather than inert.
+  - New persisted keys: `[AngelTech.Network] ping_interval` (1-30 s) and
+    `show_net_stats`, covered by a new `tests/ClientSettings.test.cpp`
+    round-trip (which also pins the section's position in the file).
+- **The half-started native menu item compiles again.** `Source/UI/UiHandler.cpp`
+  referenced `kIdmASettings` (typo for `kIdmSettings`) and an
+  `hAdvancedSettingsMenu` popup that was never created, so the client did not
+  build. The item now lives in the Settings popup as "Advanced Options...", and
+  the callback sits in the right slot of the `MenuBarCallbacks` aggregate (adding
+  the field mid-struct silently shifted `onAbout` onto it).
+- **The working copy's lit shader was not compiling, so anything built from it rendered unlit.** A brace was lost from `LitFog.fs` while retuning attenuation; `LoadShader` returned `id == 0` and raylib silently fell back to the default shader: no lights, no fog, no gamma, no emissive, no specular. (HEAD compiled — this was an in-progress edit.) Fixed, and `test_shaders_braces_balance` now walks every shader so an unbalanced file fails `make test` instead of quietly flat-lighting the game.
+- **The "smooth lighting" retune is now in BOTH shaders.** `Surface.fs` still had
+  the old `1/(1+0.09d+0.032d²)` attenuation with a hard radius cut, `pow(NdotH,32)`
+  specular with no Fresnel, and `ambient/10`. It now shares `AMBIENT_GAIN` /
+  `DESATURATION` with `LitFog.fs` and the same attenuation/Fresnel; a new
+  `test_lighting_model_parity` compares the function bodies so the two can't
+  drift again.
+- **View-models re-framed; the pistol is no longer the size of a rifle.**
+  `viewmodel_scale` is a held-length multiplier on the longest axis, so it was
+  making a 22 cm pistol exactly as long as an 83 cm rifle, and an offset of 0.45
+  with a 0.55-long gun put the grip 0.17 units from the eye. Shipped values are
+  now handgun 0.62, SMG 0.76, rifle/shotgun 0.95, blade 1.15, with offsets that
+  keep the near end >= ~0.5 and a 10-degree inward yaw so the gun is not viewed
+  end-on. The frustum warning also stopped reporting every weapon as "behind".
+- **`Wind.vs` tidy-up** on top of the two-layer sway: the gust is clamped at 0
+  (it could flip sign at the turning point), the displacement guard clamps LENGTH
+  instead of each axis, and the strength clamp is documented as the authoring
+  range (0.2-0.5) rather than a magic 1.8.
 - **Four guns from the RetroWeaponsPack, two of them new.** `smg_01` (32-round
   spray, 9mm projectile) and `shotgun_01` (8 buckshot pellets, 6-shell magazine)
   join `pistol_01`/`rifle_01`: defs, merged Skinned GLBs with Idle/Fire/Reload,

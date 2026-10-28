@@ -7,6 +7,8 @@
 // separate objects.
 // ============================================================================
 
+#include <set>
+
 // =====================================================================
 // Pawn Manager â€” Hierarchical Tree View
 // =====================================================================
@@ -46,13 +48,86 @@ static void AddChildren(HWND hTree, HTREEITEM hParent, const PawnTreeNode& node)
     }
 }
 
+// ---------------------------------------------------------------------------
+// Tree state capture/restore
+// ---------------------------------------------------------------------------
+static std::string TreeLabelPath(const std::string& parent, const std::string& label) {
+    return parent.empty() ? label : parent + '\x1f' + label;
+}
+
+static bool TreeItemText(HWND hTree, HTREEITEM hItem, std::wstring& text, UINT& state) {
+    wchar_t buf[256] = {};
+    TVITEMW item = {};
+    item.hItem = hItem;
+    item.mask = TVIF_HANDLE | TVIF_TEXT | TVIF_STATE;
+    item.stateMask = TVIS_EXPANDED | TVIS_SELECTED;
+    item.pszText = buf;
+    item.cchTextMax = 256;
+    if (!SendMessage(hTree, TVM_GETITEMW, 0, (LPARAM)&item)) return false;
+    text.assign(buf);
+    state = item.state;
+    return true;
+}
+
+static void CaptureTreeState(HWND hTree, HTREEITEM hItem, const std::string& parent,
+                             std::string& selected, std::set<std::string>& expanded) {
+    for (HTREEITEM h = (HTREEITEM)SendMessage(hTree, TVM_GETNEXTITEM,
+                 hItem ? TVGN_CHILD : TVGN_ROOT, (LPARAM)hItem);
+         h;
+         h = (HTREEITEM)SendMessage(hTree, TVM_GETNEXTITEM, TVGN_NEXT, (LPARAM)h)) {
+        std::wstring wtext;
+        UINT state = 0;
+        if (!TreeItemText(hTree, h, wtext, state)) continue;
+        const std::string path = TreeLabelPath(parent, std::string(wtext.begin(), wtext.end()));
+        if (state & TVIS_EXPANDED) expanded.insert(path);
+        if (state & TVIS_SELECTED) selected = path;
+        CaptureTreeState(hTree, h, path, selected, expanded);
+    }
+}
+
+static void RestoreTreeState(HWND hTree, HTREEITEM hItem, const std::string& parent,
+                             const std::string& selected, const std::set<std::string>& expanded,
+                             bool& selectedDone) {
+    for (HTREEITEM h = (HTREEITEM)SendMessage(hTree, TVM_GETNEXTITEM,
+                 hItem ? TVGN_CHILD : TVGN_ROOT, (LPARAM)hItem);
+         h;
+         h = (HTREEITEM)SendMessage(hTree, TVM_GETNEXTITEM, TVGN_NEXT, (LPARAM)h)) {
+        std::wstring wtext;
+        UINT state = 0;
+        if (!TreeItemText(hTree, h, wtext, state)) continue;
+        const std::string path = TreeLabelPath(parent, std::string(wtext.begin(), wtext.end()));
+        if (expanded.count(path))
+            SendMessage(hTree, TVM_EXPAND, TVE_EXPAND, (LPARAM)h);
+        if (!selectedDone && path == selected) {
+            SendMessage(hTree, TVM_SELECTITEM, TVGN_CARET, (LPARAM)h);
+            selectedDone = true;
+        }
+        RestoreTreeState(hTree, h, path, selected, expanded, selectedDone);
+    }
+}
+
 static void PopulateTreeView(HWND hTree) {
+    // The panel rebuilds on Refresh AND on a hot reload of a def file. Tearing
+    // every item out used to collapse the whole Actor hierarchy and drop the
+    // selection, so an unrelated .ozls save looked like the panel had reset
+    // itself. Capture expansion + selection by LABEL PATH first.
+    //
+    // Path, not lParam: lParam is "type|defName" and is not unique (a pickup and
+    // a weapon can share a name), while a path also survives an unrelated
+    // sibling appearing or disappearing.
+    std::string selected;
+    std::set<std::string> expanded;
+    CaptureTreeState(hTree, nullptr, "", selected, expanded);
+
     SendMessage(hTree, TVM_DELETEITEM, 0, (LPARAM)TVI_ROOT);
     PawnTreeNode root = BuildPawnTree();
     AddChildren(hTree, TVI_ROOT, root);
     // Expand root
     HTREEITEM hRoot = (HTREEITEM)SendMessage(hTree, TVM_GETNEXTITEM, TVGN_ROOT, 0);
     if (hRoot) SendMessage(hTree, TVM_EXPAND, TVE_EXPAND, (LPARAM)hRoot);
+
+    bool selectedDone = false;
+    RestoreTreeState(hTree, nullptr, "", selected, expanded, selectedDone);
 }
 
 void ShowPawnManager(bool show) {

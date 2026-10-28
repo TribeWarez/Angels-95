@@ -35,6 +35,12 @@ out vec4 finalColor;
 #define LIGHT_EFFECT_FIRE   3
 #define LIGHT_EFFECT_LAMP   4
 
+// Shared shading constants - MUST match GameData/Shaders/Lights/LitFog.fs, which
+// is the same lighting model for ordinary lit geometry.
+// tests/Surface.test.cpp compares the two files.
+#define AMBIENT_GAIN  0.33  // ambient term as a fraction of the light scale
+#define DESATURATION  1   // 1.0 = no change, lower = flatter palette
+
 struct Light {
     int enabled;
     int type;
@@ -58,6 +64,13 @@ uniform Light lights[MAX_LIGHTS];
 uniform vec4 ambient;
 uniform vec3 viewPos;
 uniform float uTime;
+
+// Shading tuning - IDENTICAL to LitFog.fs, which is the same lighting model for
+// ordinary geometry. uAmbientBoost multiplies the ambient term, uSpecularScale
+// the Blinn-Phong specular, and uLightSoftness widens the attenuation curve.
+uniform float uAmbientBoost = 1.0;
+uniform float uSpecularScale = 1.0;
+uniform float uLightSoftness = 0.0;
 
 // --- per-surface uniforms ---------------------------------------------------
 uniform int   uSurfaceFlags = 0;
@@ -121,9 +134,27 @@ float hash11(float p) {
 
 float lightAttenuation(vec3 lightPos, vec3 fragPos, float radius) {
     float dist = distance(lightPos, fragPos);
-    if (radius > 0.0 && dist > radius) return 0.0;
-    float d = dist;
-    return 1.0 / (1.0 + 0.09 * d + 0.032 * d * d);
+
+    // Softer quadratic (closer to classic UE1 feel). IDENTICAL in LitFog.fs and
+    // Surface.fs - these two programs are hand-maintained copies, and when only
+    // one of them was retuned a surface-flagged brush lit differently from the
+    // lit wall standing next to it, in the same frame.
+    //
+    // uLightSoftness widens the whole curve: 0 leaves the authored falloff alone,
+    // 1 doubles the distance at which a light still contributes. Dividing the
+    // linear term by `soft` and the quadratic by `soft*soft` keeps the shape
+    // (rather than just scaling the result) so a soft light stays smooth instead
+    // of becoming a flat ramp.
+    float soft = 1.0 + uLightSoftness;
+    float att = 1.0 / (1.0 + (0.07 / soft) * dist + (0.017 / (soft * soft)) * dist * dist);
+
+    // Soft edge instead of a hard radius cut.
+    if (radius > 0.0) {
+        float edge = 1.0 - smoothstep(radius * 0.65, radius, dist);
+        att *= edge;
+    }
+
+    return att;
 }
 
 float spotCone(vec3 lightPos, vec3 lightTarget, vec3 fragPos, float innerCone, float outerCone) {
@@ -131,6 +162,13 @@ float spotCone(vec3 lightPos, vec3 lightTarget, vec3 fragPos, float innerCone, f
     vec3 toFrag = normalize(fragPos - lightPos);
     float cosAngle = dot(-toFrag, spotDir);
     return smoothstep(outerCone, innerCone, cosAngle);
+}
+
+// Schlick Fresnel approximation - identical to LitFog.fs, which is where the
+// specular gains it. Surface.fs had NO Fresnel term at all, so its specular was
+// missing the grazing-angle lift that makes a wet/glass surface read as one.
+float fresnelSchlick(float cosTheta, float F0) {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
 // `phase` is the LIGHT's own clock (LightNode::phase, advanced once per frame by
@@ -310,10 +348,16 @@ void main()
                 }
             }
 
+            // Blinn-Phong specular, same exponent/gain/Fresnel as LitFog.fs.
+            // Surface.fs used to carry `pow(NdotH, 32.0)` with no Fresnel and no
+            // 0.25 gain, so the same lamp put a tight, bright dot on a
+            // surface-flagged brush and a broad, dim one on the wall beside it.
             if (NdotL > 0.0) {
                 vec3 halfDir = normalize(lightDir + viewDir);
                 float NdotH = max(dot(normal, halfDir), 0.0);
-                specAccum += effColor * pow(NdotH, 32.0) * attenuation * spotFactor;
+                float spec = pow(NdotH, 12.0) * 0.25;
+                float F = fresnelSchlick(max(dot(viewDir, halfDir), 0.0), 0.03);
+                specAccum += effColor * spec * F * attenuation * spotFactor;
             }
         }
     }
@@ -336,9 +380,11 @@ void main()
     //       wants - present in the room, not blown out by the sun.
     //
     // FAKE_LIT must NOT carry uFullBright. The ambient term is a floor
-    // (0.1 / 10 == 0.01 by default), not an exposure reference, so multiplying it
-    // by the backdrop gain turned a 0.55 backdrop into 0.0055 - a 100x darkening
-    // of every shipped painted backdrop. Caught by rendering, not by reading.
+    // (ambient / 10 == 0.01 by default), not an exposure reference, so multiplying
+    // it by the backdrop gain turned a 0.55 backdrop into 0.0055 - a 100x
+    // darkening of every shipped painted backdrop. Caught by rendering, not by
+    // reading. It is deliberately NOT AMBIENT_GAIN: that scales the ambient that
+    // ADDS to a lit surface, while this branch is ambient-only by definition.
     //
     // FAKE_LIT used to share UNLIT's branch, which made it a dead checkbox.
     if (HasFlag(SF_UNLIT) || HasFlag(SF_FAKEBACKDROP)) {
@@ -346,8 +392,13 @@ void main()
     } else if (HasFlag(SF_FAKE_LIT)) {
         lit = baseColor.rgb * (amb.rgb / 10.0) * colDiffuse.rgb;
     } else {
-        lit = baseColor.rgb * ((colDiffuse.rgb + specAccum) * lightAccum);
-        lit += baseColor.rgb * (amb.rgb / 10.0) * colDiffuse.rgb;
+        lit = baseColor.rgb * ((colDiffuse.rgb + specAccum * uSpecularScale) * lightAccum);
+        lit += baseColor.rgb * amb.rgb * AMBIENT_GAIN * uAmbientBoost * colDiffuse.rgb;
+
+        // Same desaturation as LitFog.fs, so a surface brush does not sit in a
+        // more saturated palette than the room it stands in.
+        float luma = dot(lit, vec3(0.299, 0.587, 0.114));
+        lit = mix(vec3(luma), lit, DESATURATION);
     }
 
     // Modulated: multiply against what is already in the framebuffer (set up by

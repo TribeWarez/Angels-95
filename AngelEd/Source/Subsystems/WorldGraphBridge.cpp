@@ -49,6 +49,29 @@ void Editor_SetPlaceMode(int mode) { g_placeMode = (PlaceMode)mode; }
 // ---------------------------------------------------------------------------
 static WNDPROC g_originalWndProc = nullptr;
 
+// Keep the Settings-menu checks in step with the shared state. Called after the
+// window is created (the menu is built BEFORE the INI options are loaded, so its
+// initial checks are just the defaults), and from the toolbar toggle. One
+// definition means the button and the menu cannot disagree.
+static void Editor_SyncUnrealMenuChecks() {
+#ifdef _WIN32
+    HWND w = (HWND)GetWindowHandle();
+    if (!w) return;
+    HMENU menu = GetMenu(w);
+    if (!menu) return;
+    const bool on = g_editorPanels.unrealBrushMove;
+    CheckMenuItem(menu, IDM_UNREAL_MOVE,
+                  MF_BYCOMMAND | (on ? MF_CHECKED : MF_UNCHECKED));
+    const int sp = g_editorPanels.unrealMoveSpeed;
+    CheckMenuItem(menu, IDM_UNREAL_SPEED_SLOW,
+                  MF_BYCOMMAND | (sp == 0 ? MF_CHECKED : MF_UNCHECKED));
+    CheckMenuItem(menu, IDM_UNREAL_SPEED_MED,
+                  MF_BYCOMMAND | (sp == 1 ? MF_CHECKED : MF_UNCHECKED));
+    CheckMenuItem(menu, IDM_UNREAL_SPEED_FAST,
+                  MF_BYCOMMAND | (sp == 2 ? MF_CHECKED : MF_UNCHECKED));
+#endif
+}
+
 static LRESULT CALLBACK EditorWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     // Unsaved-document guard for the window close button / Alt+F4. Returning 0
     // without calling the original proc cancels the close, so GLFW never sees it.
@@ -83,11 +106,32 @@ static LRESULT CALLBACK EditorWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
                 if (w) ShowWindow(w, IsZoomed(w) ? SW_RESTORE : SW_MAXIMIZE);
             } return 0;
             case IDM_RESET_LAYOUT:  ResetPanelLayouts(); return 0;
+            case IDM_SAVE_LAYOUT:
+                SavePanelLayouts();
+                EditorLog("Pane layout saved to %s", kEditorIniPath);
+                return 0;
+            case IDM_UNREAL_MOVE:
+                g_editorPanels.unrealBrushMove = !g_editorPanels.unrealBrushMove;
+                Editor_SyncUnrealMenuChecks();
+                EditorLog("Unreal-style brush movement %s",
+                          g_editorPanels.unrealBrushMove ? "on" : "off");
+                return 0;
+            case IDM_UNREAL_SPEED_SLOW:
+            case IDM_UNREAL_SPEED_MED:
+            case IDM_UNREAL_SPEED_FAST:
+                g_editorPanels.unrealMoveSpeed =
+                    (id == IDM_UNREAL_SPEED_SLOW) ? 0 :
+                    (id == IDM_UNREAL_SPEED_MED)  ? 1 : 2;
+                Editor_SyncUnrealMenuChecks();
+                EditorLog("Unreal brush move speed: %s",
+                          g_editorPanels.unrealMoveSpeed == 0 ? "slow" :
+                          g_editorPanels.unrealMoveSpeed == 1 ? "medium" : "fast");
+                return 0;
             case IDM_RESET_CAM:     SetViewPerspective(); ResetCamera(); return 0;
-            case IDM_VIEW_TOP:      { Vector3 c = OTEditor.MainCamera.target; SetViewPreset({c.x,c.y+80,c.z+0.1f},c,{0,0,-1}); } return 0;
-            case IDM_VIEW_BOTTOM:   { Vector3 c = OTEditor.MainCamera.target; SetViewPreset({c.x,c.y-80,c.z+0.1f},c,{0,0,1}); } return 0;
-            case IDM_VIEW_RIGHT:    { Vector3 c = OTEditor.MainCamera.target; SetViewPreset({c.x+80,c.y,c.z},c,{0,1,0}); } return 0;
-            case IDM_VIEW_LEFT:     { Vector3 c = OTEditor.MainCamera.target; SetViewPreset({c.x-80,c.y,c.z},c,{0,1,0}); } return 0;
+            case IDM_VIEW_TOP:      ViewTop(); return 0;
+            case IDM_VIEW_BOTTOM:   ViewBottom(); return 0;
+            case IDM_VIEW_RIGHT:    ViewRight(); return 0;
+            case IDM_VIEW_LEFT:     ViewLeft(); return 0;
             case IDM_VIEW_PERSPECTIVE: SetViewPerspective(); return 0;
             case IDM_WORLD_GRAPH:   ToggleWorldGraph(); return 0;
             case IDM_LEVEL_LIST:    ShowLevelList(!g_editorPanels.showLevelList); RefreshLevelList(); return 0;

@@ -1,0 +1,436 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vscode-json-schemas/main/schemas/textmate-grammar.json",
+  "name": "OZONE World",
+  "scopeName": "source.ozone",
+  "fileTypes": [
+    "ozone"
+  ],
+  "patterns": [
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#header"
+    },
+    {
+      "include": "#invalid-comment"
+    },
+    {
+      "include": "#brush"
+    },
+    {
+      "include": "#skybox"
+    },
+    {
+      "include": "#heightmap"
+    },
+    {
+      "include": "#entities"
+    },
+    {
+      "include": "#kwarg-deprecated"
+    },
+    {
+      "include": "#kwarg-face"
+    },
+    {
+      "include": "#kwarg-surface"
+    },
+    {
+      "include": "#kwarg-zone"
+    },
+    {
+      "include": "#kwarg-light"
+    },
+    {
+      "include": "#kwarg-mesh"
+    },
+    {
+      "include": "#kwarg-emitter"
+    },
+    {
+      "include": "#kwarg-pathnode"
+    },
+    {
+      "include": "#kwarg-door"
+    },
+    {
+      "include": "#gametype"
+    },
+    {
+      "include": "#booleans"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#punctuation"
+    },
+    {
+      "include": "#generic-keyword"
+    },
+    {
+      "include": "#invalid-token"
+    }
+  ],
+  "repository": {
+    "comment": {
+      "comment": "OzoneParser::parse_string skips a line only when '#' is the FIRST character (column 0).",
+      "match": "^#.*$",
+      "name": "comment.line.number-sign.ozone"
+    },
+    "header": {
+      "comment": "Lines beginning with OZONE or brushes are skipped as legacy/format headers (prefix match).",
+      "match": "^(OZONE|brushes)\\b.*$",
+      "name": "comment.line.header.ozone"
+    },
+    "invalid-comment": {
+      "comment": "Only a column-0 '#' is a comment. An indented '#' or any '//' line is parsed as an unknown primitive and deleted by the next editor save.",
+      "patterns": [
+        {
+          "match": "^[ \\t]+#.*$",
+          "name": "invalid.illegal.comment.indented.ozone"
+        },
+        {
+          "match": "^[ \\t]*//.*$",
+          "name": "invalid.illegal.comment.slashes.ozone"
+        }
+      ]
+    },
+    "generic-keyword": {
+      "comment": "Fallback so a malformed entity line (e.g. 'light' with no subtype) still highlights the keyword instead of the whole token as invalid.",
+      "match": "^([ \\t]*)(playerstart|pickup|zone|npc|light|portal|levelinfo|particles|emitter|Mesh\\.Static|Mesh\\.Skeletal|ParticleEmitter|PathNode|WindZone|door|trigger|skybox|heightmap)\\b",
+      "captures": {
+        "2": {
+          "name": "keyword.other.entity.ozone"
+        }
+      }
+    },
+    "invalid-token": {
+      "comment": "The first token of a line is case-sensitive and exact. Unknown tokens are warned about and skipped.",
+      "match": "^[ \\t]*([A-Za-z_][A-Za-z0-9_.]*)(?=[ \\t]|$)",
+      "captures": {
+        "1": {
+          "name": "invalid.illegal.unknown-primitive.ozone"
+        }
+      }
+    },
+    "brush": {
+      "patterns": [
+        {
+          "match": "^([ \\t]*)(add|sub|intersect|deresc)([ \\t]+)(box|cyl|sph|pyr|pln)\\b",
+          "captures": {
+            "2": {
+              "name": "keyword.control.csg.ozone"
+            },
+            "4": {
+              "name": "support.function.primitive.ozone"
+            }
+          }
+        },
+        {
+          "match": "^([ \\t]*)(box|cyl|sph|pyr|pln)\\b",
+          "captures": {
+            "2": {
+              "name": "support.function.primitive.ozone"
+            }
+          }
+        },
+        {
+          "match": "^([ \\t]*)(add|sub|intersect|deresc)\\b",
+          "captures": {
+            "2": {
+              "name": "keyword.control.csg.ozone"
+            }
+          }
+        }
+      ]
+    },
+    "skybox": {
+      "match": "^([ \\t]*)(skybox)([ \\t]+)(\"[^\"]*\"|[^\\s]+)",
+      "captures": {
+        "2": {
+          "name": "support.function.primitive.skybox.ozone"
+        },
+        "4": {
+          "name": "string.unquoted.path.ozone"
+        }
+      }
+    },
+    "heightmap": {
+      "match": "^([ \\t]*)(heightmap)([ \\t]+)(\"[^\"]*\"|[^\\s]+)([ \\t]+)(\"[^\"]*\"|[^\\s]+)",
+      "captures": {
+        "2": {
+          "name": "support.function.primitive.heightmap.ozone"
+        },
+        "4": {
+          "name": "string.unquoted.path.ozone"
+        },
+        "6": {
+          "name": "string.unquoted.path.ozone"
+        }
+      }
+    },
+    "entities": {
+      "patterns": [
+        {
+          "match": "^([ \\t]*)(light)([ \\t]+)(point|spot|directional)\\b",
+          "captures": {
+            "2": {
+              "name": "keyword.other.entity.light.ozone"
+            },
+            "4": {
+              "name": "support.class.light-type.ozone"
+            }
+          }
+        },
+        {
+          "match": "^([ \\t]*)(zone)([ \\t]+)((?i:water|ladder|sky|reverb|sound|gameplay_sound|portal|gravity))\\b",
+          "captures": {
+            "2": {
+              "name": "keyword.other.entity.zone.ozone"
+            },
+            "4": {
+              "name": "support.class.zone-type.ozone"
+            }
+          }
+        },
+        {
+          "match": "^([ \\t]*)(pickup)([ \\t]+)([^\\s]+)",
+          "captures": {
+            "2": {
+              "name": "keyword.other.entity.pickup.ozone"
+            },
+            "4": {
+              "name": "entity.name.type.pickup.ozone"
+            }
+          }
+        },
+        {
+          "match": "^([ \\t]*)(npc)([ \\t]+)([^\\s]+)",
+          "captures": {
+            "2": {
+              "name": "keyword.other.entity.npc.ozone"
+            },
+            "4": {
+              "name": "entity.name.type.pawn-def.ozone"
+            }
+          }
+        },
+        {
+          "match": "^([ \\t]*)(portal)([ \\t]+)([^\\s]+)",
+          "captures": {
+            "2": {
+              "name": "keyword.other.entity.portal.ozone"
+            },
+            "4": {
+              "name": "entity.name.namespace.world.ozone"
+            }
+          }
+        },
+        {
+          "match": "^([ \\t]*)(trigger)([ \\t]+)([^\\s]+)",
+          "captures": {
+            "2": {
+              "name": "keyword.other.entity.trigger.ozone"
+            },
+            "4": {
+              "name": "entity.name.function.trigger-def.ozone"
+            }
+          }
+        },
+        {
+          "match": "^([ \\t]*)(PathNode)([ \\t]+)([^\\s]+)",
+          "captures": {
+            "2": {
+              "name": "keyword.other.entity.pathnode.ozone"
+            },
+            "4": {
+              "name": "entity.name.function.pathnode.ozone"
+            }
+          }
+        },
+        {
+          "match": "^([ \\t]*)(Mesh\\.Static|Mesh\\.Skeletal)([ \\t]+)(\"[^\"]*\"|[^\\s]+)",
+          "captures": {
+            "2": {
+              "name": "keyword.other.entity.mesh.ozone"
+            },
+            "4": {
+              "name": "string.unquoted.path.ozone"
+            }
+          }
+        },
+        {
+          "match": "^([ \\t]*)(ParticleEmitter)([ \\t]+)([^\\s]+)",
+          "captures": {
+            "2": {
+              "name": "keyword.other.entity.particle-emitter.ozone"
+            },
+            "4": {
+              "name": "support.constant.particle-type.ozone"
+            }
+          }
+        },
+        {
+          "match": "^([ \\t]*)(emitter)([ \\t]+)(sound|music)\\b",
+          "captures": {
+            "2": {
+              "name": "keyword.other.entity.emitter.ozone"
+            },
+            "4": {
+              "name": "support.constant.emitter-type.ozone"
+            }
+          }
+        },
+        {
+          "match": "^([ \\t]*)(particles)([ \\t]+)((?i:none|snow|rain|void|void_realm|psychic|psychic_realm))\\b",
+          "captures": {
+            "2": {
+              "name": "keyword.other.entity.particles.ozone"
+            },
+            "4": {
+              "name": "support.constant.weather-type.ozone"
+            }
+          }
+        },
+        {
+          "match": "^([ \\t]*)(door)([ \\t]+)(\"[^\"]*\"|[^\\s]+)",
+          "captures": {
+            "2": {
+              "name": "keyword.other.entity.door.ozone"
+            },
+            "4": {
+              "name": "string.unquoted.path.ozone"
+            }
+          }
+        },
+        {
+          "match": "^([ \\t]*)(playerstart|levelinfo|WindZone)\\b",
+          "captures": {
+            "2": {
+              "name": "keyword.other.entity.ozone"
+            }
+          }
+        }
+      ]
+    },
+    "kwarg-deprecated": {
+      "comment": "The exporter writes these but OzoneParser::ParseSurfaceField does not read them. Use alpha=, cutoff= and glowScale= instead.",
+      "match": "\\b(surfAlpha|surfCutoff|surfGlowScale)(?=\\s*=)",
+      "name": "invalid.deprecated.surface-kwarg.ozone"
+    },
+    "kwarg-face": {
+      "match": "\\b(face(?:px|nx|py|ny|pz|nz)_[A-Za-z]+)(?=\\s*=)",
+      "captures": {
+        "1": {
+          "name": "entity.other.attribute-name.face.ozone"
+        }
+      }
+    },
+    "kwarg-surface": {
+      "match": "\\b(flags|texPath|tex|surfTex|texSlot|surfTexSlot|material|surfMaterial|uvScaleU|texScaleU|uvScaleV|texScaleV|uvOffsetU|texOffsetU|uvOffsetV|texOffsetV|pan|panU|panV|alpha|cutoff|glow|surfGlow|glowScale)(?=\\s*=)",
+      "captures": {
+        "1": {
+          "name": "entity.other.attribute-name.surface.ozone"
+        }
+      }
+    },
+    "kwarg-zone": {
+      "match": "\\b(gravity|gravity_vector|jump|terminal|water_gravity|water_drag|swim_up|ladder_speed|fly_mult)(?=\\s*=)",
+      "captures": {
+        "1": {
+          "name": "entity.other.attribute-name.zone-physics.ozone"
+        }
+      }
+    },
+    "kwarg-light": {
+      "match": "\\b(effect|flare|corona|name)(?=\\s*=)",
+      "captures": {
+        "1": {
+          "name": "entity.other.attribute-name.light.ozone"
+        }
+      }
+    },
+    "kwarg-mesh": {
+      "match": "\\b(scale|tex|material|anim|animfile|speed|wind)(?=\\s*=)",
+      "captures": {
+        "1": {
+          "name": "entity.other.attribute-name.mesh.ozone"
+        }
+      }
+    },
+    "kwarg-emitter": {
+      "match": "\\b(rate|life|spread|sizestart|sizeend|rend|gend|bend|dirx|diry|dirz|yaw|g|b|r)(?=\\s*=)",
+      "captures": {
+        "1": {
+          "name": "entity.other.attribute-name.emitter.ozone"
+        }
+      }
+    },
+    "kwarg-pathnode": {
+      "match": "\\b(radius|next)(?=\\s*=)",
+      "captures": {
+        "1": {
+          "name": "entity.other.attribute-name.pathnode.ozone"
+        }
+      }
+    },
+    "kwarg-door": {
+      "match": "\\b(key|anim|locked)(?=\\s*=)",
+      "captures": {
+        "1": {
+          "name": "entity.other.attribute-name.door.ozone"
+        }
+      }
+    },
+    "gametype": {
+      "match": "(gametype\\s*=)\\s*([A-Za-z0-9_]+)",
+      "captures": {
+        "1": {
+          "name": "entity.other.attribute-name.levelinfo.ozone"
+        },
+        "2": {
+          "name": "support.constant.gametype.ozone"
+        }
+      }
+    },
+    "booleans": {
+      "patterns": [
+        {
+          "match": "\\b(bidir|once|loop)\\b",
+          "name": "constant.language.boolean.ozone"
+        },
+        {
+          "match": "\\bwind\\b(?!\\s*=)",
+          "name": "constant.language.boolean.ozone"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.ozone",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": []
+    },
+    "numbers": {
+      "match": "(?<![\\w.])-?\\d+(?:\\.\\d+)?(?:[eE][-+]?\\d+)?",
+      "name": "constant.numeric.ozone"
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "match": "=",
+          "name": "keyword.operator.assignment.ozone"
+        },
+        {
+          "match": ",",
+          "name": "punctuation.separator.comma.ozone"
+        }
+      ]
+    }
+  }
+}

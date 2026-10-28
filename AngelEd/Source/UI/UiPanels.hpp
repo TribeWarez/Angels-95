@@ -65,9 +65,20 @@ PawnTreeNode BuildPawnTree();
 // --- Windows-only functions ---
 void CreateAllEditorWindows(void* hInst, void* hRaylibWnd);
 
+// Path of the editor's preference file: panel geometry ([Layout]) plus the input
+// options in [Options]. Declared here so the View-menu handler can name it in a
+// log line without copying the literal, and so the writer and the loader cannot
+// drift apart.
+inline const char* const kEditorIniPath = "System/AngelEd.ini";
+
 // Restore every panel to its built-in rect and maximize the main window. Backs
 // View -> Reset Layout; panel geometry is persisted in System/AngelEd.ini.
 void ResetPanelLayouts();
+
+// Write the CURRENT panel geometry (and the input options) to kEditorIniPath now.
+// Backs View -> Save Pane Layout. Also runs on exit, so a just-arranged layout is
+// only otherwise kept if the editor quits cleanly.
+void SavePanelLayouts();
 
 // Keyboard plumbing for the native panels.
 //
@@ -90,7 +101,14 @@ bool EditorUi_ViewportHasFocus();
 
 // Rebuild the Pawn Manager "Actor Hierarchy" tree from the current registries.
 // Call after PawnDefs/.ozls defs are loaded (windows are created before then).
+// Expansion and selection are preserved across the rebuild, so a hot reload (or
+// the Refresh button) never collapses the hierarchy the user is working in.
 void RefreshPawnManager();
+
+// Re-read the Script Manager list after .ozls files changed on disk. Keeps the
+// selected def selected. Safe to call whether or not the panel is open (the
+// backing list is what a later open shows).
+void RefreshScriptManager();
 void DestroyAllEditorWindows();
 void ShowSoundManager(bool show);
 void ShowTextureManager(bool show);
@@ -116,6 +134,12 @@ void ShowSurfacePropsScoped(bool show, int renderable, uint32_t faceMask,
     // what was actually stored after an Apply.
     void SurfacePropsRefresh(void* hwnd);
 void ShowPropertiesPanel(bool show);
+
+// Hot reload: re-read the def section of the OPEN Entity Properties panel from
+// the registry. No-op when the panel is closed, shows no def, or has typed-but-
+// unapplied stat edits (a background reload must never act as an implicit Apply
+// or Cancel).
+void RefreshOpenDefProperties();
 void ShowAnimPanel(bool show);
 void RefreshAnimPanel();
 void ShowMaterialGraph(bool show);
@@ -137,11 +161,14 @@ void LayoutStatsSidebar(int clientW, int clientH, int topOffset, int width);
 int GetStatsSidebarWidth();
 #else
 // Stub implementations for non-Windows
+inline const char* const kEditorIniPath = "System/AngelEd.ini";
 inline void CreateAllEditorWindows(void*, void*) {}
 inline void ResetPanelLayouts() {}
+inline void SavePanelLayouts() {}
 inline bool EditorUi_HandleMessage(void*) { return false; }
 inline bool EditorUi_ViewportHasFocus() { return true; }
 inline void RefreshPawnManager() {}
+inline void RefreshScriptManager() {}
 inline void DestroyAllEditorWindows() {}
 inline void ShowSoundManager(bool) {}
 inline void ShowTextureManager(bool) {}
@@ -158,6 +185,7 @@ inline void ShowHeightmapEditor(bool) {}
 inline void ShowWorldGraph(bool) {}
 inline void ShowKeymapPanel(bool) {}
 inline void ShowPropertiesPanel(bool) {}
+inline void RefreshOpenDefProperties() {}
 inline void ShowLevelList(bool) {}
 inline void RefreshLevelList() {}
 inline void RefreshWorldGraph() {}

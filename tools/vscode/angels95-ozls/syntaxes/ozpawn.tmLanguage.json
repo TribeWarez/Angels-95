@@ -1,0 +1,73 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vscode-json-schemas/main/schemas/textmate-grammar.json",
+  "name": "Angel Pawn Def",
+  "scopeName": "source.ozpawn",
+  "fileTypes": [
+    "cfg"
+  ],
+  "patterns": [
+    {
+      "include": "#section"
+    },
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#key-value"
+    },
+    {
+      "include": "#numbers"
+    }
+  ],
+  "repository": {
+    "section": {
+      "match": "^\\s*(\\[)([^\\]]*)(\\])",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.section.begin.ozpawn"
+        },
+        "2": {
+          "name": "entity.name.section.ozpawn"
+        },
+        "3": {
+          "name": "punctuation.definition.section.end.ozpawn"
+        }
+      }
+    },
+    "comment": {
+      "comment": "Both '#' and ';' are whole-line comments, but only when they are the first non-space character. Inline comments are NOT stripped.",
+      "match": "^\\s*[#;].*$",
+      "name": "comment.line.pawn-cfg.ozpawn"
+    },
+    "key-value": {
+      "begin": "^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*",
+      "beginCaptures": {
+        "1": {
+          "name": "entity.other.attribute-name.ozpawn"
+        },
+        "2": {
+          "name": "keyword.operator.assignment.ozpawn"
+        }
+      },
+      "end": "$",
+      "patterns": [
+        {
+          "match": "\\b(?:true|false|yes|no|static|skeletal)\\b",
+          "name": "constant.language.ozpawn"
+        },
+        {
+          "match": "(?<![\\w./-])-?\\d+(?:\\.\\d+)?",
+          "name": "constant.numeric.ozpawn"
+        },
+        {
+          "match": "[^\\s]+",
+          "name": "string.unquoted.path.ozpawn"
+        }
+      ]
+    },
+    "numbers": {
+      "match": "(?<![\\w./-])-?\\d+(?:\\.\\d+)?",
+      "name": "constant.numeric.ozpawn"
+    }
+  }
+}

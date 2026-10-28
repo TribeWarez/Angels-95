@@ -12,6 +12,7 @@ constexpr UINT kIdmFileLoad = 1001;
 constexpr UINT kIdmFileSave = 1002;
 constexpr UINT kIdmFileQuit = 1003;
 constexpr UINT kIdmSettings = 2001;
+constexpr UINT kIdmAdvancedSettings = 2002;
 constexpr UINT kIdmAbout    = 3001;
 
 WNDPROC g_originalWndProc = nullptr;
@@ -31,6 +32,9 @@ LRESULT CALLBACK ClientWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
                 return 0;
             case kIdmSettings:
                 if (g_callbacks->onToggleSettings) g_callbacks->onToggleSettings();
+                return 0;
+            case kIdmAdvancedSettings:
+                if (g_callbacks->onToggleAdvancedSettings) g_callbacks->onToggleAdvancedSettings();
                 return 0;
             case kIdmAbout:
                 if (g_callbacks->onAbout) g_callbacks->onAbout();
@@ -60,6 +64,11 @@ void CreateNativeMenuBar(const MenuBarCallbacks& callbacks) {
     AppendMenuA(hMenuBar, MF_POPUP, (UINT_PTR)hFileMenu, "&File");
     HMENU hSettingsMenu = CreatePopupMenu();
     AppendMenuA(hSettingsMenu, MF_STRING, kIdmSettings, "&Settings...");
+    // The Advanced Options tree lives next to the plain Settings panel rather
+    // than as its own top-level menu: it is the same surface (player settings),
+    // just the full tree. This item used to be appended to the MENU BAR with a
+    // popup handle that was never created, which did not compile.
+    AppendMenuA(hSettingsMenu, MF_STRING, kIdmAdvancedSettings, "&Advanced Options...");
     AppendMenuA(hMenuBar, MF_POPUP, (UINT_PTR)hSettingsMenu, "&Settings");
     HMENU hAboutMenu = CreatePopupMenu();
     AppendMenuA(hAboutMenu, MF_STRING, kIdmAbout, "&About Angels95...");

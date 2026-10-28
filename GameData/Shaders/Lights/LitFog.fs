@@ -43,6 +43,13 @@ out vec4 finalColor;
 #define LIGHT_EFFECT_FIRE   3
 #define LIGHT_EFFECT_LAMP   4
 
+// Shared shading constants. Surface.fs is a hand-maintained copy of this file's
+// lighting model (it exists because a decorated brush needs per-face uniforms),
+// so these MUST be spelled identically in both. tests/Surface.test.cpp compares
+// the two files.
+#define AMBIENT_GAIN  0.33  // ambient term as a fraction of the light scale
+#define DESATURATION  1   // 1.0 = no change, lower = flatter palette
+
 struct Light {
     int enabled;
     int type;
@@ -67,6 +74,18 @@ uniform vec4 ambient;
 uniform vec3 viewPos;
 uniform float uTime;
 
+// Shading tuning (Advanced Options > Display > Rendering > Lighting). Uniforms,
+// not constants, because a player-facing slider has to reach the same maths the
+// author tuned - and Surface.fs carries the same three, so a decorated brush
+// cannot disagree with the wall beside it.
+//
+// uAmbientBoost   multiplies the ambient term (1 = authored)
+// uSpecularScale  multiplies the Blinn-Phong specular (1 = authored)
+// uLightSoftness  widens the attenuation curve (0 = authored)
+uniform float uAmbientBoost = 1.0;
+uniform float uSpecularScale = 1.0;
+uniform float uLightSoftness = 0.0;
+
 uniform float fogStart = 10.0;
 uniform float fogEnd = 100.0;
 uniform float fogDensity = 1.0;
@@ -79,9 +98,27 @@ float hash11(float p) {
 
 float lightAttenuation(vec3 lightPos, vec3 fragPos, float radius) {
     float dist = distance(lightPos, fragPos);
-    if (radius > 0.0 && dist > radius) return 0.0;
-    float d = dist;
-    return 1.0 / (1.0 + 0.09 * d + 0.032 * d * d);
+
+    // Softer quadratic (closer to classic UE1 feel). IDENTICAL in LitFog.fs and
+    // Surface.fs - these two programs are hand-maintained copies, and when only
+    // one of them was retuned a surface-flagged brush lit differently from the
+    // lit wall standing next to it, in the same frame.
+    //
+    // uLightSoftness widens the whole curve: 0 leaves the authored falloff alone,
+    // 1 doubles the distance at which a light still contributes. Dividing the
+    // linear term by `soft` and the quadratic by `soft*soft` keeps the shape
+    // (rather than just scaling the result) so a soft light stays smooth instead
+    // of becoming a flat ramp.
+    float soft = 1.0 + uLightSoftness;
+    float att = 1.0 / (1.0 + (0.07 / soft) * dist + (0.017 / (soft * soft)) * dist * dist);
+
+    // Soft edge instead of a hard radius cut.
+    if (radius > 0.0) {
+        float edge = 1.0 - smoothstep(radius * 0.65, radius, dist);
+        att *= edge;
+    }
+
+    return att;
 }
 
 float spotCone(vec3 lightPos, vec3 lightTarget, vec3 fragPos, float innerCone, float outerCone) {
@@ -254,21 +291,26 @@ void main()
                 }
             }
 
-            // Blinn-Phong specular
+            // low intensity + soft Blinn-Phong specular
             if (NdotL > 0.0) {
                 vec3 halfDir = normalize(lightDir + viewDir);
                 float NdotH = max(dot(normal, halfDir), 0.0);
-                float spec = pow(NdotH, 32.0);
+                float spec = pow(NdotH, 12.0) * 0.25;
 
-                // Fresnel: stronger specular at grazing angles
-                float F = fresnelSchlick(max(dot(viewDir, halfDir), 0.0), 0.04);
+                float F = fresnelSchlick(max(dot(viewDir, halfDir), 0.0), 0.03);
                 specAccum += effColor * spec * F * attenuation * spotFactor;
             }
         }
     }
 
-    vec3 litColor = baseColor.rgb * ((colDiffuse.rgb + specAccum) * lightAccum);
-    litColor += baseColor.rgb * (ambient.rgb / 10.0) * colDiffuse.rgb;
+    vec3 litColor = baseColor.rgb * ((colDiffuse.rgb + specAccum * uSpecularScale) * lightAccum);
+    litColor += baseColor.rgb * ambient.rgb * AMBIENT_GAIN * uAmbientBoost * colDiffuse.rgb;
+
+    // Mild desaturation: pulls the palette toward the luma so the PS1-era textures
+    // read as one image instead of a set of oversaturated swatches. Same factor as
+    // Surface.fs (tests/Surface.test.cpp pins both).
+    float luma = dot(litColor, vec3(0.299, 0.587, 0.114));
+    litColor = mix(vec3(luma), litColor, DESATURATION);
 
     // Baked emissive gate: added BEFORE gamma so an authored glow is an additive
     // light contribution rather than a washed-out overlay.

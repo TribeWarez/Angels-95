@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <unordered_set>
 
@@ -16,6 +17,10 @@ namespace fs = std::filesystem;
 void LightningEntityRegistry::Init() {
     m_defs.clear();
     m_allDefs.clear();
+    // Init() produces the UNFILTERED view (every world's defs, last-writer-wins).
+    // LoadWorldOverrides() re-establishes the world policy; until it runs there is
+    // no world to filter against. ReloadFile() reads this.
+    m_worldDir.clear();
     std::vector<std::string> contents;
     std::vector<std::string> paths;
 
@@ -127,6 +132,26 @@ std::string StripTrailingSlash(std::string s) {
     return s;
 }
 
+// Compare two asset paths the way the two producers spell them: Init() records
+// the absolute path from a filesystem_iterator, while the editor's watcher hands
+// over a path built from the watched root. Normalise separators and case (the
+// filesystem is case-insensitive on the only platform AngelEd builds for) and
+// make both absolute so a relative spelling still matches.
+bool SameAssetPath(const std::string& a, const std::string& b) {
+    if (a.empty() || b.empty()) return false;
+    auto norm = [](const std::string& s) {
+        std::error_code ec;
+        fs::path p = fs::absolute(fs::path(s), ec);
+        std::string out = ec ? s : p.lexically_normal().string();
+        for (auto& c : out) {
+            if (c == '\\') c = '/';
+            c = (char)::tolower((unsigned char)c);
+        }
+        return out;
+    };
+    return norm(a) == norm(b);
+}
+
 // The world NAME a def was parsed from, or "" when the def is global
 // (a category folder such as Pawn/Pawns or Tex/Global/Gun, or a package)
 // Comparing names rather than full paths keeps this working for the absolute
@@ -198,6 +223,7 @@ std::string WorldNameFromPrefix(const std::string& assetPrefix) {
 } // namespace
 
 void LightningEntityRegistry::LoadWorldOverrides(const std::string& worldDir) {
+    m_worldDir = worldDir;
     const std::string want = WorldNameFromPrefix(worldDir);
     if (want.empty())
         return;
@@ -241,4 +267,139 @@ void LightningEntityRegistry::LoadWorldOverrides(const std::string& worldDir) {
     if (promoted || dropped)
         OZ_INFO("Registry: world overrides for '%s' (%d promoted, %d dropped)",
                 want.c_str(), promoted, dropped);
+
+    // The pass above can only RE-POINT names that are already in m_defs. A
+    // previous world's load DROPS the names it does not define, and Init() is
+    // startup-only - so without this, a name that only this world defines could
+    // never reappear after one visit to another world. One linear scan; it also
+    // makes a hot-reloaded def from a world you have not opened yet resolvable
+    // the moment you open that world.
+    std::unordered_set<std::string> missing;
+    for (const auto& d : m_allDefs) {
+        if (m_defs.count(d.name)) continue;
+        const std::string owner = WorldNameOfDef(d.sourcePath);
+        if (IsGlobalDefType(d.type) || owner.empty() || owner == want)
+            missing.insert(d.name);
+    }
+    for (const auto& name : missing) RepublishName(name);
+}
+
+// ---------------------------------------------------------------------------
+// RepublishName — re-derive one by-name entry from m_allDefs
+// ---------------------------------------------------------------------------
+bool LightningEntityRegistry::RepublishName(const std::string& name) {
+    const std::string want = WorldNameFromPrefix(m_worldDir);
+
+    // Last match wins, mirroring Init(). Crucially this loops m_allDefs rather
+    // than trusting the current m_defs entry, so a definition that was replaced
+    // on disk is picked up even when Init() would have ordered it differently.
+    const EntityDef* best = nullptr;
+    for (const auto& d : m_allDefs) {
+        if (d.name != name) continue;
+        if (!want.empty() && !IsGlobalDefType(d.type)) {
+            const std::string owner = WorldNameOfDef(d.sourcePath);
+            if (!owner.empty() && owner != want) continue;
+        }
+        best = &d;
+    }
+
+    if (best) {
+        auto it = m_defs.find(name);
+        if (it != m_defs.end()) it->second = *best;   // same node: Find() pointers stay valid
+        else m_defs.emplace(name, *best);
+        return true;
+    }
+
+    // Nothing visible for this world. Erase the by-name entry: leaving it would
+    // keep a deleted definition spawnable. (A holder of a pointer to it is a
+    // dangling reference, but the def is gone from the author's content, so
+    // there is no correct value to hand back.)
+    m_defs.erase(name);
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// ReloadFile — in-place hot reload of one loose .ozls file
+// ---------------------------------------------------------------------------
+LightningEntityRegistry::FileReload
+LightningEntityRegistry::ReloadFile(const std::string& pathIn) {
+    FileReload out;
+
+    std::error_code ec;
+    const fs::path abs = fs::absolute(fs::path(pathIn), ec);
+    const std::string path = (ec ? fs::path(pathIn) : abs).lexically_normal().string();
+
+    // What this file defines right now (a copy, so the parse-failure rollback
+    // below does not need to touch the containers at all).
+    std::vector<EntityDef> oldDefs;
+    for (const auto& d : m_allDefs)
+        if (SameAssetPath(d.sourcePath, path)) oldDefs.push_back(d);
+    std::vector<std::string> oldNames;
+    oldNames.reserve(oldDefs.size());
+    for (const auto& d : oldDefs) oldNames.push_back(d.name);
+
+    std::string content;
+    {
+        std::ifstream file(path, std::ios::binary);
+        if (file.is_open())
+            content.assign((std::istreambuf_iterator<char>(file)),
+                            std::istreambuf_iterator<char>());
+    }
+
+    std::vector<EntityDef> fresh;
+    if (!content.empty())
+        fresh = LightningScriptParser::ParseAll({content}, {path});
+
+    // A non-empty file that yields no def is a PARSE ERROR (a half-typed entity,
+    // a syntax mistake), not a deletion: keep the last good definition. An empty
+    // or missing file is a deliberate disable and falls through to the removal
+    // path. Nothing has been mutated at this point.
+    if (!content.empty() && fresh.empty() && !oldDefs.empty()) {
+        OZ_WARN("Registry: '%s' no longer parses; keeping the previous definition",
+                path.c_str());
+        out.ok = false;
+        return out;
+    }
+
+    // Replace this file's entries.
+    for (auto it = m_allDefs.begin(); it != m_allDefs.end(); ) {
+        if (SameAssetPath(it->sourcePath, path)) it = m_allDefs.erase(it);
+        else ++it;
+    }
+    std::vector<std::string> newNames;
+    newNames.reserve(fresh.size());
+    for (auto& d : fresh) {
+        d.sourcePath = path;
+        newNames.push_back(d.name);
+        m_allDefs.push_back(std::move(d));
+    }
+
+    // Names this edit could have changed, in a stable order for the log.
+    std::vector<std::string> names = oldNames;
+    names.insert(names.end(), newNames.begin(), newNames.end());
+    std::sort(names.begin(), names.end());
+    names.erase(std::unique(names.begin(), names.end()), names.end());
+
+    auto has = [](const std::vector<std::string>& v, const std::string& n) {
+        return std::find(v.begin(), v.end(), n) != v.end();
+    };
+    for (const auto& n : names) {
+        const bool visible = RepublishName(n);
+        const bool was = has(oldNames, n);
+        const bool is  = has(newNames, n);
+        if (is && !was) out.added.push_back(n);
+        else if (was && !is) {
+            // Another file may still define the same name; only a name with no
+            // surviving candidate is actually gone from the registry.
+            if (visible) out.changed.push_back(n);
+            else         out.removed.push_back(n);
+        } else {
+            out.changed.push_back(n);
+        }
+    }
+
+    out.ok = true;
+    OZ_INFO("Registry: reloaded '%s' (%zu added, %zu changed, %zu removed)",
+            path.c_str(), out.added.size(), out.changed.size(), out.removed.size());
+    return out;
 }

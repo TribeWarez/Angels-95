@@ -393,7 +393,7 @@ animation for `Mesh.Skeletal` entities — the text `.ozanim` format
 | O/L | Rotate placement ghost |
 | T/G | Scale placement ghost up/down |
 | Enter | Commit placement |
-| Double-click | Commit placement |
+| Left click | Commit placement (a click, not a drag, with a ghost armed) |
 | Middle Mouse | Pan camera |
 | Shift+Middle Mouse | Pan camera vertically |
 | Alt+Middle Mouse | Orbit camera |
@@ -409,6 +409,78 @@ animation for `Mesh.Skeletal` entities — the text `.ozanim` format
 | F12 | Zone Properties |
 | H | Heightmap Editor |
 | C | Toggle collision visibility |
+
+## Hot reload (defs, no Refresh click)
+
+The editor watches `GameData/` while it runs and reloads definition files the
+moment they are saved, so a `.ozls` or a `PawnDefs/*.cfg` can be edited in
+VS Code / Notepad and the change is live without pressing **Reload** in the
+Script Manager or **Refresh** in the Actor Hierarchy.
+
+- **Watched:** every `*.ozls` under `GameData/` and every `*.cfg` under
+  `GameData/Pawn/PawnDefs/`. Saves are debounced (~180 ms of quiet), so an
+  editor's temp-file + rename sequence is read once, after it settles.
+- **What refreshes:** the Script Manager list (same row stays selected), the
+  Actor Hierarchy and Pickup lists (only when a def name is added or removed,
+  and expansion/selection are preserved), the Entity Properties def section when
+  it is showing the file that changed, and the live def registry itself.
+- **What does NOT happen:** the world is not reloaded, the WorldGraph is not
+  rebuilt, no History entry is pushed, and the camera/selection/undo stack are
+  untouched. A def is not a world entity, so editing one cannot change what the
+  level contains.
+- **A broken file keeps the last good def.** A half-typed entity does not make
+  the enemy/weapon vanish; the log says it no longer parses. Deleting the file
+  (or emptying it) *does* remove the def.
+- **Live instances update:** a `.cfg` edit pushes speed/ranges/damage onto
+  already-spawned pawns, and a changed model/anim path drops their cached mesh so
+  the next frame re-resolves it. Health is instance state and is not reset.
+- **Not covered:** content inside `.oz*` packages (repack to change it), edits to
+  the `.ozone` world itself (open/save the document), and asset *file* contents
+  (a re-exported `.glb`/`.png` keeps its cached GPU resource - use Reload Mesh /
+  the Texture Manager's reload for that).
+
+Implementation: `AngelEd/Source/Subsystems/HotReload.cpp` (watcher + `.cfg`
+loader), `LightningEntityRegistry::ReloadFile` (in-place `.ozls` reload) and
+`PawnSystem::UpdateDef`/`RemoveDef`.
+
+## UnrealEd-style brush editing
+
+The main window is resizable (minimum 1024x640) and remembers its position/size
+in `System/AngelEd.ini` `[Layout]` (`main_x/y/w/h`, `main_max`). The toolbar is
+two rows so no control is clipped at the minimum width.
+
+**Settings → Unreal-Style Brush Movement** (also the `Unreal:Off/On` toolbar
+button) switches the mouse from gizmo handles to UnrealEd's modifier gestures.
+It is **off by default** because it takes Ctrl/Shift away from the gizmo's own
+snapping modifiers.
+
+| Gesture | Result |
+|---|---|
+| Ctrl + LMB drag (horizontal) | Move the selection along world **X** |
+| Ctrl + RMB drag (horizontal) | Move along world **Z** |
+| Ctrl + LMB + RMB drag (vertical) | Move along world **Y** (up/down) |
+| Ctrl + RMB drag while the **Rotate** tool is active | Yaw |
+| Shift + LMB drag | Move the selection **and the camera** together |
+| Arrow keys | Nudge on the ground plane (X/Z) by the Snap step (or 1 unit) |
+| Ctrl + Up/Down | Nudge vertically (Y) |
+| 1 / 2 / 3 | Movement speed Slow / Medium / Fast |
+| Alt + 1..5 | Placement modes (Model / Pickup / Node / Zone / Terrain) |
+
+Notes:
+
+- **Axes are translated to this engine**, which is Y-up. Unreal's X/Y/Z map to
+  X/Z/Y here, matching what the viewport shows; the table names the *world* axis
+  you actually move on.
+- **Pitch/roll are not mapped.** OZONE stores one rotation (yaw) per
+  renderable/mesh; a drag that cannot be written back would not do what it says.
+- Ctrl/Shift gestures are ignored while an Animation vertex edit is active, and
+  Shift+RMB still does the per-face Surface Properties pick.
+- A gesture pushes **one** History entry, on the first movement - a Ctrl+click
+  that never moves leaves no undo step. **Escape** during a gesture cancels it
+  and restores the pre-drag transform.
+- The movement-speed keys follow the UnrealEd convention and are hard-wired;
+  the placement-mode keys stay remappable and move to Alt while the option is on.
+  With the option off, 1/2/3 keep their original placement-mode meaning.
 
 ## World Saving
 

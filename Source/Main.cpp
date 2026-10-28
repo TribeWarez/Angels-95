@@ -2,6 +2,7 @@
 #include "Log.hpp"
 #include "Events/EventBus.hpp"
 #include "Menu/SettingsMenu.hpp"
+#include "Menu/AdvancedOptions.hpp"
 #include "Menu/PauseMenu.hpp"
 #include "ClientSettings.hpp"
 #include "Input/Keybinds.hpp"
@@ -465,6 +466,12 @@ static void ExecuteConsoleCommand(const char* cmd) {
     } else if (strcmp(cmd, "/showcollisions") == 0) {
         g_showCollisionDebug = !g_showCollisionDebug;
         OZ_INFO("Collision debug %s", g_showCollisionDebug ? "ON" : "OFF");
+    } else if (strcmp(cmd, "/advanced") == 0 || strcmp(cmd, "/advopts") == 0) {
+        // The Advanced Options tree. The native menu bar only exists on Windows,
+        // so this is the console entry point the other platforms use. (The
+        // dialog does not pause from here - the console is an overlay too.)
+        advopts::Toggle();
+        OZ_INFO("Advanced Options %s", advopts::g_open ? "open" : "closed");
     } else if (strncmp(cmd, "/connect ", 9) == 0 || strcmp(cmd, "/connect") == 0) {
         const char* arg = (cmd[8] == ' ') ? cmd + 9 : "";
         while (*arg == ' ') arg++;
@@ -778,6 +785,22 @@ ShowSpellbook = false;
         []() {
             ShowSettings = !ShowSettings;
             if (ShowSettings) {
+                advopts::g_open = false;   // one settings surface at a time
+                if (!g_gamePaused) g_settingsPausedGame = true;
+                g_gamePaused = true;
+                ShowCursor(); EnableCursor();
+            } else if (g_settingsPausedGame) {
+                g_gamePaused = false;
+                g_settingsPausedGame = false;
+                HideCursor(); DisableCursor();
+            }
+        },
+        // Settings > Advanced Options...  (the same pause/resume contract as the
+        // Settings item above, so closing it resumes only a game it paused)
+        []() {
+            advopts::g_open = !advopts::g_open;
+            if (advopts::g_open) {
+                ShowSettings = false;
                 if (!g_gamePaused) g_settingsPausedGame = true;
                 g_gamePaused = true;
                 ShowCursor(); EnableCursor();
@@ -791,6 +814,16 @@ ShowSpellbook = false;
     });
 
     static bool g_returnToMenu = false;
+
+    // Headless layout capture for the Advanced Options tree: OZ_ADV_OPTS=1 opens
+    // it on startup, and OZ_ADV_OPTS=<nodeIndex> also preselects a category, so
+    // `--shot --shot-hud` can photograph a panel that otherwise needs a mouse.
+    // Same debug-env pattern as OZ_VM_TRACE in ViewModel.cpp.
+    if (const char* advEnv = getenv("OZ_ADV_OPTS")) {
+        advopts::g_open = true;
+        const int n = atoi(advEnv);
+        if (n > 0 && n < advopts::kNodeCount) advopts::g_selected = n;
+    }
 
     // Reveal gate for the borderless window created hidden above. The splash
     // must run HERE - after the engine and the asset pipeline have finished
@@ -1154,6 +1187,18 @@ ShowSpellbook = false;
             if (ShowSettings) {
                 UpdateSettings();
                 if (IsKeyPressed(KEY_ESCAPE)) ShowSettings = false;
+            } else if (advopts::g_open) {
+                // Advanced Options pauses like Settings does; the frozen world
+                // frame behind it is drawn above.
+                advopts::Draw();
+                if (IsKeyPressed(KEY_ESCAPE)) {
+                    advopts::g_open = false;
+                    if (g_settingsPausedGame) {
+                        g_gamePaused = false;
+                        g_settingsPausedGame = false;
+                        HideCursor(); DisableCursor();
+                    }
+                }
             } else {
                 auto metrics = angelsmenu::MenuMetrics::Compute(
                     (float)GetScreenWidth(), (float)GetScreenHeight(),
@@ -1167,6 +1212,7 @@ ShowSpellbook = false;
                         break;
                     case angelsmenu::PauseAction::Settings:
                         ShowSettings = true;
+                        advopts::g_open = false;   // one settings surface at a time
                         ShowCursor();
                         EnableCursor();
                         break;
@@ -1447,6 +1493,28 @@ ShowSpellbook = false;
             DrawFPS(0,0);
         }
 
+        // Network readout ("Show Network Stats" in Advanced Options) and the live
+        // Network-section state. Refreshed from the client every frame; the stats
+        // block itself only draws while connected, because a readout full of
+        // dashes is noise.
+        if (g_showNetStats || advopts::g_open) {
+            advopts::g_net.connected   = g_client.is_connected();
+            advopts::g_net.pingMs      = g_client.get_ping_ms();
+            advopts::g_net.serverWorld = g_client.server_world_index();
+            advopts::g_net.localWorld  = g_network_world_index;
+            advopts::g_net.players     = (int)g_client.remote_players().size() + 1;
+            advopts::g_net.protocol    = (int)net::PROTOCOL_VERSION;
+            advopts::g_net.build       = oz::kBuildVersion;
+            advopts::g_net.server      = g_client.get_server_ip().c_str();
+            // Push the Advanced Options ping cadence at the live client. Cheap
+            // setter; running it every frame means the dialog needs no dirty
+            // plumbing and a hand-edited ini takes effect on the next frame too.
+            if (g_client.is_connected())
+                g_client.set_ping_interval((double)g_netPingInterval);
+            if (g_showNetStats && !(g_shot.active && g_shot.hideHud))
+                advopts::DrawNetStats(advopts::g_net);
+        }
+
         AngelTechTextSystem.Update();
 
         // Network client update
@@ -1528,7 +1596,7 @@ ShowSpellbook = false;
                             // clip and despawns it after kPawnCorpseSeconds.
                             if (g_goreEnabled)
                                 CombatFX::Instance().SpawnGibs(
-                                    {p->position.x, p->position.y + 0.6f, p->position.z});
+                                    {p->position.x, p->position.y, p->position.z});
                             p->velocity = {0, 0, 0};
                             p->deadTimer = kPawnCorpseSeconds;
                             p->animClip = -1;   // restart the clip at the death pose
@@ -1679,6 +1747,12 @@ ShowSpellbook = false;
         // under it) instead of the HUD painting over the panel.
         if (!(g_shot.active && g_shot.hideHud))
             UpdateSettings();
+
+        // Advanced Options: same layer as Settings, and it is what the native
+        // Settings menu opens. Also reachable with the `/advanced` console
+        // command, which is the only entry point on a platform without the
+        // native menu bar.
+        if (advopts::g_open) advopts::Draw();
 
         // Console overlay (always on top)
         DrawConsole();

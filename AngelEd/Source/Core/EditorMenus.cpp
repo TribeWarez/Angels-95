@@ -58,6 +58,14 @@ static void CreateEditorMenuBar() {
     AppendMenuA(hView, MF_SEPARATOR, 0, NULL);
     AppendMenuA(hView, MF_STRING, IDM_WORLD_GRAPH, menuLabel("World &Hierarchy", EdAction::Hierarchy).c_str());
     AppendMenuA(hView, MF_STRING, IDM_LEVEL_LIST, "Level &List / Campaign");
+    AppendMenuA(hView, MF_SEPARATOR, 0, NULL);
+    // Panel geometry is user data (System/AngelEd.ini [Layout]), written when the
+    // editor exits. Save makes that explicit - it is the only way to keep a layout
+    // you just arranged without quitting - and Reset restores the built-ins. Both
+    // live here because they are a pair, and because "panel layout" is a View
+    // concern, not an editor preference like Unreal-style input.
+    AppendMenuA(hView, MF_STRING, IDM_SAVE_LAYOUT, "&Save Pane Layout");
+    AppendMenuA(hView, MF_STRING, IDM_RESET_LAYOUT, "&Reset Pane Layout");
     AppendMenuA(hMenu, MF_POPUP, (UINT_PTR)hView, "&View");
 
     // Tools. The material graph is authored as text today; these two make the
@@ -82,7 +90,16 @@ static void CreateEditorMenuBar() {
     AppendMenuA(hSettings, MF_STRING, IDM_FULLSCREEN, "Toggle &Fullscreen\tF11");
     AppendMenuA(hSettings, MF_STRING, IDM_MAXIMIZE, "&Maximize Window (Windowed Full Size)");
     AppendMenuA(hSettings, MF_SEPARATOR, 0, NULL);
-    AppendMenuA(hSettings, MF_STRING, IDM_RESET_LAYOUT, "Reset Panel &Layout");
+    // UnrealEd-style input: mouse+modifier transforms instead of (or alongside)
+    // the gizmo. Opt-in because it takes Ctrl/Shift away from the gizmo's own
+    // modifiers, and because 1/2/3 become movement speed rather than placement
+    // modes while it is on.
+    AppendMenuA(hSettings, MF_STRING, IDM_UNREAL_MOVE, "&Unreal-Style Brush Movement");
+    HMENU hSpeed = CreatePopupMenu();
+    AppendMenuA(hSpeed, MF_STRING, IDM_UNREAL_SPEED_SLOW, "&Slow\t1");
+    AppendMenuA(hSpeed, MF_STRING, IDM_UNREAL_SPEED_MED,  "&Medium\t2");
+    AppendMenuA(hSpeed, MF_STRING, IDM_UNREAL_SPEED_FAST, "&Fast\t3");
+    AppendMenuA(hSettings, MF_POPUP, (UINT_PTR)hSpeed, "Brush Move &Speed");
     AppendMenuA(hMenu, MF_POPUP, (UINT_PTR)hSettings, "&Settings");
 
     HMENU hHelp = CreatePopupMenu();

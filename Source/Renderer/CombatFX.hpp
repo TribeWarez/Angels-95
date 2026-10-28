@@ -305,9 +305,16 @@ public:
 
     // --- Gore ---------------------------------------------------------------
     // Blood on a non-fatal hit and gibs on death. Both go through the shared
-    // particle pool (lit + faded) so they sit in the same lighting as the room,
-    // plus a blood-splat decal so a hit leaves a mark. Gated by the caller on
-    // the "Gore" setting (GameplayFlags.hpp) - this only draws when asked.
+    // particle pool (lit + faded) so they sit in the same lighting as the room.
+    // Gated by the caller on the "Gore" setting (GameplayFlags.hpp).
+    //
+    // A hit on an ACTOR must not leave a surface decal. It used to call
+    // AddDecal(hitPos, dir, 0.55) here, and since every caller is a pawn hit that
+    // painted a 0.55-unit blood card in the plane of the shot - i.e. flat against
+    // the camera, centred on the enemy, for the decal's whole lifetime. That is
+    // the "bullets are hiding the entity's mesh" report: the card is drawn after
+    // the pawn and its texture is mostly opaque red. Only world surfaces get
+    // decals; actors get particles.
     void SpawnBlood(Vector3 pos, Vector3 dir, int count = 16, float scale = 1.0f) {
         // The particles use the authored blood art directly (white tint so the
         // texture's own colour shows) - a soft grey disc tinted dark red was
@@ -320,22 +327,24 @@ public:
             start, end,
             /*sizeStart*/ 0.35f * scale, /*sizeEnd*/ 0.12f * scale,
             /*lifetime*/ 0.7f, /*gravity*/ -10.0f, tex);
-        // A splat stuck to the surface that was hit, facing the shooter.
-        AddDecal(pos, dir, 0.55f * scale, WHITE, tex);
     }
 
-    void SpawnGibs(Vector3 pos) {
-        // A bigger, faster, longer-lived burst plus a splat on the ground under
-        // the kill so the death reads even after the particles fade.
+    // `feet` must be the pawn's FEET (Pawn::position is feet-anchored), because
+    // the ground pool is placed on the floor at that height. Callers used to pass
+    // the body centre and this function subtracted 0.9, which put the pool 0.3
+    // units UNDER the floor (invisible) when the pawn died standing, or floating
+    // in mid-air over anything raised.
+    void SpawnGibs(Vector3 feet) {
         Texture2D tex = RandomBloodTex();
         Color start = {255, 255, 255, 255};
         Color end = {150, 0, 0, 0};
         OzParticleSimulationManager::Instance().Burst(
-            pos, {0.0f, 1.0f, 0.0f}, 30, 9.0f, /*spread*/ 90.0f,
+            {feet.x, feet.y + 0.8f, feet.z}, {0.0f, 1.0f, 0.0f}, 30, 9.0f, /*spread*/ 90.0f,
             start, end, /*sizeStart*/ 0.5f, /*sizeEnd*/ 0.15f,
             /*lifetime*/ 1.0f, /*gravity*/ -12.0f, tex);
-        // A ground splat below the body.
-        AddDecal({pos.x, pos.y - 0.9f, pos.z}, {0.0f, 1.0f, 0.0f}, 1.3f,
+        // A ground splat under the body: horizontal (normal +Y) and just above
+        // the floor so the depth test does not eat it.
+        AddDecal({feet.x, feet.y + 0.02f, feet.z}, {0.0f, 1.0f, 0.0f}, 1.3f,
                  WHITE, RandomBloodTex());
     }
 

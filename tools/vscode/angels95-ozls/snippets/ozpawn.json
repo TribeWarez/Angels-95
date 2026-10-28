@@ -1,0 +1,51 @@
+{
+  "Pawn definition": {
+    "prefix": "pawn-def",
+    "body": [
+      "name=${1:Walker}",
+      "speed=${2:1.5}",
+      "aggroRange=${3:6.0}",
+      "attackRange=${4:1.5}",
+      "damage=${5:10.0}",
+      "maxHealth=${6:100}",
+      "sprite_path=${7:GameData/Pawn/Pawns/Walker.png}",
+      "scream_path=${8:GameData/Pawn/Pawns/Walker.wav}",
+      "model_path=${9:GameData/Pawn/Pawns/Huntsman_spider.glb}",
+      "model_texture=",
+      "model_scale=${10:1.0}",
+      "mesh_type=${11|static,skeletal}",
+      "animfile=${12:GameData/Pawn/Pawns/Anims/Walker.ozanim}",
+      "anim_idle=${13:Idle}",
+      "anim_patrol=${14:Walk}",
+      "anim_chase=${15:Run}",
+      "anim_return=${16:Walk}",
+      "anim_death=${17:Death}",
+      "anim_speed=${18:1.0}",
+      "$0"
+    ],
+    "description": "Full pawn .cfg definition"
+  },
+  "Hovering pawn": {
+    "prefix": "hover",
+    "body": [
+      "hover=1",
+      "hover_amplitude=${1:0.35}",
+      "hover_speed=${2:1.6}"
+    ],
+    "description": "Hovering pawn keys (Floater-style). Skips gravity and bobs around the spawn height."
+  },
+  "Character roster entry": {
+    "prefix": "character",
+    "body": [
+      "[${1:id}]",
+      "name=${2:Display Name}",
+      "mesh=${3:GameData/Pawn/Player/Plague_Arcanist.glb}",
+      "texture=",
+      "mesh_type=${4|static,skeletal}",
+      "portrait=",
+      "bio=${5:Flavour text.}",
+      "accent=${6:0}"
+    ],
+    "description": "GameData/Pawn/Player/characters.cfg roster entry"
+  }
+}

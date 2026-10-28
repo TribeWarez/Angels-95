@@ -69,6 +69,10 @@ static void DispatchFrameEvents(const std::vector<ed::Event>& events) {
                 g_sel = { SelType::NONE, -1, "", {0,0,0} };
                 g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
                 AngelTechEditor.DrawModel = true;
+                // A brush ghost supersedes any armed entity ghost: without this,
+                // the next viewport click would try to commit a placement that is
+                // no longer the ghost on screen.
+                g_placementArmed = false;
                 EMID = 200 + ci.primitive;
                 AngelTechEditor.X = OTEditor.MainCamera.target.x;
                 AngelTechEditor.Y = OTEditor.MainCamera.target.y;
@@ -221,9 +225,21 @@ static void DispatchFrameEvents(const std::vector<ed::Event>& events) {
                     case ed::PlacementRequest::Kind::Model:
                         g_placeMode = PlaceMode::MODEL;
                         EMID = 0;   // 0 = user-selected obj
+                        // The path travels with the request and is the ONLY thing
+                        // the ghost and the commit read. It used to be dropped here
+                        // in favour of g_editorPanels.selectedModel, so any model
+                        // rescan between the click and the commit (import, Refresh)
+                        // silently changed or voided what got placed.
+                        AngelTechEditor.ActiveModelPath = pr.key;
+                        if (pr.key.empty())
+                            EditorLog("Placement: 'Place in World' arrived with no model path");
                         break;
                 }
                 AngelTechEditor.DrawModel = true;
+                // Armed only for the three entity kinds. The CSG toolbox does not
+                // come through here, so a brush ghost still needs Enter / its own
+                // commit button and a stray click cannot carve geometry.
+                g_placementArmed = true;
                 AngelTechEditor.X = OTEditor.MainCamera.position.x;
                 AngelTechEditor.Y = OTEditor.MainCamera.position.y;
                 AngelTechEditor.Z = OTEditor.MainCamera.position.z;

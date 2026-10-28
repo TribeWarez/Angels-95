@@ -119,6 +119,18 @@ struct EditorPanelState {
     float gizmoSnap = 0.0f;
     float gizmoAngleSnap = 15.0f;   // degrees; Shift = 1 degree
 
+    // --- UnrealEd-style brush editing (Settings > Unreal-Style Brush Movement)
+    //
+    // OFF by default. The gizmo is the primary tool, and this scheme deliberately
+    // takes Ctrl/Shift (which the gizmo uses for snapping and fine dragging) for
+    // itself, so it must be opt-in rather than always-on.
+    //
+    // unrealMoveSpeed: 0 = slow (x0.25), 1 = medium (x1), 2 = fast (x4). It scales
+    // the pixels-to-world factor for the drag transforms. Keyboard nudging uses
+    // the grid step instead (gizmoSnap, or 1 unit when snapping is off).
+    bool unrealBrushMove = false;
+    int unrealMoveSpeed = 1;
+
     // Terrain editing
     int terrainBrushMode = 0;       // 0=raise, 1=lower, 2=flatten
     int terrainBrushSize = 4;       // radius in grid cells
@@ -223,6 +235,7 @@ struct EditorPanelState {
 
     // Def-aligned property sections (filled by ShowPropertiesPanel, read by Main.cpp)
     std::string propDefPath;        // .ozls/.cfg source path ("" = no def / section hidden)
+    std::string propDefName;        // def name the block was built from (hot reload re-fills by this)
     std::string propDefTitle;       // e.g. "HealthVial  [pickup]"
     std::string propDefSource;      // source file path shown as a row
     // Explains WHY a def has no editable stat rows (e.g. TRIGGER/EVENT: no

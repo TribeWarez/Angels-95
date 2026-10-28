@@ -20,9 +20,16 @@ entity "pistol_01" : weapon {
         projectile_submesh = 2
         projectile_scale = 14.0
         projectile_color = (1.0, 0.85, 0.35)
-        viewmodel_offset = (0.22, -0.18, 0.45)
-        viewmodel_rot = (0, 90, 0)
-        viewmodel_scale = 1.0
+        // Held-size convention (ViewModel.cpp): viewmodel_scale multiplies a fit
+        // that normalises the LONGEST axis, so it is effectively the held length
+        // relative to a 0.55-unit rifle - not a uniform scale. A pistol is far
+        // smaller in the hand than a rifle, and the old 1.0 made it exactly as
+        // long as one; the forward offset is also chosen so the grip's near end
+        // stays ~0.5 units from the eye instead of 0.17, which is what produced
+        // the enormous, fish-eyed "gun in your face" look.
+        viewmodel_offset = (0.28, -0.23, 0.68)
+        viewmodel_rot = (0, 110, 0)
+        viewmodel_scale = 0.62
         // Sound stats: quote-free, space-free asset paths.
         fire_sound = GameData/Audio/Sounds/Guns/machgf3b.wav
         fire_volume = 0.9

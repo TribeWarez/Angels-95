@@ -1,0 +1,67 @@
+{
+  "name": "angels95-ozone",
+  "displayName": "Angels95 OZONE World",
+  "description": "OZONE (.ozone) world format for Angels95 / OmegaTech: syntax highlighting, outline, flag hover and authoring diagnostics.",
+  "version": "1.0.0",
+  "publisher": "TribeWarez",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "keywords": [
+    "ozone",
+    "angels95",
+    "omegatech",
+    "world",
+    "level",
+    "syntax"
+  ],
+  "activationEvents": [
+    "onLanguage:ozone"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "ozone",
+        "aliases": [
+          "OZONE World",
+          "ozone"
+        ],
+        "extensions": [
+          ".ozone"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ozone",
+        "scopeName": "source.ozone",
+        "path": "./syntaxes/ozone.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "ozone",
+        "path": "./snippets/ozone.json"
+      }
+    ],
+    "configuration": {
+      "title": "Angels95 OZONE",
+      "properties": {
+        "angels95Ozone.outline.grouped": {
+          "type": "boolean",
+          "default": true,
+          "description": "Group Outline entries by brush primitive and entity kind. Off (the default) lists every brush and entity as a separate item, so nothing is hidden behind a collapsed group."
+        }
+      }
+    }
+  }
+}

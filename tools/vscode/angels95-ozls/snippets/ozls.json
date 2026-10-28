@@ -1,0 +1,231 @@
+{
+  "LightningScript entity": {
+    "prefix": "entity",
+    "body": [
+      "entity \"${1:Name}\" : ${2|weapon,armor,consumable,upgrade,pickup,projectile,skyzone,pawn,skill,spell,light,GameUI,game,campaign,sector,mission,objective,trigger,event|} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Entity header — the name is a QUOTED string before the colon"
+  },
+  "Weapon definition": {
+    "prefix": "ozls-weapon",
+    "body": [
+      "entity \"${1:pistol_01}\" : weapon {",
+      "\tmesh = \"${2:FbxFiles/Pistol_01.glb}\"",
+      "\ttexture = \"${3:Textures/Pistol_01_Albedo.png}\"",
+      "\ticon = \"${4:Textures/Pistol_01_silhouette.png}\"",
+      "\tmesh_type = \"${5:skeletal}\"",
+      "\tanim_idle = \"${6:Idle}\"",
+      "\tstats {",
+      "\t\tdamage = ${7:14}",
+      "\t\tfire_rate = ${8:0.28}",
+      "\t\tprojectile_speed = ${9:55.0}",
+      "\t\tprojectile_lifetime = ${10:2.0}",
+      "\t\tprojectile_count = ${11:1}",
+      "\t\tspread = ${12:0.7}",
+      "\t\tmagazine = ${13:15}",
+      "\t\treload_time = ${14:1.4}",
+      "\t\trecoil = ${15:1.6}",
+      "\t\tprojectile_color = (${16:1.0}, ${17:0.85}, ${18:0.35})",
+      "\t\tviewmodel_offset = (${19:0.15}, ${20:-0.10}, ${21:0.67})",
+      "\t\tviewmodel_rot = (0, 100, 0)",
+      "\t\tviewmodel_scale = ${22:0.62}",
+      "\t\tfire_sound = ${23:GameData/Audio/Sounds/Guns/machgf3b.wav}",
+      "\t\tfire_volume = ${24:0.9}",
+      "\t}",
+      "\tactions {",
+      "\t\ton_fire {",
+      "\t\t\tset_cooldown ${25:0.28}",
+      "\t\t}",
+      "\t\ton_reload {",
+      "\t\t\tsay \"${26:Reloading}\"",
+      "\t\t}",
+      "\t}",
+      "}"
+    ],
+    "description": "Ranged weapon def with stats and the on_fire/on_reload hooks"
+  },
+  "Sky zone definition": {
+    "prefix": "ozls-skyzone",
+    "body": [
+      "entity \"${1:zone_name}\" : skyzone {",
+      "\tfog_color = (${2:179}, ${3:179}, ${4:204})",
+      "\tfog_density = ${5:0.005}",
+      "\tambient_light = (${6:0.1}, ${7:0.1}, ${8:0.1})",
+      "\tmusic = ${9:GameData/Audio/Music/track}",
+      "\tactions {",
+      "\t\ton_enter {",
+      "\t\t\tsay \"${10:Entered the zone}\"",
+      "\t\t}",
+      "\t\ton_exit {",
+      "\t\t\tsay \"${11:Left the zone}\"",
+      "\t\t}",
+      "\t}",
+      "}"
+    ],
+    "description": "Sky zone def — keyed by a zone's `name=` in World.ozone"
+  },
+  "Pawn hook carrier": {
+    "prefix": "ozls-pawn",
+    "body": [
+      "entity \"${1:Walker}\" : pawn {",
+      "\tactions {",
+      "\t\ton_chase {",
+      "\t\t\t$0",
+      "\t\t}",
+      "\t\ton_death {",
+      "\t\t\temit_event \"entity.death\" 1",
+      "\t\t}",
+      "\t}",
+      "}"
+    ],
+    "description": "Pawn def hook carrier — stats live in GameData/Pawn/PawnDefs/*.cfg"
+  },
+  "Pickup definition": {
+    "prefix": "ozls-pickup",
+    "body": [
+      "entity \"${1:HealthVial}\" : pickup {",
+      "\tmesh = ${2:GameData/Tex/Global/Items/MedMeshes/Med_01.glb}",
+      "\tstats {",
+      "\t\titem_id = ${3:1}",
+      "\t\tpickup_category = ${4:health}",
+      "\t\trespawn_time = ${5:30}",
+      "\t\tmesh_scale = ${6:1}",
+      "\t}",
+      "\tactions {",
+      "\t\ton_collect {",
+      "\t\t\theal ${7:25}",
+      "\t\t}",
+      "\t}",
+      "}"
+    ],
+    "description": "Pickup def with collect hook"
+  },
+  "Spell definition": {
+    "prefix": "ozls-spell",
+    "body": [
+      "entity \"${1:Fireball}\" : spell {",
+      "\ticon = ${2:GameData/Tex/Global/Items/SpellIcons/fireball.png}",
+      "\tstats {",
+      "\t\tmana_cost = ${3:10}",
+      "\t\tcooldown = ${4:0.8}",
+      "\t\tdamage = ${5:25}",
+      "\t\tprojectile_speed = ${6:30}",
+      "\t\tprojectile_lifetime = ${7:3}",
+      "\t\tprojectile_count = ${8:1}",
+      "\t}",
+      "\tactions {",
+      "\t\ton_cast {",
+      "\t\t\tplay_sound \"${9:GameData/Audio/Sounds/Skills/fire.wav}\"",
+      "\t\t}",
+      "\t}",
+      "}"
+    ],
+    "description": "Spell def with a projectile stat block"
+  },
+  "Light defaults layer": {
+    "prefix": "ozls-light",
+    "body": [
+      "entity \"${1:Light.Point}\" : light {",
+      "\tstats {",
+      "\t\teffect = ${2:2}",
+      "\t\tflare = ${3:1}",
+      "\t\tperiod = ${4:1.0}",
+      "\t\tcast_shadow = ${5:0}",
+      "\t\tis_static = ${6:0}",
+      "\t}",
+      "}"
+    ],
+    "description": "Light defaults layer, resolved by a light's `name=` kwarg. intensity/radius/colour are line-owned."
+  },
+  "Mission definition": {
+    "prefix": "ozls-mission",
+    "body": [
+      "entity \"${1:Mission_Name}\" : mission {",
+      "\tstats {",
+      "\t\tsector = ${2:Sector_Name}",
+      "\t\tworld = ${3:World_Name}",
+      "\t\tmode = ${4:campaign}",
+      "\t\tobjectives = ${5:Objective_1}",
+      "\t\tnext = ${6:Next_Mission}",
+      "\t}",
+      "\tactions {",
+      "\t\ton_start {",
+      "\t\t\tmsg \"${7:Objective updated}\"",
+      "\t\t}",
+      "\t}",
+      "}"
+    ],
+    "description": "Mission def (global def type)"
+  },
+  "Objective definition": {
+    "prefix": "ozls-objective",
+    "body": [
+      "entity \"${1:Objective_ClearArea}\" : objective {",
+      "\tstats {",
+      "\t\ttype = ${2:kill}",
+      "\t\ttarget = ${3:Walker}",
+      "\t\tcount = ${4:4}",
+      "\t}",
+      "}"
+    ],
+    "description": "Objective def — type/target/count are the consumed keys"
+  },
+  "Action hook": {
+    "prefix": "hook",
+    "body": [
+      "${1:on_fire} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "An action block. Valid hook names: on_fire, on_hit, on_reload, on_enter, on_exit, on_tick, on_death …"
+  },
+  "Stats block": {
+    "prefix": "stats",
+    "body": [
+      "stats {",
+      "\t${1:damage} = ${2:10}",
+      "\t$0",
+      "}"
+    ],
+    "description": "stats { } — flat `key = value` assignments. No `vec3` prefix; write `colour = (r, g, b)`."
+  },
+  "If block": {
+    "prefix": "if",
+    "body": [
+      "if ($${1:var} ${2|>=,<=,==,!=,>,<|} ${3:0}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Script condition block"
+  },
+  "Emit event": {
+    "prefix": "emit",
+    "body": [
+      "emit_event \"${1:zone.enter}\" ${2:1}"
+    ],
+    "description": "emit_event \"<topic>\" [int]"
+  },
+  "Objective update": {
+    "prefix": "obj",
+    "body": [
+      "objective ${1:id} ${2|+=,-=,=|} ${3:1}"
+    ],
+    "description": "objective <id> <op> <value> — `+=` is the default"
+  },
+  "Area damage": {
+    "prefix": "area-damage",
+    "body": [
+      "apply_area_damage ${1:6} ${2:25}"
+    ],
+    "description": "apply_area_damage <radius> <damage>"
+  },
+  "Spawn NPC": {
+    "prefix": "spawn-pawn",
+    "body": [
+      "spawn_pawn \"${1:Walker}\" ${2:0} ${3:0} ${4:0}"
+    ],
+    "description": "spawn_pawn \"<DefName>\" <x> <y> <z> (engine Y-up space)"
+  }
+}

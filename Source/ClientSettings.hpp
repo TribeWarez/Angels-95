@@ -70,6 +70,21 @@ static inline void LoadClientSettings() {
     PostExposure  = CfgClampF(Float(cfg, R, "post_exposure", PostExposure), 0.25f, 3.0f);
     PostBloom     = CfgClampF(Float(cfg, R, "post_bloom", PostBloom), 0.0f, 3.0f);
     PostVignette  = CfgClampF(Float(cfg, R, "post_vignette", PostVignette), 0.0f, 0.8f);
+
+    // Lighting + level-fog tuning (Advanced Options > Display > Rendering).
+    // Uniform multipliers only, so the defaults keep the authored look.
+    g_lightAmbientBoost  = CfgClampF(Float(cfg, R, "light_ambient_boost",  g_lightAmbientBoost),  0.0f, 3.0f);
+    g_lightSpecularScale = CfgClampF(Float(cfg, R, "light_specular_scale", g_lightSpecularScale), 0.0f, 3.0f);
+    g_lightSoftness      = CfgClampF(Float(cfg, R, "light_softness",      g_lightSoftness),      0.0f, 1.0f);
+    g_dynamicLights      = Bool(cfg, R, "dynamic_lights", g_dynamicLights);
+    g_fogOverride        = Bool(cfg, R, "fog_override",   g_fogOverride);
+    g_fogDensityScale    = CfgClampF(Float(cfg, R, "fog_density_scale", g_fogDensityScale), 0.0f, 3.0f);
+    g_fogStart           = CfgClampF(Float(cfg, R, "fog_start",   g_fogStart),   0.0f, 500.0f);
+    g_fogEnd             = CfgClampF(Float(cfg, R, "fog_end",     g_fogEnd),    10.0f, 2000.0f);
+    g_fogDensity         = CfgClampF(Float(cfg, R, "fog_density", g_fogDensity), 0.0f, 0.05f);
+    g_fogColorR = (unsigned char)CfgClampI(Int(cfg, R, "fog_color_r", g_fogColorR), 0, 255);
+    g_fogColorG = (unsigned char)CfgClampI(Int(cfg, R, "fog_color_g", g_fogColorG), 0, 255);
+    g_fogColorB = (unsigned char)CfgClampI(Int(cfg, R, "fog_color_b", g_fogColorB), 0, 255);
     // `particles` is DELIBERATELY no longer read.
     //
     // It was persisted while a bug forced ParticlesEnabled=false on EVERY world
@@ -117,6 +132,14 @@ static inline void LoadClientSettings() {
     CrosshairB = CfgClampI(Int(cfg, H, "crosshair_b", CrosshairB), 0, 255);
     CrosshairA = CfgClampI(Int(cfg, H, "crosshair_a", CrosshairA), 0, 255);
 
+    // Network. These live as cross-TU inline globals (GameplayFlags.hpp) because
+    // the client applies the ping cadence and the HUD draws the stats readout
+    // from other translation units.
+    const char* N = kNetwork;
+    g_netPingInterval = CfgClampF(Float(cfg, N, "ping_interval", g_netPingInterval),
+                                  1.0f, 30.0f);
+    g_showNetStats    = Bool(cfg, N, "show_net_stats", g_showNetStats);
+
     Debug          = Bool(cfg, kDebug, "debug", Debug);
     g_debugEnabled = Debug;   // mirror into the cross-TU flag (see DebugFlags.hpp)
 }
@@ -159,6 +182,18 @@ static inline void SaveClientSettings() {
     cfg.SetFloat(R, "post_exposure", PostExposure);
     cfg.SetFloat(R, "post_bloom",    PostBloom);
     cfg.SetFloat(R, "post_vignette", PostVignette);
+    cfg.SetFloat(R, "light_ambient_boost",  g_lightAmbientBoost);
+    cfg.SetFloat(R, "light_specular_scale", g_lightSpecularScale);
+    cfg.SetFloat(R, "light_softness",       g_lightSoftness);
+    cfg.SetBool(R,  "dynamic_lights",       g_dynamicLights);
+    cfg.SetBool(R,  "fog_override",         g_fogOverride);
+    cfg.SetFloat(R, "fog_density_scale",    g_fogDensityScale);
+    cfg.SetFloat(R, "fog_start",            g_fogStart);
+    cfg.SetFloat(R, "fog_end",              g_fogEnd);
+    cfg.SetFloat(R, "fog_density",          g_fogDensity);
+    cfg.SetInt(R,   "fog_color_r",          g_fogColorR);
+    cfg.SetInt(R,   "fog_color_g",          g_fogColorG);
+    cfg.SetInt(R,   "fog_color_b",          g_fogColorB);
     cfg.SetBool(R,  "particles_enabled", ParticlesEnabled);
     cfg.SetBool(R,  "fps",           FPSEnabled);
 
@@ -189,6 +224,10 @@ static inline void SaveClientSettings() {
     cfg.SetInt(H,   "crosshair_g", CrosshairG);
     cfg.SetInt(H,   "crosshair_b", CrosshairB);
     cfg.SetInt(H,   "crosshair_a", CrosshairA);
+
+    const char* N = kNetwork;
+    cfg.SetFloat(N, "ping_interval",  g_netPingInterval);
+    cfg.SetBool(N,  "show_net_stats", g_showNetStats);
 
     cfg.SetBool(kDebug, "debug", Debug);
 

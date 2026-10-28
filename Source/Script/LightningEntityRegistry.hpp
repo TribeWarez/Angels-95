@@ -31,6 +31,34 @@ public:
     // Register a single parsed definition (used by editor for live reload)
     bool Register(const EntityDef& def);
 
+    // --- Editor hot reload -------------------------------------------------
+    // Fold ONE loose .ozls file back into the registry without re-parsing the
+    // whole tree, so a def edited while the editor is open becomes live without
+    // a manual Refresh.
+    //
+    // This is deliberately NOT Init(): Init clears and rebuilds both containers,
+    // which can relocate `EntityDef` objects. Find() returns a pointer into
+    // m_defs and that pointer is stored for the life of the session by
+    // LightningEntityManager instances and SkyZoneNode::def, so a rebuild can
+    // silently repoint them at a different def. Here the by-name entry is
+    // assigned IN PLACE (std::unordered_map keeps element addresses stable), so
+    // every holder observes the new values.
+    //
+    // World policy is the same one Init()+LoadWorldOverrides() produce for the
+    // open world: globals and this world's defs are visible, another world's
+    // copy is not, and the last matching entry wins.
+    //
+    // A file that no longer parses keeps its LAST GOOD definitions: an editor
+    // saving a half-typed entity must not make it vanish. An EMPTY file (or a
+    // deleted one) does remove them - that is an explicit disable.
+    struct FileReload {
+        bool ok = false;                    // false = parse failure, registry unchanged
+        std::vector<std::string> added;     // names that only exist in the new file
+        std::vector<std::string> changed;   // names present before and after
+        std::vector<std::string> removed;   // names the file no longer defines
+    };
+    FileReload ReloadFile(const std::string& path);
+
     // Re-point the by-name map at the definitions belonging to `worldDir`.
     //
     // m_defs keeps only the last-registered def per name, but world-scoped
@@ -59,4 +87,15 @@ private:
     LightningEntityRegistry() = default;
     std::unordered_map<std::string, EntityDef> m_defs;
     std::vector<EntityDef> m_allDefs;
+
+    // Re-derive m_defs[name] from m_allDefs after the backing files changed.
+    // Returns true when a def for `name` remains visible to Find(). Shared by
+    // ReloadFile and LoadWorldOverrides so the two cannot disagree about which
+    // def wins.
+    bool RepublishName(const std::string& name);
+
+    // Last LoadWorldOverrides() target ("" = no world policy applies). Used by
+    // RepublishName to decide whether a world-scoped def belongs to the world
+    // being edited.
+    std::string m_worldDir;
 };

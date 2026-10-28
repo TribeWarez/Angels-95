@@ -28,6 +28,7 @@ inline constexpr const char* kAudio    = "AngelTech.Audio";
 inline constexpr const char* kGameplay = "AngelTech.Gameplay";
 inline constexpr const char* kInput    = "AngelTech.Input";
 inline constexpr const char* kHud      = "AngelTech.HUD";
+inline constexpr const char* kNetwork  = "AngelTech.Network";
 inline constexpr const char* kDebug    = "AngelTech.Debug";
 
 // Pre-scoping layout: every client setting lived in one flat [Settings] block.
@@ -38,7 +39,7 @@ inline constexpr const char* kLegacy   = "Settings";
 // from this list is not dropped (SaveOrdered appends it alphabetically), but it
 // does not get its intended position.
 inline const std::vector<std::string> kSectionOrder = {
-    kWindow, kRender, kAudio, kGameplay, kInput, kHud, kDebug,
+    kWindow, kRender, kAudio, kGameplay, kInput, kHud, kNetwork, kDebug,
     "Keybinds", "MasterServers",
 };
 

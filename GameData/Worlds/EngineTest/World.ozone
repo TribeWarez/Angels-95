@@ -148,7 +148,6 @@ add box 26 -34 0.9 2 1.8 2 0 3
 add box 26 -44 1.25 2 2.5 2 0 3
 add box 9.5 -38 1.25 1 2.5 20 0 3
 add box 30.5 -38 1.25 1 2.5 20 0 3
-# Sky-portal ring (SURF_PORTAL): perimeter panels show the sky-zone view; collision unchanged.
 add box 0 45 8 60 16 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_07.png texScaleU=12 texScaleV=4 flags=32768
 add box -40 0 8 1 16 60 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_08.png texScaleU=12 texScaleV=4 flags=32768
 add box 0 -92 9 60 18 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_09.png texScaleU=12 texScaleV=4 flags=32768
@@ -226,13 +225,15 @@ pickup Medkit 12 -38 2 30
 pickup Ammo 28 -30 0.7 30
 pickup rifle_01 59 -14 0.7 30
 pickup etheral_waver 59 14 0.7 30
-# SMG + shotgun on the same armory row as the rifle/sword pair. Floor top is
-# z=0.3 (brushes 6/12), so 0.7 is the height every other pickup here uses.
 pickup smg_01 53 -14 0.7 30
 pickup shotgun_01 53 14 0.7 30
 pickup HealthVial 44 -8 0.7 30
 pickup Ammo 44 6 0.7 30
 pickup Powerup 74 22 9.5 30
+
+# Enemies. EngineTest is the dev/co-op sandbox AND the content that
+# tests/GameState.test.cpp asserts seeds NPCs and pickups, so a map save that
+# drops them fails the release gate (and leaves the level empty in a match).
 npc Skaarj 20 -66 0.5
 npc Walker 26 -44 0.5
 npc Floater 14 -42 0.5
@@ -249,28 +250,28 @@ npc Walker 230 -3 0.5
 npc Brute 285 4 0.5
 light directional 50 50 40 140 155 180 0.12
 light directional -50 -50 70 205 215 235 0.3
-light point 16 14 5.5 80 130 255 0.45 22
-light point -4 14 5.5 255 60 60 0.45 22
 light point 10 0 5 190 205 255 0.4 14
-light point 34 0 5.5 190 210 255 0.5 18
 light point 16 -14 5.5 255 170 50 0.45 22
+light point 16 14 5.5 80 130 255 0.45 22
 light point -4 -14 5.5 255 220 60 0.45 22
+light point -4 14 5.5 255 60 60 0.45 22
 light point 20 -22 5 190 205 255 0.45 16
-light point 49 9 2.4 255 165 75 0.75 16 effect=2
+light point 34 0 5.5 190 210 255 0.5 18
 light point 14 -30 5.5 200 215 255 0.38 20
-light point 49 -9 2.4 255 165 75 0.75 16 effect=2
-light point 59 0 9 190 210 255 0.5 34
 light point 16 -38 4.5 255 225 190 0.45 16
-light point 69 9 2.4 255 165 75 0.75 16 effect=2
+light point 49 -9 2.4 255 165 75 0.75 16 effect=2
+light point 49 9 2.4 255 165 75 0.75 16 effect=2
 light point 28 -44 5.5 200 215 255 0.38 20
-light point 74 22 10.5 120 200 255 0.5 16
-light point 69 -9 2.4 255 165 75 0.75 16 effect=2
+light point 59 0 9 190 210 255 0.5 34
 light point 16 -60 4.5 255 180 80 0.6 18 effect=2
 light point 24 -60 4.5 255 180 80 0.6 18 effect=2
-light point 86 6.5 3.4 255 175 80 0.7 16 effect=2
+light point 69 -9 2.4 255 165 75 0.75 16 effect=2
+light point 69 9 2.4 255 165 75 0.75 16 effect=2
+light point 74 22 10.5 120 200 255 0.5 16
 light point 20 -66 2 120 200 255 0.4 22
 light point 16 -68 4.5 255 180 80 0.5 16 effect=2
 light point 24 -68 4.5 255 180 80 0.5 16 effect=2
+light point 86 6.5 3.4 255 175 80 0.7 16 effect=2
 light point 150 -6.2 3.4 255 175 80 0.7 16 effect=2
 light point 205 -10 2.2 255 150 60 0.6 18
 light point 255 6.5 3.4 255 175 80 0.7 16 effect=2
@@ -284,6 +285,19 @@ zone water 148 -13 -1 166 -7 2.5 1 name=path_acid gravity=18 jump=9 terminal=60 
 zone water 196 -13 -1 214 -7 2.5 1 name=path_lava gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
 zone sound 82 4 0 302 15 8 1 name=path_surface_demo gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
 portal Dust_Ravine -3 15 0 3 19 5.5 -66 8 2 bidir
+Mesh.Static GameData/Tex/Global/Items/MedMeshes/Med_01.glb 45 0 1.2 0 scale=3
+Mesh.Skeletal GameData/Tex/Global/Gun/Rifle_01/Fbx_Files/Rifle_01.glb 45 -14 2 90 scale=3 anim=Idle
+Mesh.Static GameData/Worlds/World_endless_snow/Models/forest/forest_pine_1.glb 44 -24 0 0 scale=1.2 tex=GameData/Tex/Global/EFX/tree_pine_needles.png wind=1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/forest/forest_pine_2.glb 74 -24 0 30 scale=1.3 tex=GameData/Tex/Global/EFX/tree_pine_needles.png wind=1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/forest/forest_pine_2.glb 44 24 0 200 scale=1.15 tex=GameData/Tex/Global/EFX/tree_pine_needles.png wind=1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/forest/forest_pine_1.glb 64 24 0 150 scale=1.25 tex=GameData/Tex/Global/EFX/tree_pine_needles.png wind=1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_2m_0.glb 100 13 0 0 scale=0.9
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_2m_2.glb 126 14 0 47 scale=1.1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_4m_1.glb 168 13.5 0 94 scale=0.8
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_4m_3.glb 214 14 0 141
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_4m_5.glb 232 -14.5 0 188 scale=0.9
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_8m_1.glb 258 13 0 235 scale=1.15
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_8m_4.glb 286 -14 0 282 scale=0.85
 Mesh.Static GameData/Tex/Global/Items/MedMeshes/Med_01.glb 45 0 1.2 0 scale=3
 Mesh.Skeletal GameData/Tex/Global/Gun/Rifle_01/Fbx_Files/Rifle_01.glb 45 -14 2 90 scale=3 anim=Idle
 Mesh.Static GameData/Worlds/World_endless_snow/Models/forest/forest_pine_1.glb 44 -24 0 0 scale=1.2 tex=GameData/Tex/Global/EFX/tree_pine_needles.png wind=1

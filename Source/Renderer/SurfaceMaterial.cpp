@@ -1,5 +1,6 @@
 #include "SurfaceMaterial.hpp"
 #include "LitLightning.hpp"
+#include "ShadingTuning.hpp"
 #include "rlgl.h"
 #include "../Package/PackageAssetLoader.hpp"
 #include "../Log.hpp"
@@ -139,6 +140,12 @@ void SurfaceMaterial::UpdateFrame(std::vector<LightNode>& lights,
     // LitLightning_Update is deliberate: a second copy of that loop would drift
     // and a surface-lit brush would disagree with the room around it.
     LitLightning_Update(lights, m_shader, camera, dt);
+
+    // Player shading knobs, the same three the world program gets. Without this
+    // a decorated brush would use the GLSL defaults (1/1/0) while the room around
+    // it used the player's settings - the exact per-program drift the parity test
+    // exists to prevent.
+    oz::ApplyShadingTuning(m_shader);
 
     const float viewPos[3] = { camera.position.x, camera.position.y, camera.position.z };
     if (m_viewPosLoc >= 0)

@@ -1,0 +1,186 @@
+{
+  "OZONE header": {
+    "prefix": "ozone-header",
+    "body": [
+      "# OZONE world exported from AngelEd",
+      "# Format: ozone v1.0",
+      "$0"
+    ],
+    "description": "Format header comment block"
+  },
+  "Brush box": {
+    "prefix": "box",
+    "body": [
+      "add box ${1:0} ${2:0} ${3:0} ${4:8} ${5:8} ${6:8} ${7:0}"
+    ],
+    "description": "add box <x> <y> <z> <w> <h> <d> <rot> [texSlot] — box position is its CENTRE (OZONE Z-up)"
+  },
+  "Brush cylinder": {
+    "prefix": "cyl",
+    "body": [
+      "add cyl ${1:0} ${2:0} ${3:4} ${4:1} ${5:1} ${6:4} ${7:16} ${8:0}"
+    ],
+    "description": "add cyl <x> <y> <z> <rTop> <rBot> <h> <slices> <rot> — z is the TOP, the body spans [z-h, z]"
+  },
+  "Brush sphere": {
+    "prefix": "sph",
+    "body": [
+      "add sph ${1:0} ${2:0} ${3:2} ${4:1} ${5:16}"
+    ],
+    "description": "add sph <x> <y> <z> <r> [segments]"
+  },
+  "Brush plane": {
+    "prefix": "pln",
+    "body": [
+      "add pln ${1:0} ${2:0} ${3:0} ${4:1} ${5:0} ${6:0} ${7:0}"
+    ],
+    "description": "add pln <x> <y> <z> <nx> <ny> <nz> <dist>"
+  },
+  "Subtract brush": {
+    "prefix": "sub",
+    "body": [
+      "sub box ${1:0} ${2:0} ${3:0} ${4:4} ${5:4} ${6:4} ${7:0}"
+    ],
+    "description": "sub carves COLLISION only — never the render mesh. Build openings from separate piers/lintels."
+  },
+  "Player start": {
+    "prefix": "playerstart",
+    "body": [
+      "playerstart ${1:0} ${2:0} ${3:1} ${4:0}"
+    ],
+    "description": "playerstart <x> <y> <z> [yaw] — only playerstart #1 is ever used"
+  },
+  "Pickup": {
+    "prefix": "pickup",
+    "body": [
+      "pickup ${1:rifle_01} ${2:0} ${3:0} ${4:1} ${5:30}"
+    ],
+    "description": "pickup <typeName> <x> <y> <z> [respawnSeconds]"
+  },
+  "NPC": {
+    "prefix": "npc",
+    "body": [
+      "npc ${1:Walker} ${2:0} ${3:0} ${4:0}"
+    ],
+    "description": "npc <defName> <x> <y> <z> [yaw] — def names come from GameData/Pawn/PawnDefs/*.cfg"
+  },
+  "Point light": {
+    "prefix": "light point",
+    "body": [
+      "light point ${1:0} ${2:0} ${3:6} ${4:255} ${5:255} ${6:255} ${7:1} ${8:20} name=${9:Light.Point}"
+    ],
+    "description": "light point <x> <y> <z> <r> <g> <b> <intensity> <radius> [effect] [flare] [corona]"
+  },
+  "Directional light": {
+    "prefix": "light directional",
+    "body": [
+      "light directional ${1:50} ${2:50} ${3:40} ${4:255} ${5:255} ${6:255} ${7:1} name=${8:Light.Point}"
+    ],
+    "description": "light directional <x> <y> <z> <r> <g> <b> <intensity> — the point is the SOURCE, aimed at the origin"
+  },
+  "Spot light": {
+    "prefix": "light spot",
+    "body": [
+      "light spot ${1:0} ${2:0} ${3:8} ${4:0} ${5:0} ${6:0} ${7:255} ${8:255} ${9:255} ${10:1} ${11:20} ${12:0.9} ${13:0.7}"
+    ],
+    "description": "light spot <x> <y> <z> <tx> <ty> <tz> <r> <g> <b> <intensity> <radius> <innerCone> <outerCone> — cones are COSINES"
+  },
+  "Sky zone": {
+    "prefix": "zone sky",
+    "body": [
+      "zone sky ${1:-1000} ${2:-1000} ${3:-1000} ${4:1000} ${5:1000} ${6:1000} 1 name=${7:zone_sky} gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5"
+    ],
+    "description": "zone <subtype> <minX> <minY> <minZ> <maxX> <maxY> <maxZ> [intensity] [fog...] [ambient...] [name=] [physics...]"
+  },
+  "Portal": {
+    "prefix": "portal",
+    "body": [
+      "portal ${1:TargetWorld} ${2:0} ${3:0} ${4:0} ${5:2} ${6:2} ${7:3} ${8:0} ${9:0} ${10:1} bidir"
+    ],
+    "description": "portal <targetWorld> <minX> <minY> <minZ> <maxX> <maxY> <maxZ> [spawnX spawnY spawnZ] [bidir] — the spawn triple is required for bidir"
+  },
+  "Trigger volume": {
+    "prefix": "trigger",
+    "body": [
+      "trigger ${1:Trigger_Name} ${2:0} ${3:0} ${4:0} ${5:2} ${6:2} ${7:3} once"
+    ],
+    "description": "trigger <defName> <minX> <minY> <minZ> <maxX> <maxY> <maxZ> [once] [team=N]"
+  },
+  "Static mesh": {
+    "prefix": "Mesh.Static",
+    "body": [
+      "Mesh.Static ${1:GameData/Environment/Plant/prop.glb} ${2:0} ${3:0} ${4:0} ${5:0} scale=${6:1}"
+    ],
+    "description": "Mesh.Static <meshPath> <x> <y> <z> <yaw> [scale=] [tex=] [material=] [wind]"
+  },
+  "Skeletal mesh": {
+    "prefix": "Mesh.Skeletal",
+    "body": [
+      "Mesh.Skeletal ${1:GameData/Tex/Global/Gun/Rifle_01/Fbx_Files/Rifle_01.glb} ${2:0} ${3:0} ${4:0} ${5:90} scale=${6:3} anim=${7:Idle}"
+    ],
+    "description": "Mesh.Skeletal <meshPath> <x> <y> <z> <yaw> [scale=] [tex=] [anim=] [animfile=] [speed=] [wind]"
+  },
+  "Particle emitter": {
+    "prefix": "ParticleEmitter",
+    "body": [
+      "ParticleEmitter fire ${1:0} ${2:0} ${3:0} rate=34 life=0.9 speed=3.2 spread=12 sizestart=0.35 sizeend=0.05 r=255 g=175 b=70 gravity=-2 radius=6"
+    ],
+    "description": "ParticleEmitter <type> <x> <y> <z> [rate life speed spread sizeStart sizeEnd r g b rEnd gEnd bEnd gravity radius dirX dirY dirZ yaw] [tex=] — spread is a cone HALF-ANGLE in DEGREES"
+  },
+  "Path node": {
+    "prefix": "PathNode",
+    "body": [
+      "PathNode ${1:r1_a} ${2:0} ${3:0} ${4:0} radius=${5:3} next=${6:r1_b}"
+    ],
+    "description": "PathNode <name> <x> <y> <z> [radius=] [next=a,b,c] [loop] — links are BY NAME"
+  },
+  "Wind zone": {
+    "prefix": "WindZone",
+    "body": [
+      "WindZone ${1:-10} ${2:-10} ${3:0} ${4:10} ${5:10} ${6:12} ${7:1} ${8:0} ${9:0.3} ${10:0.3} ${11:0.5}"
+    ],
+    "description": "WindZone <minX> <minY> <minZ> <maxX> <maxY> <maxZ> <dirX> <dirY> <dirZ> <strength> [freq] — strength is a WORLD-SPACE DISPLACEMENT; author 0.2-0.5"
+  },
+  "Level info": {
+    "prefix": "levelinfo",
+    "body": [
+      "levelinfo ${1:0} ${2:8} ${3:5} ${4:0} ${5:10} ${6:50} ${7:0} ${8:GameData/Tex/Global/Sky/sky_day.png}"
+    ],
+    "description": "levelinfo <gameType> <maxPlayers> <respawnTime> <timeLimitEnabled> <timeLimitMinutes> <scoreLimit> <friendlyFire> <skyboxPath> [sideSkyboxPath] [gametype=]"
+  },
+  "Ambient particles": {
+    "prefix": "particles",
+    "body": [
+      "particles ${1:1} ${2:90} ${3:1.0} ${4:214} ${5:194} ${6:156} ${7:0.5} ${8:0.1}"
+    ],
+    "description": "particles <type> <density> <speed> <r> <g> <b> <windX> <windZ>"
+  },
+  "Sound / music emitter": {
+    "prefix": "emitter",
+    "body": [
+      "emitter ${1:sound} ${2:0} ${3:0} ${4:0}"
+    ],
+    "description": "emitter <sound|music> <x> <y> <z> — anything other than 'music' is treated as sound"
+  },
+  "Skybox": {
+    "prefix": "skybox",
+    "body": [
+      "skybox ${1:GameData/Tex/Global/Sky/cloud01.png} ${2:0} ${3:0} ${4:0} ${5:512}"
+    ],
+    "description": "skybox <texPath> <cx> <cy> <cz> <size> — render-only; never enters CSG"
+  },
+  "Heightmap": {
+    "prefix": "heightmap",
+    "body": [
+      "heightmap ${1:oztex/heightmaps/ground_hm.png} ${2:oztex/tileset/01_floor_sand_32.png} ${3:0} ${4:0} ${5:0} ${6:1} ${7:180} ${8:10} ${9:180}"
+    ],
+    "description": "heightmap <imagePath> <texturePath> <x> <y> <z> <scale> <sizeX> <sizeY> <sizeZ>"
+  },
+  "Surface flags and texture": {
+    "prefix": "surface",
+    "body": [
+      "flags=${1:16} texPath=${2:GameData/Tex/Global/EFX/liquid_water.png} texScaleU=${3:4} texScaleV=${4:4}"
+    ],
+    "description": "Brush surface kwargs: flags=, texPath=, texSlot=, material=, uvScale*, pan*, alpha=, cutoff=, glow="
+  }
+}

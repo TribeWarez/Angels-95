@@ -392,6 +392,25 @@ public:
     // Register a PawnDef so Spawn() can use it by name
     void RegisterDef(const PawnDef& def);
 
+    // Editor hot reload: replace an EXISTING def in place. RegisterDef refuses a
+    // duplicate name, which is why a re-saved .cfg cannot just call it again.
+    //
+    // The movement/combat knobs are pushed onto live pawns of this def, because
+    // Spawn() copies them onto the instance. Health is deliberately NOT touched:
+    // it is instance state (a damaged enemy must not heal because its template
+    // was edited), and a changed maxHealth only affects the next spawn.
+    //
+    // When a mesh-affecting field changed, the resolved mesh is dropped from
+    // every live pawn using it, so the next Update/Draw re-resolves the asset;
+    // a stats-only edit needs no invalidation because those fields are read from
+    // the def every frame.
+    bool UpdateDef(const PawnDef& def);
+
+    // Editor hot reload: drop a def whose .cfg was deleted or renamed. Live
+    // pawns of it keep running on their own copied stats and keep their mesh;
+    // the def is only consulted by name for animation, so nothing dangles.
+    bool RemoveDef(const char* name);
+
     // Spawn a new pawn from a named template at world position
     int Spawn(Vector3 position, const char* defName);
 

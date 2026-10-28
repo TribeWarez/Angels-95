@@ -43,3 +43,44 @@ inline bool  g_invertY = false;
 // can disagree. InventoryBehaviour reads this mirror because it is a separate
 // TU and Settings.hpp's globals are per-TU static copies.
 inline float g_hudScale = 1.0f;
+
+// --- Network ---------------------------------------------------------------
+// Seconds between PING samples; applied to the live client with
+// OmegaClient::set_ping_interval() every frame it changes. Persisted in
+// [AngelTech.Network] ping_interval. 1..30 s (0 is not allowed: the RTT display
+// would never update).
+inline float g_netPingInterval = 5.0f;
+
+// Compact ping / world / player readout in the corner while connected.
+// Persisted in [AngelTech.Network] show_net_stats.
+inline bool g_showNetStats = false;
+
+// --- Lighting + level fog tuning (Advanced Options > Display > Rendering) ---
+//
+// These feed the three shader programs that share one lighting model
+// (LitFog.fs for the world, Surface.fs for decorated brushes/backdrops, and
+// Wind.vs+LitFog.fs for foliage). They are uniform multipliers, not new light
+// maths, so the defaults reproduce the authored look exactly:
+//
+//   g_lightAmbientBoost  1.0  multiplies the ambient term (uAmbientBoost)
+//   g_lightSpecularScale 1.0  multiplies the Blinn-Phong specular (uSpecularScale)
+//   g_lightSoftness      0.0  widens the attenuation curve, 0 = authored (uLightSoftness)
+//   g_dynamicLights      true false stops every light's flicker (period is uploaded as 0)
+//
+// Persisted in [AngelTech.Render].
+inline float g_lightAmbientBoost  = 1.0f;
+inline float g_lightSpecularScale = 1.0f;
+inline float g_lightSoftness      = 0.0f;
+inline bool  g_dynamicLights      = true;
+
+// Level fog: the authored values live in each skyzone `.ozls`, so these are an
+// OPT-IN override plus a density multiplier that is always applied. The override
+// is applied inside OzoneLoader::SetWorldFog - the one store every fog path
+// writes through - so level defaults, zone enter/exit, script set_fog and
+// restore_fog all go through it.
+inline bool  g_fogOverride      = false;
+inline float g_fogStart         = 10.0f;
+inline float g_fogEnd           = 100.0f;
+inline float g_fogDensity       = 0.0035f;   // exponential rate per world unit
+inline float g_fogDensityScale  = 1.0f;      // always applied
+inline unsigned char g_fogColorR = 200, g_fogColorG = 200, g_fogColorB = 210;

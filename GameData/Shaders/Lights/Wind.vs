@@ -56,27 +56,32 @@ void main()
 
     vec3 pos = skinnedPos.xyz;
 
-    // --- Wind displacement (replace the old block) ---
+    // Height-weighted sway: 0 at the mesh base (so trunks and roots stay
+    // planted) and 1 at the top, growing quadratically with height.
     float h = clamp((pos.y - windBaseY) / max(windHeight, 0.001), 0.0, 1.0);
-    float sway = h * h;                    // still quadratic
+    float sway = h * h;
 
-    // Stronger spatial variation so neighboring vertices differ
+    // Two motion layers with SPATIAL phase, so neighbouring vertices move at
+    // different times and a foliage card bends instead of translating as a rigid
+    // sheet: a slow main sway plus a smaller, faster gust. Previously the phase
+    // was a single time term, which moved every vertex of a card in lockstep.
     float phase1 = windTime * windParams.w + pos.x * 0.7 + pos.z * 0.5;
     float phase2 = windTime * windParams.w * 1.7 + pos.x * 1.3 - pos.z * 0.9;
+    // Clamped at 0: 0.65 - 0.35 - 0.35 could go slightly negative, which flipped
+    // the sway direction for a frame - a visible pop at the gust's turning point.
+    float gust = clamp(0.65 + 0.35 * sin(phase1) + 0.35 * sin(phase2), 0.0, 1.35);
 
-    // Two-layer motion (main sway + smaller gusts)
-    float mainSway = sin(phase1);
-    float turbulence = sin(phase2) * 0.35;
+    // windParams.z is a DISPLACEMENT IN WORLD UNITS, not a breeze rating (see the
+    // WindZone section of AGENTS.md): author 0.2-0.5. A mistyped 5-7 shears a
+    // hedge flat onto the ground, which reads as a broken asset.
+    vec2 off = windParams.xy * (windParams.z * gust * sway);
 
-    float gust = 0.65 + 0.35 * mainSway + turbulence;
-
-    // Clamp strength so it can never explode
-    float strength = min(windParams.z, 1.8);   // tune this value
-
-    vec2 off = windParams.xy * (strength * gust * sway);
-
-    // Optional safety clamp on the actual displacement
-    off = clamp(off, vec2(-0.8), vec2(0.8));
+    // Last-resort guard so a typo cannot fling geometry across the map. Clamp the
+    // LENGTH, not each axis: a per-axis clamp bends the displacement toward the
+    // diagonal at the limit.
+    float offLen = length(off);
+    const float kMaxDisplacement = 0.8;
+    if (offLen > kMaxDisplacement) off *= kMaxDisplacement / offLen;
 
     pos.x += off.x;
     pos.z += off.y;

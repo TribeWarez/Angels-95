@@ -7,9 +7,13 @@ entity "etheral_waver" : weapon {
         swing_speed = 0.7
         reach = 3.5
         stamina_cost = 18
-        viewmodel_offset = (0.30, -0.26, 0.52)
-        viewmodel_rot = (0, 90, 0)
-        viewmodel_scale = 1.0
+        // Held-size convention: viewmodel_scale is a held-length multiplier on
+        // a fit that normalises the longest axis (rifle 0.95, pistol 0.62). A
+        // blade is longer than a rifle; the forward offset keeps its near end
+        // ~0.5 units from the eye instead of 0.25.
+        viewmodel_offset = (0.34, -0.27, 0.83)
+        viewmodel_rot = (0, 110, 0)
+        viewmodel_scale = 1.15
         // Same reason as selenite_blade: the source GLB is ~9.9 units long
         // (authored with a 100/100/64.8 node scale), which the viewmodel Fit
         // handles but the 1.5x world pickup does not - it rendered ~15 units

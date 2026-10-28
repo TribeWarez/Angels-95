@@ -67,6 +67,10 @@
 // Subsystems/WorldIO.cpp             LoadWorldDocument + name helpers
 // Subsystems/OzoneExport.cpp         ExportToOzone, Save, File menu actions
 // Subsystems/WorldGraphBridge.cpp    UI accessor surface + Win32 menu dispatch
+// Subsystems/HotReload.cpp           watches GameData for .ozls/.cfg edits and
+//                                    reloads defs in place (after
+//                                    WorldGraphBridge: it reads the current
+//                                    world dir; after EditorLog: it logs)
 // Core/EditorMenus.cpp               native menu bar construction
 // Subsystems/AnimEditing.cpp         vertex-keyframe editing + anim event handlers
 // Subsystems/History.cpp             OZONE-snapshot undo/redo
@@ -90,6 +94,7 @@
 #include "Subsystems/WorldIO.cpp"
 #include "Subsystems/OzoneExport.cpp"
 #include "Subsystems/WorldGraphBridge.cpp"
+#include "Subsystems/HotReload.cpp"
 #include "Core/EditorMenus.cpp"
 #include "Subsystems/AnimEditing.cpp"
 #include "Core/EditorDispatcher.cpp"
@@ -109,8 +114,15 @@ int main(int argc, char **argv){
     EdKeys::Load();
 
     EditorLog("=== AngelEd starting ===");
-    SetConfigFlags(FLAG_VSYNC_HINT);
+    // RESIZABLE: the viewport, toolbar and docked stats sidebar all lay out from
+    // GetScreenWidth()/GetScreenHeight() each frame, so the only thing missing was
+    // the flag. The size/position is restored and saved in System/AngelEd.ini
+    // [Layout] (main_x/y/w/h) by Load/SavePanelLayouts.
+    SetConfigFlags(FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(1280, 720, "AngelEd");
+    // Below this the toolbar and the fixed-width stats sidebar start overlapping
+    // the viewport, so refuse to shrink further rather than render a broken layout.
+    SetWindowMinSize(1024, 640);
     CreateEditorMenuBar();
     SetTraceLogLevel(LOG_WARNING);
     InitAudioDevice();
@@ -157,149 +169,23 @@ int main(int argc, char **argv){
 
 #ifdef _WIN32
     CreateAllEditorWindows(GetModuleHandle(NULL), GetWindowHandle());
+    // The menu is built before the INI loads (InitWindow happens first), so the
+    // Settings-menu check marks are only correct after LoadPanelLayouts has read
+    // [Options] inside CreateAllEditorWindows.
+    Editor_SyncUnrealMenuChecks();
 #endif
 
     // Load editor world
     Init();
 
-    // Load pawn definitions from config files (data-driven)
-    {
-        auto& ps = PawnSystem::Instance();
-        const char* defsDir = "GameData/Pawn/PawnDefs";
-        // Loose defs first, then packaged ones (.cfg ship in pawns_defs.ozpak).
-        // Loose wins: the editor runs from a checkout, where the author's file is
-        // the authority, and a packaged copy must not shadow it.
-        std::vector<std::pair<std::string, std::string>> cfgFiles; // basename, text
-        if (fs::exists(defsDir)) {
-            for (auto& entry : fs::directory_iterator(defsDir)) {
-                if (!entry.is_regular_file()) continue;
-                std::string ext = entry.path().extension().string();
-                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                if (ext != ".cfg") continue;
-                std::ifstream f(entry.path());
-                if (!f.is_open()) continue;
-                std::stringstream ss;
-                ss << f.rdbuf();
-                cfgFiles.emplace_back(entry.path().filename().string(), ss.str());
-            }
-        }
-        for (const std::string& cfg : PackageAssetLoader::Instance().ListAssetBasenames(".cfg")) {
-            bool seen = false;
-            for (auto& cf : cfgFiles) if (cf.first == cfg) { seen = true; break; }
-            if (seen) continue;
-            std::string text = LoadFileTextWithFallback(("GameData/Pawn/PawnDefs/" + cfg).c_str());
-            if (!text.empty()) cfgFiles.emplace_back(cfg, text);
-        }
-
-        if (!cfgFiles.empty()) {
-            int loaded = 0;
-            for (auto& cf : cfgFiles) {
-                std::istringstream f(cf.second);
-                std::string name, sp, sc;
-                std::string modelPath, modelTex, meshType;
-                std::string animIdle, animPatrol, animChase, animReturn, animDeath;
-                std::string animFile;
-                float speed = 1.5f, aggroRange = 6.0f, attackRange = 1.5f, damage = 10.0f;
-                float animSpeed = 1.0f, modelScale = 1.0f, modelYOffset = 0.0f;
-                float hoverAmplitude = 0.35f, hoverSpeed = 1.6f;
-                bool hover = false;
-                int maxHealth = 100;
-                std::string line;
-                while (std::getline(f, line)) {
-                    line.erase(0, line.find_first_not_of(" \t\r\n"));
-                    if (line.empty() || line[0] == '#' || line[0] == ';') continue;
-                    size_t eq = line.find('=');
-                    if (eq == std::string::npos) continue;
-                    std::string key = line.substr(0, eq);
-                    std::string val = line.substr(eq + 1);
-                    key.erase(0, key.find_first_not_of(" \t"));
-                    key.erase(key.find_last_not_of(" \t") + 1);
-                    val.erase(0, val.find_first_not_of(" \t"));
-                    val.erase(val.find_last_not_of(" \t\r") + 1);
-                    if (key == "name") name = val;
-                    else if (key == "speed") speed = std::stof(val);
-                    else if (key == "aggroRange") aggroRange = std::stof(val);
-                    else if (key == "attackRange") attackRange = std::stof(val);
-                    else if (key == "damage") damage = std::stof(val);
-                    else if (key == "maxHealth") maxHealth = std::stoi(val);
-                    else if (key == "sprite_path") sp = val;
-                    else if (key == "scream_path") sc = val;
-                    // Model fields. The client's loader (Core.hpp) reads these, so
-                    // without them the editor fell back to the sprite_path - which
-                    // for most shipped defs is a 32x32 placeholder - and enemies
-                    // rendered as flat coloured squares while the game showed their
-                    // real GLBs. Keep this list in step with Core.hpp's parser.
-                    else if (key == "model_path") modelPath = val;
-                    else if (key == "model_texture") modelTex = val;
-                    else if (key == "mesh_type") meshType = val;
-                    else if (key == "model_scale") modelScale = std::stof(val);
-                    else if (key == "anim_idle") animIdle = val;
-                    else if (key == "anim_patrol") animPatrol = val;
-                    else if (key == "anim_chase") animChase = val;
-                    else if (key == "anim_return") animReturn = val;
-                    else if (key == "anim_death") animDeath = val;
-                    else if (key == "anim_speed") animSpeed = std::stof(val);
-                    // Keep in step with Core.hpp: animfile/model_y_offset/hover.
-                    else if (key == "animfile" || key == "anim_file") animFile = val;
-                    else if (key == "model_y_offset") modelYOffset = std::stof(val);
-                    else if (key == "hover") hover = (val == "1" || val == "true" || val == "True" || val == "yes");
-                    else if (key == "hover_amplitude") hoverAmplitude = std::stof(val);
-                    else if (key == "hover_speed") hoverSpeed = std::stof(val);
-                }
-                if (!name.empty()) {
-                    PawnDef def;
-                    def.name = name;
-                    def.speed = speed;
-                    def.aggroRange = aggroRange;
-                    def.attackRange = attackRange;
-                    def.damage = damage;
-                    def.maxHealth = maxHealth;
-                    def.sprite_path = sp;
-                    def.scream_path = sc;
-                    def.model_path = modelPath;
-                    def.model_texture = modelTex;
-                    def.model_scale = modelScale;
-                    def.mesh_type = meshType;
-                    def.anim_idle = animIdle;
-                    def.anim_patrol = animPatrol;
-                    def.anim_chase = animChase;
-                    def.anim_return = animReturn;
-                    def.anim_death = animDeath;
-                    def.anim_speed = animSpeed;
-                    def.anim_file = animFile;
-                    def.model_y_offset = modelYOffset;
-                    def.hover = hover;
-                    def.hover_amplitude = hoverAmplitude;
-                    def.hover_speed = hoverSpeed;
-                    def.baseDir = std::string(defsDir) + "/";
-                    ps.RegisterDef(def);
-                    if (!sp.empty())
-                        PawnManagerAddPawn(name.c_str(), sp.c_str());
-                    else
-                        PawnManagerAddPawn(name.c_str(), (std::string("GameData/Pawn/Pawns/") + name + ".png").c_str());
-                    loaded++;
-                    EditorLog("Loaded pawn def: %s", name.c_str());
-                }
-            }
-            EditorLog("Loaded %d pawn definitions from %s (loose + packaged)", loaded, defsDir);
-        } else {
-            // Legacy fallback if no config files are available at all
-            EditorLog("WARN: no pawn defs loose or packaged (%s), using hardcoded defaults", defsDir);
-            {
-                PawnDef d; d.name="Walker"; d.speed=1.5f; d.aggroRange=6.0f; d.attackRange=1.5f; d.damage=10.0f; d.maxHealth=100; ps.RegisterDef(d);
-                PawnManagerAddPawn("Walker", "GameData/Pawn/Pawns/Walker.png");
-            } {
-                PawnDef d; d.name="Skaarj"; d.speed=2.5f; d.aggroRange=10.0f; d.attackRange=2.0f; d.damage=20.0f; d.maxHealth=150; ps.RegisterDef(d);
-                PawnManagerAddPawn("Skaarj", "GameData/Pawn/Pawns/Skaarj.png");
-            } {
-                PawnDef d; d.name="Brute"; d.speed=1.0f; d.aggroRange=4.0f; d.attackRange=1.5f; d.damage=30.0f; d.maxHealth=250; ps.RegisterDef(d);
-                PawnManagerAddPawn("Brute", "GameData/Pawn/Pawns/Brute.png");
-            } {
-                PawnDef d; d.name="Floater"; d.speed=1.2f; d.aggroRange=8.0f; d.attackRange=3.0f; d.damage=15.0f; d.maxHealth=80; ps.RegisterDef(d);
-                PawnManagerAddPawn("Floater", "GameData/Pawn/Pawns/Floater.png");
-            }
-        }
-    }
+    // Load pawn definitions from config files (data-driven).
+    //
+    // The loader lives in Subsystems/HotReload.cpp so the file watcher can run
+    // the SAME parser when a .cfg is saved. A second copy here is how the
+    // editor's loader and the client's (Core.hpp) drifted before: the editor
+    // silently ignored model_path/mesh_type and drew every enemy as its
+    // sprite_path placeholder.
+    LoadAllPawnDefs();
 
     // The editor windows (and their Actor Hierarchy tree) were created before
     // the PawnDefs were registered, so rebuild the Pawn Manager tree now that
@@ -323,6 +209,12 @@ int main(int argc, char **argv){
         EditorLog("No world to load - starting with an empty scene.");
     }
 
+    // Watch GameData for .ozls / PawnDefs/*.cfg saves and reload definitions in
+    // place. Started AFTER the world is open: the watcher's overflow recovery
+    // re-applies the current world's defs, and there is nothing to recover
+    // before the first load.
+    HotReload_Start();
+
     // Suppress raylib's texture-not-found warnings from .obj material refs
     SetTraceLogLevel(LOG_ERROR);
 
@@ -330,9 +222,6 @@ int main(int argc, char **argv){
     g_previewRT = LoadRenderTexture(256, 256);
 
     EnableCursor();
-
-    int LastClickTime = 0;
-    bool DoubleClick = false;
 
     while (!WindowShouldClose())
     {
@@ -347,6 +236,12 @@ int main(int argc, char **argv){
             DispatchMessage(&msg);
         }
 
+        // A placement click is a ONE-FRAME request: the release below sets it and
+        // the commit block later in THIS frame consumes it. Clearing it here means
+        // a click that could not commit (ghost disarmed by the same frame) can
+        // never leak into the next armed ghost and place it without a click.
+        g_commitPlacement = false;
+
         if (g_pendingNew) {
             ClearScene();
             HistoryClear();
@@ -358,6 +253,13 @@ int main(int argc, char **argv){
             LoadWorldDocument(g_pendingOpenPath);
             g_pendingOpenPath.clear();
         }
+
+        // Hot reload: drain def-file changes (debounced in the subsystem) and
+        // refresh only the panels that showed the old values. Deliberately
+        // BEFORE the event drains and the WorldGraph consume below, so a panel
+        // refresh cannot race a pending placement/undo in the same frame. It
+        // never marks the world dirty: defs are not world entities.
+        HotReload_Poll();
 
         // Window title = document + unsaved marker. Updated only on change, so it
         // does not spam SetWindowText once per frame.
@@ -387,7 +289,7 @@ int main(int argc, char **argv){
 
         // Viewport bounds check â€” all raycasts only fire when mouse is inside 3D viewport
         Vector2 _mp = GetMousePosition();
-        bool _inViewport = (_mp.x >= (float)GetStatsSidebarWidth() && _mp.y >= 28.0f);
+        bool _inViewport = (_mp.x >= (float)GetStatsSidebarWidth() && _mp.y >= (float)kEditorToolbarHeight);
 
         // Hover raycast (throttled every 4 frames for performance)
         {
@@ -411,11 +313,119 @@ int main(int argc, char **argv){
         Gizmo_UpdateHover(_inViewport ? _mp : Vector2{-10000.0f, -10000.0f},
                           OTEditor.MainCamera, g_editorPanels.currentToolMode);
 
+        // --- UnrealEd-style mouse editing (opt-in) ---------------------------
+        //
+        // Authentic UnrealEd transforms are mouse + modifier, not handle drags:
+        //   Ctrl + LMB            translate world X  (horizontal drag)
+        //   Ctrl + RMB            translate world Z  (horizontal drag)
+        //   Ctrl + LMB + RMB      translate world Y  (vertical drag)
+        //   Ctrl + RMB in Rotate  yaw
+        //   Shift + LMB           translate the selection AND the camera
+        //
+        // Translated to this engine's axes (Y is up; Unreal's Z-up becomes Y).
+        // Pitch/roll are NOT mapped: a renderable/mesh stores one rotation (yaw),
+        // so a control that cannot be written back would lie about what it did.
+        //
+        // When the option is OFF none of this touches the mouse, so the gizmo,
+        // selection and camera gestures behave exactly as before.
+        const bool uCtrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+        const bool uShift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+        const bool unrealSel = g_editorPanels.unrealBrushMove && _inViewport &&
+                               g_sel.type != SelType::NONE && g_sel.type != SelType::MAP &&
+                               !g_editorPanels.animEditVerts;
+        // Split by modifier because Shift+RMB is still the per-face surface pick:
+        // only Ctrl owns the right button in the Unreal scheme.
+        const bool unrealCtrl = unrealSel && uCtrl;
+        const bool unrealShift = unrealSel && uShift && !uCtrl;
+        const bool unrealMouseEdit = unrealCtrl || unrealShift;
+
+        if (unrealMouseEdit && !Gizmo_IsUnrealDragging() &&
+            (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) ||
+             IsMouseButtonPressed(MOUSE_RIGHT_BUTTON))) {
+            const bool l = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
+            const bool r = IsMouseButtonDown(MOUSE_RIGHT_BUTTON);
+            UnrealDragMode mode = UnrealDragMode::None;
+            if (uCtrl && (l || r)) {
+                // The exact axis is refined by the first Update (adding the second
+                // button switches X/Z -> Y without moving the object).
+                mode = (l && r) ? UnrealDragMode::TranslateY
+                                : (l ? UnrealDragMode::TranslateX
+                                     : UnrealDragMode::TranslateZ);
+            } else if (uShift && !uCtrl && l) {
+                mode = UnrealDragMode::CameraFollow;
+            }
+            if (mode != UnrealDragMode::None) {
+                // History is pushed on the first actual movement, not on the
+                // press: a Ctrl+click that never moves must not leave an undo
+                // step behind (the press may be the start of a plain pick).
+                Gizmo_BeginUnrealDrag(mode);
+                g_gizmoDrag = true;   // lets the "mesh has no bounds yet" branch write
+            }
+        }
+        // Update/end runs even when the modifier is released BEFORE the button:
+        // otherwise the drag would stay latched until the next Ctrl press.
+        if (Gizmo_IsUnrealDragging()) {
+            const bool l = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
+            const bool r = IsMouseButtonDown(MOUSE_RIGHT_BUTTON);
+            if (g_sel.type == SelType::NONE || g_sel.type == SelType::MAP) {
+                Gizmo_CancelUnrealDrag();
+            } else {
+                const Vector2 md = GetMouseDelta();
+                if (!g_gizmoHistPushed && (md.x != 0.0f || md.y != 0.0f)) {
+                    HistoryPush();
+                    g_gizmoHistPushed = true;
+                }
+                Gizmo_UpdateUnrealDrag(md, OTEditor.MainCamera,
+                                       g_editorPanels.currentToolMode,
+                                       uCtrl, uShift, l, r);
+            }
+            if (!l && !r) {
+                Gizmo_EndUnrealDrag();
+                g_gizmoDrag = false;
+                if (g_gizmoHistPushed) {
+                    MarkWorldGraphDirty();
+                    g_gizmoHistPushed = false;
+                }
+                // Swallow the release so the generic handlers cannot pick or open
+                // the context menu for a gesture that was a transform.
+                (void)GetMouseDelta();
+            }
+        }
+
+        // Unreal-style keyboard nudge: arrows step the selection on the ground
+        // plane (X/Z); Ctrl+Up/Down steps vertically (Y). The step is the grid
+        // snap when set, else one unit. One History entry per keypress, and it is
+        // applied BEFORE the gizmo->entity sync below so it lands this frame.
+        if (g_editorPanels.unrealBrushMove && EditorUi_ViewportHasFocus() &&
+            g_sel.type != SelType::NONE && g_sel.type != SelType::MAP &&
+            !g_editorPanels.animEditVerts &&
+            !Gizmo_IsDragging() && !Gizmo_IsUnrealDragging()) {
+            const float step = g_editorPanels.gizmoSnap > 0.0f
+                                   ? g_editorPanels.gizmoSnap : 1.0f;
+            Vector3 nd = {0.0f, 0.0f, 0.0f};
+            if (uCtrl) {
+                if (IsKeyPressed(KEY_UP))   nd.y += step;
+                if (IsKeyPressed(KEY_DOWN)) nd.y -= step;
+            } else {
+                if (IsKeyPressed(KEY_LEFT))  nd.x -= step;
+                if (IsKeyPressed(KEY_RIGHT)) nd.x += step;
+                if (IsKeyPressed(KEY_UP))    nd.z -= step;
+                if (IsKeyPressed(KEY_DOWN))  nd.z += step;
+            }
+            if (nd.x != 0.0f || nd.y != 0.0f || nd.z != 0.0f) {
+                HistoryPush();
+                AngelTechEditor.X += nd.x;
+                AngelTechEditor.Y += nd.y;
+                AngelTechEditor.Z += nd.z;
+                MarkWorldGraphDirty();
+            }
+        }
+
         // Vertex-edit picking (Phase C): click nearest vertex, Shift adds.
 
         if (g_editorPanels.animEditVerts && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             Vector2 mp = GetMousePosition();
-            if (mp.x >= (float)GetStatsSidebarWidth() && mp.y >= 28.0f) {
+            if (mp.x >= (float)GetStatsSidebarWidth() && mp.y >= (float)kEditorToolbarHeight) {
                 MeshObjectNode* vn = PawnSystem::Instance().GetMeshObject(g_editorPanels.animTargetMesh);
                 oz::AnimatedMesh* vam = AnimTarget();
                 if (vn && vn->editPose && vam) {
@@ -443,7 +453,7 @@ int main(int argc, char **argv){
         // "a gizmo/placement ghost is drawn". Gating picks on it made the viewport
         // unselectable whenever a placement ghost was active with nothing selected
         // (e.g. after using the CSG toolbox), with no way to recover via Escape.
-        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !unrealMouseEdit) {
             g_lbDown = true;
             g_lbDownPos = GetMousePosition();
             g_gizmoHistPushed = false;
@@ -454,7 +464,7 @@ int main(int argc, char **argv){
             if (!g_suppressViewportDrag && g_sel.type != SelType::NONE &&
                 !g_editorPanels.animEditVerts) {
                 Vector2 mp = GetMousePosition();
-                if (mp.x >= (float)GetStatsSidebarWidth() && mp.y >= 28.0f) {
+                if (mp.x >= (float)GetStatsSidebarWidth() && mp.y >= (float)kEditorToolbarHeight) {
                     // Handles win over the generic "press on the object" drag: if a
                     // handle was hit, the drag is constrained to that axis/plane.
                     if (Gizmo_BeginDrag(mp, OTEditor.MainCamera,
@@ -487,8 +497,20 @@ int main(int argc, char **argv){
                 g_lbDown = false;
                 Vector2 mp = GetMousePosition();
                 if (!g_editorPanels.animEditVerts && g_placeMode != PlaceMode::TERRAIN &&
-                    mp.x >= (float)GetStatsSidebarWidth() && mp.y >= 28.0f) {
-                    EditorPickEntity();
+                    mp.x >= (float)GetStatsSidebarWidth() && mp.y >= (float)kEditorToolbarHeight) {
+                    // A placement ghost is armed: a CLICK places it. Without this
+                    // the click fell through to EditorPickEntity, missed (a ghost
+                    // is not pickable), set DrawModel=false and made the ghost
+                    // vanish with nothing added to the world - which reads exactly
+                    // like "the mesh I just placed got deleted". Gated on
+                    // g_placementArmed and NOT on DrawModel alone: DrawModel also
+                    // means "a selection gizmo is drawn", so every click with an
+                    // entity selected would otherwise place another copy.
+                    if (g_placementArmed && g_sel.type == SelType::NONE &&
+                        !g_suppressViewportDrag)
+                        g_commitPlacement = true;
+                    else
+                        EditorPickEntity();
                 }
             }
             // A gizmo drag wrote new positions every frame it was held, so the WorldGraph's
@@ -513,7 +535,7 @@ int main(int argc, char **argv){
             auto& oz = OzoneLoader::Instance();
             if (oz.HasHeightmap()) {
                 Vector2 mp = GetMousePosition();
-                if (mp.x >= (float)GetStatsSidebarWidth() && mp.y >= 28.0f) {
+                if (mp.x >= (float)GetStatsSidebarWidth() && mp.y >= (float)kEditorToolbarHeight) {
                     if (!g_terrainHistPushed) { HistoryPush(); g_terrainHistPushed = true; }
                     Ray ray = GetMouseRay(mp, OTEditor.MainCamera);
                     Vector3 hmPos = oz.GetHeightmapPosition();
@@ -572,7 +594,7 @@ int main(int argc, char **argv){
         // Right-click: drag resizes placement ghost; click picks entity + native
         // context menu. It must NEVER commit a placement (that added duplicate
         // entities when right-clicking to delete/duplicate) â€” commit is Enter only.
-        if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
+        if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON) && !unrealCtrl) {
             g_rbDown = true;
             g_rbDownPos = GetMousePosition();
         }
@@ -587,7 +609,7 @@ int main(int argc, char **argv){
             g_rbDown = false;
             // Re-check viewport bounds with fresh cursor position
             Vector2 _mp_rel = GetMousePosition();
-            bool _inVpRel = (_mp_rel.x >= (float)GetStatsSidebarWidth() && _mp_rel.y >= 28.0f);
+            bool _inVpRel = (_mp_rel.x >= (float)GetStatsSidebarWidth() && _mp_rel.y >= (float)kEditorToolbarHeight);
             // Per-FACE surface pick, done BEFORE the entity pick so the menu can
             // offer "Surface Properties (N Selected)". Triangle-level rather than
             // AABB-level, so clicking the top of a wall selects the +Y face and
@@ -729,11 +751,6 @@ int main(int argc, char **argv){
                 }
             }
         }
-        if (LastClickTime != 0){
-            LastClickTime ++;
-            if (LastClickTime == 30){ LastClickTime = 0; DoubleClick = false; }
-        }
-
         // Mouse-controlled camera: only move when middle-mouse-button is held.
         // Leaves the cursor free for clicking Win32 panels.
         // MMB          = pan horizontal (X/Z)
@@ -1163,17 +1180,26 @@ if (g_editorPanels.showCollisionBounds) {
                     LoadedModel* lm = WDLModels.GetModelByWDLId(EMID);
                     if (lm) DrawModelEx(lm->model, {px,py,pz},{0,pr,0},pr,{ps,ps,ps},WHITE);
                 } else if (EMID == 0) {
-                    // User-selected model from the Model Browser â€” ghost preview.
-                    int bidx = g_editorPanels.selectedModel;
-                    if (bidx >= 0 && bidx < (int)g_editorPanels.modelEntries.size()) {
+                    // Ghost preview of the model captured at "Place in World"
+                    // time. Reading g_editorPanels.selectedModel here meant a
+                    // rescan (import / Refresh) left the ghost undrawn entirely,
+                    // because that index is reset to -1 - and an unplaced ghost
+                    // that vanishes on the next click reads as a deleted mesh.
+                    //
+                    // Drawn ONLY while a placement is armed. DrawModel doubles as
+                    // "a selection gizmo is drawn", so without this gate the last
+                    // placed model kept hovering at the gizmo of whatever was
+                    // selected next - which reads as a stray duplicate.
+                    if (g_placementArmed) {
                         static Model s_browsePreview = {0};
                         static std::string s_browsePreviewPath;
-                        const std::string& path = g_editorPanels.modelEntries[bidx].path;
+                        const std::string& path = AngelTechEditor.ActiveModelPath;
                         if (s_browsePreviewPath != path) {
                             if (s_browsePreview.meshes) UnloadModel(s_browsePreview);
                             s_browsePreview = {0};
                             s_browsePreviewPath = path;
-                            s_browsePreview = LoadModelWithFallback(path.c_str());
+                            if (!path.empty())
+                                s_browsePreview = LoadModelWithFallback(path.c_str());
                         }
                         if (s_browsePreview.meshes)
                             DrawModelEx(s_browsePreview, {px,py,pz},{0,1,0},pr,{ps,ps,ps},WHITE);
@@ -1482,14 +1508,17 @@ if (g_editorPanels.showCollisionBounds) {
                 g_sel.pos = newPos;
             }
 
-            // Commit placement
-            if (IsKeyPressed(KEY_ENTER) || DoubleClick)
+            // Commit placement. Enter and a viewport CLICK both place; the click
+            // arrives as g_commitPlacement, set on left-click release above.
+            const bool commitRequested = IsKeyPressed(KEY_ENTER) || g_commitPlacement;
+            g_commitPlacement = false;
+            if (commitRequested)
             {
                 bool willCommit =
                     (g_placeMode == PlaceMode::PICKUP) ||
                     (g_placeMode == PlaceMode::NODE) ||
                     (g_placeMode == PlaceMode::MODEL &&
-                     ((EMID == 0 && g_editorPanels.selectedModel >= 0) || EMID >= 200));
+                     ((EMID == 0 && !AngelTechEditor.ActiveModelPath.empty()) || EMID >= 200));
                 if (willCommit) HistoryPush();
                 if (g_placeMode == PlaceMode::MODEL) {
                     if (EMID > 0) {
@@ -1498,9 +1527,14 @@ if (g_editorPanels.showCollisionBounds) {
                     } else {
                         if (EMID == 0) {
                             // Model Browser selection â†’ GameEngine.Mesh.* entity.
-                            int bidx = g_editorPanels.selectedModel;
-                            if (bidx >= 0 && bidx < (int)g_editorPanels.modelEntries.size()) {
-                                const std::string& path = g_editorPanels.modelEntries[bidx].path;
+                            // The path was captured when "Place in World" was
+                            // clicked (ed::PlacementRequest::key), not read back
+                            // from the browser here: a rescan between the button
+                            // and the click resets selectedModel to -1, and the
+                            // old lookup then refused the placement with no other
+                            // sign than one log line.
+                            const std::string& path = AngelTechEditor.ActiveModelPath;
+                            if (!path.empty()) {
                                 std::string ext;
                                 size_t dot = path.rfind('.');
                                 if (dot != std::string::npos) {
@@ -1595,6 +1629,11 @@ if (g_editorPanels.showCollisionBounds) {
                 }
 
 AngelTechEditor.DrawModel = false;
+                // Placement is one-shot: the ghost is spent, so a later click must
+                // go back to selecting instead of placing another copy. The path is
+                // dropped too, so nothing can redraw the ghost from a stale arm.
+                g_placementArmed = false;
+                AngelTechEditor.ActiveModelPath.clear();
                 // This whole block bypasses the event bus and mutates PawnSystem /
                 // ZoneManager directly, so it has to flag the WorldGraph itself.
                 MarkWorldGraphDirty();
@@ -1785,7 +1824,9 @@ AngelTechEditor.DrawModel = false;
         // Terrain-following camera
         {
             float gy = SampleHeightmapGroundY(OTEditor.MainCamera.position.x, OTEditor.MainCamera.position.z);
-            if (gy > -50000.0f)
+            // Don't fight a camera-follow drag (Shift+LMB): the clamp would undo
+            // the vertical part of the gesture every frame.
+            if (gy > -50000.0f && !Gizmo_IsUnrealDragging())
                 OTEditor.MainCamera.position.y = gy + 2.0f;
         }
 
@@ -1800,23 +1841,28 @@ AngelTechEditor.DrawModel = false;
         // Top toolbar with icons
         {
             int tw = GetScreenWidth();
-            int tbH = 28;
+            // TWO rows: the controls no longer fit on one line at the window's
+            // minimum width, and a toolbar that silently clips "Snap"/"Unreal"
+            // when the user shrinks the window is worse than two rows.
+            const int tbH = kEditorToolbarHeight;
+            const int rowH = 24;
+            int by = 2;                       // current row's y
             DrawRectangle(0, 0, tw, tbH, (Color){35, 35, 40, 220});
             DrawLine(0, tbH, tw, tbH, (Color){60, 60, 70, 255});
 
             auto& ico = EditorIcons::Instance();
-            int bx = 4, iy = 4, is = 20;
+            int bx = 4, is = 20;
 
             auto tBtn = [&](const char* icon, const char* label, int cmd, bool active = false) {
                 int lw = (label ? (int)strlen(label) * 7 + 4 : 0);
                 int bw = (icon ? 24 : 0) + lw + 4;
-                Rectangle r = {(float)bx, 2, (float)bw, (float)tbH - 4};
+                Rectangle r = {(float)bx, (float)by, (float)bw, (float)rowH};
                 bool hover = CheckCollisionPointRec(GetMousePosition(), r);
                 DrawRectangleRec(r, active ? (Color){70,90,120,255}
                                            : hover ? (Color){55,55,65,255}
                                                    : (Color){45,45,50,255});
-                if (icon && ico.Has(icon)) ico.Draw(icon, bx+2, iy, is, WHITE);
-                if (label) DrawText(label, bx+(icon?26:4), 7, 12, active ? WHITE : LIGHTGRAY);
+                if (icon && ico.Has(icon)) ico.Draw(icon, bx+2, by+2, is, WHITE);
+                if (label) DrawText(label, bx+(icon?26:4), by+5, 12, active ? WHITE : LIGHTGRAY);
                 if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                     if (cmd==0) ToggleModelBrowser(); else if(cmd==1) ToggleSoundMgr();
                     else if(cmd==2) ToggleTextureMgr(); else if(cmd==3) TogglePawnMgr();
@@ -1839,10 +1885,10 @@ AngelTechEditor.DrawModel = false;
             {
                 const char* lbl = "Play";
                 int bw = (int)strlen(lbl) * 7 + 10;
-                Rectangle r = {(float)bx, 2, (float)bw, (float)tbH - 4};
+                Rectangle r = {(float)bx, (float)by, (float)bw, (float)rowH};
                 bool hover = CheckCollisionPointRec(GetMousePosition(), r);
                 DrawRectangleRec(r, hover ? (Color){50,100,50,255} : (Color){35,80,35,255});
-                DrawText(lbl, bx + 4, 7, 12, WHITE);
+                DrawText(lbl, bx + 4, by+5, 12, WHITE);
                 if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                     PlayTestCurrentWorld();
                 }
@@ -1855,9 +1901,9 @@ AngelTechEditor.DrawModel = false;
             for (int li=0;li<3;li++) {
                 const char* labs[]={"Lit","Unlit","Wire"};
                 int lw=38; Color lc=(int)OTEditor.ViewMode==li?(Color){70,90,120,255}:(Color){45,45,50,255};
-                DrawRectangle(bx,2,lw,tbH-4,lc);
-                DrawText(labs[li],bx+4,7,12,(int)OTEditor.ViewMode==li?WHITE:LIGHTGRAY);
-                if(CheckCollisionPointRec(GetMousePosition(),{(float)bx,2,(float)lw,(float)tbH-4})&&IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                DrawRectangle(bx,by,lw,rowH,lc);
+                DrawText(labs[li],bx+4,by+5,12,(int)OTEditor.ViewMode==li?WHITE:LIGHTGRAY);
+                if(CheckCollisionPointRec(GetMousePosition(),{(float)bx,(float)by,(float)lw,(float)rowH})&&IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                     LightingMode prev = OTEditor.ViewMode;
                     OTEditor.ViewMode = (LightingMode)li;
                     if (prev != OTEditor.ViewMode) {
@@ -1883,9 +1929,9 @@ AngelTechEditor.DrawModel = false;
                 int lw = 42;
                 bool on = OTEditor.ShowSkybox;
                 Color lc = on ? (Color){70,90,120,255} : (Color){45,45,50,255};
-                DrawRectangle(bx, 2, lw, tbH-4, lc);
-                DrawText("Sky", bx+6, 7, 12, on ? WHITE : LIGHTGRAY);
-                if (CheckCollisionPointRec(GetMousePosition(), {(float)bx, 2, (float)lw, (float)tbH-4}) &&
+                DrawRectangle(bx, by, lw, rowH, lc);
+                DrawText("Sky", bx+6, by+5, 12, on ? WHITE : LIGHTGRAY);
+                if (CheckCollisionPointRec(GetMousePosition(), {(float)bx, (float)by, (float)lw, (float)rowH}) &&
                     IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                     OTEditor.ShowSkybox = !OTEditor.ShowSkybox;
                     EditorLog("Viewport skybox %s", OTEditor.ShowSkybox ? "shown" : "hidden");
@@ -1898,23 +1944,26 @@ AngelTechEditor.DrawModel = false;
             // Scene graph / World Hierarchy. It used to be reachable only from the
             // View menu, which is why it read as a hidden window rather than a tool.
             tBtn("AddMover","Hier",13, g_editorPanels.showWorldGraph);
-            bx += 6;
+
+            // ---- row 2: terrain / snap / Unreal-style input --------------------
+            bx = 4;
+            by = 2 + rowH + 4;
             // Terrain editing buttons
             bool terrainMode = (g_placeMode == PlaceMode::TERRAIN);
             Color terrainColor = terrainMode ? (Color){90,70,50,255} : (Color){45,45,50,255};
             int tbW = 76;
-            DrawRectangle(bx, 2, tbW, tbH-4, terrainColor);
-            if (ico.Has("BBTerrain")) ico.Draw("BBTerrain", bx+3, 4, 20, WHITE);
-            DrawText("Raise", bx+27, 7, 12, terrainMode ? WHITE : LIGHTGRAY);
-            if (CheckCollisionPointRec(GetMousePosition(), {(float)bx, 2, (float)tbW, (float)tbH-4}) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            DrawRectangle(bx, by, tbW, rowH, terrainColor);
+            if (ico.Has("BBTerrain")) ico.Draw("BBTerrain", bx+3, by+2, 20, WHITE);
+            DrawText("Raise", bx+27, by+5, 12, terrainMode ? WHITE : LIGHTGRAY);
+            if (CheckCollisionPointRec(GetMousePosition(), {(float)bx, (float)by, (float)tbW, (float)rowH}) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                 g_placeMode = PlaceMode::TERRAIN;
                 g_editorPanels.terrainBrushMode = 0; // raise
             }
             bx += tbW + 2;
-            DrawRectangle(bx, 2, tbW, tbH-4, terrainColor);
-            if (ico.Has("BBTerrain")) ico.Draw("BBTerrain", bx+3, 4, 20, WHITE);
-            DrawText("Lower", bx+27, 7, 12, terrainMode ? WHITE : LIGHTGRAY);
-            if (CheckCollisionPointRec(GetMousePosition(), {(float)bx, 2, (float)tbW, (float)tbH-4}) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            DrawRectangle(bx, by, tbW, rowH, terrainColor);
+            if (ico.Has("BBTerrain")) ico.Draw("BBTerrain", bx+3, by+2, 20, WHITE);
+            DrawText("Lower", bx+27, by+5, 12, terrainMode ? WHITE : LIGHTGRAY);
+            if (CheckCollisionPointRec(GetMousePosition(), {(float)bx, (float)by, (float)tbW, (float)rowH}) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                 g_placeMode = PlaceMode::TERRAIN;
                 g_editorPanels.terrainBrushMode = 1; // lower
             }
@@ -1922,9 +1971,9 @@ AngelTechEditor.DrawModel = false;
             // Brush size adjustment buttons
             char sizeTxt[32];
             snprintf(sizeTxt, sizeof(sizeTxt), "Sz:%d", g_editorPanels.terrainBrushSize);
-            DrawText(sizeTxt, bx+4, 7, 12, LIGHTGRAY);
+            DrawText(sizeTxt, bx+4, by+5, 12, LIGHTGRAY);
             int szW = (int)strlen(sizeTxt) * 7 + 10;
-            Rectangle szR = {(float)bx, 2, (float)szW, (float)tbH-4};
+            Rectangle szR = {(float)bx, (float)by, (float)szW, (float)rowH};
             if (CheckCollisionPointRec(GetMousePosition(), szR)) {
                 if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
                     g_editorPanels.terrainBrushSize = (g_editorPanels.terrainBrushSize % 10) + 1;
@@ -1933,9 +1982,9 @@ AngelTechEditor.DrawModel = false;
             // Brush strength
             char strTxt[32];
             snprintf(strTxt, sizeof(strTxt), "Str:%.1f", g_editorPanels.terrainBrushStrength);
-            DrawText(strTxt, bx+4, 7, 12, LIGHTGRAY);
+            DrawText(strTxt, bx+4, by+5, 12, LIGHTGRAY);
             int stW = (int)strlen(strTxt) * 7 + 10;
-            Rectangle stR = {(float)bx, 2, (float)stW, (float)tbH-4};
+            Rectangle stR = {(float)bx, (float)by, (float)stW, (float)rowH};
             if (CheckCollisionPointRec(GetMousePosition(), stR)) {
                 if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                     static float strengths[] = {0.01f, 0.03f, 0.05f, 0.1f, 0.2f};
@@ -1947,8 +1996,8 @@ AngelTechEditor.DrawModel = false;
             bx += stW + 2;
 
             // Gizmo snap. Discoverable here rather than hidden behind a modifier:
-            // clicking cycles Off / 0.25 / 0.5 / 1 / 2. Ctrl still forces 1.0 and
-            // Shift forces 0.1 while dragging.
+            // clicking cycles Off / 0.25 / 0.5 / 1 / 2. Ctrl still forces 1.0,
+            // Shift forces 0.1 while dragging a gizmo handle.
             {
                 const float steps[] = {0.0f, 0.25f, 0.5f, 1.0f, 2.0f};
                 char snapTxt[32];
@@ -1958,10 +2007,10 @@ AngelTechEditor.DrawModel = false;
                     snprintf(snapTxt, sizeof(snapTxt), "Snap:%.2g", g_editorPanels.gizmoSnap);
                 int sw = (int)strlen(snapTxt) * 7 + 10;
                 bool on = g_editorPanels.gizmoSnap > 0.0f;
-                DrawRectangle(bx, 2, sw, tbH - 4, on ? (Color){70,90,120,255} : (Color){45,45,50,255});
-                DrawText(snapTxt, bx + 4, 7, 12, on ? WHITE : LIGHTGRAY);
+                DrawRectangle(bx, by, sw, rowH, on ? (Color){70,90,120,255} : (Color){45,45,50,255});
+                DrawText(snapTxt, bx + 4, by+5, 12, on ? WHITE : LIGHTGRAY);
                 if (CheckCollisionPointRec(GetMousePosition(),
-                                           {(float)bx, 2, (float)sw, (float)tbH - 4}) &&
+                                           {(float)bx, (float)by, (float)sw, (float)rowH}) &&
                     IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                     int cur = 0;
                     for (int i = 0; i < 5; i++)
@@ -1970,11 +2019,84 @@ AngelTechEditor.DrawModel = false;
                 }
                 bx += sw + 2;
             }
+
+            // UnrealEd-style brush editing. Same state the Settings menu edits,
+            // so the button and the check mark can never disagree. The speed chip
+            // appears only while it is on; 1/2/3 also set it (UnrealEd convention).
+            {
+                const bool on = g_editorPanels.unrealBrushMove;
+                const char* lbl = on ? "Unreal:On" : "Unreal:Off";
+                const int uw = (int)strlen(lbl) * 7 + 10;
+                DrawRectangle(bx, by, uw, rowH,
+                              on ? (Color){70, 90, 120, 255} : (Color){45, 45, 50, 255});
+                DrawText(lbl, bx + 4, by+5, 12, on ? WHITE : LIGHTGRAY);
+                if (CheckCollisionPointRec(GetMousePosition(),
+                                           {(float)bx, (float)by, (float)uw, (float)rowH}) &&
+                    IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                    g_editorPanels.unrealBrushMove = !g_editorPanels.unrealBrushMove;
+                    Editor_SyncUnrealMenuChecks();
+                    EditorLog("Unreal-style brush movement %s",
+                              g_editorPanels.unrealBrushMove ? "on" : "off");
+                }
+                bx += uw + 2;
+                if (on) {
+                    char spTxt[32];
+                    static const char* kSpd[] = {"Slow", "Med", "Fast"};
+                    int spd = g_editorPanels.unrealMoveSpeed;
+                    if (spd < 0 || spd > 2) spd = 1;
+                    snprintf(spTxt, sizeof(spTxt), "%s", kSpd[spd]);
+                    const int spW = (int)strlen(spTxt) * 7 + 10;
+                    DrawRectangle(bx, by, spW, rowH, (Color){60, 70, 90, 255});
+                    DrawText(spTxt, bx + 4, by+5, 12, WHITE);
+                    if (CheckCollisionPointRec(GetMousePosition(),
+                                               {(float)bx, (float)by, (float)spW, (float)rowH}) &&
+                        IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                        g_editorPanels.unrealMoveSpeed =
+                            (g_editorPanels.unrealMoveSpeed + 1) % 3;
+                        Editor_SyncUnrealMenuChecks();
+                    }
+                    bx += spW + 2;
+                }
+            }
+            // View presets. Row 2, not row 1: row 1 is already at its width limit,
+            // and these are viewport chrome rather than document tools. The active
+            // chip is DERIVED from the camera (CurrentViewPreset), so the Camera
+            // menu, the NumPad keys and these buttons cannot disagree about which
+            // view is being shown - a stored flag would be a second source of truth.
+            bx += 6;
+            {
+                struct PresetChip { const char* label; ViewPresetKind kind; };
+                static const PresetChip kChips[] = {
+                    {"Top",   ViewPresetKind::Top},
+                    {"Side",  ViewPresetKind::Side},
+                    {"Down",  ViewPresetKind::Bottom},
+                    {"Persp", ViewPresetKind::Perspective},
+                };
+                const ViewPresetKind cur = CurrentViewPreset();
+                for (const auto& chip : kChips) {
+                    const int cw = (int)strlen(chip.label) * 7 + 10;
+                    const bool on = (cur == chip.kind);
+                    DrawRectangle(bx, by, cw, rowH,
+                                  on ? (Color){70, 90, 120, 255} : (Color){45, 45, 50, 255});
+                    DrawText(chip.label, bx + 4, by + 5, 12, on ? WHITE : LIGHTGRAY);
+                    if (CheckCollisionPointRec(GetMousePosition(),
+                                               {(float)bx, (float)by, (float)cw, (float)rowH}) &&
+                        IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                        switch (chip.kind) {
+                            case ViewPresetKind::Top:    ViewTop(); break;
+                            case ViewPresetKind::Bottom: ViewBottom(); break;
+                            case ViewPresetKind::Side:   ViewRight(); break;
+                            case ViewPresetKind::Perspective: SetViewPerspective(); break;
+                        }
+                    }
+                    bx += cw + 2;
+                }
+            }
         }
 
         // Draw the 3D viewport render target (offset by native stats sidebar)
         int sbW = GetStatsSidebarWidth();
-        const int tbH = 28;
+        const int tbH = kEditorToolbarHeight;
         LayoutStatsSidebar(GetScreenWidth(), GetScreenHeight(), tbH, sbW);
         {
             const char* modeStr =
@@ -1992,7 +2114,7 @@ AngelTechEditor.DrawModel = false;
                 OTEditor.MainCamera.position.y,
                 OTEditor.MainCamera.position.z);
         }
-        DrawFPS(GetScreenWidth() - 60, 36);
+        DrawFPS(GetScreenWidth() - 60, kEditorToolbarHeight + 8);
 
         // --- Event bus drain + dispatch ---------------------------------------
         //
@@ -2088,12 +2210,23 @@ AngelTechEditor.DrawModel = false;
                     EditorLog("Patched %s: %d updated, %d inserted, %d erased",
                               g_editorPanels.propDefPath.c_str(),
                               res.updated, res.inserted, res.erased);
-                    // Re-read the defs so the panel's read-only dump and the
-                    // registry agree with the file immediately.
-                    LightningEntityRegistry::Instance().Init();
+                    // Re-read ONLY this file, in place. Init() would reparse the
+                    // whole tree and can relocate defs, which leaves the
+                    // EntityDef pointers held by LightningEntityManager
+                    // instances and SkyZoneNode::def pointing at the wrong def.
+                    // ReloadFile updates the by-name entry through its existing
+                    // node, so every holder observes the new values.
+                    LightningEntityRegistry::Instance().ReloadFile(g_editorPanels.propDefPath);
+                    // The watcher will also see this write. Record the stamp so
+                    // the pending event is swallowed instead of rebuilding the
+                    // panel a second time ~200 ms after Apply.
+                    HotReload_NoteApplied(g_editorPanels.propDefPath);
                     // The defs just changed on disk, so any icon EngineBillboard
                     // memoised for these names is now stale.
                     EngineBillboard::InvalidateIconCache();
+                    // Keep the Script Manager's action counts / parse-error rows
+                    // in step with the file the panel just wrote.
+                    RefreshScriptManager();
                     SendMessage((HWND)g_editorPanels.hPropsPanel, WM_USER + 50, 0, 0);
                 } else {
                     EditorLog("Stat patch FAILED for %s: %s",
@@ -2521,13 +2654,37 @@ AngelTechEditor.DrawModel = false;
         if (EdKeys::Pressed(EdAction::Exit))
             PostMessageA((HWND)GetWindowHandle(), WM_CLOSE, 0, 0);
 
-        // Mode switching
-        if (EdKeys::Pressed(EdAction::ModeModel))  g_placeMode = PlaceMode::MODEL;
-        if (EdKeys::Pressed(EdAction::ModePickup)) g_placeMode = PlaceMode::PICKUP;
-        if (EdKeys::Pressed(EdAction::ModeNode))   g_placeMode = PlaceMode::NODE;
-        if (EdKeys::Pressed(EdAction::ModeZone))   ToggleZonePlacement();
-        if (EdKeys::Pressed(EdAction::ModeTerrain) && g_placeMode != PlaceMode::MODEL)
-            g_placeMode = PlaceMode::TERRAIN;
+        // Mode switching / Unreal movement speed.
+        //
+        // With Unreal-style editing ON, bare 1/2/3 are the movement-speed keys
+        // (the UnrealEd convention), so the placement modes move to Alt+key. Both
+        // routes are in the Keyboard Shortcuts panel and the toolbar; the speed
+        // keys are the only hard-wired ones here because they follow that
+        // convention rather than the remappable action table.
+        const bool uAlt = IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT);
+        if (g_editorPanels.unrealBrushMove) {
+            if (uAlt) {
+                if (IsKeyPressed(EdKeys::Key(EdAction::ModeModel)))  g_placeMode = PlaceMode::MODEL;
+                if (IsKeyPressed(EdKeys::Key(EdAction::ModePickup))) g_placeMode = PlaceMode::PICKUP;
+                if (IsKeyPressed(EdKeys::Key(EdAction::ModeNode)))   g_placeMode = PlaceMode::NODE;
+                if (IsKeyPressed(EdKeys::Key(EdAction::ModeZone)))   ToggleZonePlacement();
+                if (IsKeyPressed(EdKeys::Key(EdAction::ModeTerrain)) && g_placeMode != PlaceMode::MODEL)
+                    g_placeMode = PlaceMode::TERRAIN;
+            } else {
+                bool speedChanged = false;
+                if (IsKeyPressed(KEY_ONE))   { g_editorPanels.unrealMoveSpeed = 0; speedChanged = true; }
+                if (IsKeyPressed(KEY_TWO))   { g_editorPanels.unrealMoveSpeed = 1; speedChanged = true; }
+                if (IsKeyPressed(KEY_THREE)) { g_editorPanels.unrealMoveSpeed = 2; speedChanged = true; }
+                if (speedChanged) Editor_SyncUnrealMenuChecks();
+            }
+        } else {
+            if (EdKeys::Pressed(EdAction::ModeModel))  g_placeMode = PlaceMode::MODEL;
+            if (EdKeys::Pressed(EdAction::ModePickup)) g_placeMode = PlaceMode::PICKUP;
+            if (EdKeys::Pressed(EdAction::ModeNode))   g_placeMode = PlaceMode::NODE;
+            if (EdKeys::Pressed(EdAction::ModeZone))   ToggleZonePlacement();
+            if (EdKeys::Pressed(EdAction::ModeTerrain) && g_placeMode != PlaceMode::MODEL)
+                g_placeMode = PlaceMode::TERRAIN;
+        }
 
         // Primitive type cycling (1-5 for box/cyl/sph/pyr/pln, only in MODEL mode)
         // Reads real state from EMID (200+prim); never re-fires the actionCsgPlace
@@ -2536,7 +2693,10 @@ AngelTechEditor.DrawModel = false;
             int prim = (EMID >= 200 && EMID <= 204) ? EMID - 200 : 0;
             // Uses the same remappable key as the terrain mode (5 by default):
             // inside MODEL mode it cycles primitives, otherwise it selects terrain.
-            if (IsKeyPressed(EdKeys::Key(EdAction::ModeTerrain))) {
+            // With Unreal-style editing on, Alt+5 is the terrain mode switch, so it
+            // must not also cycle here.
+            if (IsKeyPressed(EdKeys::Key(EdAction::ModeTerrain)) &&
+                !(g_editorPanels.unrealBrushMove && uAlt)) {
                 prim = (prim + 1) % 5;
                 EMID = 200 + prim;
                 EditorLog("Primitive: %s", prim == 0 ? "box" : prim == 1 ? "cylinder" : prim == 2 ? "sphere" : prim == 3 ? "pyramid" : "plane");
@@ -2569,7 +2729,11 @@ AngelTechEditor.DrawModel = false;
         // way out of placement mode.
         // Escape cancels an active gizmo drag first (restoring the pre-drag
         // transform), and only then clears the selection.
-        if (IsKeyPressed(KEY_ESCAPE) && Gizmo_IsDragging()) {
+        if (IsKeyPressed(KEY_ESCAPE) &&
+            (Gizmo_IsDragging() || Gizmo_IsUnrealDragging())) {
+            // Both cancel paths restore their own start values; the frame sync then
+            // publishes the restored gizmo, so the entity reverts too.
+            Gizmo_CancelUnrealDrag();
             Gizmo_CancelDrag();
             g_gizmoDrag = false;
             g_gizmoHistPushed = false;
@@ -2578,6 +2742,11 @@ AngelTechEditor.DrawModel = false;
             g_sel = { SelType::NONE, -1, "", {0,0,0} };
             g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
             AngelTechEditor.DrawModel = false;
+            g_placementArmed = false;
+            // A cancelled ghost must not leave its model path armed: the ghost
+            // preview and the commit both read it, and a stale path would place
+            // the previous model on the next "Place in World".
+            AngelTechEditor.ActiveModelPath.clear();
         }
         // Delete/Duplicate are for placed objects only. Both targets are `else if`
         // chains with no `else`, so gating on `!= NONE` alone would let the Map
@@ -2608,31 +2777,13 @@ AngelTechEditor.DrawModel = false;
         if (IsKeyPressed(KEY_PAGE_UP)) CamUp();
         if (IsKeyPressed(KEY_PAGE_DOWN)) CamDown();
 
-        // View preset shortcuts (NumPad)
-        if (IsKeyPressed(KEY_KP_7)) {
-            // Top view
-            Vector3 center = OTEditor.MainCamera.target;
-            SetViewPreset({center.x, center.y + 80, center.z + 0.1f}, center, {0, 0, -1});
-        }
-        if (IsKeyPressed(KEY_KP_1)) {
-            // Bottom view
-            Vector3 center = OTEditor.MainCamera.target;
-            SetViewPreset({center.x, center.y - 80, center.z + 0.1f}, center, {0, 0, 1});
-        }
-        if (IsKeyPressed(KEY_KP_3)) {
-            // Right view
-            Vector3 center = OTEditor.MainCamera.target;
-            SetViewPreset({center.x + 80, center.y, center.z}, center, {0, 1, 0});
-        }
-        if (IsKeyPressed(KEY_KP_9)) {
-            // Left view
-            Vector3 center = OTEditor.MainCamera.target;
-            SetViewPreset({center.x - 80, center.y, center.z}, center, {0, 1, 0});
-        }
-        if (IsKeyPressed(KEY_KP_5)) {
-            // Perspective / back to default
-            SetViewPerspective();
-        }
+        // View preset shortcuts (NumPad). Same named presets the Camera menu and
+        // the toolbar chips use, so all three stay in step.
+        if (IsKeyPressed(KEY_KP_7)) ViewTop();
+        if (IsKeyPressed(KEY_KP_1)) ViewBottom();
+        if (IsKeyPressed(KEY_KP_3)) ViewRight();
+        if (IsKeyPressed(KEY_KP_9)) ViewLeft();
+        if (IsKeyPressed(KEY_KP_5)) SetViewPerspective();
 
         }  // EditorUi_ViewportHasFocus()
 
@@ -2640,6 +2791,9 @@ AngelTechEditor.DrawModel = false;
 
     // Cleanup
     EditorLog("=== AngelEd shutting down ===");
+    // Stop the file watcher before the windows and the log go away: its thread
+    // may still be holding a ReadDirectoryChangesW on GameData.
+    HotReload_Stop();
     EditorIcons::Instance().Unload();
     if (g_editorLog) fclose(g_editorLog);
     StopSoundPreview();

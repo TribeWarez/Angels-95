@@ -299,9 +299,146 @@ void Gizmo_UpdateDrag(Vector2 mouse, const Camera3D& cam, int toolMode) {
     }
 }
 
+// ---------------------------------------------------------------- Unreal-style
+//
+// UnrealEd's transforms are mouse + modifier gestures rather than handle drags.
+// The mapping here is translated to THIS engine's axes, which are Y-up:
+//
+//   Ctrl + LMB            -> world X        (horizontal drag)
+//   Ctrl + RMB            -> world Z        (horizontal drag; Unreal's "Y")
+//   Ctrl + LMB + RMB      -> world Y        (vertical drag; Unreal's "Z")
+//   Ctrl + RMB in Rotate  -> yaw (degrees, gizmoAngleSnap/Shift-1)
+//   Shift + LMB           -> move the selection AND the camera together
+//
+// Rotation is yaw-only on purpose: OZONE stores one rotation value per
+// renderable/mesh, so mapping pitch/roll here would be a control that changes
+// nothing - the failure mode the gizmo avoids by hiding its ring for types that
+// cannot rotate.
+//
+// All of this writes AngelTechEditor only. Main.cpp's per-frame sync publishes
+// that into the selected entity, so there is still exactly ONE write path.
+
+enum class UnrealDragMode {
+    None = 0,
+    TranslateX,
+    TranslateZ,
+    TranslateY,
+    Yaw,
+    CameraFollow,
+};
+
+static UnrealDragMode g_unrealDrag = UnrealDragMode::None;
+static float g_unrealStartX = 0, g_unrealStartY = 0, g_unrealStartZ = 0;
+static float g_unrealStartR = 0;
+
+static float UnrealSpeedMul() {
+    switch (g_editorPanels.unrealMoveSpeed) {
+        case 0:  return 0.25f;   // slow
+        case 2:  return 4.0f;    // fast
+        default: return 1.0f;    // medium
+    }
+}
+
+bool Gizmo_IsUnrealDragging() { return g_unrealDrag != UnrealDragMode::None; }
+
+void Gizmo_BeginUnrealDrag(UnrealDragMode mode) {
+    g_unrealDrag = mode;
+    g_unrealStartX = AngelTechEditor.X;
+    g_unrealStartY = AngelTechEditor.Y;
+    g_unrealStartZ = AngelTechEditor.Z;
+    g_unrealStartR = AngelTechEditor.R;
+}
+
+// `delta` is the per-frame mouse delta, so the axis can change mid-gesture
+// (adding the second button switches to the vertical axis) without the object
+// jumping: total movement is the sum of the deltas, not a projection from the
+// gesture's start.
+void Gizmo_UpdateUnrealDrag(Vector2 delta, const Camera3D& cam, int toolMode,
+                            bool ctrl, bool shift, bool lmb, bool rmb) {
+    if (g_unrealDrag == UnrealDragMode::None) return;
+    (void)shift;
+
+    if (g_unrealDrag != UnrealDragMode::CameraFollow) {
+        UnrealDragMode want = UnrealDragMode::None;
+        if (ctrl) {
+            if (lmb && rmb) want = UnrealDragMode::TranslateY;
+            else if (lmb)   want = UnrealDragMode::TranslateX;
+            else if (rmb)   want = (toolMode == 3) ? UnrealDragMode::Yaw
+                                                   : UnrealDragMode::TranslateZ;
+        }
+        if (want == UnrealDragMode::None) return;
+        g_unrealDrag = want;
+    }
+
+    const Vector3 pivot = Gizmo_Pivot();
+    const float dist = Vector3Distance(cam.position, pivot);
+    float k = dist * 0.002f;
+    if (k < 0.02f) k = 0.02f;
+    k *= UnrealSpeedMul();
+
+    // Ctrl is OUR modifier here, so snapping reads the toolbar grid directly
+    // instead of Gizmo_SnapStep() (which treats Ctrl as "snap to 1").
+    const float snap = g_editorPanels.gizmoSnap;
+
+    switch (g_unrealDrag) {
+        case UnrealDragMode::TranslateX:
+            AngelTechEditor.X = (snap > 0.0f)
+                ? ozg::SnapValue(AngelTechEditor.X + delta.x * k, snap)
+                : AngelTechEditor.X + delta.x * k;
+            break;
+        case UnrealDragMode::TranslateZ:
+            AngelTechEditor.Z = (snap > 0.0f)
+                ? ozg::SnapValue(AngelTechEditor.Z + delta.x * k, snap)
+                : AngelTechEditor.Z + delta.x * k;
+            break;
+        case UnrealDragMode::TranslateY:
+            // Screen-up is negative mouse-delta, so the vertical axis is negated.
+            AngelTechEditor.Y = (snap > 0.0f)
+                ? ozg::SnapValue(AngelTechEditor.Y - delta.y * k, snap)
+                : AngelTechEditor.Y - delta.y * k;
+            break;
+        case UnrealDragMode::Yaw: {
+            const float r = AngelTechEditor.R + delta.x * 0.4f * UnrealSpeedMul();
+            AngelTechEditor.R = ozg::SnapAngle(r, Gizmo_AngleStep());
+            break;
+        }
+        case UnrealDragMode::CameraFollow: {
+            // Camera-plane movement, then the camera is translated by the SAME
+            // delta: the selection stays under the cursor and the view follows,
+            // which is the point of Unreal's Shift-drag.
+            Vector3 fwd = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
+            Vector3 right = Vector3Normalize(Vector3CrossProduct(fwd, {0, 1, 0}));
+            Vector3 up = Vector3Normalize(Vector3CrossProduct(right, fwd));
+            const Vector3 d = Vector3Subtract(Vector3Scale(right, delta.x * k),
+                                              Vector3Scale(up, delta.y * k));
+            AngelTechEditor.X += d.x;
+            AngelTechEditor.Y += d.y;
+            AngelTechEditor.Z += d.z;
+            OTEditor.MainCamera.position = Vector3Add(OTEditor.MainCamera.position, d);
+            OTEditor.MainCamera.target   = Vector3Add(OTEditor.MainCamera.target, d);
+            break;
+        }
+        default: break;
+    }
+}
+
+void Gizmo_EndUnrealDrag() {
+    g_unrealDrag = UnrealDragMode::None;
+}
+
 void Gizmo_EndDrag() {
     g_gizmoDragHandle = GizmoHandle::None;
 }
+
+void Gizmo_CancelUnrealDrag() {
+    if (g_unrealDrag == UnrealDragMode::None) return;
+    AngelTechEditor.X = g_unrealStartX;
+    AngelTechEditor.Y = g_unrealStartY;
+    AngelTechEditor.Z = g_unrealStartZ;
+    AngelTechEditor.R = g_unrealStartR;
+    g_unrealDrag = UnrealDragMode::None;
+}
+
 
 void Gizmo_CancelDrag() {
     if (!Gizmo_IsDragging()) return;

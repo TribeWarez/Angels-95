@@ -1,0 +1,16 @@
+{
+  "brackets": [],
+  "autoClosingPairs": [
+    {
+      "open": "\"",
+      "close": "\""
+    }
+  ],
+  "surroundingPairs": [
+    {
+      "open": "\"",
+      "close": "\""
+    }
+  ],
+  "wordPattern": "(-?\\d+(?:\\.\\d+)?)|([A-Za-z_][A-Za-z0-9_.]*)"
+}

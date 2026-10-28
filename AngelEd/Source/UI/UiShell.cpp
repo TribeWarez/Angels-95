@@ -58,7 +58,8 @@
 // where you look.
 // ============================================================================
 
-static const char* const kEditorIniPath = "System/AngelEd.ini";
+// kEditorIniPath is declared in UiPanels.hpp (one definition, shared with the
+// View -> Save Pane Layout handler that names it in the log).
 
 struct PanelLayoutBinding {
     const char* key;
@@ -112,6 +113,34 @@ static void LoadPanelLayouts() {
     IniConfig cfg;
     if (!cfg.Load(kEditorIniPath)) return;
 
+    // Input options live beside the layout: they are user preferences, must be
+    // available before the first frame, and are read/written by the same file
+    // the panel geometry already uses.
+    g_editorPanels.unrealBrushMove = cfg.GetBool("Options", "unreal_brush_move", false);
+    g_editorPanels.unrealMoveSpeed = cfg.GetInt("Options", "unreal_move_speed", 1);
+    if (g_editorPanels.unrealMoveSpeed < 0) g_editorPanels.unrealMoveSpeed = 0;
+    if (g_editorPanels.unrealMoveSpeed > 2) g_editorPanels.unrealMoveSpeed = 2;
+
+    // Restore the MAIN window's size/position before the panels are created so
+    // the docked stats sidebar is laid out against the right client rect. The
+    // editor window is resizable (FLAG_WINDOW_RESIZABLE); these values are
+    // written by SavePanelLayouts on exit. A missing/invalid pair just leaves
+    // the 1280x720 default in place.
+    if (g_hRaylibWnd) {
+        const int mw = cfg.GetInt("Layout", "main_w", 0);
+        const int mh = cfg.GetInt("Layout", "main_h", 0);
+        if (mw >= 640 && mh >= 480) {
+            const int mx = cfg.GetInt("Layout", "main_x", -1000000);
+            const int my = cfg.GetInt("Layout", "main_y", -1000000);
+            if (mx > -1000000 && my > -1000000)
+                SetWindowPos(g_hRaylibWnd, nullptr, mx, my, mw, mh,
+                             SWP_NOZORDER | SWP_NOACTIVATE);
+            else
+                SetWindowPos(g_hRaylibWnd, nullptr, 0, 0, mw, mh,
+                             SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+    }
+
     for (int i = 0; i < kLayoutBindingCount; i++) {
         auto& b = kLayoutBindings[i];
         const std::string base = b.key;
@@ -125,7 +154,7 @@ static void LoadPanelLayouts() {
     }
 }
 
-static void SavePanelLayouts() {
+void SavePanelLayouts() {
     IniConfig cfg;
     cfg.Load(kEditorIniPath);   // keep every unrelated section
 
@@ -165,6 +194,11 @@ static void SavePanelLayouts() {
         cfg.SetInt("Layout", "main_h", r.bottom - r.top);
         cfg.SetBool("Layout", "main_max", maxed);
     }
+
+    // Input options. Written here because this is the one function that already
+    // owns "editor preferences that are not document state", and it runs on exit.
+    cfg.SetBool("Options", "unreal_brush_move", g_editorPanels.unrealBrushMove);
+    cfg.SetInt("Options", "unreal_move_speed", g_editorPanels.unrealMoveSpeed);
     cfg.Save(kEditorIniPath);
 }
 

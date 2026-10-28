@@ -12,9 +12,9 @@ entity "selenite_blade" : weapon {
         // screen (~15x oversized at 0.45 units). The blade's long axis is Y, so
         // a Y yaw cannot fix it - it needs a 90 deg pitch about X to lay the
         // blade along screen depth.
-        viewmodel_offset = (0.26, -0.30, 0.44)
+        viewmodel_offset = (0.32, -0.25, 0.83)
         viewmodel_rot = (90, 0, 0)
-        viewmodel_scale = 1.0
+        viewmodel_scale = 1.15
         // The 3.9-unit source model is right for the viewmodel (ViewModel::Fit
         // normalises source scales) but four times too long on the ground: a
         // drawn pickup uses this _unfitted_ size times the historical 1.5, so

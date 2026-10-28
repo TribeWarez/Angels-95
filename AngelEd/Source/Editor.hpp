@@ -340,6 +340,12 @@ class InEditor{
         bool DrawModel = false;
         float X = 0, Y = 0, Z = 0, S = 1, R = 0, L = 0, H = 0, W = 0;
         std::string ActivePickupName = "HealthVial";
+        // Model Browser path captured at "Place in World" time. BOTH the ghost
+        // preview and the commit read this, never g_editorPanels.selectedModel:
+        // that index is reset to -1 by ScanModelBrowserFiles (import, Refresh),
+        // so a rescan between the button and the click made the ghost disappear
+        // and made the commit silently refuse with "select a model first".
+        std::string ActiveModelPath;
         EditorNodeType ActiveNodeType = EditorNodeType::SPAWN;
         // CSG operation for OZONE brush placement: 0=SOLID, 1=ADD, 2=SUB, 3=INTERSECT, 4=DE_RESC
         int CSGOperation = 0;

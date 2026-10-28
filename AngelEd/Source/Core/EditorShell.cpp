@@ -112,6 +112,29 @@ static void SetViewPerspective() {
     OTEditor.MainCamera.projection = CAMERA_PERSPECTIVE;
 }
 
+// Named orthographic presets. The Camera menu, the NumPad shortcuts and the
+// toolbar's Top/Side/Down/Persp chips each used to carry their own copy of the
+// offset math, so retuning one meant finding all three.
+static void ViewTop()    { const Vector3 c = OTEditor.MainCamera.target; SetViewPreset({c.x, c.y + 80, c.z + 0.1f}, c, {0, 0, -1}); }
+static void ViewBottom() { const Vector3 c = OTEditor.MainCamera.target; SetViewPreset({c.x, c.y - 80, c.z + 0.1f}, c, {0, 0, 1}); }
+static void ViewRight()  { const Vector3 c = OTEditor.MainCamera.target; SetViewPreset({c.x + 80, c.y, c.z}, c, {0, 1, 0}); }
+static void ViewLeft()   { const Vector3 c = OTEditor.MainCamera.target; SetViewPreset({c.x - 80, c.y, c.z}, c, {0, 1, 0}); }
+
+// Which preset the viewport is showing, so the toolbar chips can mark one active.
+// Derived from the camera rather than stored: the menu items and the NumPad keys
+// write the same camera, and a stored flag would be a second source of truth that
+// a manual orbit could silently invalidate. An ortho view the user orbited by hand
+// reports what it most resembles (up +Y is the side orientation) instead of
+// inventing a fifth state the chips could not show.
+enum class ViewPresetKind { Top, Bottom, Side, Perspective };
+static ViewPresetKind CurrentViewPreset() {
+    if (!g_orthoView) return ViewPresetKind::Perspective;
+    const Vector3 up = OTEditor.MainCamera.up;
+    if (up.z < -0.5f) return ViewPresetKind::Top;
+    if (up.z >  0.5f) return ViewPresetKind::Bottom;
+    return ViewPresetKind::Side;
+}
+
 // Panel toggle helpers (keyboard-driven, no top menu bar)
 static void ToggleSoundMgr()    { ShowSoundManager(!g_editorPanels.showSoundMgr); }
 static void ToggleTextureMgr()  { ShowTextureManager(!g_editorPanels.showTextureMgr); }
@@ -173,4 +196,6 @@ void ClearScene() {
     pawns.ClearMeshObjects();
     pawns.ClearSkyZones();
     AngelTechEditor.DrawModel = false;
+    AngelTechEditor.ActiveModelPath.clear();
+    g_placementArmed = false;
 }

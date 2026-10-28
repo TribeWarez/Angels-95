@@ -49,6 +49,15 @@ enum EditorMenuCmd {
     IDM_FULLSCREEN,
     IDM_MAXIMIZE,
     IDM_RESET_LAYOUT,
+    // Persist the current panel geometry now instead of only on exit. A layout
+    // you just arranged is otherwise kept only if you quit cleanly.
+    IDM_SAVE_LAYOUT,
+    // Editor input options (Settings menu + the toolbar toggle). Same state in
+    // both places, so the check mark and the button can never disagree.
+    IDM_UNREAL_MOVE,
+    IDM_UNREAL_SPEED_SLOW,
+    IDM_UNREAL_SPEED_MED,
+    IDM_UNREAL_SPEED_FAST,
     IDM_RESET_CAM,
     IDM_VIEW_TOP,
     IDM_VIEW_BOTTOM,
@@ -76,6 +85,11 @@ enum EditorMenuCmd {
 // refuses outright rather than emitting a partial hull - a missing box in a
 // collision wall is the exact failure the feature exists to prevent.
 inline constexpr int kAutoConvexMaxBoxes = 2048;
+
+// Height of the editor toolbar. It is TWO rows so every control still fits when
+// the (now resizable) window is at its minimum width; the viewport, its input
+// gates and the docked stats sidebar all start below this.
+inline constexpr int kEditorToolbarHeight = 56;
 
 // Forward declarations
 void EditorLog(const char* fmt, ...);
@@ -159,6 +173,18 @@ inline Vector2 g_rbDownPos{0,0};
 // placement ghost) is not mistaken for a selection click.
 inline bool g_lbDown = false;
 inline Vector2 g_lbDownPos{0,0};
+// True only while an explicit placement ghost is armed by BeginPlacement (the
+// Model Browser's "Place in World", the Pickups/Node panels, the CSG toolbox does
+// NOT arm it). It is NOT the same thing as AngelTechEditor.DrawModel, which also
+// means "the selection gizmo is drawn": gating a click on DrawModel alone would
+// turn every plain click with something selected into a placement.
+inline bool g_placementArmed = false;
+// Set by the viewport's left-click RELEASE when a placement ghost is armed, and
+// consumed once by the frame's commit block. A click places; it used to only
+// deselect the ghost, because the commit was Enter-only. It is a request rather
+// than a direct call because the commit lives further down the frame, inside the
+// `if (AngelTechEditor.DrawModel)` block that owns the ghost.
+inline bool g_commitPlacement = false;
 
 // Gizmo drag: moving a SELECTED entity requires an intentional gesture (Move
 // tool active, or the press landing on the selection) â€” a plain viewport click

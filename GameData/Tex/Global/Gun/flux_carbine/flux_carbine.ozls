@@ -20,9 +20,9 @@ entity "flux_carbine" : weapon {
         // Same source orientation as automag (muzzle toward +Z), so it needs the
         // same 180 deg yaw. Authored explicitly so it does not inherit another
         // weapon's transform.
-        viewmodel_offset = (0.22, -0.18, 0.48)
-        viewmodel_rot = (0, 180, 0)
-        viewmodel_scale = 1.0
+        viewmodel_offset = (0.30, -0.24, 0.72)
+        viewmodel_rot = (0, 200, 0)
+        viewmodel_scale = 0.76
     }
     actions {
         on_reload {

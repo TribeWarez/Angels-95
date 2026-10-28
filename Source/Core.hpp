@@ -17,6 +17,7 @@
 #include "Renderer/ViewModel.hpp"
 #include "Renderer/PlayerModel.hpp"
 #include "Renderer/CullState.hpp"
+#include "Renderer/ShadingTuning.hpp"
 #include "Particle/OzParticleSimulationManager.hpp"
 #include "Pawn/AngelPlayer/PlayerController.hpp"
 // LoadWorld() resets the HUD's per-world transients (XP baseline / banners), so
@@ -583,6 +584,31 @@ void LoadLaunchConfig()
     }
 }
 
+// Push the world fog store back onto the LitFog program. See the call site in
+// UpdateLightSources: the four fog-setting sites each set these uniforms from
+// their own locals, so without this sync the *store's* value - which is where
+// the player fog override lands - reaches Surface/Wind but not the world.
+inline void SyncLitFogFromStore(const float color[3], float start, float end,
+                                float density, float intensity) {
+    if (AngelTechData.Lights.id == 0) return;
+    static int s_colorLoc = -1, s_startLoc = -1, s_endLoc = -1,
+               s_densityLoc = -1, s_intensityLoc = -1;
+    static unsigned int s_programId = 0;
+    if (AngelTechData.Lights.id != s_programId) {
+        s_programId    = AngelTechData.Lights.id;
+        s_colorLoc     = GetShaderLocation(AngelTechData.Lights, "fogColor");
+        s_startLoc     = GetShaderLocation(AngelTechData.Lights, "fogStart");
+        s_endLoc       = GetShaderLocation(AngelTechData.Lights, "fogEnd");
+        s_densityLoc   = GetShaderLocation(AngelTechData.Lights, "fogDensity");
+        s_intensityLoc = GetShaderLocation(AngelTechData.Lights, "fogIntensity");
+    }
+    if (s_colorLoc     >= 0) SetShaderValue(AngelTechData.Lights, s_colorLoc, color, SHADER_UNIFORM_VEC3);
+    if (s_startLoc     >= 0) SetShaderValue(AngelTechData.Lights, s_startLoc, &start, SHADER_UNIFORM_FLOAT);
+    if (s_endLoc       >= 0) SetShaderValue(AngelTechData.Lights, s_endLoc, &end, SHADER_UNIFORM_FLOAT);
+    if (s_densityLoc   >= 0) SetShaderValue(AngelTechData.Lights, s_densityLoc, &density, SHADER_UNIFORM_FLOAT);
+    if (s_intensityLoc >= 0) SetShaderValue(AngelTechData.Lights, s_intensityLoc, &intensity, SHADER_UNIFORM_FLOAT);
+}
+
 void UpdateLightSources()
 {
     // Lighting now lives in Renderer/LitLightning (LitLightning_UpdateFrame).
@@ -616,6 +642,24 @@ void UpdateLightSources()
                                                 GetFrameTime(), amb);
     }
 
+    // LitFog reads the SAME store back, once per frame, OUTSIDE the Surface
+    // block above: if Surface.fs were missing, the world would otherwise keep
+    // whatever the last fog-setting site pushed (and a player fog override,
+    // which lands in the store, would never reach it).
+    //
+    // The four fog-setting sites (startup, skyzone enter/exit, script
+    // set_fog/restore_fog) each push their own values straight to this
+    // program's uniforms, so syncing here is what makes the store the single
+    // source of truth and an override take effect on the next frame instead of
+    // only on the next fog event.
+    {
+        float fogCol[3] = {0.7f, 0.7f, 0.8f};
+        float fogStart = 10.0f, fogEnd = 100.0f, fogDensity = 1.0f, fogIntensity = 1.0f;
+        OzoneLoader::Instance().GetWorldFog(fogCol, fogStart, fogEnd,
+                                            fogDensity, fogIntensity);
+        SyncLitFogFromStore(fogCol, fogStart, fogEnd, fogDensity, fogIntensity);
+    }
+
     // The wind program (Wind.vs + LitFog.fs) is a THIRD consumer of the same
     // uniform contract, and it was the only one nothing refreshed. Every wind=1
     // mesh was therefore drawn with the program's GLSL defaults - no lights, no
@@ -645,6 +689,10 @@ void UpdateLightSources()
 
         LitLightning_Update(PawnSystem::Instance().GetLights(), AngelTechData.WindShader,
                             AngelTechData.MainCamera, GetFrameTime());
+
+        // The wind program is Wind.vs + LitFog.fs: same fragment shader, so it
+        // needs the same player shading knobs as the world program.
+        oz::ApplyShadingTuning(AngelTechData.WindShader);
 
         const float windViewPos[3] = { AngelTechData.MainCamera.position.x,
                                        AngelTechData.MainCamera.position.y,

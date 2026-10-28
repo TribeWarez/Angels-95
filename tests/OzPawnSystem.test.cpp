@@ -64,6 +64,62 @@ static int test_register_def() {
     PASS(); return 0; END_TEST();
 }
 
+// Editor hot reload: UpdateDef replaces an EXISTING def in place. RegisterDef
+// refuses a duplicate name, so without it a re-saved .cfg could never take
+// effect. Live pawns must see the edited movement/combat knobs, while HEALTH is
+// instance state and survives (an enemy must not heal because its template was
+// edited). RemoveDef is the deleted-.cfg path.
+static int test_update_def_hot_reload() {
+    TEST("UpdateDef edits in place, updates live pawns, keeps health");
+    reset_pawn_system();
+    auto& ps = PawnSystem::Instance();
+
+    PawnDef def;
+    def.name = "HotReloadBot";
+    def.speed = 1.0f;
+    def.aggroRange = 4.0f;
+    def.attackRange = 1.0f;
+    def.damage = 5.0f;
+    def.maxHealth = 100;
+    ps.RegisterDef(def);
+    const int defCount = (int)ps.GetDefs().size();
+
+    const int id = ps.Spawn({0.0f, 0.0f, 0.0f}, "HotReloadBot");
+    CHECK(id >= 0);
+    Pawn* p = ps.Get(id);
+    CHECK(p != nullptr);
+    p->health = 70;   // pretend it has taken damage
+
+    PawnDef edited = def;
+    edited.speed = 3.0f;
+    edited.aggroRange = 9.0f;
+    edited.attackRange = 2.0f;
+    edited.damage = 25.0f;
+    edited.maxHealth = 200;
+    CHECK(ps.UpdateDef(edited));
+
+    // No duplicate entry: UpdateDef replaced the existing slot.
+    CHECK_EQ((int)ps.GetDefs().size(), defCount);
+    // Live instance picked up the template's knobs...
+    CHECK_APROX(p->speed, 3.0f, 0.001f);
+    CHECK_APROX(p->aggroRange, 9.0f, 0.001f);
+    CHECK_APROX(p->attackRange, 2.0f, 0.001f);
+    CHECK_APROX(p->damage, 25.0f, 0.001f);
+    // ...but not its health: damage taken is instance state.
+    CHECK_EQ(p->health, 70);
+
+    // An unknown name reports "not found" so the caller registers it instead.
+    PawnDef missing;
+    missing.name = "NoSuchDefForHotReload";
+    CHECK(!ps.UpdateDef(missing));
+
+    // Deleted .cfg path: the def goes away and cannot be spawned any more.
+    CHECK(ps.RemoveDef("HotReloadBot"));
+    CHECK(!ps.RemoveDef("HotReloadBot"));
+    CHECK_EQ(ps.Spawn({0.0f, 0.0f, 0.0f}, "HotReloadBot"), -1);
+    PASS(); return 0; END_TEST();
+}
+
 static int test_spawn_unknown_def() {
     TEST("Spawn with unknown def name returns -1");
     reset_pawn_system();
@@ -1266,6 +1322,45 @@ static int test_combat_feedback_cues() {
     PASS(); return 0; END_TEST();
 }
 
+// A hit on an ACTOR must not leave a surface decal.
+//
+// SpawnBlood's only callers are pawn hits. It used to call AddDecal(hitPos, dir,
+// 0.55) as well as the particle burst, and a decal quad is built in the plane of
+// the hit NORMAL - for a body hit that is the shot direction, so a 0.55-unit
+// blood card stood flat against the camera, centred on the enemy, for the whole
+// decal lifetime and drawn after the pawn. Reported as "shooting an enemy hides
+// its mesh". This is a source-level assertion because the alternative is a GL
+// context and a rendered frame to observe the same fact.
+static int test_actor_hits_leave_no_surface_decal() {
+    TEST("SpawnBlood paints particles only - no surface decal on an actor");
+    std::ifstream f("Source/Renderer/CombatFX.hpp");
+    CHECK(f.is_open());
+    std::string src((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    const size_t at = src.find("void SpawnBlood(");
+    CHECK(at != std::string::npos);
+    if (at != std::string::npos) {
+        // Body of SpawnBlood: up to the next member function at the same scope.
+        const size_t end = src.find("\n    void ", at + 10);
+        const std::string body = src.substr(at, end == std::string::npos
+                                                   ? std::string::npos : end - at);
+        CHECK(body.find("AddDecal") == std::string::npos);
+        CHECK(body.find("Burst") != std::string::npos);
+    }
+
+    // ...and the gib pool is placed at the FEET the caller passes, not 0.9 below
+    // the body centre (which put it under the floor, or floating over a ledge).
+    const size_t gib = src.find("void SpawnGibs(");
+    CHECK(gib != std::string::npos);
+    if (gib != std::string::npos) {
+        const size_t gend = src.find("\n    void ", gib + 10);
+        const std::string gbody = src.substr(gib, gend == std::string::npos
+                                                   ? std::string::npos : gend - gib);
+        CHECK(gbody.find("feet.y + 0.02f") != std::string::npos);
+        CHECK(gbody.find("pos.y - 0.9f") == std::string::npos);
+    }
+    PASS(); return 0; END_TEST();
+}
+
 static int test_spell_element_mapping() {
     TEST("SpellElement: string mapping is explicit, unknown -> Arcane");
     // The element is IDENTITY, not colour: Arc Bolt and Frost Lance are both
@@ -1561,6 +1656,7 @@ int main() {
 
     int failures = 0;
     failures += test_register_def();
+    failures += test_update_def_hot_reload();
     failures += test_spawn_unknown_def();
     failures += test_despawn();
     failures += test_despawn_all();
@@ -1594,6 +1690,7 @@ int main() {
     failures += test_projectile_miss();
     failures += test_dead_pawn_keeps_drawing_until_corpse_timer_expires();
     failures += test_combat_feedback_cues();
+    failures += test_actor_hits_leave_no_surface_decal();
     failures += test_spell_element_mapping();
     failures += test_status_element_mapping();
     failures += test_status_burn_ticks_and_expires();
