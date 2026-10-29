@@ -1,5 +1,6 @@
 #include "Data.hpp"
 #include "Log.hpp"
+#include <chrono>
 #include "Physics/PlayerPhysics.hpp"
 #include "Client/JoinUri.hpp"
 #include "Network/NetworkSession.hpp"
@@ -455,14 +456,21 @@ auto LoadWorld()
             else
                 snprintf(ozonePath, sizeof(ozonePath), "%sWorld.ozone", assetPrefix.c_str());
             if (IsPathFile(ozonePath))
+            {
+                const auto tParse0 = std::chrono::steady_clock::now();
                 OzoneLoader::Instance().LoadFile(ozonePath);
+                const auto tParse1 = std::chrono::steady_clock::now();
+                InjectOzoneEntities(OzoneLoader::Instance().GetEntities(),
+                                    PawnSystem::Instance());
+                const auto tInject1 = std::chrono::steady_clock::now();
+                OZ_INFO("LoadWorld: '%s' parse+mesh=%.1fms inject=%.1fms (%.0f brushes)",
+                        g_world_to_load,
+                        std::chrono::duration<double, std::milli>(tParse1 - tParse0).count(),
+                        std::chrono::duration<double, std::milli>(tInject1 - tParse1).count(),
+                        (double)OzoneLoader::Instance().Count());
+            }
             else
                 OZ_ERROR("LoadWorld: missing world '%s' (no World.ozone; WDL fallback removed)", ozonePath);
-
-            // The loader only parses: it hands back the world's entities and
-            // level metadata, and this orchestrator decides what to apply.
-            InjectOzoneEntities(OzoneLoader::Instance().GetEntities(),
-                                PawnSystem::Instance());
 
             // EventBus: world.load. s0 carries the world name for a global game
             // script to read; the bridge finds no def by that name, so nothing is

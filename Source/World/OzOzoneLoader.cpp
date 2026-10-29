@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <chrono>
 
 // Defined with the other per-face surface helpers further down, but needed by
 // DrawSurface() which comes first.
@@ -1184,6 +1185,7 @@ Model OzoneLoader::BuildFromPrimitive(int type, const std::vector<float>& args) 
 // LoadFile Ã¢â‚¬â€ also loads world textures from the .ozone file's directory
 // ---------------------------------------------------------------------------
 bool OzoneLoader::LoadFile(const char* path) {
+    const auto tLoad0 = std::chrono::steady_clock::now();
     OZ_INFO("OzoneLoader: loading %s", path);
     Unload();
 
@@ -1215,8 +1217,10 @@ bool OzoneLoader::LoadFile(const char* path) {
     // available so world-local skyzone defs win over same-named ones elsewhere)
     m_worldDir = gameDataWorldDir.empty() ? worldDir : gameDataWorldDir;
 
+    const auto tTex = std::chrono::steady_clock::now();
     auto primitives = OzoneParser::parse_file(path);
     if (primitives.empty()) return false;
+    const auto tParse = std::chrono::steady_clock::now();
 
     // Entities are parsed into a plain set first; the orchestrator decides when
     // (and whether) to inject them into the runtime systems.
@@ -1258,7 +1262,7 @@ bool OzoneLoader::LoadFile(const char* path) {
                     sb.model.materials[0].shader = oz::SurfaceMaterial::Instance().Get();
                 const std::string tp = ResolveWorldAssetPath(
                     prim.entityType, gameDataWorldDir, worldDir);
-                Texture2D tex = LoadTextureWithFallback(tp.c_str());
+                Texture2D tex = GetCachedWorldTexture(tp);
                 if (tex.id > 0) {
                     sb.customTex = tex;
                     sb.model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = tex;
@@ -1344,7 +1348,16 @@ r.csgOp = prim.csgOp;
     }
 
     // Lights are bound to zone volumes by InjectOzoneEntities(), not here.
+    const auto tCsg0 = std::chrono::steady_clock::now();
     RebuildCollisionVolumes();
+    const auto tCsg1 = std::chrono::steady_clock::now();
+    OZ_INFO("OzoneLoader phases: total=%.1fms  tex=%.1f parse=%.1f mesh=%.1f csg=%.1f  brushes=%zu",
+            std::chrono::duration<double, std::milli>(tCsg1 - tLoad0).count(),
+            std::chrono::duration<double, std::milli>(tTex - tLoad0).count(),
+            std::chrono::duration<double, std::milli>(tParse - tTex).count(),
+            std::chrono::duration<double, std::milli>(tCsg0 - tParse).count(),
+            std::chrono::duration<double, std::milli>(tCsg1 - tCsg0).count(),
+            m_renderables.size());
     int r0shader = (!m_renderables.empty() && m_renderables[0].model.materialCount > 0)
         ? m_renderables[0].model.materials[0].shader.id : -1;
     OZ_INFO("OZONE: entities=%zu litShader=%d renderable0.shader=%d",
@@ -2329,6 +2342,20 @@ void OzoneLoader::ApplyRenderableUV(int idx, float su, float sv, float ou, float
 // custom texture. Stores the path on the renderable for persistence.
 // Returns true if the texture was loaded and applied successfully.
 // ---------------------------------------------------------------------------
+Texture2D OzoneLoader::GetCachedWorldTexture(const std::string& resolvedPath) {
+    if (resolvedPath.empty()) return Texture2D{0};
+    auto it = m_faceTexCache.find(resolvedPath);
+    if (it != m_faceTexCache.end()) return it->second;
+    Texture2D tex = LoadTextureWithFallback(resolvedPath.c_str());
+    if (tex.id == 0) {
+        OZ_WARN("Surface: texture '%s' failed to load", resolvedPath.c_str());
+        m_faceTexCache[resolvedPath] = Texture2D{0};   // cache the miss: one warning, not one per use
+        return Texture2D{0};
+    }
+    m_faceTexCache[resolvedPath] = tex;
+    return tex;
+}
+
 Texture2D OzoneLoader::ResolveFaceTextureHandle(const oz::surface::SurfaceProps& p) {
     const oz::surface::FaceTextureRef ref = oz::surface::ResolveFaceTexture(p);
 
@@ -2337,18 +2364,7 @@ Texture2D OzoneLoader::ResolveFaceTextureHandle(const oz::surface::SurfaceProps&
         // and absolute all handled), so a face texture behaves identically
         // wherever it was authored. A second copy of this rule would drift.
         const std::string tp = ResolveWorldAssetPath(ref.path, m_worldDir, m_worldDir);
-
-        auto it = m_faceTexCache.find(tp);
-        if (it != m_faceTexCache.end()) return it->second;
-
-        Texture2D tex = LoadTextureWithFallback(tp.c_str());
-        if (tex.id == 0) {
-            OZ_WARN("Surface: face texture '%s' failed to load", tp.c_str());
-            m_faceTexCache[tp] = Texture2D{0};   // cache the miss: one warning, not one per frame
-            return Texture2D{0};
-        }
-        m_faceTexCache[tp] = tex;
-        return tex;
+        return GetCachedWorldTexture(tp);
     }
 
     if (ref.slot > 0) return GetTilesetTex(ref.slot);
@@ -2358,13 +2374,12 @@ Texture2D OzoneLoader::ResolveFaceTextureHandle(const oz::surface::SurfaceProps&
 bool OzoneLoader::ApplyRenderableTexture(int idx, const char* path) {    OzoneRenderable* r = Get(idx);
     if (!r || !r->loaded || r->model.meshCount == 0) return false;
 
-    Texture2D tex = LoadTextureWithFallback(path);
+    // Borrow from the shared world-texture cache (it owns the handle; do NOT
+    // UnloadTexture it here or on Unload — the cache frees each path once).
+    Texture2D tex = GetCachedWorldTexture(path ? path : "");
     if (tex.id == 0) return false;
 
-    // Unload previous custom texture if any
-    if (r->customTex.id > 0) UnloadTexture(r->customTex);
-
-    r->customTex = tex;
+    r->customTex = tex;   // borrowed, not owned
     r->texSlot = 0; // custom texture overrides tileset
 
     // surface.def is the OWNER of a brush's texture path; r->texPath is a derived
@@ -2582,7 +2597,9 @@ void OzoneLoader::RemoveRenderable(int idx) {
         r->faceMesh[f] = Mesh{0};
     }
     r->faceMeshesBuilt = false;
-    if (r->customTex.id > 0) UnloadTexture(r->customTex);
+    // r->customTex is a BORROWED handle owned by m_faceTexCache; Unload() frees
+    // the cache once. Unloading it here would free a texture other renderables
+    // still point at.
     if (r->loaded) UnloadModel(r->model);
     m_renderables.erase(m_renderables.begin() + idx);
 }
@@ -2898,7 +2915,9 @@ void OzoneLoader::DrawZoneGeometry(Camera3D& camera) {
 // ---------------------------------------------------------------------------
 void OzoneLoader::Unload() {
     for (auto& r : m_renderables) {
-        if (r.customTex.id > 0) UnloadTexture(r.customTex);
+        // r.customTex is a BORROWED handle owned by m_faceTexCache (freed below,
+        // once per path). Unloading it per renderable double-frees a texture
+        // shared by many brushes.
         for (int f = 0; f < oz::surface::FACE_COUNT; f++) {
             if (r.faceMesh[f].vaoId > 0) UnloadMesh(r.faceMesh[f]);
             r.faceMesh[f] = Mesh{0};

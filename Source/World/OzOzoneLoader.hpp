@@ -413,6 +413,13 @@ void ResetRenderableSurfaceDefault(int idx);
     // renderer and the tests share one definition.
     Texture2D ResolveFaceTextureHandle(const oz::surface::SurfaceProps& p);
 
+    // Load and cache a world texture by its RESOLVED path. The cache is the sole
+    // owner: every caller gets a borrowed handle and must NOT UnloadTexture it.
+    // This is what makes a level with 70+ `texPath=` brushes load the shared
+    // tileset files a handful of times instead of once per brush (the difference
+    // between ~300 ms and ~30 ms on Sektor_01_SilentPines).
+    Texture2D GetCachedWorldTexture(const std::string& resolvedPath);
+
     // Publish the world's current `ambient` uniform so DrawZoneGeometry can put
     // it back. raylib has no GetShaderValue (and adding one would not help: the
     // value lives on the GL program, not in our code), so the owner of the
@@ -493,10 +500,13 @@ private:
     std::string m_hmTexRel;      // relative texture path as authored (for export)
 
     std::vector<Texture2D> m_tilesetTex;
-    // Per-face texture assets, keyed by the RESOLVED path. Loaded once per
-    // distinct path and freed in Unload(). Separate from a renderable's
-    // `customTex` (which the renderable owns and frees) so the two lifetimes
-    // cannot be confused - sharing them would double-free on unload.
+    // World texture assets, keyed by the RESOLVED path. Loaded once per distinct
+    // path and freed in Unload(). This is the SOLE OWNER of every explicit-path
+    // texture (brush `texPath=`, per-face `tex=`, skybox): renderables' `customTex`
+    // is a borrowed handle into this map, never unloaded per renderable. Sharing
+    // one owner is what makes a 70-brush `texPath=` level load its shared files a
+    // handful of times instead of 70 (and avoids the double-free a second owner
+    // would cause).
     std::unordered_map<std::string, Texture2D> m_faceTexCache;
 
     std::string m_worldDir;        // current world directory (for .ozls def matching)
