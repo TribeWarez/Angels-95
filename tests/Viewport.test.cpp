@@ -145,6 +145,12 @@ static void test_main_uses_one_viewport_helper() {
     check(!sel.empty() && sel.find("GetMouseRay(") == std::string::npos &&
           sel.find("RayFromPane") != std::string::npos,
           "picking builds a pane-aware ray");
+    // Phase 3: maximize is a layout flag, and the layout persists in [Views].
+    check(main.find("viewMaximized") != std::string::npos,
+          "maximize is driven by the layout state");
+    const std::string uishell = ReadFile("AngelEd/Source/UI/UiShell.cpp");
+    check(!uishell.empty() && uishell.find("\"Views\", \"layout\"") != std::string::npos,
+          "the viewport layout persists in [Views]");
 }
 
 int main() {

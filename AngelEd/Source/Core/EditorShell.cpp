@@ -120,6 +120,20 @@ static void ViewBottom() { const Vector3 c = OTEditor.MainCamera.target; SetView
 static void ViewRight()  { const Vector3 c = OTEditor.MainCamera.target; SetViewPreset({c.x + 80, c.y, c.z}, c, {0, 1, 0}); }
 static void ViewLeft()   { const Vector3 c = OTEditor.MainCamera.target; SetViewPreset({c.x - 80, c.y, c.z}, c, {0, 1, 0}); }
 
+// Re-sync the global ortho/perspective bookkeeping from the ACTIVE pane's camera.
+// The presets keep `g_orthoView` + `g_perspectiveCamState` as their two states;
+// with multiple panes each pane has its own projection, so switching panes must
+// update those globals or SetViewPerspective would restore the PREVIOUS pane's
+// saved perspective camera.
+static void Editor_SyncViewPresetState() {
+    if (OTEditor.MainCamera.projection == CAMERA_ORTHOGRAPHIC) {
+        g_orthoView = true;
+    } else {
+        g_orthoView = false;
+        g_perspectiveCamState = OTEditor.MainCamera;
+    }
+}
+
 // Which preset the viewport is showing, so the toolbar chips can mark one active.
 // Derived from the camera rather than stored: the menu items and the NumPad keys
 // write the same camera, and a stored flag would be a second source of truth that

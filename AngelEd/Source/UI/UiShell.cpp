@@ -128,6 +128,16 @@ static void LoadPanelLayouts() {
     g_editorPanels.gizmoAngleSnap = cfg.GetFloat("Options", "gizmo_angle_snap", 15.0f);
     if (g_editorPanels.gizmoAngleSnap < 0.0f) g_editorPanels.gizmoAngleSnap = 0.0f;
 
+    // Multi-viewport layout (Phase 3 persistence). The pane CAMERAS are not saved
+    // yet; secondary panes re-derive their default top/side/persp views on start.
+    g_editorPanels.viewLayout = cfg.GetInt("Views", "layout", 0);
+    if (g_editorPanels.viewLayout < 0) g_editorPanels.viewLayout = 0;
+    if (g_editorPanels.viewLayout > 3) g_editorPanels.viewLayout = 3;
+    g_editorPanels.viewActive = cfg.GetInt("Views", "active", 0);
+    if (g_editorPanels.viewActive < 0) g_editorPanels.viewActive = 0;
+    if (g_editorPanels.viewActive > 3) g_editorPanels.viewActive = 3;
+    g_editorPanels.viewMaximized = cfg.GetBool("Views", "maximized", false);
+
     // Restore the MAIN window's size/position before the panels are created so
     // the docked stats sidebar is laid out against the right client rect. The
     // editor window is resizable (FLAG_WINDOW_RESIZABLE); these values are
@@ -208,6 +218,9 @@ void SavePanelLayouts() {
     cfg.SetInt("Options", "unreal_move_speed", g_editorPanels.unrealMoveSpeed);
     cfg.SetFloat("Options", "gizmo_snap", g_editorPanels.gizmoSnap);
     cfg.SetFloat("Options", "gizmo_angle_snap", g_editorPanels.gizmoAngleSnap);
+    cfg.SetInt("Views", "layout", g_editorPanels.viewLayout);
+    cfg.SetInt("Views", "active", g_editorPanels.viewActive);
+    cfg.SetBool("Views", "maximized", g_editorPanels.viewMaximized);
     cfg.Save(kEditorIniPath);
 }
 

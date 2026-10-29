@@ -114,6 +114,10 @@ static ed::viewport::VpRect EditorViewportAreaNow() {
 
 // Split the area for the current layout. 0=1x1, 1=1x2, 2=2x1, 3=2x2.
 static void EditorViewportRectsNow(std::vector<ed::viewport::VpRect>& out) {
+    if (g_editorPanels.viewMaximized) {
+        out.assign(1, EditorViewportAreaNow());
+        return;
+    }
     int rows = 1, cols = 1;
     switch (g_editorPanels.viewLayout) {
         case 1: rows = 1; cols = 2; break;
@@ -363,6 +367,9 @@ int main(int argc, char **argv){
                 }
             }
         }
+        // Keep the preset bookkeeping in step with whichever pane is active, so a
+        // preset chip/menu action applies to THIS pane's projection.
+        Editor_SyncViewPresetState();
         // A placement click is a ONE-FRAME request: the release below sets it and
         // the commit block later in THIS frame consumes it. Clearing it here means
         // a click that could not commit (ghost disarmed by the same frame) can
@@ -2059,7 +2066,7 @@ AngelTechEditor.DrawModel = false;
         BeginDrawing();
         // Multi-viewport pane chrome: a divider per pane and a brighter edge on
         // the primary (input) pane, so the read-only reference panes read as such.
-        if (g_editorPanels.viewLayout != 0) {
+        if (g_editorPanels.viewLayout != 0 && !g_editorPanels.viewMaximized) {
             std::vector<ed::viewport::VpRect> pr;
             EditorViewportRectsNow(pr);
             for (size_t i = 0; i < pr.size(); i++) {
@@ -2345,6 +2352,21 @@ AngelTechEditor.DrawModel = false;
                         g_editorPanels.viewLayout = (lay + 1) % 4;
                     }
                     bx += lw + 2;
+                }
+                // Maximize the active pane (keeps the layout so it can be restored).
+                {
+                    const char* lbl = g_editorPanels.viewMaximized ? "Max:On" : "Max:Off";
+                    const int mw = (int)strlen(lbl) * 7 + 10;
+                    const bool mon = g_editorPanels.viewMaximized;
+                    DrawRectangle(bx, by, mw, rowH,
+                                  mon ? (Color){70, 90, 120, 255} : (Color){45, 45, 50, 255});
+                    DrawText(lbl, bx + 4, by + 5, 12, mon ? WHITE : LIGHTGRAY);
+                    if (CheckCollisionPointRec(GetMousePosition(),
+                                               {(float)bx, (float)by, (float)mw, (float)rowH}) &&
+                        IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                        g_editorPanels.viewMaximized = !g_editorPanels.viewMaximized;
+                    }
+                    bx += mw + 2;
                 }
             }
         }
