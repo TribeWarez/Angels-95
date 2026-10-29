@@ -165,6 +165,11 @@ struct EditorSelection {
 };
 inline EditorSelection g_sel;       // left-click selected (red)
 inline EditorSelection g_hoverSel;  // mouse hover (yellow)
+// Multi-selection (Phase: multi-select + copy/paste). `g_sel` stays the PRIMARY
+// (the one the gizmo and Properties panel act on); this set is the full selection
+// used by delete and copy/paste. Kept as a separate vector so the ~40 existing
+// readers of g_sel do not have to change.
+inline std::vector<EditorSelection> g_selSet;
 
 // Right-click state: drag vs click detection
 inline bool g_rbDown = false;

@@ -38,6 +38,12 @@ int ClampPropInt(int v, int lo, int hi);
 // the edit with the pre-edit transform.
 void SnapGizmoToSelection(const EditorSelection& sel);
 
+// Multi-select copy/paste. Copies every BRUSH in g_selSet (or the primary when the
+// set has one entry) and pastes them at a small offset, each paste stepping
+// further so repeated Ctrl+V fans out. Ctrl+C / Ctrl+V in the frame loop.
+void CopySelectedBrushes();
+void PasteBrushes();
+
 // Centre the viewport on the current selection, preserving the current view
 // direction and distance. Used by the World Hierarchy's Frame Selection item.
 void FocusSelectionInViewport();

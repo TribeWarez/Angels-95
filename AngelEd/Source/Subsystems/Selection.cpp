@@ -7,6 +7,8 @@
 // single TU for AngelEd's core layer. See Wiki/Editor-Architecture-Refactor.md.
 // =============================================================================
 
+#include <algorithm>
+
 // Thirteen per-container raycasts, one per entity kind, all sharing the same shape:
 // pick the nearest hit and fill `out`. They lived in Core/EditorShell.hpp until R6,
 // which is how a 420-line state header came to contain 250 lines of picking logic.
@@ -557,22 +559,51 @@ static bool EditorPickEntity(bool toggleOffSame = true) {
     EditorSelection prevSel = g_sel;
 
     if (EditorRaycastAt(mousePos, g_sel)) {
+        // Shift+left-click toggles membership in the multi-selection. g_sel stays
+        // the PRIMARY (the gizmo/Properties target) so the ~40 existing readers do
+        // not change; g_selSet is the full set delete/copy/paste act on. Shift is
+        // only honoured for a left-click pick (toggleOffSame), never for the
+        // right-click context-menu pick.
+        const bool shiftPick = toggleOffSame && IsKeyDown(KEY_LEFT_SHIFT);
         // Toggle: clicking the same entity deselects
-        if (toggleOffSame && g_sel.type == prevSel.type && g_sel.index == prevSel.index) {
+        if (!shiftPick && toggleOffSame && g_sel.type == prevSel.type && g_sel.index == prevSel.index) {
             g_sel = { SelType::NONE, -1, "", {0,0,0} };
             g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
+            g_selSet.clear();
             AngelTechEditor.DrawModel = false;
             return true;
         }
         // Clicking a different zone while one is selected = deselect
-        if (toggleOffSame && prevSel.type != SelType::NONE && g_sel.type == SelType::ZONE) {
+        if (!shiftPick && toggleOffSame && prevSel.type != SelType::NONE && g_sel.type == SelType::ZONE) {
             g_sel = { SelType::NONE, -1, "", {0,0,0} };
             g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
+            g_selSet.clear();
             AngelTechEditor.DrawModel = false;
             return true;
         }
-        EditorLog("Selected: %s (type=%d idx=%d x=%f y=%f z=%f)",
-                  g_sel.name.c_str(), (int)g_sel.type, g_sel.index, (float)g_sel.pos.x, (float)g_sel.pos.y, (float)g_sel.pos.z);
+        if (shiftPick) {
+            bool removed = false;
+            for (auto it = g_selSet.begin(); it != g_selSet.end(); ++it) {
+                if (it->type == g_sel.type && it->index == g_sel.index) {
+                    g_selSet.erase(it);
+                    removed = true;
+                    break;
+                }
+            }
+            if (!removed) g_selSet.push_back(g_sel);
+            if (g_selSet.empty()) {
+                g_sel = { SelType::NONE, -1, "", {0,0,0} };
+                g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
+                AngelTechEditor.DrawModel = false;
+                return true;
+            }
+            if (removed) g_sel = g_selSet.back();   // promote another member to primary
+        } else {
+            g_selSet.clear();
+            g_selSet.push_back(g_sel);
+        }
+        EditorLog("Selected: %s (type=%d idx=%d)  [%zu selected]",
+                  g_sel.name.c_str(), (int)g_sel.type, g_sel.index, g_selSet.size());
         AngelTechEditor.DrawModel = true;
         SnapGizmoToSelection(g_sel);
         if (g_sel.type == SelType::PORTAL) {
@@ -597,8 +628,122 @@ static void EditorHoverEntity() {
 // ---------------------------------------------------------------------------
 // Entity action functions (called from native context menu + WorldGraph)
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Multi-select copy/paste (Ctrl+C / Ctrl+V). A brush clipboard: everything that
+// AddBrushRenderable + the surface block need to recreate the brush, so a paste
+// does not depend on the source still existing (copy, delete, paste works).
+// ---------------------------------------------------------------------------
+namespace {
+struct BrushClip {
+    int typeId = 0;
+    Vector3 pos{0,0,0};
+    Vector3 size{1,1,1};
+    float rotDeg = 0.0f;
+    float scale = 1.0f;
+    int csgOp = 0;
+    int surfaceFlags = 0;
+    float cylRTop = 0.0f, cylRBot = 0.0f;
+    int cylSlices = 0;
+    oz::surface::BrushSurface surface;
+    int texSlot = 0;
+    float texScaleU = 1.0f, texScaleV = 1.0f, texOffsetU = 0.0f, texOffsetV = 0.0f;
+};
+std::vector<BrushClip> g_brushClip;
+int g_pasteCount = 0;
+
+void ClipOneBrush(int idx) {
+    OzoneRenderable* r = OzoneLoader::Instance().Get(idx);
+    if (!r || !r->loaded || r->model.meshCount <= 0) return;
+    BrushClip c;
+    c.typeId = r->typeId;
+    c.pos = BrushCenter(*r);
+    const BoundingBox mb = GetMeshBoundingBox(r->model.meshes[0]);
+    c.size = {mb.max.x - mb.min.x, mb.max.y - mb.min.y, mb.max.z - mb.min.z};
+    c.rotDeg = r->rotation * RAD2DEG;
+    c.scale = r->scale;
+    c.csgOp = r->csgOp;
+    c.surfaceFlags = r->surfaceFlags;
+    c.cylRTop = r->cylRTop;
+    c.cylRBot = r->cylRBot;
+    c.cylSlices = r->cylSlices;
+    c.surface = r->surface;
+    c.texSlot = r->texSlot;
+    c.texScaleU = r->texScaleU;
+    c.texScaleV = r->texScaleV;
+    c.texOffsetU = r->texOffsetU;
+    c.texOffsetV = r->texOffsetV;
+    g_brushClip.push_back(c);
+}
+} // namespace
+
+void CopySelectedBrushes() {
+    g_brushClip.clear();
+    if (g_selSet.size() > 1) {
+        for (const auto& s : g_selSet)
+            if (s.type == SelType::BRUSH) ClipOneBrush(s.index);
+    } else if (g_sel.type == SelType::BRUSH) {
+        ClipOneBrush(g_sel.index);
+    }
+    g_pasteCount = 0;
+    EditorLog("Copied %zu brush(es)", g_brushClip.size());
+}
+
+void PasteBrushes() {
+    if (g_brushClip.empty()) return;
+    HistoryPush();
+    g_pasteCount++;
+    const float off = 2.0f * (float)g_pasteCount;
+    int added = 0;
+    for (const auto& c : g_brushClip) {
+        Vector3 pos = {c.pos.x + off, c.pos.y, c.pos.z + off};
+        const int idx = OzoneLoader::Instance().AddBrushRenderable(
+            c.typeId, pos, c.size, c.rotDeg, c.scale, c.csgOp,
+            c.surfaceFlags, c.cylRTop, c.cylRBot, c.cylSlices);
+        if (idx < 0) continue;
+        if (OzoneRenderable* d = OzoneLoader::Instance().Get(idx)) {
+            d->texSlot = c.texSlot;
+            d->texScaleU = c.texScaleU;
+            d->texScaleV = c.texScaleV;
+            d->texOffsetU = c.texOffsetU;
+            d->texOffsetV = c.texOffsetV;
+            d->surface = c.surface;
+            // surface.def owns the derived mirrors; re-derive after the copy.
+            DeriveLegacyRenderable(*d);
+            OzoneLoader::Instance().RebuildSurfaceMeshes(idx);
+        }
+        added++;
+    }
+    OzoneLoader::Instance().RebuildCollisionVolumes();
+    MarkWorldGraphDirty();
+    EditorLog("Pasted %d brush(es)", added);
+}
+
 static void DeleteSelectedEntity() {
     if (g_sel.type == SelType::NONE) return;
+
+    // Multi-selection: delete every BRUSH in the set, descending so each removal
+    // does not shift the indices still to be removed. Non-brush types keep the
+    // single-entity path below (their containers are not index-stable in the same
+    // way and the common multi-select case is brushes).
+    if (g_selSet.size() > 1) {
+        std::vector<int> brushIdx;
+        for (const auto& s : g_selSet)
+            if (s.type == SelType::BRUSH) brushIdx.push_back(s.index);
+        if (!brushIdx.empty()) {
+            HistoryPush();
+            std::sort(brushIdx.begin(), brushIdx.end(), [](int a, int b) { return a > b; });
+            for (int idx : brushIdx) OzoneLoader::Instance().RemoveRenderable(idx);
+            OzoneLoader::Instance().RebuildCollisionVolumes();
+            EditorLog("Deleted %zu brush(es) (multi-select)", brushIdx.size());
+            g_selSet.clear();
+            g_sel = { SelType::NONE, -1, "", {0,0,0} };
+            g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
+            AngelTechEditor.DrawModel = false;
+            MarkWorldGraphDirty();
+            return;
+        }
+    }
+
     HistoryPush();
     EditorLog("Deleted %s idx=%d", g_sel.name.c_str(), g_sel.index);
     if (g_sel.type == SelType::NPC)
@@ -636,6 +781,7 @@ else if (g_sel.type == SelType::BRUSH) {
     }
     g_sel = { SelType::NONE, -1, "", {0,0,0} };
     g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
+    g_selSet.clear();
     AngelTechEditor.DrawModel = false; // drop the gizmo so picking isn't gated
 }
 

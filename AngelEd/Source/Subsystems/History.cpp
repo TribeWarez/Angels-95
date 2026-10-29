@@ -79,6 +79,7 @@ void HistoryRestore(const std::string& text) {
     LoadLevelMetadataFromPrims(OzoneParser::parse_string(text));
     g_sel = { SelType::NONE, -1, "", {0,0,0} };
     g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
+    g_selSet.clear();
     AngelTechEditor.DrawModel = false;
     // Undo replaces the whole scene, so every WorldGraph row is invalid. Setting the
     // flag is not a mutation and keeps the layer direction right: Core consumes it.

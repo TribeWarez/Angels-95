@@ -1847,6 +1847,16 @@ AngelTechEditor.DrawModel = false;
                 DrawBoundingBox(sb, (Color){255,(unsigned char)(80*sp),(unsigned char)(80*sp),255});
             }
         }
+        // Multi-selection: outline every ADDITIONAL member (orange) so the set
+        // that Delete / Ctrl+C act on is visible, not just the primary.
+        if (g_selSet.size() > 1) {
+            for (const auto& s : g_selSet) {
+                if (s.type == g_sel.type && s.index == g_sel.index) continue;
+                BoundingBox mb = GetSelBox(s);
+                if (mb.min.x != mb.max.x || mb.min.y != mb.max.y)
+                    DrawBoundingBox(mb, (Color){255, 150, 80, 255});
+            }
+        }
 
         // Transform gizmo for the current selection. Drawn AFTER the highlight so
         // the handles are never hidden by the selection box.
@@ -2787,6 +2797,7 @@ AngelTechEditor.DrawModel = false;
             (g_sel.type != SelType::NONE || AngelTechEditor.DrawModel)) {
             g_sel = { SelType::NONE, -1, "", {0,0,0} };
             g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
+            g_selSet.clear();
             AngelTechEditor.DrawModel = false;
             g_placementArmed = false;
             // A cancelled ghost must not leave its model path armed: the ghost
@@ -2805,6 +2816,15 @@ AngelTechEditor.DrawModel = false;
         }
         if (EdKeys::Pressed(EdAction::Duplicate) && selIsPlaceable) {
             DuplicateSelectedEntity();
+        }
+        // Ctrl+C / Ctrl+V for the (multi-)selected brushes. Deliberately plain
+        // modifiers rather than EdKeys actions: the cut/copy/paste vocabulary is
+        // universal and does not need rebinding, and keeping it out of the key
+        // table avoids a conflict row for something every user expects fixed.
+        if (EditorUi_ViewportHasFocus() &&
+            (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))) {
+            if (IsKeyPressed(KEY_C)) CopySelectedBrushes();
+            if (IsKeyPressed(KEY_V)) PasteBrushes();
         }
         // Undo / redo (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z). Deferred to the anim tool
         // while vertex-editing, which owns its own undo stack.
