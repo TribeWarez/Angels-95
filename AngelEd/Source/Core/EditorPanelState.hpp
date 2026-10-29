@@ -114,6 +114,10 @@ struct EditorPanelState {
     // currently is; collapsing them would either lose the reset or commit a brush
     // the user never positioned.
     int currentToolMode = 0;    // persistent tool mode: 0=cam,1=move,2=scale,3=rotate
+    // Viewport layout: 0=1x1, 1=1x2 (side by side), 2=2x1 (stacked), 3=2x2.
+    // Phase 1: secondary panes are read-only ortho/persp views derived from the
+    // primary camera; input stays on the primary (pane 0). Persisted in Phase 3.
+    int viewLayout = 0;
     // Gizmo snapping. The value is the grid step; 0 = off. Held Ctrl toggles it
     // momentarily (see Gizmo_SnapStep), Shift = fine 0.1. Persisted in
     // [Options] gizmo_snap so it no longer resets to Off on every launch, which

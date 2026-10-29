@@ -110,8 +110,73 @@ static ed::viewport::VpRect EditorViewportAreaNow() {
     return ed::viewport::Area((float)GetScreenWidth(), (float)GetScreenHeight(),
                               (float)GetStatsSidebarWidth(), (float)kEditorToolbarHeight);
 }
+
+// Split the area for the current layout. 0=1x1, 1=1x2, 2=2x1, 3=2x2.
+static void EditorViewportRectsNow(std::vector<ed::viewport::VpRect>& out) {
+    int rows = 1, cols = 1;
+    switch (g_editorPanels.viewLayout) {
+        case 1: rows = 1; cols = 2; break;
+        case 2: rows = 2; cols = 1; break;
+        case 3: rows = 2; cols = 2; break;
+        default: rows = 1; cols = 1; break;
+    }
+    ed::viewport::Split(EditorViewportAreaNow(), rows, cols, out);
+}
+
+// Input is gated to the PRIMARY pane (index 0). In a split, the mouse ray is still
+// built from the primary camera, so accepting clicks in a secondary pane would
+// pick against the wrong view; input routing across panes is the next phase.
 static bool EditorViewportContains(Vector2 p) {
-    return ed::viewport::Contains(EditorViewportAreaNow(), p.x, p.y);
+    std::vector<ed::viewport::VpRect> rects;
+    EditorViewportRectsNow(rects);
+    return !rects.empty() && ed::viewport::Contains(rects[0], p.x, p.y);
+}
+
+// Secondary-pane cameras are DERIVED from the primary each frame, so panning the
+// primary keeps the reference views centred on what is being edited. They are
+// read-only in this phase (no per-pane navigation yet).
+static Camera3D MakeSecondaryCam(int pane, const Camera3D& primary) {
+    Camera3D c = primary;
+    const Vector3 t = primary.target;
+    switch (pane) {
+        case 1:
+            c.position = {t.x, t.y + 80.0f, t.z + 0.1f};
+            c.target = t; c.up = {0, 0, -1}; c.projection = CAMERA_ORTHOGRAPHIC;
+            break;
+        case 2:
+            c.position = {t.x + 80.0f, t.y, t.z};
+            c.target = t; c.up = {0, 1, 0}; c.projection = CAMERA_ORTHOGRAPHIC;
+            break;
+        default:
+            c.position = {t.x + 10.0f, t.y + 10.0f, t.z - 14.0f};
+            c.target = t; c.up = {0, 1, 0}; c.projection = CAMERA_PERSPECTIVE;
+            break;
+    }
+    return c;
+}
+
+// Override the projection BeginMode3D just pushed with one whose aspect matches
+// the PANE, not the window. Without this a 1x2 split stretches both views.
+static void SetPaneProjection(const Camera3D& cam, const ed::viewport::VpRect& r) {
+    const double aspect = (r.h > 0.0f) ? (double)r.w / (double)r.h : 1.0;
+    rlMatrixMode(RL_PROJECTION);
+    rlLoadIdentity();
+    if (cam.projection == CAMERA_PERSPECTIVE) {
+        const double top = (double)RL_CULL_DISTANCE_NEAR *
+                           tan((double)cam.fovy * 0.5 * DEG2RAD);
+        const double right = top * aspect;
+        rlFrustum(-right, right, -top, top, RL_CULL_DISTANCE_NEAR, RL_CULL_DISTANCE_FAR);
+    } else {
+        const double top = (double)cam.fovy * 0.5;
+        const double right = top * aspect;
+        rlOrtho(-right, right, -top, top, RL_CULL_DISTANCE_NEAR, RL_CULL_DISTANCE_FAR);
+    }
+    rlMatrixMode(RL_MODELVIEW);
+}
+
+// GL viewport uses a bottom-left origin; VpRect is top-left screen space.
+static void SetPaneViewport(const ed::viewport::VpRect& r) {
+    rlViewport((int)r.x, GetScreenHeight() - (int)(r.y + r.h), (int)r.w, (int)r.h);
 }
 
 // -----------------------------------------------------------------------------
@@ -979,7 +1044,18 @@ int main(int argc, char **argv){
             glEnable(GL_CULL_FACE);
         }
 
+        // --- Multi-viewport (Phase 1): the primary pane is the full editor pass
+        // below; secondary panes are read-only reference views rendered after it.
+        // Scissor + viewport + a pane-aspect projection keep each view framed.
+        std::vector<ed::viewport::VpRect> vpRects;
+        EditorViewportRectsNow(vpRects);
+        const ed::viewport::VpRect vpPrimary =
+            vpRects.empty() ? EditorViewportAreaNow() : vpRects[0];
+        BeginScissorMode((int)vpPrimary.x, (int)vpPrimary.y, (int)vpPrimary.w, (int)vpPrimary.h);
+        SetPaneViewport(vpPrimary);
+
         BeginMode3D(OTEditor.MainCamera);
+        SetPaneProjection(OTEditor.MainCamera, vpPrimary);
 
         // -------------------------------------------------------------------
         // Skybox cube (viewport backdrop) â€” toggled by the toolbar "Sky" button.
@@ -1887,6 +1963,40 @@ AngelTechEditor.DrawModel = false;
         }
 
         EndMode3D();
+        EndScissorMode();
+
+        // --- Secondary panes (Phase 1): read-only reference views. Each draws the
+        // sky, grid, world and actors from its own camera. No gizmo/overlays yet -
+        // the primary pane remains the editing surface.
+        for (size_t pi = 1; pi < vpRects.size(); pi++) {
+            const ed::viewport::VpRect& r = vpRects[pi];
+            Camera3D cam = MakeSecondaryCam((int)pi, OTEditor.MainCamera);
+            BeginScissorMode((int)r.x, (int)r.y, (int)r.w, (int)r.h);
+            SetPaneViewport(r);
+            BeginMode3D(cam);
+            SetPaneProjection(cam, r);
+            if (wantSky) {
+                oz::Skybox::Instance().Draw(
+                    cam.position, s_skyTex, Texture2D{0},
+                    /*cullBackfaces=*/OTEditor.ViewMode != LightingMode::WIREFRAME,
+                    &skyFog);
+            }
+            DrawGrid(1000, 10.0f);
+            OzoneLoader::Instance().Draw(cam);
+            {
+                Shader bbShader = {0};
+                if (OTEditor.ViewMode == LightingMode::LIT) bbShader = OTEditor.LitFogShader;
+                else if (OTEditor.ViewMode == LightingMode::UNLIT) bbShader = OTEditor.UnlitShader;
+                PawnSystem::Instance().DrawAll(cam, bbShader);
+                PawnSystem::Instance().DrawEntities(cam, bbShader);
+            }
+            EndMode3D();
+            EndScissorMode();
+        }
+
+        // Restore the full-window viewport for the 2D pass. A pane viewport left
+        // active would draw the toolbar and every panel into that sub-rect.
+        rlViewport(0, 0, GetScreenWidth(), GetScreenHeight());
 
         // Reset lighting mode state (always restore defaults)
         rlDrawRenderBatchActive();
@@ -1894,6 +2004,17 @@ AngelTechEditor.DrawModel = false;
         glEnable(GL_CULL_FACE);
 
         BeginDrawing();
+        // Multi-viewport pane chrome: a divider per pane and a brighter edge on
+        // the primary (input) pane, so the read-only reference panes read as such.
+        if (g_editorPanels.viewLayout != 0) {
+            std::vector<ed::viewport::VpRect> pr;
+            EditorViewportRectsNow(pr);
+            for (size_t i = 0; i < pr.size(); i++) {
+                const Color edge = (i == 0) ? (Color){90, 120, 170, 255}
+                                            : (Color){60, 60, 70, 255};
+                DrawRectangleLinesEx({pr[i].x, pr[i].y, pr[i].w, pr[i].h}, 1.0f, edge);
+            }
+        }
         // Top toolbar with icons
         {
             int tw = GetScreenWidth();
@@ -2150,10 +2271,30 @@ AngelTechEditor.DrawModel = false;
                     }
                     bx += cw + 2;
                 }
+
+                // Viewport layout: 1x1 -> 1x2 -> 2x1 -> 2x2. The secondary panes
+                // are reference views derived from the primary camera; input stays
+                // on the primary pane until per-pane routing lands.
+                bx += 6;
+                static const char* kLayoutLabels[] = {"View:1", "View:2V", "View:2H", "View:4"};
+                int lay = g_editorPanels.viewLayout;
+                if (lay < 0 || lay > 3) lay = 0;
+                {
+                    const char* lbl = kLayoutLabels[lay];
+                    const int lw = (int)strlen(lbl) * 7 + 10;
+                    const bool lon = lay != 0;
+                    DrawRectangle(bx, by, lw, rowH,
+                                  lon ? (Color){70, 90, 120, 255} : (Color){45, 45, 50, 255});
+                    DrawText(lbl, bx + 4, by + 5, 12, lon ? WHITE : LIGHTGRAY);
+                    if (CheckCollisionPointRec(GetMousePosition(),
+                                               {(float)bx, (float)by, (float)lw, (float)rowH}) &&
+                        IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                        g_editorPanels.viewLayout = (lay + 1) % 4;
+                    }
+                    bx += lw + 2;
+                }
             }
         }
-
-        // Draw the 3D viewport render target (offset by native stats sidebar)
         int sbW = GetStatsSidebarWidth();
         const int tbH = kEditorToolbarHeight;
         LayoutStatsSidebar(GetScreenWidth(), GetScreenHeight(), tbH, sbW);

@@ -126,6 +126,14 @@ static void test_main_uses_one_viewport_helper() {
           "the six-copy sidebar/toolbar gate is gone from Main.cpp");
     check(main.find("EditorViewportContains") != std::string::npos,
           "input sites ask the one viewport helper");
+    // Phase 1 wiring: the render loop splits the area and gives each pane its own
+    // projection aspect + GL viewport. Without these the split stretches or draws
+    // every pane with the full-window framing.
+    check(main.find("EditorViewportRectsNow") != std::string::npos,
+          "the render loop splits the viewport area per layout");
+    check(main.find("SetPaneProjection") != std::string::npos &&
+          main.find("SetPaneViewport") != std::string::npos,
+          "each pane gets its own aspect-correct projection and GL viewport");
 }
 
 int main() {
