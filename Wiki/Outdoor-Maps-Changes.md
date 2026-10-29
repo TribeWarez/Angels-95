@@ -180,6 +180,11 @@ client --shot --world Sektor_01_SilentPines --shot-cam "60,0,1.65,90,0"
    the terraces now have landmarks and a horizon instead of reading as empty plains.
 4. **No waterfall audio loop.** Script `play_sound` is one-shot; the keyed loop API is
    stat-driven only. The falls are silent.
+5. **There is no JPEG decoder in this raylib build.** Every `.jpg` (including a
+   freshly re-encoded baseline JPEG) loads at the FILEIO layer and then fails
+   with `Data format not supported`; the Texture Manager lists the name with an
+   empty thumbnail. The Jungle tileset was converted to PNG. Use PNG/BMP/TGA
+   for anything the editor or runtime must display.
 
 ## Reusable lessons
 
