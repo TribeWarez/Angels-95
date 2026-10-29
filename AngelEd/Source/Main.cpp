@@ -2068,7 +2068,8 @@ AngelTechEditor.DrawModel = false;
                     IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                     g_editorPanels.unrealBrushMove = !g_editorPanels.unrealBrushMove;
                     Editor_SyncUnrealMenuChecks();
-                    EditorLog("Unreal-style brush movement %s",
+                    EditorLog("Unreal-style brush movement %s (Ctrl+LMB=X, Ctrl+RMB=Z, "
+                              "Ctrl+both=Y, Shift+LMB=move on view plane)",
                               g_editorPanels.unrealBrushMove ? "on" : "off");
                 }
                 bx += uw + 2;

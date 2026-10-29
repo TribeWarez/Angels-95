@@ -172,6 +172,12 @@ static GizmoHandle Gizmo_Pick(Vector2 mouse, const Camera3D& cam, int toolMode) 
     for (GizmoHandle h : axes) {
         const Vector3 tip = Vector3Add(pivot, Vector3Scale(AxisVector(h), len));
         const Vector2 tp = GetWorldToScreen(tip, cam);
+        // Skip an axis whose shaft is (nearly) parallel to the view direction:
+        // it projects to a few pixels at the pivot, so it is both unaimable and
+        // wins the distance test against the axis the user is actually pointing
+        // at. That was the "moving only pulls one axis, weirdly" report.
+        const float sdx = tp.x - sp.x, sdy = tp.y - sp.y;
+        if (sqrtf(sdx * sdx + sdy * sdy) < 12.0f) continue;
         const float d = DistToSegment2D(mouse, sp, tp);
         if (d < bestDist) { bestDist = d; best = h; }
     }
