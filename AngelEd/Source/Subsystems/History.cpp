@@ -20,6 +20,22 @@
 static std::vector<std::string> g_histUndo;
 static std::vector<std::string> g_histRedo;
 static const size_t kHistMax = 64;
+// A snapshot is the whole world's OZONE text, so 64 entries of a large level is
+// gigabytes. Cap each stack by total bytes as well as by count, evicting the
+// oldest first; an undo step older than ~64 MB of history is not one anybody
+// scrolls back to.
+static const size_t kHistMaxBytes = 64ull * 1024ull * 1024ull;
+
+static void TrimHistory(std::vector<std::string>& stack) {
+    size_t total = 0;
+    for (const auto& s : stack) total += s.size();
+    while (stack.size() > 1 && total > kHistMaxBytes) {
+        total -= stack.front().size();
+        stack.erase(stack.begin());
+    }
+    while (stack.size() > kHistMax) stack.erase(stack.begin());
+}
+
 std::string HistoryCapture() {
     std::ostringstream oss;
     ExportToOzone(oss);
@@ -32,11 +48,19 @@ void HistoryClear() {
 }
 
 // Call BEFORE a mutation: snapshots current state and invalidates redo.
+//
+// HistoryPush runs BEFORE the edit, so two consecutive pushes with no edit in
+// between (a click that pushes, then another that pushes) capture the SAME
+// document. Collapsing them keeps one undo step and one world-sized string
+// instead of two, and — importantly — a no-op push must not clear the redo
+// stack, or a stray click after an undo would throw the redo away.
 void HistoryPush() {
     g_documentDirty = true;
+    std::string snap = HistoryCapture();
+    if (!g_histUndo.empty() && g_histUndo.back() == snap) return; // nothing changed
     g_histRedo.clear();
-    g_histUndo.push_back(HistoryCapture());
-    if (g_histUndo.size() > kHistMax) g_histUndo.erase(g_histUndo.begin());
+    g_histUndo.push_back(std::move(snap));
+    TrimHistory(g_histUndo);
 }
 
 
@@ -64,6 +88,7 @@ void HistoryRestore(const std::string& text) {
 void HistoryUndo() {
     if (g_histUndo.empty()) return;
     g_histRedo.push_back(HistoryCapture());
+    TrimHistory(g_histRedo);
     std::string snap = g_histUndo.back();
     g_histUndo.pop_back();
     HistoryRestore(snap);
@@ -73,6 +98,7 @@ void HistoryUndo() {
 void HistoryRedo() {
     if (g_histRedo.empty()) return;
     g_histUndo.push_back(HistoryCapture());
+    TrimHistory(g_histUndo);
     std::string snap = g_histRedo.back();
     g_histRedo.pop_back();
     HistoryRestore(snap);
