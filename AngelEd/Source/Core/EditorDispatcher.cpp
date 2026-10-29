@@ -77,9 +77,11 @@ static void DispatchFrameEvents(const std::vector<ed::Event>& events) {
                 AngelTechEditor.X = OTEditor.MainCamera.target.x;
                 AngelTechEditor.Y = OTEditor.MainCamera.target.y;
                 AngelTechEditor.Z = OTEditor.MainCamera.target.z;
-                AngelTechEditor.W = 4.0f;
-                AngelTechEditor.H = 4.0f;
-                AngelTechEditor.L = 4.0f;
+                // Spawn at the sidebar's "New brush size" instead of a hard-coded
+                // 4x4x4, so a wall is authored once rather than add-then-resize.
+                AngelTechEditor.W = g_editorPanels.newBrushW;
+                AngelTechEditor.H = g_editorPanels.newBrushH;
+                AngelTechEditor.L = g_editorPanels.newBrushL;
                 AngelTechEditor.S = 1.0f;
                 AngelTechEditor.R = 0.0f;
                 break;
@@ -96,9 +98,9 @@ static void DispatchFrameEvents(const std::vector<ed::Event>& events) {
                         AngelTechEditor.X = OTEditor.MainCamera.target.x;
                         AngelTechEditor.Y = OTEditor.MainCamera.target.y;
                         AngelTechEditor.Z = OTEditor.MainCamera.target.z;
-                        AngelTechEditor.W = 4.0f;
-                        AngelTechEditor.H = 4.0f;
-                        AngelTechEditor.L = 4.0f;
+                        AngelTechEditor.W = g_editorPanels.newBrushW;
+                        AngelTechEditor.H = g_editorPanels.newBrushH;
+                        AngelTechEditor.L = g_editorPanels.newBrushL;
                     }
                     // Same CSG placement logic as the ENTER key (collision is
                     // rebuilt by RebuildCollisionVolumes inside

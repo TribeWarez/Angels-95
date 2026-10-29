@@ -37,11 +37,17 @@ static const int ID_TB_MODE_MOVE  = 930;
 static const int ID_TB_MODE_SCALE = 931;
 static const int ID_TB_MODE_ROT   = 932;
 static const int ID_TB_SHOW_COLLISION = 933;
+// New-brush size fields (W/H/L). Placed before the primitives so the next placed
+// brush spawns at this size instead of the old hard-coded 4x4x4.
+static const int ID_SB_NEWW = 954;
+static const int ID_SB_NEWH = 955;
+static const int ID_SB_NEWL = 956;
 
 static HWND g_sbPos = nullptr, g_sbSize = nullptr, g_sbRot = nullptr;
 static HWND g_sbColl = nullptr, g_sbChunks = nullptr, g_sbMode = nullptr;
 static HWND g_sbCam = nullptr;
 static HWND g_sbWorld = nullptr;
+static HWND g_sbNewW = nullptr, g_sbNewH = nullptr, g_sbNewL = nullptr;
 static HBRUSH g_sbBgBrush = nullptr;
 
 int GetStatsSidebarWidth() { return STATS_SIDEBAR_W; }
@@ -122,7 +128,28 @@ static LRESULT CALLBACK StatsSidebarProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l
         CreateLabel(hwnd, L"---", x, y, lw, 16, ID_SB_SEP2); y += 20;
         CreateLabel(hwnd, L"Camera:", x, y, lw, 18, ID_SB_CAM_L); y += 20;
         g_sbCam    = CreateLabel(hwnd, L"0.0 0.0 0.0", x, y, lw, 18, ID_SB_CAM); y += 20;
-        g_sbWorld  = CreateLabel(hwnd, L"World: 0 br  0 mesh  0 NPC", x, y, lw, 18, ID_SB_WORLD); y += 10;
+        g_sbWorld  = CreateLabel(hwnd, L"World: 0 br  0 mesh  0 NPC", x, y, lw, 18, ID_SB_WORLD); y += 22;
+
+        // New-brush size: the NEXT primitive placed spawns at these extents, so
+        // placing a wall no longer means add-a-4x4-cube then resize. Editable before
+        // clicking a primitive (three small fields, all in the tab ring).
+        CreateLabel(hwnd, L"New brush size (W H L)", x, y, lw, 18, 954 + 100); y += 20;
+        {
+            const int fw = 46, gap = 4;
+            int fx = x;
+            auto mkEdit = [&](int cid, const wchar_t* txt) -> HWND {
+                return CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", txt,
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
+                    fx, y, fw, 20, hwnd, (HMENU)(INT_PTR)cid, g_hInst, nullptr);
+            };
+            CreateLabel(hwnd, L"W", fx, y + 2, 14, 16, 954 + 101); fx += 14;
+            g_sbNewW = mkEdit(ID_SB_NEWW, L"4"); fx += fw + gap;
+            CreateLabel(hwnd, L"H", fx, y + 2, 14, 16, 954 + 102); fx += 14;
+            g_sbNewH = mkEdit(ID_SB_NEWH, L"4"); fx += fw + gap;
+            CreateLabel(hwnd, L"L", fx, y + 2, 14, 16, 954 + 103); fx += 14;
+            g_sbNewL = mkEdit(ID_SB_NEWL, L"4");
+            y += 28;
+        }
 
         // --- Primitives section (icons) ---
         CreateLabel(hwnd, L"Primitives", x, y, lw, 18, 950); y += 22;
@@ -159,6 +186,19 @@ static LRESULT CALLBACK StatsSidebarProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l
     }
     case WM_COMMAND: {
         int id = LOWORD(w);
+        // New-brush size edits: parse on every change and DO NOT fall through to
+        // the toolbox focus-return below (that would steal focus from the field
+        // mid-keystroke).
+        if (id == ID_SB_NEWW || id == ID_SB_NEWH || id == ID_SB_NEWL) {
+            wchar_t buf[32] = {};
+            GetWindowTextW((HWND)l, buf, 32);
+            float v = (float)wcstod(buf, nullptr);
+            if (!(v > 0.0f)) v = 0.1f;   // never zero/negative
+            if (id == ID_SB_NEWW)      g_editorPanels.newBrushW = v;
+            else if (id == ID_SB_NEWH) g_editorPanels.newBrushH = v;
+            else                       g_editorPanels.newBrushL = v;
+            break;
+        }
         switch (id) {
             // --- Primitives ---
             // Both halves post a CsgIntent. They are separate kinds because
@@ -235,6 +275,7 @@ static LRESULT CALLBACK StatsSidebarProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l
     case WM_DESTROY:
         g_editorPanels.hStatsSidebar = nullptr;
         g_sbPos = g_sbSize = g_sbRot = g_sbColl = g_sbChunks = g_sbMode = g_sbCam = g_sbWorld = nullptr;
+        g_sbNewW = g_sbNewH = g_sbNewL = nullptr;
         break;
     default:
         return DefWindowProc(hwnd, msg, w, l);

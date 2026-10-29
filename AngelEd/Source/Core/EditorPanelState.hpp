@@ -137,6 +137,14 @@ struct EditorPanelState {
     int terrainBrushMode = 0;       // 0=raise, 1=lower, 2=flatten
     int terrainBrushSize = 4;       // radius in grid cells
     float terrainBrushStrength = 0.05f; // height change per click [0..1]
+
+    // Default size for the NEXT placed primitive (the Stats sidebar's "New brush
+    // size" W/H/L fields). CsgPlace/CsgCommit used to hard-code 4x4x4, so placing a
+    // wall meant add -> resize -> commit. Editing these first makes the ghost spawn
+    // at the authored size.
+    float newBrushW = 4.0f;
+    float newBrushH = 4.0f;
+    float newBrushL = 4.0f;
     // actionCsgCommitNow is GONE -> ed::Ev::CsgCommit (see actionCsgPlace above).
     // actionWorldGraphProperties / actionWorldGraphDelete / actionWorldGraphDup and
     // the five actionSelectFromGraph* fields are GONE — they became ed::Event
