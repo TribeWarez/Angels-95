@@ -525,23 +525,39 @@ bool EditorUi_HandleMessage(void* msgPtr) {
 
     const bool isEdit = EditorUi_IsClass(focus, L"EDIT");
 
-    if (ctrl && (msg->wParam == 'A' || msg->wParam == 'a') && isEdit) {
-        SendMessageW(focus, EM_SETSEL, 0, (LPARAM)-1);
+    // A COMBOBOX owns an EDIT child; Ctrl+A / Ctrl+Backspace / Enter all target
+    // that child. Without this they were dead inside every dropdown's text field
+    // (the class is COMBOBOX, so the EDIT-gated branches never fired).
+    HWND editTarget = isEdit ? focus : nullptr;
+    if (!editTarget && EditorUi_IsClass(focus, L"COMBOBOX"))
+        editTarget = GetWindow(focus, GW_CHILD);
+    const bool editLike = editTarget && EditorUi_IsClass(editTarget, L"EDIT");
+
+    if (ctrl && (msg->wParam == 'A' || msg->wParam == 'a') && editLike) {
+        SendMessageW(editTarget, EM_SETSEL, 0, (LPARAM)-1);
         return true;
     }
 
-    if (ctrl && msg->wParam == VK_BACK && isEdit) {
-        LONG style = GetWindowLongW(focus, GWL_STYLE);
+    if (ctrl && msg->wParam == VK_BACK && editLike) {
+        LONG style = GetWindowLongW(editTarget, GWL_STYLE);
         if (!(style & ES_MULTILINE)) {
-            EditorUi_WordDelete(focus);
+            EditorUi_WordDelete(editTarget);
             return true;
         }
     }
 
+    // Enter on a focused button activates it. Outside a real dialog there is no
+    // default-button handling, so a keyboard user had to Tab to Apply and press
+    // Space; BM_CLICK makes Enter work like every other form.
+    if (msg->wParam == VK_RETURN && !ctrl && !alt && EditorUi_IsClass(focus, L"BUTTON")) {
+        SendMessageW(focus, BM_CLICK, 0, 0);
+        return true;
+    }
+
     // Enter in a single-line field = next field (Shift+Enter = previous). This
     // keeps a long Properties form keyboard-drivable without a default button.
-    if (msg->wParam == VK_RETURN && !ctrl && !alt && isEdit) {
-        LONG style = GetWindowLongW(focus, GWL_STYLE);
+    if (msg->wParam == VK_RETURN && !ctrl && !alt && editLike) {
+        LONG style = GetWindowLongW(editTarget, GWL_STYLE);
         if (!(style & ES_MULTILINE)) {
             EditorUi_FocusRelative(focus, shift ? -1 : 1);
             return true;

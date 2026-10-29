@@ -538,7 +538,7 @@ static LRESULT CALLBACK TextureMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) 
         // Search box shares the toolbar row (right of the buttons).
         CreateLabel(hwnd, L"Search", x + 304, y + 2, 44, 20, 2);
         CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", L"",
-            WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
             x + 348, y, 150, 24, hwnd, (HMENU)(INT_PTR)ID_TEX_SEARCH, g_hInst, nullptr);
         y += 30;
 
@@ -548,7 +548,7 @@ static LRESULT CALLBACK TextureMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) 
             TVS_HASLINES | TVS_LINESATROOT | TVS_SHOWSELALWAYS | WS_TABSTOP,
             x, y, 150, 200, hwnd, (HMENU)(INT_PTR)ID_TEX_SCOPE, g_hInst, nullptr);
         hGrid = CreateWindowEx(WS_EX_CLIENTEDGE, CLASS_TEXTURE_GRID, L"",
-            WS_CHILD | WS_VISIBLE | WS_VSCROLL,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL,
             x + 156, y, bw - 156, 200, hwnd, (HMENU)(INT_PTR)ID_TEX_LIST, g_hInst, nullptr);
         y += 206;
 
