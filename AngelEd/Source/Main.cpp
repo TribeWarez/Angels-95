@@ -1077,8 +1077,15 @@ int main(int argc, char **argv){
             }
         }
         const bool wantSky = OTEditor.ShowSkybox && s_skyTex.id > 0;
+        // Sky portals sample their pre-render by gl_FragCoord / uViewport, i.e. in
+        // WINDOW space. A split pane is a sub-rect, so drawing the full-window view
+        // into it samples the wrong region. Until per-pane portal targets land
+        // (Phase 4), portals are only shown in the single-view layout; a split pane
+        // draws the brush's own texture instead of a mis-sampled sky.
+        const bool skyPortals = wantSky && g_editorPanels.viewLayout == 0 &&
+                                OzoneLoader::Instance().HasSkyPortalFaces();
 
-        if (wantSky && OzoneLoader::Instance().HasSkyPortalFaces()) {
+        if (skyPortals) {
             SkyZoneNode* sky = PawnSystem::Instance().GetActiveSkyZone();
             const Vector3 anchor = sky ? sky->position : OTEditor.MainCamera.position;
             oz::SkyPortal::Instance().Render(
@@ -1133,8 +1140,8 @@ int main(int argc, char **argv){
 
         // SURF_PORTAL faces sample the sky view rendered before BeginMode3D.
         // Drawn after the world so geometry in front of a portal occludes it -
-        // the same ordering the client uses.
-        if (wantSky && OzoneLoader::Instance().HasSkyPortalFaces()) {
+        // the same ordering the client uses. Split panes skip this (see skyPortals).
+        if (skyPortals) {
             OzoneLoader::Instance().DrawSkyPortals(OTEditor.MainCamera,
                                                    oz::SkyPortal::Instance().View(),
                                                    GetScreenWidth(), GetScreenHeight());
