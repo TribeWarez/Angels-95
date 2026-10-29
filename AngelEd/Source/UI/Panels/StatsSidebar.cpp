@@ -181,6 +181,17 @@ static LRESULT CALLBACK StatsSidebarProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l
                 OzoneLoader::Instance().SetDrawCollisionProxies(g_editorPanels.showCollisionBounds);
                 break;
         }
+        // Hand keyboard focus back to the viewport.
+        //
+        // A Win32 button that keeps focus takes it from the GLFW/raylib window,
+        // and raylib's keyboard state freezes with it. That is not cosmetic:
+        // Alt+MMB (camera orbit) then reads no Alt and silently degrades to a
+        // plain pan, so the camera "rotation stops working" after clicking any
+        // mode button (Cam/Move/Scale/Rotate) and coming back - and every
+        // viewport shortcut (Home, NumPad presets, Delete...) stops too until
+        // the user clicks the viewport again. The sidebar is a toolbar with no
+        // text input, so returning focus here is always safe.
+        if (g_hRaylibWnd) SetFocus(g_hRaylibWnd);
         break;
     }
     case WM_CTLCOLORSTATIC: {

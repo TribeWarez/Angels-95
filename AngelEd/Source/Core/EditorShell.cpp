@@ -151,7 +151,16 @@ static void ToggleZonePlacement() { g_placeMode = PlaceMode::ENV; }
 static void ToggleHeightmapEditor() { ShowHeightmapEditor(!g_editorPanels.showHeightmapEditor); }
 static void ToggleWorldGraph() { ShowWorldGraph(!g_editorPanels.showWorldGraph); }
 static void ToggleAnimPanel()   { ShowAnimPanel(!g_editorPanels.showAnimPanel); }
-static void ResetCamera()       { OTEditor.MainCamera.position = {0, 10, 0}; OTEditor.MainCamera.target = {0, 0, 0}; OTEditor.MainCamera.up = {0, 1, 0}; }
+// Reset to a 3/4 view of the origin.
+//
+// The position must NOT be directly above the target with up = +Y. That makes
+// the view direction (-Y) and the up vector (+Y) parallel, the view matrix
+// degenerates to zeros/NaN and the viewport renders BLACK - which is exactly
+// what "View -> Reset Camera" did whenever a perspective view was active (the
+// orthographic presets always pair a top-down position with up = -Z, so they
+// were the only ones that happened to be safe). A diagonal position keeps
+// forward and up independent and still centres on the origin.
+static void ResetCamera()       { OTEditor.MainCamera.position = {0, 10, -12}; OTEditor.MainCamera.target = {0, 0, 0}; OTEditor.MainCamera.up = {0, 1, 0}; }
 static void CamUp()             { OTEditor.MainCamera.position.y += 2; }
 static void CamDown()           { OTEditor.MainCamera.position.y -= 2; }
 
