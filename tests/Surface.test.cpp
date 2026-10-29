@@ -1093,25 +1093,23 @@ static void test_dead_flags_are_still_dead() {
         { SURF_INVISIBLE_OCCLUDER, "SURF_INVISIBLE_OCCLUDER" },
         { SURF_FORCE_VIEW_ZONE, "SURF_FORCE_VIEW_ZONE" },
         { SURF_NO_SMOOTH, "SURF_NO_SMOOTH" },
-        // Planned (Phase 7.2): the dynamic-collision side-list exists
-        // (Physics/DynamicCollision.hpp), but the CSG-exclusion + frustum toggle
-        // and the ghostly shader overlay are not wired yet, so it has no consumer.
-        { SURF_QUANTUM, "SURF_QUANTUM" },
     };
     const int deadCount = (int)(sizeof(dead) / sizeof(dead[0]));
-    check(deadCount == 14, "the dead-flag register has 14 entries");
+    check(deadCount == 13, "the dead-flag register has 13 entries");
 
-    // The dialog's Flags tab exposes 16 rows: these 15 live flags plus MIRROR
+    // The dialog's Flags tab exposes 17 rows: these 17 live flags plus MIRROR
     // shown-but-disabled as "(planned)". SURF_PORTAL moved out of the planned
-    // group when the sky portal landed - it is now a real render pass.
+    // group when the sky portal landed - it is now a real render pass. SURF_QUANTUM
+    // moved out when the dynamic-collision side-list gained its first consumer.
     const uint32_t live[] = {
         SURF_FAKEBACKDROP, SURF_INVISIBLE, SURF_MASKED, SURF_TRANSLUCENT,
         SURF_ALPHABLEND, SURF_MODULATED, SURF_TWO_SIDED, SURF_UNLIT,
         SURF_FAKE_LIT, SURF_GLOW, SURF_PAN_U, SURF_PAN_V,
         SURF_NO_FOG, SURF_NO_BSP_CUTS, SURF_PORTAL, SURF_OCCLUDER,
+        SURF_QUANTUM,
     };
     const int liveCount = (int)(sizeof(live) / sizeof(live[0]));
-    check(liveCount == 16, "16 flags are live and offered as enabled checkboxes");
+    check(liveCount == 17, "17 flags are live and offered as enabled checkboxes");
 
     bool overlap = false;
     for (int i = 0; i < liveCount; i++)
@@ -1183,6 +1181,25 @@ static void test_dead_flags_are_still_dead() {
         check(loader.find("SkyPortalOnly") != std::string::npos &&
               loader.find("DrawSkyPortals") != std::string::npos,
               "SURF_PORTAL reaches a real render pass (SkyPortalOnly / DrawSkyPortals)");
+    }
+
+    // SURF_QUANTUM's consumer is the dynamic side-list: RebuildCollisionVolumes
+    // registers the brush there INSTEAD of in CSG, and Core.hpp's per-frame toggle
+    // flips it from the same AabbInFrustum the draw pass culls with. Both halves
+    // are asserted because either one alone is a mechanic that does nothing: the
+    // flag without the toggle is a permanently-solid brush, and the toggle without
+    // the registration has nothing to toggle.
+    if (!loader.empty()) {
+        const std::string core = ReadFile("Source/Core.hpp");
+        check(loader.find("SURF_QUANTUM") != std::string::npos &&
+              loader.find("HasAnywhere") != std::string::npos &&
+              loader.find("m_quantumIndices") != std::string::npos,
+              "SURF_QUANTUM reaches the DynamicCollision side-list in the loader");
+        check(!core.empty() &&
+              core.find("UpdateQuantumObstacles") != std::string::npos &&
+              core.find("AabbInFrustum") != std::string::npos &&
+              core.find("OverlapsEnabledAbove") != std::string::npos,
+              "SURF_QUANTUM is toggled per frame from the shared frustum test");
     }
 }
 
@@ -1649,8 +1666,10 @@ static void test_editor_transform_and_surface_wiring() {
     // --- Per-face pick uses the SAME (local) normal as BuildFaceMeshes --------
     check(sel.find("FaceFromNormal(lnx, lny, lnz)") != std::string::npos,
           "surface picking buckets the face from the LOCAL triangle normal");
-    check(sel.find("RotatedAabbY(local, r->rotation") != std::string::npos,
-          "brush picking uses the rotation-aware AABB");
+    check(sel.find("BoundingBox BrushWorldBox") != std::string::npos &&
+          sel.find("RotatedAabbY(local, r.rotation") != std::string::npos &&
+          sel.find("BrushWorldBox(*r)") != std::string::npos,
+          "brush picking uses the ONE rotation-aware AABB (BrushWorldBox)");
 
     // --- The Properties apply publishes its result to the gizmo --------------
     check(props.find("SnapGizmoToSelection(g_sel)") != std::string::npos,
