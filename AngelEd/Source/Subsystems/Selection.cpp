@@ -19,10 +19,26 @@
 int EdSel_CurrentType()  { return (int)g_sel.type; }
 int EdSel_CurrentIndex() { return g_sel.index; }
 
-// RaycastTestBrushes REMOVED (R8). It picked from GetCollisionVolumes() - the CSG
-// output, whose entries are merged AABBs - and returned that index as
-// SelType::BRUSH, the same type RaycastTestOzPrimitives used for a RENDERABLE index.
-// See the note at the call site in EditorRaycastAt for the full account.
+// One rotation-aware brush box for the picker, the gizmo pivot/write-back and
+// duplicate. Kept here (and declared in Selection.hpp) so those four sites cannot
+// disagree about where a rotated brush's centre is - which they did: the picker
+// used RotatedAabbY while the per-frame sync used the unrotated mesh centre.
+BoundingBox BrushWorldBox(const OzoneRenderable& r) {
+    if (r.model.meshCount <= 0) return BoundingBox{{0,0,0},{0,0,0}};
+    const BoundingBox mb = GetMeshBoundingBox(r.model.meshes[0]);
+    const AabbBox local{mb.min.x, mb.min.y, mb.min.z, mb.max.x, mb.max.y, mb.max.z};
+    const AabbBox w = RotatedAabbY(local, r.rotation,
+                                   r.position.x, r.position.y, r.position.z, r.scale);
+    return BoundingBox{{w.minX, w.minY, w.minZ}, {w.maxX, w.maxY, w.maxZ}};
+}
+
+Vector3 BrushCenter(const OzoneRenderable& r) {
+    const BoundingBox b = BrushWorldBox(r);
+    return {(b.min.x + b.max.x) * 0.5f,
+            (b.min.y + b.max.y) * 0.5f,
+            (b.min.z + b.max.z) * 0.5f};
+}
+
 static RayCollision RaycastTestOzPrimitives(Ray ray, EditorSelection& out) {
     RayCollision best = { false, 1e9f, {0,0,0}, {0,0,0} };
     int count = OzoneLoader::Instance().Count();
@@ -36,24 +52,14 @@ static RayCollision RaycastTestOzPrimitives(Ray ray, EditorSelection& out) {
         // the WorldGraph list and the surface picker - see IsEditorPickableSurface.
         if (!IsEditorPickableSurface(*r))
             continue;
-        BoundingBox mb = GetMeshBoundingBox(r->model.meshes[0]);
-        // Rotation-aware pick box, using the SAME composition the renderer and
-        // collision use (scale, then yaw about the brush origin, then translate).
-        // The old code applied position + scale only, so a rotated brush was
-        // picked from its unrotated footprint: clicks in empty space selected
-        // it, and clicks on its visible ends missed.
-        const AabbBox local{mb.min.x, mb.min.y, mb.min.z,
-                            mb.max.x, mb.max.y, mb.max.z};
-        const AabbBox w = RotatedAabbY(local, r->rotation,
-                                       r->position.x, r->position.y,
-                                       r->position.z, r->scale);
-        BoundingBox box = {{w.minX, w.minY, w.minZ}, {w.maxX, w.maxY, w.maxZ}};
+        BoundingBox box = BrushWorldBox(*r);
         RayCollision hit = GetRayCollisionBox(ray, box);
         if (hit.hit && hit.distance < best.distance) {
             best = hit;
             // Store ACTUAL mesh center as selection position, not r->position
-            Vector3 center = {(w.minX + w.maxX) * 0.5f, (w.minY + w.maxY) * 0.5f,
-                              (w.minZ + w.maxZ) * 0.5f};
+            Vector3 center = {(box.min.x + box.max.x) * 0.5f,
+                              (box.min.y + box.max.y) * 0.5f,
+                              (box.min.z + box.max.z) * 0.5f};
             out = { SelType::BRUSH, i, TextFormat("OzPrimitive %d", i),
                     center, r->scale, r->rotation * RAD2DEG, true }; // UI works in degrees
         }
@@ -500,17 +506,12 @@ void SnapGizmoToSelection(const EditorSelection& sel) {    AngelTechEditor.X = s
         // that box, which read as a brush being re-added on every click.
         OzoneRenderable* r = OzoneLoader::Instance().Get(sel.index);
         if (r && r->loaded && r->model.meshCount > 0) {
-            BoundingBox mb = GetMeshBoundingBox(r->model.meshes[0]);
-            const AabbBox local{mb.min.x, mb.min.y, mb.min.z,
-                                mb.max.x, mb.max.y, mb.max.z};
             // The drawn gizmo is axis-aligned, so report the rotated brush's
-            // enclosing extents (same rotation-aware box the picker/collision use).
-            const AabbBox w = RotatedAabbY(local, r->rotation,
-                                           r->position.x, r->position.y,
-                                           r->position.z, r->scale);
-            AngelTechEditor.W = w.maxX - w.minX;
-            AngelTechEditor.H = w.maxY - w.minY;
-            AngelTechEditor.L = w.maxZ - w.minZ;
+            // enclosing extents (the one shared rotation-aware box).
+            const BoundingBox w = BrushWorldBox(*r);
+            AngelTechEditor.W = w.max.x - w.min.x;
+            AngelTechEditor.H = w.max.y - w.min.y;
+            AngelTechEditor.L = w.max.z - w.min.z;
         }
     } else if (sel.type == SelType::WINDZONE) {
         auto& zones = PawnSystem::Instance().GetWindZones();

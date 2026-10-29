@@ -67,11 +67,18 @@ static float Gizmo_Length(const Camera3D& cam, Vector3 pivot) {
 }
 
 static float Gizmo_SnapStep() {
-    // Ctrl = force 1.0 grid; Shift = fine 0.1; otherwise the toolbar setting
-    // (0 = off). Ctrl wins so a user who wants a whole unit always gets one.
-    if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) return 1.0f;
-    if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) return 0.1f;
-    return g_editorPanels.gizmoSnap;
+    // The toolbar step is the authority; held keys MODIFY it for the duration of
+    // the gesture instead of replacing it. Ctrl used to force 1.0 and the toolbar
+    // defaulted to Off, so a configured 0.25 became 1.0 while held and nothing at
+    // all otherwise - which read as "snap only works occasionally".
+    //   Shift = fine  (a tenth of the step, or 0.1 when snapping is off)
+    //   Ctrl  = hold-to-snap at the configured step (0.5 when the toolbar is Off)
+    const bool ctrl  = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+    const bool shift = IsKeyDown(KEY_LEFT_SHIFT)   || IsKeyDown(KEY_RIGHT_SHIFT);
+    const float base = g_editorPanels.gizmoSnap;
+    if (shift) return base > 0.0f ? base * 0.1f : 0.1f;
+    if (ctrl)  return base > 0.0f ? base : 0.5f;
+    return base;
 }
 
 static float Gizmo_AngleStep() {

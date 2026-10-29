@@ -120,6 +120,13 @@ static void LoadPanelLayouts() {
     g_editorPanels.unrealMoveSpeed = cfg.GetInt("Options", "unreal_move_speed", 1);
     if (g_editorPanels.unrealMoveSpeed < 0) g_editorPanels.unrealMoveSpeed = 0;
     if (g_editorPanels.unrealMoveSpeed > 2) g_editorPanels.unrealMoveSpeed = 2;
+    // Grid/angle snap. Persisted because snap is a working preference, not a
+    // per-session mode: it used to reset to Off on every launch, which is why
+    // "snap only works occasionally" (you had to hold Ctrl).
+    g_editorPanels.gizmoSnap = cfg.GetFloat("Options", "gizmo_snap", 0.5f);
+    if (g_editorPanels.gizmoSnap < 0.0f) g_editorPanels.gizmoSnap = 0.0f;
+    g_editorPanels.gizmoAngleSnap = cfg.GetFloat("Options", "gizmo_angle_snap", 15.0f);
+    if (g_editorPanels.gizmoAngleSnap < 0.0f) g_editorPanels.gizmoAngleSnap = 0.0f;
 
     // Restore the MAIN window's size/position before the panels are created so
     // the docked stats sidebar is laid out against the right client rect. The
@@ -199,6 +206,8 @@ void SavePanelLayouts() {
     // owns "editor preferences that are not document state", and it runs on exit.
     cfg.SetBool("Options", "unreal_brush_move", g_editorPanels.unrealBrushMove);
     cfg.SetInt("Options", "unreal_move_speed", g_editorPanels.unrealMoveSpeed);
+    cfg.SetFloat("Options", "gizmo_snap", g_editorPanels.gizmoSnap);
+    cfg.SetFloat("Options", "gizmo_angle_snap", g_editorPanels.gizmoAngleSnap);
     cfg.Save(kEditorIniPath);
 }
 

@@ -114,9 +114,11 @@ struct EditorPanelState {
     // currently is; collapsing them would either lose the reset or commit a brush
     // the user never positioned.
     int currentToolMode = 0;    // persistent tool mode: 0=cam,1=move,2=scale,3=rotate
-    // Gizmo snapping. 0 = off. Ctrl forces 1.0, Shift forces 0.1 regardless.
-    // The toolbar shows/cycles this so snapping is discoverable, not a hidden key.
-    float gizmoSnap = 0.0f;
+    // Gizmo snapping. The value is the grid step; 0 = off. Held Ctrl toggles it
+    // momentarily (see Gizmo_SnapStep), Shift = fine 0.1. Persisted in
+    // [Options] gizmo_snap so it no longer resets to Off on every launch, which
+    // was the real reason "snap only works occasionally".
+    float gizmoSnap = 0.5f;
     float gizmoAngleSnap = 15.0f;   // degrees; Shift = 1 degree
 
     // --- UnrealEd-style brush editing (Settings > Unreal-Style Brush Movement)
@@ -201,6 +203,12 @@ struct EditorPanelState {
     // Set when a Sub/Intersect brush produced no collision volume at all. The
     // sidebar paints the collision count red until the next brush is committed.
     bool collisionOpWarning = false;
+    // A brush transform changed since the last collision rebuild. The per-frame
+    // gizmo sync used to call RebuildCollisionVolumes() unconditionally, i.e. a
+    // full CSG rebuild every frame a brush was selected - the "large meshes feel
+    // laggy/stuck to the cursor" report. Now it marks this and rebuilds once,
+    // when the drag ends.
+    bool collisionDirty = false;
     // Pawn Manager: show metadata-only defs (EntityType::GAMETYPE) that are not
     // placeable. Off by default so the tree stays focused on placeable actors.
     bool showHidden = false;

@@ -12,7 +12,18 @@
 
 #include "../Core/EditorState.hpp"
 
+#include "raylib.h"
 #include <vector>
+
+struct OzoneRenderable;
+
+// The ONE rotation-aware world box of a brush, using the same composition the
+// renderer, collision and picker use (Scale then RotateY about the brush origin,
+// then translate). Before this, the picker/pivot used RotatedAabbY while the
+// per-frame gizmo write-back used the UNROTATED mesh box centre, so a rotated
+// brush slid/jittered as the gizmo rewrote its position every frame.
+BoundingBox BrushWorldBox(const OzoneRenderable& r);
+Vector3      BrushCenter(const OzoneRenderable& r);
 
 // Find a playerstart by its id. Used by the properties apply to write position and yaw.
 PlayerStartNode* FindPlayerStartById(int id);

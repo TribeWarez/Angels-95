@@ -1105,6 +1105,10 @@ if (g_editorPanels.showCollisionBounds) {
                     case ZoneType::ZONE_SKY:    wireColor = (Color){100, 150, 255, 80};  break;
                     case ZoneType::ZONE_REVERB: wireColor = (Color){150, 50, 200, 80};   break;
                     case ZoneType::ZONE_GAMEPLAY_SOUND: wireColor = (Color){50, 200, 50, 80}; break;
+                    // Gravity volumes get their own tint so a tilted-gravity
+                    // pocket is distinguishable from a water volume at a glance.
+                    case ZoneType::ZONE_GRAVITY: wireColor = (Color){230, 90, 220, 80}; break;
+                    case ZoneType::ZONE_CRT:     wireColor = (Color){255, 240, 120, 80}; break;
                     default:                    wireColor = (Color){50, 120, 200, 80};   break;
                 }
                 DrawBoundingBox(z.bounds, wireColor);
@@ -1405,20 +1409,35 @@ if (g_editorPanels.showCollisionBounds) {
                     if (rIdx >= 0) {
                         OzoneRenderable* r = OzoneLoader::Instance().Get(rIdx);
                         if (r) {
-                            BoundingBox mb = GetMeshBoundingBox(r->model.meshes[0]);
-                            Vector3 center = {r->position.x + (mb.min.x + mb.max.x) * 0.5f * r->scale,
-                                              r->position.y + (mb.min.y + mb.max.y) * 0.5f * r->scale,
-                                              r->position.z + (mb.min.z + mb.max.z) * 0.5f * r->scale};
-                            Vector3 delta = {r->position.x - center.x,
-                                             r->position.y - center.y,
-                                             r->position.z - center.z};
-                            r->position = {newPos.x + delta.x, newPos.y + delta.y, newPos.z + delta.z};
+                            // Rotation-aware centre (the same box the picker and
+                            // SnapGizmoToSelection use). The old code used the
+                            // UNROTATED mesh centre here, so a rotated brush's
+                            // pivot and its write-back disagreed and the brush
+                            // slid/jittered as this ran every frame.
+                            const Vector3 center = BrushCenter(*r);
+                            const Vector3 oldPos = r->position;
+                            const float oldScale = r->scale;
+                            const float oldRot = r->rotation;
+                            r->position = {newPos.x + (oldPos.x - center.x),
+                                           newPos.y + (oldPos.y - center.y),
+                                           newPos.z + (oldPos.z - center.z)};
                             // Scale/Rotate tool modes write back to the renderable
                             if (g_editorPanels.currentToolMode == 2) r->scale = AngelTechEditor.S;
                             if (g_editorPanels.currentToolMode == 3) r->rotation = AngelTechEditor.R * DEG2RAD;
+                            if (r->position.x != oldPos.x || r->position.y != oldPos.y ||
+                                r->position.z != oldPos.z || r->scale != oldScale ||
+                                r->rotation != oldRot)
+                                g_editorPanels.collisionDirty = true;
                         }
                     }
-                    OzoneLoader::Instance().RebuildCollisionVolumes();
+                    // Rebuild the CSG world once, AFTER the drag, not every frame.
+                    // Mid-drag the renderable moves continuously, so a per-frame
+                    // rebuild is a full O(brush) CSG pass for no benefit; nothing
+                    // reads collision while the gizmo is being dragged.
+                    if (g_editorPanels.collisionDirty && !g_gizmoDrag) {
+                        OzoneLoader::Instance().RebuildCollisionVolumes();
+                        g_editorPanels.collisionDirty = false;
+                    }
                 } else if (g_sel.type == SelType::LIGHT) {
                     LightNode* l = PawnSystem::Instance().GetLight(idx);
                     if (l) l->position = newPos;
@@ -1683,6 +1702,10 @@ AngelTechEditor.DrawModel = false;
                         HistoryPush();
                         g_gizmoHistPushed = true;
                     }
+                    // Grid snap applies to the free drag too. The handle drag has
+                    // always snapped; this fallback silently did not, which is the
+                    // other half of "snap only works occasionally".
+                    const float snapStep = Gizmo_SnapStep();
                     // Camera-relative fallback for a free drag (ghost or Cam-mode
                     // object drag). The old X += dx/8 was screen-space and did not
                     // follow the cursor; this moves along the camera's right/up
@@ -1704,12 +1727,27 @@ AngelTechEditor.DrawModel = false;
                         AngelTechEditor.Y += (right.y * d.x - up.y * d.y) * k;
                         AngelTechEditor.Z += (right.z * d.x - up.z * d.y) * k;
                     }
+                    if (snapStep > 0.0f) {
+                        AngelTechEditor.X = ozg::SnapValue(AngelTechEditor.X, snapStep);
+                        AngelTechEditor.Y = ozg::SnapValue(AngelTechEditor.Y, snapStep);
+                        AngelTechEditor.Z = ozg::SnapValue(AngelTechEditor.Z, snapStep);
+                    }
                 }
             }
             if (IsMouseButtonDown(1) && !g_suppressViewportDrag) {
                 AngelTechEditor.W += GetMouseDelta().x / 8;
                 AngelTechEditor.H += GetMouseDelta().y / 8;
                 AngelTechEditor.L -= (GetMouseWheelMove() * 2);
+                // Snap the size too, so a resized ghost lands on the grid.
+                const float ss = Gizmo_SnapStep();
+                if (ss > 0.0f) {
+                    AngelTechEditor.W = ozg::SnapValue(AngelTechEditor.W, ss);
+                    AngelTechEditor.H = ozg::SnapValue(AngelTechEditor.H, ss);
+                    AngelTechEditor.L = ozg::SnapValue(AngelTechEditor.L, ss);
+                    if (AngelTechEditor.W < 0.1f) AngelTechEditor.W = 0.1f;
+                    if (AngelTechEditor.H < 0.1f) AngelTechEditor.H = 0.1f;
+                    if (AngelTechEditor.L < 0.1f) AngelTechEditor.L = 0.1f;
+                }
             }
         }
 
@@ -1739,15 +1777,8 @@ AngelTechEditor.DrawModel = false;
                 // trap and was fixed; this consumer was missed.
                 OzoneRenderable* r = OzoneLoader::Instance().Get(sel.index);
                 if (r && r->loaded && r->model.meshCount > 0) {
-                    BoundingBox mb = GetMeshBoundingBox(r->model.meshes[0]);
-                    const AabbBox local{mb.min.x, mb.min.y, mb.min.z,
-                                        mb.max.x, mb.max.y, mb.max.z};
-                    // Rotation-aware, matching what collision now uses, so the box
-                    // always contains the drawn (possibly rotated) brush.
-                    const AabbBox w = RotatedAabbY(local, r->rotation,
-                                                   r->position.x, r->position.y,
-                                                   r->position.z, r->scale);
-                    return {{w.minX, w.minY, w.minZ}, {w.maxX, w.maxY, w.maxZ}};
+                    // The one rotation-aware brush box (same as the picker/gizmo).
+                    return BrushWorldBox(*r);
                 }
             } else if (sel.type == SelType::ZONE) {
                 auto& zones = ZoneManager::Instance().GetZones();
@@ -1996,8 +2027,10 @@ AngelTechEditor.DrawModel = false;
             bx += stW + 2;
 
             // Gizmo snap. Discoverable here rather than hidden behind a modifier:
-            // clicking cycles Off / 0.25 / 0.5 / 1 / 2. Ctrl still forces 1.0,
-            // Shift forces 0.1 while dragging a gizmo handle.
+            // clicking cycles Off / 0.25 / 0.5 / 1 / 2 and the value persists in
+            // [Options] gizmo_snap. Held Ctrl = snap at this step (0.5 when Off);
+            // held Shift = fine (a tenth of it). Ctrl/Shift MODIFY the step now
+            // instead of replacing it, so a configured 0.25 stays 0.25.
             {
                 const float steps[] = {0.0f, 0.25f, 0.5f, 1.0f, 2.0f};
                 char snapTxt[32];
