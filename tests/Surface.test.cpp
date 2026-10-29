@@ -1740,6 +1740,23 @@ static void test_glow_halo_pass_is_wired() {
           "DrawGlowGeometry brackets its additive pass with SetHaloPass");
 }
 
+static void test_no_zone_pvs_culling() {
+    const std::string ldr = ReadFile("Source/World/OzOzoneLoader.cpp");
+    if (ldr.empty()) {
+        printf("  SKIP  zone PVS regression (source not found from cwd)\n");
+        return;
+    }
+    // A zone is an open gameplay volume, not an occlusion cell. Culling a
+    // renderable because its centre was inside an inactive zone made the shrine
+    // and the river vanish from the bridge; it scaled with the zone count.
+    check(ldr.find("activeZonePtrs") == std::string::npos,
+          "DrawWorldGeometry does not collect active-zone pointers for culling");
+    check(ldr.find("inAnyZone") == std::string::npos,
+          "DrawWorldGeometry does not skip renderables by zone membership");
+    check(ldr.find("AabbInFrustum(planes, r.bounds)") != std::string::npos,
+          "the frustum AABB test is still the world-visibility path");
+}
+
 int main() {
     printf("Surface tests:\n");
     test_legacy_bits_stable();
@@ -1753,6 +1770,7 @@ int main() {
     test_skybox_has_one_implementation();
     test_full_bright_is_not_batched();
     test_glow_halo_pass_is_wired();
+    test_no_zone_pvs_culling();
     test_derive_legacy_surface_mirror();
     test_backdrop_gain();
     test_dead_flags_are_still_dead();

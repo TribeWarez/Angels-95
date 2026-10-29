@@ -7,6 +7,8 @@
 //   -o test_pawn_system -lraylib -lopengl32 -lgdi32 -lwinmm -lws2_32 -lm
 
 #include "../Source/Pawn/OzPawnSystem.hpp"
+#include "../Source/Pawn/PlayerMovement.hpp"
+#include "../Source/Physics/PlayerPhysics.hpp"
 #include "../Source/Renderer/Mesh/SkeletalMesh.hpp"
 #include "../Source/Script/LightningEntityRegistry.hpp"
 #include "../Source/Script/LightningEntityManager.hpp"
@@ -533,6 +535,55 @@ static int test_point_region_primary_matches_type() {
     CHECK(flow.primaryZoneId >= 0);   // stable across rebuilds
     flow.Rebuild({});
     CHECK_EQ(flow.primaryZoneId, -1); // left both volumes
+
+    zones.ClearZones();
+    PASS(); return 0; END_TEST();
+}
+
+static int test_point_region_any_zone_type() {
+    TEST("PointRegion: HasZoneTypeIn sees a non-primary zone type");
+    auto& zones = ZoneManager::Instance();
+    zones.ClearZones();
+
+    // A CRT pocket authored INSIDE a water volume. The water volume wins the
+    // priority sort, so the CRT zone is active but NOT primary - which is exactly
+    // the shape every per-effect system has to survive: `HasZoneType()` reports
+    // only the primary zone, so it would answer "no CRT here" and the warp would
+    // silently never fire. `HasZoneTypeIn()` reads the all-active type mask.
+    ZoneVolumeNode water;
+    water.bounds = {{-50, -50, -50}, {50, 50, 50}};
+    water.zoneType = ZoneType::ZONE_WATER;
+    water.priority = 9;
+    ZoneVolumeNode crt;
+    crt.bounds = {{-5, -5, -5}, {5, 5, 5}};
+    crt.zoneType = ZoneType::ZONE_CRT;
+    crt.priority = 1;
+
+    zones.AddZone(water);
+    zones.AddZone(crt);
+
+    PointRegion r;
+    r.Rebuild(zones.GetActiveZones({0, 0, 0}, {{-1, -1, -1}, {1, 1, 1}}));
+    CHECK(r.primaryZoneType == ZoneType::ZONE_WATER);   // primary is the water volume
+    CHECK(r.HasZoneType(ZoneType::ZONE_WATER));
+    CHECK(!r.HasZoneType(ZoneType::ZONE_CRT));          // the primary-only question
+    CHECK(r.HasZoneTypeIn(ZoneType::ZONE_CRT));         // the any-active question
+    CHECK(r.HasZoneTypeIn(ZoneType::ZONE_WATER));
+
+    // Leaving every volume must CLEAR the mask, not leave the last frame's bits set
+    // (a latched bit means the warp never turns off again).
+    r.Rebuild({});
+    CHECK(r.activeTypeMask == 0u);
+    CHECK(!r.HasZoneTypeIn(ZoneType::ZONE_CRT));
+
+    // A point outside both volumes sees neither type. NOTE the bounds argument is
+    // an ABSOLUTE box, not an offset from the point: it must be centred on the
+    // query position, or the "does any volume overlap my body" fallback matches the
+    // volumes at the origin and reports them active at any coordinate.
+    PointRegion q;
+    q.Rebuild(zones.GetActiveZones({100, 0, 0}, {{99, -1, -1}, {101, 1, 1}}));
+    CHECK(!q.HasZoneTypeIn(ZoneType::ZONE_CRT));
+    CHECK(!q.HasZoneTypeIn(ZoneType::ZONE_WATER));
 
     zones.ClearZones();
     PASS(); return 0; END_TEST();
@@ -1645,6 +1696,117 @@ static int test_bone_ids_fit_skeleton() {
     PASS(); return 0; END_TEST();
 }
 
+// ---------------------------------------------------------------------------
+// Phase 7.1b — gravity orientation.
+//
+// The contract has two halves and both are asserted: when up == +Y every formula
+// must be IDENTICAL to the old Y-up one (so ordinary worlds cannot regress), and
+// for a tilted axis the basis must be orthonormal (so a gravity zone works without
+// remapping input).
+// ---------------------------------------------------------------------------
+static int test_gravity_basis_y_up_is_the_old_basis() {
+    TEST("PlayerMovement: +Y basis reproduces the old yaw formulas");
+    PlayerMovement m;
+    m.up = {0, 1, 0};
+    m.Yaw = 0.7f;
+    m.Pitch = -0.3f;
+
+    const Vector3 f = m.ForwardOnPlane();
+    const Vector3 r = m.RightOnPlane();
+    const Vector3 d = m.LookDir();
+    CHECK_APROX(f.x, sinf(m.Yaw), 1e-5f);
+    CHECK_APROX(f.y, 0.0f, 1e-5f);
+    CHECK_APROX(f.z, cosf(m.Yaw), 1e-5f);
+    CHECK_APROX(r.x, -cosf(m.Yaw), 1e-5f);
+    CHECK_APROX(r.z, sinf(m.Yaw), 1e-5f);
+    CHECK_APROX(d.x, cosf(m.Pitch) * sinf(m.Yaw), 1e-5f);
+    CHECK_APROX(d.y, sinf(m.Pitch), 1e-5f);
+    CHECK_APROX(d.z, cosf(m.Pitch) * cosf(m.Yaw), 1e-5f);
+
+    // The collision box must still be the old one exactly.
+    Camera3D cam{};
+    cam.position = {3.0f, 10.0f, -4.0f};
+    m.EyeHeight = 2.0f;
+    m.Width = 1.5f; m.Height = 2.8f;
+    m.UpdateBounds(cam);
+    CHECK_APROX(m.PlayerBounds.min.x, 3.0f - 0.75f, 1e-5f);
+    CHECK_APROX(m.PlayerBounds.min.y, 10.0f - 2.0f, 1e-5f);
+    CHECK_APROX(m.PlayerBounds.max.y, 10.0f - 2.0f + 2.8f, 1e-5f);
+    CHECK_APROX(m.PlayerBounds.max.z, -4.0f + 0.75f, 1e-5f);
+    PASS(); return 0; END_TEST();
+}
+
+static int test_gravity_basis_tilted() {
+    TEST("PlayerMovement: tilted up gives an orthonormal basis and unit look dir");
+    PlayerMovement m;
+    m.up = {0.0f, 0.0f, 1.0f};   // up = +Z, i.e. gravity along -Z
+    m.Yaw = 0.4f;
+    m.Pitch = 0.2f;
+
+    const Vector3 f = m.ForwardOnPlane();
+    const Vector3 r = m.RightOnPlane();
+    CHECK_APROX(Vector3DotProduct(f, m.up), 0.0f, 1e-5f);
+    CHECK_APROX(Vector3DotProduct(r, m.up), 0.0f, 1e-5f);
+    CHECK_APROX(Vector3DotProduct(f, r), 0.0f, 1e-5f);
+    CHECK_APROX(Vector3Length(f), 1.0f, 1e-5f);
+    CHECK_APROX(Vector3Length(r), 1.0f, 1e-5f);
+    CHECK_APROX(Vector3Length(m.LookDir()), 1.0f, 1e-5f);
+    // Pitch is measured against up, so positive pitch tips toward +Z.
+    CHECK(m.LookDir().z > 0.0f);
+
+    // The body box must contain the body oriented along up: long in Z, thin in Y.
+    Camera3D cam{};
+    cam.position = {0.0f, 0.0f, 10.0f};
+    m.EyeHeight = 2.0f;
+    m.Width = 1.5f; m.Height = 2.8f;
+    m.UpdateBounds(cam);
+    CHECK(m.PlayerBounds.max.z >= 8.0f + 2.8f - 1e-4f);
+    CHECK_APROX(m.PlayerBounds.max.y, 0.75f, 1e-5f);
+
+    // Degenerate basis: yaw pointing straight along up. A zero cross product here
+    // makes BuildFrustum's right vector NaN and the viewport renders black.
+    PlayerMovement deg;
+    deg.up = {0.0f, 0.0f, 1.0f};
+    deg.Yaw = 0.0f;                       // world forward == {0,0,1} == up
+    CHECK_APROX(Vector3Length(deg.ForwardOnPlane()), 1.0f, 1e-4f);
+    CHECK_APROX(Vector3DotProduct(deg.ForwardOnPlane(), deg.up), 0.0f, 1e-4f);
+    CHECK_APROX(Vector3Length(deg.LookDir()), 1.0f, 1e-4f);
+    PASS(); return 0; END_TEST();
+}
+
+static int test_gravity_integrator_falls_along_up() {
+    TEST("PlayerPhysics: gravity integrates along `up`, not world Y");
+    oz::physics::PlayerPhysics phys;
+    oz::physics::PlayerPhysics::Motion motion;
+    motion.onGround = false;
+    motion.velocityUp = 0.0f;
+
+    oz::physics::PhysicsInfo info;
+    info.gravityVector = {0.0f, 0.0f, -18.0f};   // gravity along -Z
+    const Vector3 up = {0.0f, 0.0f, 1.0f};
+
+    Camera3D cam{};
+    const Vector3 saved = {0.0f, 5.0f, 5.0f};
+    cam.position = saved;
+    phys.UpdateGroundVertical(cam, motion, saved, true, info, up, 1.0f / 60.0f);
+    CHECK(cam.position.z < saved.z);                 // fell along -Z...
+    CHECK_APROX(cam.position.y, saved.y, 1e-6f);     // ...and Y is untouched
+    CHECK_APROX(cam.position.x, saved.x, 1e-6f);
+    CHECK(motion.velocityUp < 0.0f);
+
+    // Same call with up == +Y is the old Y-up integrator, unchanged.
+    oz::physics::PlayerPhysics::Motion m2;
+    m2.onGround = false;
+    oz::physics::PhysicsInfo info2;                  // default {0,-18,0}
+    Camera3D cam2{};
+    cam2.position = saved;
+    phys.UpdateGroundVertical(cam2, m2, saved, true, info2, {0, 1, 0}, 1.0f / 60.0f);
+    CHECK(cam2.position.y < saved.y);
+    CHECK_APROX(cam2.position.x, saved.x, 1e-6f);
+    CHECK_APROX(cam2.position.z, saved.z, 1e-6f);
+    PASS(); return 0; END_TEST();
+}
+
 int main() {
     // Unbuffered: this binary is the one suite that has ever died without a
     // diagnostic (a segfault on Linux CI printed nothing, because stdout is
@@ -1666,6 +1828,10 @@ int main() {
     failures += test_pickup_unlisted_item_no_crash();
     failures += test_zone_crud();
     failures += test_point_region_primary_matches_type();
+    failures += test_point_region_any_zone_type();
+    failures += test_gravity_basis_y_up_is_the_old_basis();
+    failures += test_gravity_basis_tilted();
+    failures += test_gravity_integrator_falls_along_up();
     failures += test_skyzone_crud();
     failures += test_skyzone_active();
     failures += test_skyzone_transition_emits_exit_then_enter();

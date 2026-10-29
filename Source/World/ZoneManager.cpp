@@ -130,6 +130,7 @@ void ZoneManager::UpdatePlayerRegion(Vector3 playerPos, BoundingBox playerBounds
 void PointRegion::Rebuild(const std::vector<ZoneVolumeNode*>& activeZones) {
     std::unordered_set<int> newIds;
     ZoneEnvOverrides merged;
+    uint32_t typeMask = 0;
 
     // Layers are applied lowest-priority first so the highest-priority zone
     // has the final word on fog/ambient/reverb.
@@ -137,6 +138,10 @@ void PointRegion::Rebuild(const std::vector<ZoneVolumeNode*>& activeZones) {
         if (!*it) continue;
         newIds.insert((int)(*it)->id);
         merged.Merge((*it)->envOverrides);
+        // Every active type, independent of priority. `primaryZoneType` below is
+        // the single winner; this is the "is the player inside ANY volume of type
+        // X" question, which per-effect systems (CRT warp, gravity audio) ask.
+        typeMask |= (1u << (int)(*it)->zoneType);
     }
 
     // enteredZoneIds/exitedZoneIds were computed here and never read by anything
@@ -144,6 +149,7 @@ void PointRegion::Rebuild(const std::vector<ZoneVolumeNode*>& activeZones) {
     // per-zone enter/exit hooks are driven from the lightning scripts in Main.cpp
     // via lastZoneName, not from this set. Removed rather than kept as dead state.
     activeZoneIds = std::move(newIds);
+    activeTypeMask = typeMask;
     combinedEnv = merged;
     if (activeZoneIds.empty()) {
         primaryZoneId = -1;

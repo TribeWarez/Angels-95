@@ -313,6 +313,43 @@ static int test_dynamic_collision() {
     CHECK(!dc.AnyEnabled());
     CHECK(!dc.OverlapsEnabled(11, 5, 11, 13, 6, 13));
 
+    // -----------------------------------------------------------------------
+    // The step-up rule, which is what makes a quantum FLOOR work.
+    //
+    // `OverlapsObstacle` skips a static volume whose top is at or below
+    // feet + kStepHeight, because that surface is support, not an obstacle (the
+    // ground clamp stands the player on it). The side-list needs the same rule or
+    // a quantum slab you can see is a slab you cannot stand on: it blocks instead
+    // of supporting, and because a blocked move rolls the whole step back the
+    // player appears to stick to it.
+    // -----------------------------------------------------------------------
+    dc.Clear();
+    // PlayerPhysics::kStepHeight is 1.0. That header pulls in raylib, which this
+    // suite deliberately does not link, so the value is repeated here - if it ever
+    // changes, OzPawnSystem.test.cpp's physics coverage is the place that notices.
+    const float step = 1.0f;
+    const float ux = 0.0f, uy = 1.0f, uz = 0.0f;     // +Y gravity
+    // A solid slab whose top is at y=6.
+    dc.Add(DynamicBlocker{0, 0, 0, 4, 6, 4, true, 10});
+    // Feet at 5.0 (within a step of the top): the slab SUPPORTS, it does not block.
+    CHECK(!dc.OverlapsEnabledAbove(0, 5.0f, 0, 4, 7.8f, 4, 5.0f + step, ux, uy, uz));
+    // Feet on the ground: the same slab IS an obstacle.
+    CHECK(dc.OverlapsEnabledAbove(0, 0.0f, 0, 4, 2.8f, 4, 0.0f + step, ux, uy, uz));
+    // And it still supports from below.
+    CHECK_NEAR(dc.TopUnder(2, 2, -999.0f), 6.0f, 0.001f);
+
+    // The same rule measured along a TILTED up: with up = +X the slab's "top" is
+    // its maxX (4), so feet at x=3.5 are within a step and it must not block, while
+    // feet at x=0 are 4 units below the top and it must.
+    CHECK_NEAR(DynamicCollision::TopAlongUp(0, 0, 0, 4, 6, 4, 1, 0, 0), 4.0f, 0.001f);
+    CHECK(!dc.OverlapsEnabledAbove(3.5f, 0, 0, 5.0f, 2.8f, 4, 3.5f + step, 1, 0, 0));
+    CHECK(dc.OverlapsEnabledAbove(0, 0, 0, 2.8f, 2.8f, 4, 0.0f + step, 1, 0, 0));
+
+    // A DISABLED blocker must not block even when far above the step tolerance -
+    // this is the entire point of the quantum toggle.
+    dc.SetEnabled(0, false);
+    CHECK(!dc.OverlapsEnabledAbove(0, 0, 0, 4, 2.8f, 4, 0.0f + step, ux, uy, uz));
+
     dc.Clear();
     CHECK(dc.Count() == 0);
     return 0;

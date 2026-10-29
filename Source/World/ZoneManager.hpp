@@ -56,10 +56,22 @@ struct PointRegion {
     ZoneType primaryZoneType = ZoneType::ZONE_WATER; // type of primary zone
     std::unordered_set<int> activeZoneIds;   // all overlapping zones this frame
     ZoneEnvOverrides combinedEnv;            // merged from all active zones
+    // Bitmask of EVERY active zone type, not just the primary one. A CRT or
+    // gravity pocket authored INSIDE a water/sky volume is not the primary zone
+    // (priority/volume decides that), so `HasZoneType()` - which is primary-only -
+    // would never see it. Zone effects that should fire from anywhere inside the
+    // volume read this instead. One bit per ZoneType; ZoneType is uint8_t and the
+    // enum has 8 values, so a uint32_t is the whole space.
+    uint32_t activeTypeMask = 0;
 
     // `activeZones` must be sorted highest-priority-first (see GetActiveZones).
     void Rebuild(const std::vector<ZoneVolumeNode*>& activeZones);
+    // Primary-zone test (the zone that owns the player's physics/env).
     bool HasZoneType(ZoneType type) const { return primaryZoneId >= 0 && primaryZoneType == type; }
+    // Any-active-zone test (an effect pocket anywhere inside the player's volume).
+    bool HasZoneTypeIn(ZoneType type) const {
+        return (activeTypeMask & (1u << (int)type)) != 0;
+    }
     bool HasZoneId(int id) const;
 };
 

@@ -66,6 +66,46 @@ public:
         return false;
     }
 
+    // AABB overlap against any ENABLED blocker whose TOP is above `floorUp`,
+    // measured ALONG the gravity axis.
+    //
+    // This is the obstacle test, not the raw overlap test: a blocker whose top is
+    // at or below the player's feet + step tolerance is a FLOOR (the ground clamp
+    // supports them on it), exactly like the static CSG path's
+    // `vol.aabb.max.y <= feetUp + kStepHeight` rule. Without the distinction a
+    // quantum floor would block the player from standing on it.
+    //
+    // `up` arrives as three floats because this header is deliberately raylib-free
+    // (it links from the headless harness); `floorUp` is dot(feetPoint, up).
+    bool OverlapsEnabledAbove(float minX, float minY, float minZ,
+                              float maxX, float maxY, float maxZ,
+                              float floorUp,
+                              float ux, float uy, float uz) const {
+        for (const auto& b : m_blocks) {
+            if (!b.enabled) continue;
+            if (TopAlongUp(b, ux, uy, uz) <= floorUp) continue;
+            if (minX < b.maxX && maxX > b.minX &&
+                minY < b.maxY && maxY > b.minY &&
+                minZ < b.maxZ && maxZ > b.minZ)
+                return true;
+        }
+        return false;
+    }
+
+    // Highest point of an AABB along the unit axis `up`, as a coordinate along that
+    // axis: the max projection of its 8 corners, which is the per-axis corner chosen
+    // by the SIGN of each up component. For up == +Y this is just maxY.
+    static float TopAlongUp(const DynamicBlocker& b, float ux, float uy, float uz) {
+        return TopAlongUp(b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ, ux, uy, uz);
+    }
+    static float TopAlongUp(float minX, float minY, float minZ,
+                            float maxX, float maxY, float maxZ,
+                            float ux, float uy, float uz) {
+        return (ux >= 0.0f ? maxX * ux : minX * ux) +
+               (uy >= 0.0f ? maxY * uy : minY * uy) +
+               (uz >= 0.0f ? maxZ * uz : minZ * uz);
+    }
+
     // Highest ENABLED blocker top that contains (x, z), i.e. the floor the
     // side-list would support a point with. Returns `none` when nothing is under
     // the point (same convention as the ground sampler's kNoGroundY).

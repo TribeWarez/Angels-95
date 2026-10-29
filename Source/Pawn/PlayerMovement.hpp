@@ -35,7 +35,11 @@ public:
     int HeadBob = 0;
     int HeadBobDirection = 1;
 
-    float velocityY = 0.2f;
+    // Speed ALONG the gravity axis (`up`): positive is jumping/rising, negative is
+    // falling. Was `velocityY` when the world was Y-up only; gravity has no
+    // component perpendicular to `up`, so a scalar is still the whole story in a
+    // tilted / inverted zone - only the axis it is measured on changed.
+    float velocityUp = 0.2f;
     bool onGround = false;
     bool isFlying = false;
     bool isNoClip = false;
@@ -73,6 +77,68 @@ public:
     void AdvanceGravity(float dt) {
         if (gravityBlend < 1.0f)
             gravityBlend = fminf(1.0f, gravityBlend + dt / kGravityLerpSeconds);
+    }
+
+    // --- Gravity ORIENTATION (Phase 7.1b) ---
+    // `up` is the axis the player's body, movement basis, ground clamp and camera
+    // are built from: the unit opposite of the effective gravity. It is eased on
+    // the same 0.3 s budget as the gravity vector so entering an inverted or
+    // wall-walking zone reads as a camera roll rather than a snap.
+    //
+    // In +Y gravity this is exactly {0,1,0}, which is why every consumer below can
+    // keep a Y-up fast path and ordinary worlds behave identically.
+    Vector3 up{0.0f, 1.0f, 0.0f};
+
+    Vector3 TargetUp() const {
+        Vector3 g = EffectiveGravity();
+        const float m = sqrtf(g.x * g.x + g.y * g.y + g.z * g.z);
+        if (m < 1e-4f) return up;      // zero-g: keep the orientation we have
+        return { -g.x / m, -g.y / m, -g.z / m };
+    }
+
+    // Normalize-lerp toward TargetUp(). Slerp would need an axis/angle; for unit
+    // vectors nlerp traces the same arc to within float error and cannot produce
+    // a NaN when the two are antiparallel (slerp's sin(theta) does).
+    void AdvanceUp(float dt) {
+        const Vector3 target = TargetUp();
+        const float k = fminf(1.0f, dt / kGravityLerpSeconds);
+        Vector3 n = { up.x + (target.x - up.x) * k,
+                      up.y + (target.y - up.y) * k,
+                      up.z + (target.z - up.z) * k };
+        const float m = Vector3Length(n);
+        if (m > 1e-5f) up = { n.x / m, n.y / m, n.z / m };
+    }
+
+    // Some unit vector perpendicular to `v`, for the degenerate basis case.
+    static Vector3 AnyPerpendicular(const Vector3& v) {
+        // Cross with whichever world axis is least parallel, so the result is never
+        // near-zero (a zero basis makes BuildFrustum's right vector NaN and the
+        // viewport renders BLACK - the documented ResetCamera failure class).
+        Vector3 axis = (fabsf(v.y) < 0.9f) ? Vector3{0, 1, 0} : Vector3{1, 0, 0};
+        Vector3 p = Vector3CrossProduct(v, axis);
+        return Vector3Normalize(p);
+    }
+
+    // Yaw-relative forward, projected onto the plane perpendicular to `up`.
+    // At +Y gravity this is exactly {sin yaw, 0, cos yaw} - the old basis.
+    Vector3 ForwardOnPlane() const {
+        Vector3 f = { sinf(Yaw), 0.0f, cosf(Yaw) };
+        f = Vector3Subtract(f, Vector3Scale(up, Vector3DotProduct(f, up)));
+        const float m = Vector3Length(f);
+        if (m < 1e-4f) return AnyPerpendicular(up);   // yaw aimed along up
+        return Vector3Scale(f, 1.0f / m);
+    }
+    // right = cross(forward, up); at +Y this is {-cos yaw, 0, sin yaw}.
+    Vector3 RightOnPlane() const {
+        return Vector3Normalize(Vector3CrossProduct(ForwardOnPlane(), up));
+    }
+
+    // Where the camera looks: yaw on the `up` plane, then pitch about its right
+    // axis. At +Y this reproduces the old {cos p sin y, sin p, cos p cos y}.
+    Vector3 LookDir() const {
+        return Vector3Normalize(Vector3Add(
+            Vector3Scale(ForwardOnPlane(), cosf(Pitch)),
+            Vector3Scale(up, sinf(Pitch))));
     }
 
     // --- Controller tuning ---
@@ -125,11 +191,19 @@ public:
         // Re-sync the authoritative look when the camera's facing changed
         // externally (first frame, teleport, respawn). Vertical drift from the
         // jump/gravity code is tiny, so it stays below the mismatch threshold.
+        //
+        // Basis-aware: the old comparison built a WORLD-Y look direction, so in a
+        // tilted-gravity zone (where the camera is rolled) it never matched and this
+        // block re-initialised yaw from the camera EVERY frame - the view fought the
+        // mouse. Pitch is measured against `up` and yaw from the projected XZ
+        // direction, which keeps the same yaw convention at any orientation.
+        cam.up = up;
         Vector3 camDir = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
-        Vector3 lookDir = {cosf(Pitch) * sinf(Yaw), sinf(Pitch), cosf(Pitch) * cosf(Yaw)};
-        if (!LookInit || Vector3DotProduct(camDir, lookDir) < 0.9f) {
-            Yaw = atan2f(camDir.x, camDir.z);
-            Pitch = asinf(fmaxf(-1.0f, fminf(1.0f, camDir.y)));
+        if (!LookInit || Vector3DotProduct(camDir, LookDir()) < 0.9f) {
+            Vector3 flat = Vector3Subtract(camDir, Vector3Scale(up, Vector3DotProduct(camDir, up)));
+            if (Vector3Length(flat) > 1e-4f)
+                Yaw = atan2f(flat.x, flat.z);
+            Pitch = asinf(fmaxf(-1.0f, fminf(1.0f, Vector3DotProduct(camDir, up))));
             LookInit = true;
         }
 
@@ -164,10 +238,14 @@ public:
         if (isSprinting) speed *= SprintMultiplier;
         if (isCrouching) speed *= CrouchMultiplier;
 
-        Vector3 forward = {sinf(Yaw), 0.0f, cosf(Yaw)};
-        // Right-hand strafe: cross(forward, up) for a Y-up camera.
-        Vector3 right   = {-cosf(Yaw), 0.0f, sinf(Yaw)};
-        Vector3 move = {forward.x * f + right.x * r, 0.0f, forward.z * f + right.z * r};
+        // Movement in the plane perpendicular to `up`. Both basis vectors are unit
+        // and lie in that plane, so the sum needs no further projection - and at
+        // +Y gravity this is bit-for-bit the old {forward*f + right*r, y=0}.
+        //
+        // Do NOT remap the input axes: yaw still means the same thing to the
+        // player, the plane just tilts under them.
+        Vector3 move = Vector3Add(Vector3Scale(ForwardOnPlane(), f),
+                                  Vector3Scale(RightOnPlane(), r));
         float dist = speed * dt;
 
         // Split into sub-steps so a sprint step cannot tunnel through a thin
@@ -175,33 +253,44 @@ public:
         int steps = (int)(dist / 0.5f) + 1;
         for (int i = 0; i < steps; i++) {
             float s = dist / (float)steps;
-            cam.position.x += move.x * s;
-            cam.position.z += move.z * s;
+            cam.position = Vector3Add(cam.position, Vector3Scale(move, s));
         }
 
         // Rebuild the look target from the owned yaw/pitch.
-        Vector3 dir = {cosf(Pitch) * sinf(Yaw), sinf(Pitch), cosf(Pitch) * cosf(Yaw)};
-        cam.target = Vector3Add(cam.position, Vector3Scale(dir, LookDistance));
+        cam.target = Vector3Add(cam.position, Vector3Scale(LookDir(), LookDistance));
+        cam.up = up;
     }
 
-    // Collision box in world space, measured from the FEET upward.
+    // Collision box in world space, measured from the FEET upward along `up`.
     //
     // The box deliberately spans [feet, feet + Height] rather than
     // [cam.y - Height, cam.y]: the old anchoring hung most of the box below the
     // feet, where OverlapsObstacle's "top at/below the feet is a floor, not an
     // obstacle" rule discarded it, so the effective body was only EyeHeight tall
     // and Height did nothing. Anchoring to the feet makes Height meaningful and
-    // makes ceilings below feet+Height solid.
+    // makes ceilings below feet+Height solid. Crouching works because EyeHeight is
+    // the SMOOTHED value, so the box ducks as the stance settles.
     //
-    // Uses the smoothed EyeHeight so crouching (1.2) ducks under low ceilings.
+    // The body is Width across and Height tall, oriented along the gravity up axis,
+    // and the query world is AABB-only - so the box is the tightest world-AABB that
+    // CONTAINS that oriented body (it over-covers near 90 degrees, never under-covers).
+    // Per axis the perpendicular half-extent of a disc of radius w whose normal is
+    // `up` is w*sqrt(1 - up_i^2); at +Y gravity that collapses to exactly the old
+    // {x +- Width/2, feet..feet+Height, z +- Width/2} box.
     void UpdateBounds(Camera3D& cam) {
-        const float feet = cam.position.y - EyeHeight;
+        const float w = Width * 0.5f;
+        const Vector3 feet = Vector3Subtract(cam.position, Vector3Scale(up, EyeHeight));
+        const Vector3 head = Vector3Add(feet, Vector3Scale(up, Height));
+        const Vector3 half = {
+            w * sqrtf(fmaxf(0.0f, 1.0f - up.x * up.x)),
+            w * sqrtf(fmaxf(0.0f, 1.0f - up.y * up.y)),
+            w * sqrtf(fmaxf(0.0f, 1.0f - up.z * up.z)) };
         PlayerBounds = (BoundingBox){
-            (Vector3){cam.position.x - Width / 2,
-                       feet,
-                       cam.position.z - Width / 2},
-            (Vector3){cam.position.x + Width / 2,
-                       feet + Height,
-                       cam.position.z + Width / 2}};
+            (Vector3){fminf(feet.x, head.x) - half.x,
+                      fminf(feet.y, head.y) - half.y,
+                      fminf(feet.z, head.z) - half.z},
+            (Vector3){fmaxf(feet.x, head.x) + half.x,
+                      fmaxf(feet.y, head.y) + half.y,
+                      fmaxf(feet.z, head.z) + half.z}};
     }
 };

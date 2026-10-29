@@ -449,7 +449,7 @@ static void ExecuteConsoleCommand(const char* cmd) {
         g_playerMovement.isFlying = !g_playerMovement.isFlying;
         if (g_playerMovement.isFlying) {
             g_playerMovement.onGround = false;
-            g_playerMovement.velocityY = 0.0f;
+            g_playerMovement.velocityUp = 0.0f;
             OZ_INFO("FLY enabled");
         } else {
             OZ_INFO("FLY disabled");
@@ -458,7 +458,7 @@ static void ExecuteConsoleCommand(const char* cmd) {
         g_playerMovement.isNoClip = !g_playerMovement.isNoClip;
         if (g_playerMovement.isNoClip) {
             g_playerMovement.onGround = false;
-            g_playerMovement.velocityY = 0.0f;
+            g_playerMovement.velocityUp = 0.0f;
             OZ_INFO("NOCLIP enabled");
         } else {
             OZ_INFO("NOCLIP disabled");
@@ -1253,9 +1253,12 @@ ShowSpellbook = false;
         g_playerMovement.OldY = AngelTechData.MainCamera.position.y;
         g_playerMovement.OldZ = AngelTechData.MainCamera.position.z;
 
-        // Save Y so the vertical physics below can own it (the horizontal
-        // controller never touches Y).
-        float savedCamY = AngelTechData.MainCamera.position.y;
+        // Save the position so the vertical physics below can own the along-up
+        // coordinate (the horizontal controller only moves tangentially). This used
+        // to be `savedCamY`, which is the same thing only while up == +Y: in a
+        // gravity zone the body's vertical is tilted, and restoring world Y would
+        // teleport it sideways.
+        Vector3 savedCamPos = AngelTechData.MainCamera.position;
 
         // Custom first-person controller: mouse look + WASD at a speed derived
         // from the player entity's authored movement_speed, with hold-Shift
@@ -1342,10 +1345,13 @@ ShowSpellbook = false;
                         break;
                     case ZoneType::ZONE_GRAVITY:
                         // Gravity is driven entirely by the zone's PhysicsInfo
-                        // (gravity_vector= / gravity=), applied in
-                        // PlayerPhysics::UpdateGroundVertical via zonePhysics.
-                        // No flag here: the vector is the state. Horizontal
-                        // gravity + camera re-orientation are follow-up work.
+                        // (gravity_vector= / gravity= via `zonePhysics` above) and by
+                        // PlayerMovement::up, which PlayerController::UpdateVertical
+                        // advances toward -normalize(effective gravity) on the same
+                        // blend. Movement input is projected onto the plane
+                        // perpendicular to that up, and the camera's `up` follows it,
+                        // so horizontal/upward gravity works without remapping WASD.
+                        // No flag here: the vector is the state.
                         break;
                     default:
                         break;
@@ -1364,7 +1370,7 @@ ShowSpellbook = false;
         const bool verticalBlocked = g_consoleOpen || ShowInventory || ShowSkillTree || ShowSpellbook;
         for (int s = 0; s < move_steps; ++s) {
             PlayerController::Instance().UpdateVertical(kMoveDt, AngelTechData.MainCamera,
-                                                        savedCamY, verticalBlocked, zonePhysics);
+                                                        savedCamPos, verticalBlocked, zonePhysics);
         }
 
         const bool uiBlocking = ShowSettings || ShowInventory || ShowSkillTree || ShowSpellbook || g_consoleOpen;
@@ -1434,6 +1440,17 @@ ShowSpellbook = false;
             grade.bloomStrength = PostFXEnabled ? PostBloom : 0.0f;
             grade.vignette      = PostFXEnabled ? PostVignette : 0.0f;
         }
+
+        // ZONE_CRT drives PostFX's optional warp pass. This reads the ANY-active-zone
+        // type mask, not the primary type: a CRT pocket authored inside a water or
+        // sky volume is usually not the priority winner, so HasZoneType() (primary
+        // only) would never see it and the zone would silently do nothing.
+        // Suppressed in --shot mode for the same reason pixel/jitter/fog are: a
+        // capture must show the authored world, not a player-state effect.
+        oz::PostFX::Instance().SetWarpTarget(
+            (!g_shot.active &&
+             ZoneManager::Instance().GetPlayerRegion().HasZoneTypeIn(ZoneType::ZONE_CRT))
+                ? 1.0f : 0.0f);
 
         // Resolve the HDR scene through bloom + grade into the LDR result. The
         // Pixel/Jitter post shaders below still expect a display-ready texture, so

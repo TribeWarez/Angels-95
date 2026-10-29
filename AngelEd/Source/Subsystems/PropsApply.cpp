@@ -139,8 +139,12 @@ void ApplyPanelProperties(const std::vector<ed::Event>& events) {
                     zone.bounds.min = {px - szx*0.5f, py - szy*0.5f, pz - szz*0.5f};
                     zone.bounds.max = {px + szx*0.5f, py + szy*0.5f, pz + szz*0.5f};
                     // Type/intensity/script-hook name (exported by ExportToOzone)
+                    // ZoneType is written straight through. The `> 4` clamp that
+                    // used to live here (and in two places in PropsPanel.cpp) is
+                    // what silently turned a gravity zone into water on Apply.
                     int zt = g_editorPanels.propZoneType;
-                    if (zt < 0 || zt > 4) zt = 0;
+                    if (zt < 0 || zt > (int)ZoneType::ZONE_CRT)
+                        zt = (int)ZoneType::ZONE_WATER;
                     zone.zoneType = (ZoneType)zt;
                     if (g_editorPanels.propZoneIntensity > 0.0f)
                         zone.intensity = g_editorPanels.propZoneIntensity;
@@ -153,8 +157,25 @@ void ApplyPanelProperties(const std::vector<ed::Event>& events) {
                             if (sky.name == oldName) sky.name = g_editorPanels.propZoneName;
                         zone.name = g_editorPanels.propZoneName;
                     }
-                    // Per-zone physics overrides (exported by ExportToOzone)
-                    zone.physics.gravity = g_editorPanels.propZoneGravity;
+                    // Per-zone physics overrides (exported by ExportToOzone).
+                    //
+                    // `gravity` is the DOWN magnitude and `gravityVector` is the
+                    // value the runtime actually integrates (PhysicsInfo keeps
+                    // both; `gravity=` writes both, `gravity_vector=` writes only
+                    // the vector). Writing the scalar alone left the vector at its
+                    // {0,-18,0} default, so a Gravity field edit in this panel was
+                    // silently ignored - and rewriting the vector unconditionally
+                    // would flatten a hand-authored `gravity_vector=` tilt just
+                    // because someone pressed Apply. So sync only when the row
+                    // actually changed, which is exactly the "a value the author
+                    // set always wins" rule the whole surface/light def system follows.
+                    {
+                        const float edited = g_editorPanels.propZoneGravity;
+                        if (fabsf(edited - zone.physics.gravity) > 1e-4f) {
+                            zone.physics.gravity = edited;
+                            zone.physics.gravityVector = {0.0f, -edited, 0.0f};
+                        }
+                    }
                     zone.physics.jumpSpeed = g_editorPanels.propZoneJump;
                     zone.physics.terminalVelocity = g_editorPanels.propZoneTerminal;
                     zone.physics.waterGravity = g_editorPanels.propZoneWaterGravity;

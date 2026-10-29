@@ -86,6 +86,11 @@ build/cmake*
 # is why the rule matches contents (/*) instead of the directory - git cannot
 # re-include files from inside an excluded directory.
 GameData/Screenshots/*
+# Editor gallery (README "Editor" section). These were ignored while the README
+# linked them, so GitHub showed broken images even though the files existed in
+# a developer checkout.
+!GameData/Screenshots/Editor.png
+!GameData/Screenshots/AngelEd_b122.png
 !GameData/Screenshots/CitadelRuins_*.png
 !GameData/Screenshots/Dessert_Dreams_*.png
 !GameData/Screenshots/Dust_Ravine_*.png

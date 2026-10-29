@@ -28,9 +28,10 @@ public:
     int ConsumeMoveSteps(float frameTime, int maxSteps = 4);
     static constexpr float MoveDeltaSeconds() { return 1.0f / 60.0f; }
 
-    // Jump / Fly / Noclip / Water vertical integration for one fixed step.
-    // Gravity/water/ladder constants come from the active zone's PhysicsInfo.
-    void UpdateVertical(float dt, Camera3D& cam, float savedCamY, bool uiBlocked,
+    // Jump / Fly / Noclip / Water integration for one fixed step, ALONG the
+    // player's gravity axis (`g_playerMovement.up`, advanced here). Gravity/water/
+    // ladder constants come from the active zone's PhysicsInfo.
+    void UpdateVertical(float dt, Camera3D& cam, Vector3 savedCamPos, bool uiBlocked,
                         const oz::physics::PhysicsInfo& phys);
 
     // Play the jump one-shot (called by UpdateVertical when a jump is detected).

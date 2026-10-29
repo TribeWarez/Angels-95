@@ -6,6 +6,7 @@
 #include "../Pawn/OzPawnSystem.hpp"
 #include "../Physics/WorldChunk.hpp"
 #include "../Physics/AutoConvex.hpp"   // AutoConvexFail, for AppendAutoConvexCollision
+#include "../Physics/DynamicCollision.hpp"   // quantum obstacles (SURF_QUANTUM)
 #include "OzoneParser.hpp"
 #include "SurfaceFlags.hpp"
 #include "BrushMesh.hpp"   // oz::brushmesh builders (raylib-free, unit-tested)
@@ -93,6 +94,14 @@ struct OzoneRenderable {
     int   cylSlices = 0;         // 0 = derive from the loaded mesh
     BoundingBox bounds{{0,0,0},{0,0,0}}; // world-space AABB for frustum culling
     bool hasBounds = false;      // true once bounds is meaningful
+    // --- Quantum obstacle state (Phase 7.2) --------------------------------
+    // `quantumHidden` is written ONCE per frame by Core.hpp's UpdateQuantumObstacles,
+    // from the same AabbInFrustum test the world pass would use, so this pass, the
+    // dynamic side-list and the editor cannot disagree about the brush's state
+    // within a frame. `isQuantum` is resolved at RebuildCollisionVolumes and marks
+    // the brush as side-list owned. Non-quantum brushes stay false/false.
+    bool quantumHidden = false;
+    bool isQuantum     = false;
 };
 
 // ---------------------------------------------------------------------------
@@ -256,6 +265,18 @@ public:
     // Collision volumes for OZONE brush primitives
     const std::vector<OzoneCollisionVolume>& GetCollisionVolumes() const { return m_collisionVolumes; }
     void RebuildCollisionVolumes();
+
+    // Dynamic collision side-list (Phase 7.2 quantum obstacles). Rebuilt by
+    // RebuildCollisionVolumes(): one blocker per SURF_QUANTUM brush, in
+    // m_quantumIndices order, and those brushes are excluded from the static CSG
+    // output because a toggled brush cannot live in a CSG result (it carries no
+    // brush identity). The runtime consultation lives in Core.hpp's
+    // EngineCollisionQuery; the per-frame toggle lives in UpdateQuantumObstacles.
+    oz::physics::DynamicCollision& GetDynamicCollision() { return m_dynamicCollision; }
+    const oz::physics::DynamicCollision& GetDynamicCollision() const { return m_dynamicCollision; }
+    // Renderable indices that carry SURF_QUANTUM, in the same order as the
+    // side-list blockers (index i in one names index i in the other).
+    const std::vector<int>& GetQuantumIndices() const { return m_quantumIndices; }
 
     // CSG overflow count from the most recent RebuildCollisionVolumes(). Non-zero
     // means at least one sub/intersect brush hit the per-brush carve budget and
@@ -476,6 +497,11 @@ private:
     static Shader s_backupLitFogShader;
     std::vector<OzoneRenderable> m_renderables;
     std::vector<OzoneCollisionVolume> m_collisionVolumes;
+    // Quantum obstacle side-list + the renderable indices it mirrors, rebuilt
+    // together by RebuildCollisionVolumes(). Both empty in a world with no
+    // SURF_QUANTUM brush, which is what makes the per-frame toggle free there.
+    oz::physics::DynamicCollision m_dynamicCollision;
+    std::vector<int> m_quantumIndices;
     WorldChunkManager m_chunkManager;
     bool m_drawCollisionProxies = false;  // editor-only debug view of SURF_COLLISION_PROXY
     float m_worldAmbient[4] = {0.1f, 0.1f, 0.1f, 1.0f};  // see SetWorldAmbient

@@ -96,6 +96,7 @@ The slice promises **route choice**, not build choice: two lines through each of
 | 01 SilentPines | arrival plateau, 18u above the gorge | read the descent; no threat in reach | the whole valley in one view | — |
 | | 19-step descent | commit to the stair, not the cliff edge | safe passage | a deliberate leap off the rim (this build has no fall damage; the rim is 1.4 high, so a walk-off is blocked and only a jump costs you the stair) |
 | | bridge + shrine | fight on the bridge or wade the river | sword at the altar, ammo | sword is missed |
+| | optional machine scar (behind the falls) | read the curtain, then look up in the quantum vault | `shotgun_01` + supplies | supplies are missed; the shrine exit is unaffected |
 | | shrine → portal | walk out through the shrine | completion + Megacity Grid | stay in the gorge |
 | 02 MegacityGrid | south avenue | see deck + tower over the gate | the route map | arrive under the deck instead |
 | | crossroads | fight or flank behind the newsstand | rifle on the deck | rifle is missed |

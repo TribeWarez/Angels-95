@@ -106,8 +106,17 @@ static const char* WDLZoneTypeName(ZoneType t) {
         case ZoneType::ZONE_SKY: return "sky";
         case ZoneType::ZONE_REVERB: return "reverb";
         case ZoneType::ZONE_GAMEPLAY_SOUND: return "sound";
-        default: return "water";
+        // ZONE_GRAVITY and ZONE_PORTAL used to fall through to "water" here, so
+        // ExportToOzone rewrote a gravity zone as a water zone on the first
+        // save. ZoneTypeFromString accepts both tokens, so the round-trip is
+        // lossless now. Keep this switch exhaustive: a new ZoneType with no
+        // case is a silent type change on save, not a compile error.
+        case ZoneType::ZONE_GRAVITY: return "gravity";
+        case ZoneType::ZONE_CRT: return "crt";
+        case ZoneType::ZONE_PORTAL: return "portal";
+        case ZoneType::ZONE_WATER: break;
     }
+    return "water";
 }
 
 static const char* OzonePrimName(int typeId) {

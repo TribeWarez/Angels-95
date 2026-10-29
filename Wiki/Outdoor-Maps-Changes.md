@@ -112,6 +112,59 @@ Residuals: a ≤5-level step at the **U** face boundary (each face still supplie
 
 
 
+## Machine Scar branch (Sektor_01)
+
+The falls' backing rock now has a 10-wide, 6-high opening, hidden behind a wider
+waterfall sheet and a dog-leg baffle. It leads to an optional three-room branch
+built to exercise the Phase-7 mechanics in real content:
+
+| Room | Mechanic | Read / affordance |
+|---|---|---|
+| The Choir (south) | `zone gravity ... gravity=-18` (straight up) | A 26-unit shaft with full-height ribs and 8/16/24 bands; the ceiling ring and the top gallery are the visible destination. A `zone ladder` in the entry corridor is the return. |
+| The Wound (east) | `zone crt` | A signal room with a screen bank on the entry wall, a reader pedestal, and cool blue/cyan lamps. The warp is per-frame, so `--shot` deliberately captures it off. |
+| The Vault (north) | `SURF_QUANTUM` brushes | A quantum seal in the corridor and a quantum bridge over a 4-deep pit, on the entry axis. A bright ceiling eye is the "look up" cue; the bridge is solid only while it is out of the frustum. A 0.8-step block pile makes a fall recoverable. |
+
+Design rules used:
+
+- The branch is a loop, not a corridor: enter through the falls, exit down the
+  ladder. It pays a `shotgun_01` and supplies, and never gates the shrine exit.
+- The pit is on the entry axis so the choice is readable in one frame; the
+  quantum bridge is deliberately never visible while solid.
+- The interior is a separate sky volume (`silentpines_scar`) nested inside
+  `silentpines_sky`; `UpdateSkyZone` takes the smallest containing volume, so the
+  dark fog/ambient and its `say` line win inside and the gorge def resumes at
+  the tunnel mouth.
+- All ceilings are 5.05+ above standable surfaces, all walkable rises are
+  <= 0.9, and `worldcheck` reports 0 errors and 0 headroom traps.
+
+The larger-world fix that made this branch possible is in the renderer: the old
+zone-membership PVS culled the shrine and the river whenever the camera left
+their local zone. `DrawWorldGeometry` now culls only by frustum + explicit
+occluder planes (see `AGENTS.md`). Verify with:
+
+```text
+./worldcheck GameData/Worlds/Sektor_01_SilentPines/World.ozone
+client --shot --world Sektor_01_SilentPines --shot-cam "60,0,1.65,90,0"
+```
+
+### Large-world readability fixes in the same pass
+
+- **The bridge rail was hiding the shrine.** The rail topped out at 2.2 while the
+  eye is 1.65; at 8.6 units it blocked ~3.7°, and the 5.4-high shrine columns at
+  60 units subtend ~3.6°. The sword was technically in the level and invisible
+  from the bridge. The rail is now 1.0 high (top 1.7), so the altar/sword reads
+  from the bridge as the design promises.
+- **The plateau's east face was the grass box itself**, so the descent stair
+  climbed a green wall. A 1-unit rock veneer (`Rock_Diffuse.png`) now faces the
+  cliff; the stair reads as a cut in stone.
+- **Large brushes used the same UV multiplier as a crate.** At the original
+  2-3.5 range, a 26-high, 62-long cliff repeated its tile hundreds of times and
+  read as noise. The outdoor cliff/ground surfaces now use 0.2-0.8 (grass stays
+  finer than stone), while the scar's interiors use 0.2.
+- `worldcheck` on the extended world: **0 errors, 0 headroom traps**, 231 solid
+  brushes, 17 point lights, 8 zones, 405 primitives. The only warning is the
+  pre-existing second `playerstart`.
+
 ## Known visual limitations (engine-level, not content bugs)
 
 1. **Sky box cube seams - fixed (see above).** The hard panels, the cap band and the corner

@@ -1,0 +1,25 @@
+// Sektor_01_SilentPines - interior sky volume behind the falls
+// (name=silentpines_scar in World.ozone).
+//
+// This volume is nested inside silentpines_sky. UpdateSkyZone chooses the
+// smallest containing sky volume, so the scar's dark fog and its on_enter line
+// win while the player is inside, and the outer gorge def resumes the moment
+// the tunnel mouth is behind them.
+entity "silentpines_scar" : skyzone {
+    fog_color = (0.06, 0.08, 0.10)
+    fog_density = 0.018
+    ambient_light = (0.11, 0.13, 0.16)
+    skybox = "GameData/Tex/Global/Sky/sky_day.png"
+    actions {
+        on_enter {
+            set_fog 0.06 0.08 0.10 0.018
+            set_ambient 0.11 0.13 0.16
+            set_skybox "GameData/Tex/Global/Sky/sky_day.png"
+            say "Behind the falls the air is wrong - the light bends."
+        }
+        on_exit {
+            restore_fog
+            restore_skybox
+        }
+    }
+}

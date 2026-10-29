@@ -27,6 +27,33 @@ static void PostApplyProperties() {
     ed::EventBus::instance().post(ed::Ev::ApplyProperties, ref);
 }
 
+// Zone Type combo: an explicit label -> ZoneType TABLE, never a positional cast.
+// The combo used to be a hardcoded 5-item list whose index was cast straight to
+// ZoneType, with a `> 4` clamp in three separate places (build here, read below,
+// and the zone-load path). ZONE_GRAVITY is 6, so it could not be shown, could not
+// be selected, and was clamped back to WATER on load - and `WDLZoneTypeName` then
+// exported the wrong token, so a gravity zone silently became a water zone on the
+// first save. Every site that maps a combo index to a type (and back) reads THIS
+// table; do not reintroduce an index clamp.
+struct ZoneTypeChoice { const wchar_t* label; ZoneType type; };
+static const ZoneTypeChoice kZoneTypeChoices[] = {
+    { L"water",   ZoneType::ZONE_WATER },
+    { L"ladder",  ZoneType::ZONE_LADDER },
+    { L"sky",     ZoneType::ZONE_SKY },
+    { L"reverb",  ZoneType::ZONE_REVERB },
+    { L"sound",   ZoneType::ZONE_GAMEPLAY_SOUND },
+    { L"gravity", ZoneType::ZONE_GRAVITY },
+    { L"crt",     ZoneType::ZONE_CRT },
+};
+static const int kZoneTypeChoiceCount =
+    (int)(sizeof(kZoneTypeChoices) / sizeof(kZoneTypeChoices[0]));
+
+static int ZoneTypeChoiceIndex(ZoneType t) {
+    for (int i = 0; i < kZoneTypeChoiceCount; i++)
+        if (kZoneTypeChoices[i].type == t) return i;
+    return 0;   // unknown -> water, the historical default
+}
+
 static const int ID_PP_POSX  = 401;
 static const int ID_PP_POSY  = 402;
 static const int ID_PP_POSZ  = 403;
@@ -1073,10 +1100,9 @@ static void PopulatePropertiesPanel(HWND hwnd) {
             HWND hCombo = CreateWindowEx(0, L"COMBOBOX", L"",
                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST,
                 x + lw, y, ew, 200, hwnd, (HMENU)(INT_PTR)ID_PP_ZONETYPE, g_hInst, nullptr);
-            const wchar_t* zt[] = { L"water", L"ladder", L"sky", L"reverb", L"sound" };
-            for (auto* t : zt) SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)t);
-            int zsel = g_editorPanels.propZoneType;
-            if (zsel < 0 || zsel > 4) zsel = 0;
+            for (int i = 0; i < kZoneTypeChoiceCount; i++)
+                SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)kZoneTypeChoices[i].label);
+            int zsel = ZoneTypeChoiceIndex((ZoneType)g_editorPanels.propZoneType);
             SendMessage(hCombo, CB_SETCURSEL, zsel, 0);
         }
         y += rowH;
@@ -1579,7 +1605,8 @@ case WM_USER + 50: {
             g_editorPanels.propPortalSpawn[2] = readFloat(ID_PP_PSPAWNZ, g_editorPanels.propPortalSpawn[2]);
             if (HWND hz = GetDlgItem(hwnd, ID_PP_ZONETYPE)) {
                 int s = (int)SendMessage(hz, CB_GETCURSEL, 0, 0);
-                if (s >= 0 && s <= 4) g_editorPanels.propZoneType = s;
+                if (s >= 0 && s < kZoneTypeChoiceCount)
+                    g_editorPanels.propZoneType = (int)kZoneTypeChoices[s].type;
             }
             if (HWND hb = GetDlgItem(hwnd, ID_PP_PBIDIR))
                 g_editorPanels.propPortalBidir =
@@ -1981,7 +2008,8 @@ g_editorPanels.propLightTarget[0] = l->target.x;
             for (auto& z : ZoneManager::Instance().GetZones()) {
                 if ((int)z.id == g_editorPanels.propsTargetIndex) {
             g_editorPanels.propZoneType = (int)z.zoneType;
-            if (g_editorPanels.propZoneType > 4) g_editorPanels.propZoneType = 0;
+            // No `> 4` clamp: ZONE_GRAVITY is 6 and is a real, selectable type.
+            // ZoneTypeChoiceIndex() already maps an unknown value to water.
             g_editorPanels.propZoneIntensity = z.intensity;
             g_editorPanels.propZoneName = z.name;
             g_editorPanels.propZoneGravity = z.physics.gravity;

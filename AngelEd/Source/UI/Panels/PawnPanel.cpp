@@ -268,7 +268,8 @@ PawnTreeNode BuildPawnTree() {
     zoneBranch.label = "ZoneVolumeNode";
     zoneBranch.isExpanded = false;
     zoneBranch.typeTag = "category";
-    const char* zoneTypes[] = {"ZONE_WATER", "ZONE_LADDER", "ZONE_SKY", "ZONE_REVERB", "ZONE_GAMEPLAY_SOUND"};
+    const char* zoneTypes[] = {"ZONE_WATER", "ZONE_LADDER", "ZONE_SKY", "ZONE_REVERB",
+                               "ZONE_GAMEPLAY_SOUND", "ZONE_GRAVITY", "ZONE_CRT"};
     for (auto& zt : zoneTypes) {
         PawnTreeNode leaf;
         leaf.label = zt;
@@ -391,12 +392,16 @@ static ed::Ev PlacementKindForTag(const std::string& typeTag) {
     return ed::Ev::SpawnPawn;
 }
 
-// Zone def name -> ZoneType. The five placed zone kinds and nothing else.
+// Zone def name -> ZoneType. The six placeable zone kinds; ZONE_PORTAL has no
+// placement leaf because portals are a separate entity (`portal` lines from
+// ZoneManager), not a zone volume an author picks from this tree.
 static int ZoneTypeForDef(const std::string& defName) {
     if (defName == "ZONE_LADDER")         return (int)ZoneType::ZONE_LADDER;
     if (defName == "ZONE_SKY")            return (int)ZoneType::ZONE_SKY;
     if (defName == "ZONE_REVERB")         return (int)ZoneType::ZONE_REVERB;
     if (defName == "ZONE_GAMEPLAY_SOUND") return (int)ZoneType::ZONE_GAMEPLAY_SOUND;
+    if (defName == "ZONE_GRAVITY")        return (int)ZoneType::ZONE_GRAVITY;
+    if (defName == "ZONE_CRT")            return (int)ZoneType::ZONE_CRT;
     return (int)ZoneType::ZONE_WATER;
 }
 

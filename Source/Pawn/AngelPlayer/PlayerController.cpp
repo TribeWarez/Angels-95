@@ -84,43 +84,51 @@ int PlayerController::ConsumeMoveSteps(float frameTime, int maxSteps) {
 // ---------------------------------------------------------------------------
 // Jump / Fly / Noclip / Water vertical integration (one fixed step)
 // ---------------------------------------------------------------------------
-void PlayerController::UpdateVertical(float dt, Camera3D& cam, float savedCamY, bool uiBlocked,
+void PlayerController::UpdateVertical(float dt, Camera3D& cam, Vector3 savedCamPos, bool uiBlocked,
                                       const oz::physics::PhysicsInfo& phys) {
     // Gravity-zone smoothing: retarget on a zone change, then advance the blend
     // toward the target each fixed step and hand the eased vector to the
-    // integrator (the vector, not the scalar, so a gravity zone can fall
-    // sideways / upward, though the vertical path only consumes Y today).
+    // integrator. The integrator works along `up`, so the orientation is advanced
+    // from the SAME blend - a camera that rolled on its own curve would disagree
+    // with the direction the body actually falls.
     g_playerMovement.RetargetGravity({phys.gravityVector.x, phys.gravityVector.y, phys.gravityVector.z});
     g_playerMovement.AdvanceGravity(dt);
+    g_playerMovement.AdvanceUp(dt);
+
     oz::physics::PhysicsInfo effective = phys;
-    Vector3 g = g_playerMovement.EffectiveGravity();
+    const Vector3 g = g_playerMovement.EffectiveGravity();
     effective.gravityVector = {g.x, g.y, g.z};
-    effective.gravity = -g.y;
+    // NOTE: `effective.gravity` (the legacy scalar) is deliberately left alone.
+    // It is a Y-up magnitude and has no meaning once the axis tilts; nothing in
+    // the integrator reads it any more, and re-deriving it from g.y would be a
+    // second, wrong source of truth. It survives only for the OZONE round-trip.
+
+    const Vector3 up = g_playerMovement.up;
 
     pphys::PlayerPhysics physics;
     pphys::PlayerPhysics::Motion motion;
     motion.onGround = g_playerMovement.onGround;
-    motion.velocityY = g_playerMovement.velocityY;
+    motion.velocityUp = g_playerMovement.velocityUp;
 
     const bool wasOnGround = motion.onGround;
 
     if (g_playerMovement.isNoClip || g_playerMovement.isFlying) {
-        // Noclip / flying: direct vertical control (Space up / Ctrl down)
-        physics.UpdateFlyVertical(cam, g_playerMovement.BaseSpeed, effective, dt, true, true);
+        // Noclip / flying: direct along-up control (Space up / Ctrl down)
+        physics.UpdateFlyVertical(cam, g_playerMovement.BaseSpeed, effective, up, dt, true, true);
     } else if (g_playerMovement.isClimbing) {
         // Ladder: W/S climb at ladderSpeed, no gravity. Checked before water so
         // a ladder volume inside a pool still behaves as a ladder.
-        physics.UpdateLadderVertical(cam, motion, savedCamY, uiBlocked, effective, dt);
+        physics.UpdateLadderVertical(cam, motion, savedCamPos, uiBlocked, effective, up, dt);
     } else if (g_playerMovement.inWater) {
-        // Water: restore Y, reduced gravity, dampen fall
-        physics.UpdateWaterVertical(cam, motion, savedCamY, g_playerMovement.EyeHeight,
-                                    uiBlocked, effective, dt);
+        // Water: restore the along-up position, reduced gravity, dampen fall
+        physics.UpdateWaterVertical(cam, motion, savedCamPos, g_playerMovement.EyeHeight,
+                                    uiBlocked, effective, up, dt);
     } else {
-        // Normal / grounded: restore Y, jump impulse, gravity
-        physics.UpdateGroundVertical(cam, motion, savedCamY, uiBlocked, effective, dt);
+        // Normal / grounded: restore the along-up position, jump impulse, gravity
+        physics.UpdateGroundVertical(cam, motion, savedCamPos, uiBlocked, effective, up, dt);
     }
 
-    if (wasOnGround && !motion.onGround && motion.velocityY > 0.0f)
+    if (wasOnGround && !motion.onGround && motion.velocityUp > 0.0f)
         PlayJump();
     // Mirror of the jump edge: the transition back to grounded. Only from
     // actual airtime (wasOnGround was false), so a jump's own first frame does
@@ -129,7 +137,7 @@ void PlayerController::UpdateVertical(float dt, Camera3D& cam, float savedCamY, 
         PlayLand();
 
     g_playerMovement.onGround = motion.onGround;
-    g_playerMovement.velocityY = motion.velocityY;
+    g_playerMovement.velocityUp = motion.velocityUp;
 }
 
 // ---------------------------------------------------------------------------

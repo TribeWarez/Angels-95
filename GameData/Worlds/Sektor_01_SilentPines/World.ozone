@@ -4,6 +4,18 @@
 # Format: ozone v1.0
 # Hierarchy: Terran Prime -> Sefirah 1 -> Sektor_01_SilentPines
 #
+# The playable route is unchanged, but the falls now hide a second, optional
+# branch: a machine scar cut into the cliff behind the water. It exists to make
+# the three Phase-7 mechanics readable in content:
+#   * the choir  – a reverse-gravity shaft (ZONE_GRAVITY + 3-axis up)
+#   * the wound  – a CRT control room (ZONE_CRT)
+#   * the vault  – quantum brushes that phase out when looked at (SURF_QUANTUM)
+# The branch pays a shotgun and supplies, so it is worth the detour but never
+# gates the shrine exit. It also doubles the world's authored footprint, which
+# is the point: the sky zone and lighting below cover the larger map, and the
+# renderer no longer culls a whole landmark just because the camera left its
+# gameplay zone.
+#
 # All-brush terrain on purpose: collision is AABB-only, so cliffs and terraces
 # are brushes (a heightmap would give walk-through cliff faces). Every walkable
 # rise is 0.9 or less - kStepHeight is exactly 1.0 and a rise of 1.0 sits on the
@@ -18,40 +30,47 @@
 #
 # Zone names are the lookup keys for the sibling .ozls defs in this directory;
 # renaming one without re-keying its def silently drops fog/ambient at load.
+# The scar's interior sky zone is a nested pocket inside the outer world sky.
+# UpdateSkyZone picks the SMALLEST containing volume, so the interior wins while
+# the player is inside and the outer sky resumes at the tunnel mouth.
 
 # --- Arrival plateau (playerstart #1 sits at its edge, facing down the gorge) ---
-add box -91 0 8 42 20 140 0 texPath=GameData/Worlds/EngineTest/oztex/tileset/05_grass_jungle_256.png texScaleU=3.5 texScaleV=3.5
+add box -91 0 8 42 20 140 0 texPath=GameData/Worlds/EngineTest/oztex/tileset/05_grass_jungle_256.png texScaleU=0.8 texScaleV=0.8
 
 # --- Valley floor: west bank / river bed / east bank (no sub: separate adds) ---
-add box -31 0 -1 78 2 140 0 texPath=GameData/Worlds/EngineTest/oztex/tileset/05_grass_jungle_256.png texScaleU=3.5 texScaleV=3.5
-add box 17 0 -2.2 18 2 140 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1.5 texScaleV=1.5
-add box 50 0 -1 48 2 140 0 texPath=GameData/Worlds/EngineTest/oztex/tileset/05_grass_jungle_256.png texScaleU=3.5 texScaleV=3.5
-add box 80 41 -1 12 2 58 0 texPath=GameData/Worlds/EngineTest/oztex/tileset/05_grass_jungle_256.png texScaleU=3.5 texScaleV=3.5
-add box 80 -41 -1 12 2 58 0 texPath=GameData/Worlds/EngineTest/oztex/tileset/05_grass_jungle_256.png texScaleU=3.5 texScaleV=3.5
+add box -31 0 -1 78 2 140 0 texPath=GameData/Worlds/EngineTest/oztex/tileset/05_grass_jungle_256.png texScaleU=0.8 texScaleV=0.8
+add box 17 0 -2.2 18 2 140 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 50 0 -1 48 2 140 0 texPath=GameData/Worlds/EngineTest/oztex/tileset/05_grass_jungle_256.png texScaleU=0.8 texScaleV=0.8
+add box 80 41 -1 12 2 58 0 texPath=GameData/Worlds/EngineTest/oztex/tileset/05_grass_jungle_256.png texScaleU=0.8 texScaleV=0.8
+add box 80 -41 -1 12 2 58 0 texPath=GameData/Worlds/EngineTest/oztex/tileset/05_grass_jungle_256.png texScaleU=0.8 texScaleV=0.8
 
 # --- River: shallow, fast, scrolling along Y (PAN_V, not PAN_U) ---
 add box 17 0 -0.55 18 0.3 140 0 texPath=GameData/Tex/Global/EFX/water_pool.png texScaleU=1.5 texScaleV=6 flags=526464 surfAlpha=0.8 panV=0.12
 
 # --- Bridge over the river: deck top 0.9, 0.45 landings so it is walk-up ---
-add box 17 0 0.7 30 0.4 18 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1
-add box 0.5 0 0.225 3 0.45 18 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.6 texScaleV=1
-add box 33.5 0 0.225 3 0.45 18 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.6 texScaleV=1
-add box 17 8.6 1.55 30 1.3 0.3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=0.5
-add box 17 -8.6 1.55 30 1.3 0.3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=0.5
+add box 17 0 0.7 30 0.4 18 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 0.5 0 0.225 3 0.45 18 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 33.5 0 0.225 3 0.45 18 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 17 8.6 1.2 30 1.0 0.3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.1
+add box 17 -8.6 1.2 30 1.0 0.3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.1
 
 # --- East cliff split around the falls notch (y -8..8) ---
-add box 89 39 13 6 26 62 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=2 texScaleV=2
-add box 89 -39 13 6 26 62 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=2 texScaleV=2
+add box 89 39 13 6 26 62 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.25 texScaleV=0.25
+add box 89 -39 13 6 26 62 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.25 texScaleV=0.25
 # Rock face BEHIND the notch, so the water reads against dark stone and not sky.
-add box 86.8 0 13 1.4 26 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=1 texScaleV=1
+# A 10-wide, 6-high opening is left at the waterline: the falls are a curtain,
+# not a wall. The lintel keeps the cliff face intact above the gap.
+add box 86.8 0 16 1.4 20 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 86.8 -6.5 3 1.4 6.5 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 86.8 6.5 3 1.4 6.5 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
 
 # --- Waterfall sheet: just in front of the backing rock, translucent, scrolls down ---
 # flags = UNLIT 2048 | TRANSLUCENT 128 | TWO_SIDED 1024 | PAN_V 524288 | NO_BSP_CUTS 268435456
-add box 85.9 0 11 0.2 22 12 0 texPath=GameData/Tex/Global/EFX/waterfall_streaks.png texScaleU=1.5 texScaleV=1 flags=268962944 surfAlpha=0.9 panV=-0.35
+add box 85.9 0 13 0.2 26 16 0 texPath=GameData/Tex/Global/EFX/waterfall_streaks.png texScaleU=0.3 texScaleV=0.2 flags=268962944 surfAlpha=0.8 panV=-0.35
 
 # --- Plunge pool ---
-add box 80 0 -1.9 12 2 24 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1.5 texScaleV=1.5
-add box 80 0 -0.55 12 0.3 24 0 texPath=GameData/Tex/Global/EFX/water_pool.png texScaleU=1.5 texScaleV=1.5 flags=264320 surfAlpha=0.8 panU=0.05 panV=0.03
+add box 80 0 -1.9 12 2 24 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 80 0 -0.55 12 0.3 24 0 texPath=GameData/Tex/Global/EFX/water_pool.png texScaleU=0.2 texScaleV=0.2 flags=264320 surfAlpha=0.8 panU=0.05 panV=0.03
 
 # Stone rim: without it the 0.4-deep water reads as a blue strip lying on the lawn.
 add box 80 12.3 0.05 14 0.6 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1.5 texScaleV=0.5
@@ -59,10 +78,14 @@ add box 80 -12.3 0.05 14 0.6 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainsto
 add box 73.7 0 0.05 0.6 0.6 25.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.5 texScaleV=1.5
 
 # --- Impact foam: fast band on the pool surface, churn wall, shore foam ---
-add box 84 0 -0.28 4 0.25 13 0 texPath=GameData/Tex/Global/EFX/foam.png texScaleU=1 texScaleV=2 flags=788480 surfAlpha=0.9 panU=0.5
-add box 85.6 0 1 0.3 2.4 12 0 texPath=GameData/Tex/Global/EFX/waterfall_streaks.png texScaleU=1 texScaleV=1 flags=268962944 surfAlpha=0.55 panV=-1.2
-add box 80 -11.6 -0.3 12 0.2 0.8 0 texPath=GameData/Tex/Global/EFX/foam.png texScaleU=6 texScaleV=1 flags=788480 surfAlpha=0.75 panU=0.2
-add box 80 11.6 -0.3 12 0.2 0.8 0 texPath=GameData/Tex/Global/EFX/foam.png texScaleU=6 texScaleV=1 flags=788480 surfAlpha=0.75 panU=0.2
+add box 84 0 -0.28 4 0.25 13 0 texPath=GameData/Tex/Global/EFX/foam.png texScaleU=0.2 texScaleV=0.4 flags=788608 surfAlpha=0.9 panU=0.5
+add box 85.6 0 1 0.3 2.4 12 0 texPath=GameData/Tex/Global/EFX/waterfall_streaks.png texScaleU=0.2 texScaleV=0.2 flags=268962944 surfAlpha=0.55 panV=-1.2
+add box 80 -11.6 -0.3 12 0.2 0.8 0 texPath=GameData/Tex/Global/EFX/foam.png texScaleU=6 texScaleV=1 flags=788608 surfAlpha=0.75 panU=0.2
+add box 80 11.6 -0.3 12 0.2 0.8 0 texPath=GameData/Tex/Global/EFX/foam.png texScaleU=6 texScaleV=1 flags=788608 surfAlpha=0.75 panU=0.2
+
+# The plateau side faces were the big grass box itself; face them in rock so
+# the descent reads as a cut stair instead of a green wall.
+add box -70.1 0 9 1 18 140 0 texPath=GameData/Environment/Props/Rock_Diffuse.png texScaleU=0.2 texScaleV=0.2
 
 # --- Cliff rim: a 1.4-high broken rock lip along the plateau's east edge, with
 # the stair mouth left open at y -3..3. Without it the "descent" is optional by
@@ -70,67 +93,338 @@ add box 80 11.6 -0.3 12 0.2 0.8 0 texPath=GameData/Tex/Global/EFX/foam.png texSc
 # build has no fall damage. It reads the same as a natural rim, does not block
 # the valley view (eye 19.8, lip 19.4), and makes leaving the plateau a
 # deliberate choice (the stair, or a jump).
-add box -70.6 -36.5 18.7 1.2 1.4 67 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.5 texScaleV=2
-add box -70.6 36.5 18.7 1.2 1.4 67 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.5 texScaleV=2
+add box -70.6 -36.5 18.7 1.2 1.4 67 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.4
+add box -70.6 36.5 18.7 1.2 1.4 67 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.4
 
 # --- Descent: 19 solid columns, 0.9 drop each, from the plateau edge to the floor ---
-add box -68.5 0 8.55 3 17.1 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -65.5 0 8.1 3 16.2 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -62.5 0 7.65 3 15.3 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -59.5 0 7.2 3 14.4 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -56.5 0 6.75 3 13.5 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -53.5 0 6.3 3 12.6 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -50.5 0 5.85 3 11.7 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -47.5 0 5.4 3 10.8 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -44.5 0 4.95 3 9.9 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -41.5 0 4.5 3 9 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -38.5 0 4.05 3 8.1 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -35.5 0 3.6 3 7.2 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -32.5 0 3.15 3 6.3 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -29.5 0 2.7 3 5.4 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -26.5 0 2.25 3 4.5 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -23.5 0 1.8 3 3.6 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -20.5 0 1.35 3 2.7 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -17.5 0 0.9 3 1.8 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
-add box -14.5 0 0.45 3 0.9 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=1 texScaleV=1
+add box -68.5 0 8.55 3 17.1 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -65.5 0 8.1 3 16.2 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -62.5 0 7.65 3 15.3 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -59.5 0 7.2 3 14.4 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -56.5 0 6.75 3 13.5 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -53.5 0 6.3 3 12.6 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -50.5 0 5.85 3 11.7 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -47.5 0 5.4 3 10.8 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -44.5 0 4.95 3 9.9 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -41.5 0 4.5 3 9 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -38.5 0 4.05 3 8.1 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -35.5 0 3.6 3 7.2 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -32.5 0 3.15 3 6.3 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -29.5 0 2.7 3 5.4 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -26.5 0 2.25 3 4.5 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -23.5 0 1.8 3 3.6 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -20.5 0 1.35 3 2.7 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -17.5 0 0.9 3 1.8 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box -14.5 0 0.45 3 0.9 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
 
 # --- Shrine platform, columns and altar ---
-add box 67 37 0.3 16 0.6 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1
-add cyl 62 32 6 0.5 0.6 5.4 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=2
-add cyl 72 32 6 0.5 0.6 5.4 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=2
-add cyl 62 42 6 0.5 0.6 5.4 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=2
-add cyl 72 42 6 0.5 0.6 5.4 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=2
-add cyl 67 32 6 0.5 0.6 5.4 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=2
-add cyl 67 42 6 0.5 0.6 5.4 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=2
-add box 67 37 0.9 3 1.8 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=1
-add cyl 60 30 1.1 0.55 0.4 0.5 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
-add cyl 74 30 1.1 0.55 0.4 0.5 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
-add cyl 60 44 1.1 0.55 0.4 0.5 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
-add cyl 74 44 1.1 0.55 0.4 0.5 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=1 texScaleV=1
+add box 67 37 0.3 16 0.6 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add cyl 62 32 6 0.5 0.6 5.4 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.4
+add cyl 72 32 6 0.5 0.6 5.4 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.4
+add cyl 62 42 6 0.5 0.6 5.4 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.4
+add cyl 72 42 6 0.5 0.6 5.4 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.4
+add cyl 67 32 6 0.5 0.6 5.4 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.4
+add cyl 67 42 6 0.5 0.6 5.4 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.4
+add box 67 37 0.9 3 1.8 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add cyl 60 30 1.1 0.55 0.4 0.5 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+add cyl 74 30 1.1 0.55 0.4 0.5 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+add cyl 60 44 1.1 0.55 0.4 0.5 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+add cyl 74 44 1.1 0.55 0.4 0.5 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
 
 # --- Two roofless hut shells (a roof here would be a headroom trap) ---
-add box 46 -36 2 12 4 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=1 texScaleV=1
-add box 43 -24 2 6 4 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=1 texScaleV=1
-add box 51 -24 2 2 4 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=1 texScaleV=1
-add box 40 -30 2 0.6 4 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=1 texScaleV=1
-add box 52 -30 2 0.6 4 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=1 texScaleV=1
-add box 58 -49 1.8 10 3.6 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_06.png texScaleU=1 texScaleV=1
-add box 55.5 -39 1.8 5 3.6 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_06.png texScaleU=1 texScaleV=1
-add box 61.75 -39 1.8 2.5 3.6 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_06.png texScaleU=1 texScaleV=1
-add box 53 -44 1.8 0.6 3.6 10 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_06.png texScaleU=1 texScaleV=1
-add box 63 -44 1.8 0.6 3.6 10 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_06.png texScaleU=1 texScaleV=1
+add box 46 -36 2 12 4 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 43 -24 2 6 4 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 51 -24 2 2 4 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 40 -30 2 0.6 4 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 52 -30 2 0.6 4 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 58 -49 1.8 10 3.6 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_06.png texScaleU=0.2 texScaleV=0.2
+add box 55.5 -39 1.8 5 3.6 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_06.png texScaleU=0.2 texScaleV=0.2
+add box 61.75 -39 1.8 2.5 3.6 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_06.png texScaleU=0.2 texScaleV=0.2
+add box 53 -44 1.8 0.6 3.6 10 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_06.png texScaleU=0.2 texScaleV=0.2
+add box 63 -44 1.8 0.6 3.6 10 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_06.png texScaleU=0.2 texScaleV=0.2
 
 # --- Valley end ridges: low rock (12 tall) so the SKY stays visible. A taller
 # painted ring at the bounds turned every sightline into a courtyard wall.
-add box 0 72 5 224 12 2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=2 texScaleV=1
-add box 0 -72 5 224 12 2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=2 texScaleV=1
+add box 0 72 5 224 12 2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.25 texScaleV=0.2
+add box 0 -72 5 224 12 2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.25 texScaleV=0.2
 
 # --- Dirt decals on the valley floor (NO_BSP_CUTS: cosmetic, never collision) ---
 # PNG, not the Jungle .jpg: raylib cannot decode those EXIF JPEGs (they load at
 # the FILEIO layer and then fail with "Data format not supported", silently
 # falling back to a flat colour).
-add pln -40 10 0.06 0 0 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.5 texScaleV=0.5 flags=268435456
-add pln 20 -25 0.06 0 0 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.5 texScaleV=0.5 flags=268435456
+add pln -40 10 0.06 0 0 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2 flags=268435456
+add pln 20 -25 0.06 0 0 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2 flags=268435456
+
+# ===========================================================================
+# THE MACHINE SCAR - optional branch behind the falls
+# ===========================================================================
+# The waterfall curtain is the door. Walk through the sheet (it is cosmetic,
+# NO_BSP_CUTS) into a cut tunnel, then a three-way grotto:
+#   north -> quantum vault (look at the seal to make it fail)
+#   east  -> CRT control room (signal wound)
+#   south -> reverse-gravity choir, with a ladder back down
+# Every floor here is a real brush; there is no heightmap and no mesh collision.
+
+# --- Tunnel through the backing rock -------------------------------------
+add box 91 0 -1 10 2 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 91 -6 3.5 10 7 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.3 texScaleV=0.2
+add box 91 6 3.5 10 7 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.3 texScaleV=0.2
+add box 91 0 7.5 10 1 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+# Dog-leg baffle: the pool must not see straight into the lit hub.
+# The passage is the 6-wide gap on the +Y side of this wall.
+add box 91 -2 3.5 0.6 7 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+
+# --- Grotto hub (20 x 24, 13 high) ---------------------------------------
+add box 106 0 -1 20 2 24 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+# North wall, doorway at x 102..108 (vault)
+add box 99 12 6.5 6 13 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 112 12 6.5 8 13 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 105 12 9.5 6 7 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+# South wall, doorway at x 104..112 (choir)
+add box 100 -12 6.5 8 13 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 114 -12 6.5 4 13 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 108 -12 9.5 8 7 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+# East wall, doorway at y -4..4 (CRT)
+add box 116 -8 6.5 1 13 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 116 8 6.5 1 13 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 116 0 9.5 1 7 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+# West wall, tunnel opening at y -5.5..5.5
+add box 96 -8.75 6.5 1 13 6.5 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 96 8.75 6.5 1 13 6.5 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 96 0 9.5 1 7 11 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 106 0 13.5 20 1 24 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+# The signal stone. The glowing band is the landmark that reads from the tunnel.
+add box 110 5 0.7 2 1.4 2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+add box 110 5 1.55 2.2 0.3 2.2 0 texPath=GameData/Tex/Global/EFX/eff_penetra_lightpat_01.png flags=2048 texScaleU=0.2 texScaleV=0.2
+
+# --- CRT control room (east, 18 x 16, 9 high) ----------------------------
+add box 125 0 -1 18 2 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 125 8 4.5 18 9 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.3 texScaleV=0.2
+add box 125 -8 4.5 18 9 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.3 texScaleV=0.2
+add box 134 0 4.5 1 9 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 125 0 9.5 18 1 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+# Wall of dead screens. UNLIT so they stay legible under the CRT wash.
+add box 118 7.4 4 3 2 0.2 0 texPath=GameData/Tex/Global/EFX/eff_mecha_blue_1#.png flags=2048 texScaleU=0.2 texScaleV=0.2
+add box 124 7.4 4 3 2 0.2 0 texPath=GameData/Tex/Global/EFX/eff_mecha_blue_1#.png flags=2048 texScaleU=0.2 texScaleV=0.2
+add box 130 7.4 4 3 2 0.2 0 texPath=GameData/Tex/Global/EFX/eff_mecha_blue_1#.png flags=2048 texScaleU=0.2 texScaleV=0.2
+add box 118 -7.4 4 3 2 0.2 0 texPath=GameData/Tex/Global/EFX/eff_penetra_lightpat_01.png flags=2048 texScaleU=0.2 texScaleV=0.2
+add box 124 -7.4 4 3 2 0.2 0 texPath=GameData/Tex/Global/EFX/eff_penetra_lightpat_01.png flags=2048 texScaleU=0.2 texScaleV=0.2
+add box 130 -7.4 4 3 2 0.2 0 texPath=GameData/Tex/Global/EFX/eff_penetra_lightpat_01.png flags=2048 texScaleU=0.2 texScaleV=0.2
+# Console bank against the north wall, plus a free-standing reader in the room
+# centre. Keeping the eye slab out of the doorway is what makes the room read as
+# a control room instead of a wall of texture at eye height.
+add box 124 5.4 0.8 6 1.6 1.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 124 0 0.4 1.2 0.8 1.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+add box 130 0 0.5 4 1 4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 130 0 1.5 1.2 1 1.2 0 texPath=GameData/Tex/Global/EFX/eff_penetra_lightpat_01.png flags=2048 texScaleU=0.2 texScaleV=0.2
+
+# --- Quantum vault (north, 28 x 16, 9 high) ------------------------------
+# Approach corridor.
+add box 105 18 -1 6 2 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 102 18 3.5 1 7 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 108 18 3.5 1 7 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 105 18 7.5 6 1 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+# Quantum seal: SURF_QUANTUM | NO_BSP_CUTS. It is solid + drawn only while the
+# camera does NOT contain it. Look at it and it phases out, including collision.
+add box 105 22 3.5 5.4 7 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png flags=268435458 surfGlow=(0.2,0.7,1) surfGlowScale=0.15 texScaleU=0.2 texScaleV=0.2
+# Vault floor split around the pit (x 102..112, y 26..34). The pit is on the
+# entry axis: the player sees the gap, the far dais and the ceiling eye in one
+# frame, so "look up to keep the bridge solid" is a readable choice.
+add box 100 30 -1 4 2 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 119 30 -1 14 2 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 107 24 -1 10 2 4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 107 36 -1 10 2 4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+# Pit: 4 deep, with a 0.8-step ladder of blocks up the east side so a fall is
+# never a softlock.
+add box 107 30 -4.5 10 1 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 102 30 -2 0.5 4 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 112 30 -2 0.5 4 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 107 26 -2 10 4 0.5 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 107 34 -2 10 4 0.5 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 111.5 30 -3.6 1 0.8 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 111.5 30 -2.8 1 0.8 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 111.5 30 -2.0 1 0.8 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 111.5 30 -1.2 1 0.8 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 111.5 30 -0.4 1 0.8 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+# Quantum bridge. The cue above the dais is bright on purpose: look UP to keep
+# the bridge out of the frustum, and it stays solid under your feet.
+add box 107 30 0.2 10 0.4 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png flags=268435458 surfGlow=(0.25,0.8,1) surfGlowScale=0.2 texScaleU=0.2 texScaleV=0.4
+# Vault shell.
+add box 98 30 4.5 1 9 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 126 30 4.5 1 9 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 112 38 4.5 28 9 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 100 22 4.5 4 9 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 117 22 4.5 18 9 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 105 22 7.5 6 3 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 112 30 9.5 28 1 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+# Dais, its 0.7 step and the ceiling eye (flush to the ceiling: no trap).
+add box 107 36 0.75 3 1.5 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 107 34.5 0.35 3 0.7 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 107 36 8.5 1 1 1 0 texPath=GameData/Tex/Global/EFX/eff_penetra_lightpat_01.png flags=2048 texScaleU=0.2 texScaleV=0.2
+# East alcove: cover for the vault fight, and the only side route out of the
+# pit's east step.
+add box 122 30 0.7 4 1.4 4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+
+# --- The Choir (south, reverse-gravity shaft 14 x 16 x 26) ---------------
+# Entry corridor, normal gravity. The ladder lands here, not in the shaft.
+add box 113 -14 -1 18 2 4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 104 -14 3.5 1 7 4 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 122 -14 3.5 1 7 4 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 111 -14 7.5 14 1 4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+# Shaft shell. The east wall stops at 20.9 so the top opening clears 5.05.
+add box 111 -24 -1 14 2 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 104 -24 13 1 26 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 111 -32 13 14 26 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 111 -16 16.5 14 19 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 118 -24 10.45 1 20.9 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 111 -24 26.5 14 1 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+# Ladder shaft walls (the volume itself is a `zone ladder`), gallery above.
+add box 118 -14 16.5 0.5 19 4 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 122 -14 16.5 0.5 19 4 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 120 -16 16.5 4 19 0.5 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 120 -12 16.5 4 19 0.5 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+# Gallery floor (hole at x 118..122, y -16..-12 for the ladder), 7 high.
+add box 122 -24 25.5 8 1 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 124 -14 25.5 4 1 4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 126 -24 29.5 1 7 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 126 -14 29.5 1 7 4 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 122 -32 29.5 8 7 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 122 -12 29.5 8 7 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_05.png texScaleU=0.2 texScaleV=0.2
+add box 122 -22 33.5 8 1 20 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+
+# --- Art pass: framing, plinths, ribs and ceiling beams -------------------
+# The scar is a machine cut into living rock, so the read is "worked stone
+# inside raw stone": flat box surfaces are broken with a processional floor
+# strip, wall plinths/cornices, pilasters at every doorway and beams across the
+# ceilings. None of these are tall enough to become headroom traps.
+#
+# Hub door frames (north vault, east CRT, south choir, west falls).
+add box 101.7 11.65 3 0.4 6 0.7 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 108.3 11.65 3 0.4 6 0.7 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 105 11.65 6.15 6.6 0.3 0.7 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 115.65 -4.3 3 0.7 6 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 115.65 4.3 3 0.7 6 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 115.65 0 6.15 0.7 0.3 8.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 103.7 -11.65 3 0.4 6 0.7 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 112.3 -11.65 3 0.4 6 0.7 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 108 -11.65 6.15 8.6 0.3 0.7 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 95.65 -5.7 3 0.7 6 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 95.65 5.7 3 0.7 6 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 95.65 0 6.15 0.7 0.3 11.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+# Hub pilasters (full height; no exposed top under the ceiling).
+add box 99 11.8 6.5 0.4 13 0.5 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 112 11.8 6.5 0.4 13 0.5 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 100 -11.8 6.5 0.4 13 0.5 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 114 -11.8 6.5 0.4 13 0.5 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 115.8 -8 6.5 0.5 13 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 115.8 8 6.5 0.5 13 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 96.2 -8.75 6.5 0.5 13 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 96.2 8.75 6.5 0.5 13 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+# Hub plinth + cornice (the base is a 0.4 step, never a wall).
+add box 106 11.7 0.2 20 0.4 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 106 -11.7 0.2 20 0.4 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 115.7 0 0.2 0.4 0.4 24 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 96.3 0 0.2 0.4 0.4 24 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 106 11.7 12.8 20 0.4 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 106 -11.7 12.8 20 0.4 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 115.7 0 12.8 0.4 0.4 24 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 96.3 0 12.8 0.4 0.4 24 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+# Hub floor processional cross + ceiling beams.
+add box 106 0 0.06 2.4 0.12 24 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 106 0 0.06 20 0.12 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 100 0 12.85 0.4 0.3 24 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 106 0 12.85 0.4 0.3 24 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 112 0 12.85 0.4 0.3 24 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+
+# CRT room: plinth/cornice, ribs and ceiling beams. The screen bank is the wall.
+add box 125 7.7 0.2 18 0.4 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 125 -7.7 0.2 18 0.4 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 133.7 0 0.2 0.4 0.4 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 125 7.7 8.8 18 0.4 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 125 -7.7 8.8 18 0.4 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 133.7 0 8.8 0.4 0.4 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 120 7.8 4.5 0.4 9 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 125 7.8 4.5 0.4 9 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 130 7.8 4.5 0.4 9 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 120 -7.8 4.5 0.4 9 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 125 -7.8 4.5 0.4 9 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 130 -7.8 4.5 0.4 9 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 120 0 9.15 0.4 0.3 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 125 0 9.15 0.4 0.3 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 130 0 9.15 0.4 0.3 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+# Cable conduit along the east wall, and the reader's small floor light.
+add box 133.6 0 7.4 0.2 0.2 14 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+add box 133.35 -4 4 0.2 2 3 0 texPath=GameData/Tex/Global/EFX/eff_mecha_blue_1#.png flags=2048 texScaleU=0.2 texScaleV=0.2
+add box 133.35 0 4 0.2 2 3 0 texPath=GameData/Tex/Global/EFX/eff_mecha_blue_1#.png flags=2048 texScaleU=0.2 texScaleV=0.2
+add box 133.35 4 4 0.2 2 3 0 texPath=GameData/Tex/Global/EFX/eff_mecha_blue_1#.png flags=2048 texScaleU=0.2 texScaleV=0.2
+add box 124 0 0.1 1.8 0.2 1.8 0 texPath=GameData/Tex/Global/EFX/eff_penetra_lightpat_01.png flags=2048 texScaleU=0.2 texScaleV=0.2
+
+# Quantum vault: door frame, pit rails, dais step, wall ribs and the two cyan
+# strips that pull the eye UP to the ceiling eye (look up = the bridge is solid).
+add box 101.7 21.65 3 0.4 6 0.7 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 108.3 21.65 3 0.4 6 0.7 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 105 21.65 6.15 6.6 0.3 0.7 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 102 30 0.25 0.4 0.5 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 112 30 0.25 0.4 0.5 8 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 124 30.5 0.35 3 0.7 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=0.2 texScaleV=0.2
+add box 98.2 26 4.5 0.4 9 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 98.2 34 4.5 0.4 9 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 104 37.8 4.5 0.4 9 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 112 37.8 4.5 0.4 9 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 120 37.8 4.5 0.4 9 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 105 30 9.15 0.4 0.3 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 112 30 9.15 0.4 0.3 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 119 30 9.15 0.4 0.3 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 102 37.7 5 0.4 6 0.1 0 texPath=GameData/Tex/Global/EFX/eff_penetra_lightpat_01.png flags=2048 texScaleU=0.2 texScaleV=0.2
+add box 112 37.7 5 0.4 6 0.1 0 texPath=GameData/Tex/Global/EFX/eff_penetra_lightpat_01.png flags=2048 texScaleU=0.2 texScaleV=0.2
+
+# Choir: full-height wall ribs and 8/16/24 bands make the 26-unit shaft readable
+# without a landmark that gravity would move.
+add box 104.2 -30 13 0.4 26 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 104.2 -26 13 0.4 26 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 104.2 -22 13 0.4 26 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 104.2 -18 13 0.4 26 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 117.8 -30 13 0.4 26 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 117.8 -26 13 0.4 26 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 117.8 -22 13 0.4 26 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 117.8 -18 13 0.4 26 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 104.15 -24 8 0.3 0.3 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+add box 104.15 -24 16 0.3 0.3 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+add box 104.15 -24 24 0.3 0.3 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+add box 117.85 -24 8 0.3 0.3 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+add box 117.85 -24 16 0.3 0.3 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+add box 117.85 -24 24 0.3 0.3 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+# Ladder rungs are cosmetic (NO_BSP_CUTS) so they never narrow the climb volume.
+add box 120 -14 4 3.6 0.12 0.12 0 flags=268435456 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+add box 120 -14 8 3.6 0.12 0.12 0 flags=268435456 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+add box 120 -14 12 3.6 0.12 0.12 0 flags=268435456 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+add box 120 -14 16 3.6 0.12 0.12 0 flags=268435456 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+add box 120 -14 20 3.6 0.12 0.12 0 flags=268435456 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+add box 120 -14 24 3.6 0.12 0.12 0 flags=268435456 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+# Ceiling ring under the choir's ceiling: the destination when gravity flips.
+add cyl 111 -24 25.8 2.2 2.2 0.4 24 0 texPath=GameData/Tex/Global/EFX/eff_penetra_lightpat_01.png flags=268438528 texScaleU=0.2 texScaleV=0.2
+
+# Gallery chest, plinth/cornice and ceiling beams.
+add box 122 -28 26.4 2 0.8 2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=0.2 texScaleV=0.2
+
+# Gallery plinth/cornice and ceiling beams, so the top reads as a room rather
+# than the underside of a lid.
+add box 122 -31.7 26.2 8 0.4 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 122 -12.3 26.2 8 0.4 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 125.7 -22 26.2 0.4 0.4 20 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 118.3 -22 26.2 0.4 0.4 20 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 122 -20 33.15 8 0.3 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 122 -24 33.15 8 0.3 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 122 -28 33.15 8 0.3 0.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 118 -22 29.5 0.5 7 20 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_03.png texScaleU=0.2 texScaleV=0.2
+add box 111 -24 27.4 14 1 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+# Rock cap over the shaft + gallery void: the gallery ceiling stops at 34
+# and the shaft open top above it must never read as a sky hole.
+add box 115 -22 34.5 22 1 20 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+# Solid side masses behind the gallery walls: they close the void above
+# the shaft ceiling without showing a second surface inside the room.
+add box 117.5 -22 30.5 2 7 20 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
+add box 126.5 -22 30.5 2 7 20 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=0.2 texScaleV=0.2
 
 # Entities
 playerstart -80 0 18 90
@@ -156,6 +450,17 @@ npc Floater 60 10 0
 npc Walker 78 -30 0
 npc Skaarj 67 40 0.6
 npc Walker -30 40 0
+# Optional scar branch: one encounter per room, none on the critical route.
+npc Skaarj 112 8 0
+npc Walker 128 4 0
+npc Floater 111 -24 6
+npc Skaarj 120 36 0
+pickup Ammo 90 0 0.7 30
+pickup ManaVial 106 -8 0.7 30
+pickup Medkit 130 0 1.7 30
+pickup shotgun_01 107 36 2.2 30
+pickup HealthVial 122 -28 27.5 30
+pickup Ammo 122 30 2.1 30
 light directional 60 40 90 255 240 205 0.85
 light directional -45 -30 55 165 185 220 0.35
 light point 60 30 2.2 255 170 70 0.7 14 effect=2
@@ -164,12 +469,41 @@ light point 60 44 2.2 255 170 70 0.7 14 effect=2
 light point 74 44 2.2 255 170 70 0.7 14 effect=2
 light point -14 0 2 200 215 255 0.5 16
 light point 17 0 2.5 200 215 255 0.5 16
+# The scar is behind the cliff, so the sun never reaches it. Each room carries
+# its own lamp; the colours are the room identities (amber hub, cyan/magenta
+# signal, cold blue choir, violet vault).
+light point 106 0 7 240 180 90 0.6 18 effect=2
+light point 92 4 5 120 180 255 0.3 8 effect=4
+light point 118 0 5 90 220 255 0.7 14 effect=4
+light point 130 0 5 120 190 255 0.6 14 effect=4
+light point 111 -24 3 90 140 255 0.7 20 effect=4
+light point 111 -24 24 120 170 255 0.55 16 effect=4
+light point 122 -24 29 180 210 255 0.45 12 effect=4
+light point 107 36 4 180 120 255 0.6 14 effect=4
+light point 105 24 4 90 200 255 0.6 12 effect=4
+light point 107 31 5 160 140 255 0.7 16 effect=4
+light point 120 -14 6 140 190 255 0.45 10 effect=4
 
 # Zones: names must match the sibling .ozls entity names exactly.
-zone sky -112 -72 -6 112 72 46 1 name=silentpines_sky gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
+# The scar's sky volume is nested inside the outer sky. UpdateSkyZone picks the
+# smallest containing volume, so the interior wins while the player is inside
+# and the outer sky takes over again at the tunnel mouth.
+zone sky 92 -42 -8 140 42 40 1 name=silentpines_scar gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
+zone sky -112 -80 -12 160 80 52 1 name=silentpines_sky gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
 zone water 8 -70 -2 26 70 2 1 name=silentpines_river gravity=18 jump=9 terminal=60 water_gravity=7 water_drag=0.92 swim_up=4.5 ladder_speed=6 fly_mult=1.5
 zone water 74 -12 -2 86 12 2 1 name=silentpines_pool gravity=18 jump=9 terminal=60 water_gravity=7 water_drag=0.92 swim_up=4.5 ladder_speed=6 fly_mult=1.5
 zone reverb 59 29 0 75 45 9 1 name=silentpines_shrine gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
+# 3-axis gravity: `gravity=-18` is a straight-UP vector (engine +Y). The 0.3 s
+# blend and the up basis do the camera roll; jump is along up, so the shaft is a
+# vertical jump-and-run, not a scripted lift.
+zone gravity 104 -32 0 118 -16 26 1 name=silentpines_choir gravity=-18 jump=9 terminal=14 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
+# CRT warp: any active volume of this type drives uWarpIntensity, even when it
+# is not the primary zone (the interior sky volume usually wins that).
+zone crt 116 -8 0 134 8 9 1 name=silentpines_crt gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
+# Ladder back down from the choir's ceiling gallery. It overlaps the entry
+# corridor, not the reverse-gravity volume, so stepping off the ladder never
+# re-triggers the upward pull.
+zone ladder 118 -16 0 122 -12 26 1 name=silentpines_choir_ladder gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
 
 # Threshold at the bridge approach (off both playerstarts). Per-district def:
 # the line belongs to THIS map (see Game/Angels95/Triggers/Trigger_S01_Bridge).
@@ -200,6 +534,13 @@ ParticleEmitter fire 60 30 1.4 26 0.8 2.6 10 0.35 0.05 255 175 70 255 60 0 -2 5 
 ParticleEmitter fire 74 30 1.4 26 0.8 2.6 10 0.35 0.05 255 175 70 255 60 0 -2 5 0 0 1 0
 ParticleEmitter fire 60 44 1.4 26 0.8 2.6 10 0.35 0.05 255 175 70 255 60 0 -2 5 0 0 1 0
 ParticleEmitter fire 74 44 1.4 26 0.8 2.6 10 0.35 0.05 255 175 70 255 60 0 -2 5 0 0 1 0
+# The scar: falls mist at the mouth, cold dust in the choir, signal sparks in
+# the control room and under the vault's ceiling eye.
+ParticleEmitter mist 87 0 1 14 2.2 1.5 16 0.15 1.2 220 235 245 170 190 210 -0.4 6 0 0 1 0
+ParticleEmitter smoke 111 -24 2 12 2.5 1.5 12 0.2 0.8 120 140 180 60 70 100 -0.6 5 0 0 1 0
+ParticleEmitter sparks 118 0 1.8 8 0.8 0.3 48 0.05 0.02 120 240 255 80 180 255 0.3 3 0 0 1 0
+ParticleEmitter sparks 107 36 7.5 4 0.5 0.2 30 0.04 0.02 180 120 255 120 80 255 0.1 2 0 0 1 0
+ParticleEmitter sparks 107 31 0.6 6 0.7 0.25 40 0.03 0.01 120 220 255 80 160 255 0.1 1.6 0 0 1 0
 
 # --- Dressing: pines / bushes / rocks / stumps / logs (wind=1 on foliage) ---
 Mesh.Static GameData/Worlds/World_endless_snow/Models/forest/forest_pine_1.glb -100 -10 18 0 scale=1.5 tex=GameData/Tex/Global/EFX/tree_pine_needles.png wind=1
@@ -282,6 +623,14 @@ PathNode valley_d 0 -40 1 radius=4 next=valley_a
 PathNode east_a 50 5 1 radius=4 next=east_b
 PathNode east_b 70 -20 1 radius=4 next=east_c
 PathNode east_c 70 20 1 radius=4 next=east_a
+PathNode scar_hub_a 102 6 1 radius=3 next=scar_hub_b
+PathNode scar_hub_b 112 -6 1 radius=3 next=scar_hub_a
+PathNode scar_crt_a 124 4 1 radius=3 next=scar_crt_b
+PathNode scar_crt_b 130 -4 1 radius=3 next=scar_crt_a
+PathNode scar_vault_a 118 30 1 radius=3 next=scar_vault_b
+PathNode scar_vault_b 118 36 1 radius=3 next=scar_vault_a
+PathNode scar_gallery_a 122 -24 27 radius=2 next=scar_gallery_b
+PathNode scar_gallery_b 122 -28 27 radius=2 next=scar_gallery_a
 
 WindZone -70 -70 0 86 70 30 1 0 0.25 0.3 0.5
 levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_grad_day.png GameData/Tex/Global/Sky/sky_grad_day.png

@@ -29,6 +29,10 @@ static constexpr float kPawnGravity   = 18.0f;
 static constexpr float kPawnTerminal  = 40.0f;
 static constexpr float kPawnHalfWidth = 0.5f;
 static constexpr float kPawnHeight    = 1.8f;
+// NPCs are always Y-up: their integrator is a plain world-Y column (no gravity
+// zones), so the obstacle query's gravity axis is a constant here. The PLAYER's
+// axis comes from PlayerMovement::up.
+static const Vector3 kPawnUp = {0.0f, 1.0f, 0.0f};
 
 // ---------------------------------------------------------------------------
 // AssignLightZones — bind each light to the first zone volume that contains it.
@@ -1010,13 +1014,25 @@ void PawnSystem::UpdateSkyZone(Vector3 playerPos, BoundingBox playerBounds) {
 
     // Find the sky zone the player is inside
     m_activeSkyZoneIndex = -1;
+    // Pick the SMALLEST sky volume containing the camera, not the first in
+    // file order. An interior sky pocket (the machine scar) is authored inside
+    // the outer world sky volume; if the editor ever reorders the zones, a
+    // first-match loop would silently apply gorge fog indoors. Volume is the
+    // specificity rule here, and it makes nested sky pockets order-independent.
+    float bestVolume = 3.4e38f;
     for (int i = 0; i < (int)m_skyZones.size(); i++) {
         auto& n = m_skyZones[i];
         if (playerPos.x >= n.bounds.min.x && playerPos.x <= n.bounds.max.x &&
             playerPos.y >= n.bounds.min.y && playerPos.y <= n.bounds.max.y &&
             playerPos.z >= n.bounds.min.z && playerPos.z <= n.bounds.max.z) {
-            m_activeSkyZoneIndex = i;
-            break;
+            const float volume =
+                (n.bounds.max.x - n.bounds.min.x) *
+                (n.bounds.max.y - n.bounds.min.y) *
+                (n.bounds.max.z - n.bounds.min.z);
+            if (volume < bestVolume) {
+                bestVolume = volume;
+                m_activeSkyZoneIndex = i;
+            }
         }
     }
 
@@ -1200,12 +1216,12 @@ void PawnSystem::Update(Vector3 playerPos, float dt,
                     {p.position.x - kPawnHalfWidth, p.position.y, p.position.z - kPawnHalfWidth},
                     {p.position.x + kPawnHalfWidth, p.position.y + kPawnHeight, p.position.z + kPawnHalfWidth}};
             };
-            if (collision->OverlapsObstacle(pawnBox(), p.position.y)) {
+            if (collision->OverlapsObstacle(pawnBox(), p.position, kPawnUp)) {
                 const float nx = p.position.x, nz = p.position.z;
                 p.position.x = oldX;                        // try X rolled back
-                if (collision->OverlapsObstacle(pawnBox(), p.position.y)) {
+                if (collision->OverlapsObstacle(pawnBox(), p.position, kPawnUp)) {
                     p.position.x = nx; p.position.z = oldZ; // try Z rolled back
-                    if (collision->OverlapsObstacle(pawnBox(), p.position.y)) {
+                    if (collision->OverlapsObstacle(pawnBox(), p.position, kPawnUp)) {
                         p.position.x = oldX; p.position.z = oldZ;
                         p.velocity.x = 0.0f;
                         p.velocity.z = 0.0f;

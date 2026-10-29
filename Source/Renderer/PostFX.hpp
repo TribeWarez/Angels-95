@@ -100,6 +100,22 @@ public:
     }
 
     // -----------------------------------------------------------------------
+    // CRT warp (Phase 7.3) — an OPTIONAL fifth stage.
+    // -----------------------------------------------------------------------
+    // Driven by ZONE_CRT membership. The target is smoothed here rather than in
+    // the caller so the lerp survives a pause, a world load or a shot capture
+    // without a static float in Main.cpp, and so the settle time lives next to
+    // the pass it affects.
+    //
+    // Deliberately a separate stage instead of a uniform on Grade.fs: the final
+    // blit in Main.cpp picks ONE post program (Pixel / Jitter / Fog) through
+    // `shaderActive` because BeginShaderMode cannot nest, so a warp living there
+    // would cancel the others. Inside Resolve it composes with all of them.
+    void SetWarpTarget(float t) {
+        m_warpTarget = std::max(0.0f, std::min(1.0f, t));
+    }
+    float WarpIntensity() const { return m_warpCurrent; }
+
     // Resolve
     // -----------------------------------------------------------------------
     // `w`/`h` are the SCENE dimensions. Bloom runs at half resolution; the grade
@@ -113,6 +129,9 @@ public:
         if (!EnsureShaders()) return Texture2D{0};
         EnsureSize(w, h);
         if (m_ldr.id == 0) return Texture2D{0};
+        // A failed EnsureShaders() returns above, so `m_resolved` can never be
+        // left pointing at a destroyed texture from a previous size.
+        m_resolved = m_ldr.texture;
 
         const float bw = (float)m_bright.texture.width;
         const float bh = (float)m_bright.texture.height;
@@ -168,24 +187,50 @@ public:
             EndTextureMode();
         }
 
-        return m_ldr.texture;
+        // 5. Optional CRT warp (ZONE_CRT). Skips entirely at rest, so a world with
+        //    no CRT zone costs nothing, and a missing CRTWarp.fs leaves the graded
+        //    frame untouched instead of disabling the chain (that is why the warp
+        //    shader has its OWN load gate rather than joining EnsureShaders()).
+        AdvanceWarp();
+        if (m_warpCurrent > 0.002f && EnsureWarpShader() && m_warp.id > 0) {
+            const Rectangle src = {0, 0, (float)m_ldr.texture.width, -(float)m_ldr.texture.height};
+            const Rectangle dst = {0, 0, (float)w, (float)h};
+            BeginTextureMode(m_warp);
+            ClearBackground(BLACK);
+            BeginShaderMode(m_warpShader);
+            SetShaderValue(m_warpShader, m_locWarp, &m_warpCurrent, SHADER_UNIFORM_FLOAT);
+            float t = (float)GetTime();
+            SetShaderValue(m_warpShader, m_locWarpTime, &t, SHADER_UNIFORM_FLOAT);
+            DrawTexturePro(m_ldr.texture, src, dst, Vector2{0, 0}, 0.0f, WHITE);
+            EndShaderMode();
+            EndTextureMode();
+            m_resolved = m_warp.texture;
+        }
+
+        return m_resolved;
     }
 
-    Texture2D ResolvedTexture() const { return m_ldr.texture; }
+    Texture2D ResolvedTexture() const { return m_resolved.id > 0 ? m_resolved : m_ldr.texture; }
     bool Ready() const { return m_ldr.id != 0; }
 
     PostGrade& Grade() { return m_grade; }
 
     void Shutdown() {
+        DestroyTarget(m_warp);
         DestroyTarget(m_bright);
         DestroyTarget(m_blurA);
         DestroyTarget(m_blurB);
         DestroyTarget(m_ldr);
+        m_resolved = Texture2D{0};
         if (m_brightShader.id > 0) { UnloadShader(m_brightShader); m_brightShader = Shader{0}; }
         if (m_blurShader.id > 0)   { UnloadShader(m_blurShader);   m_blurShader = Shader{0}; }
         if (m_gradeShader.id > 0)  { UnloadShader(m_gradeShader);  m_gradeShader = Shader{0}; }
         if (m_addShader.id > 0)    { UnloadShader(m_addShader);    m_addShader = Shader{0}; }
+        if (m_warpShader.id > 0)   { UnloadShader(m_warpShader);   m_warpShader = Shader{0}; }
         m_shadersTried = false;
+        m_warpTried = false;
+        m_warpCurrent = 0.0f;
+        m_warpTarget = 0.0f;
     }
 
 private:
@@ -231,13 +276,48 @@ private:
         return true;
     }
 
+    bool EnsureWarpShader() {
+        if (m_warpShader.id > 0) return true;
+        if (m_warpTried) return false;
+        m_warpTried = true;
+        m_warpShader = LoadShaderWithFallback(nullptr, "GameData/Shaders/CRTWarp.fs");
+        if (m_warpShader.id == 0) {
+            // Not fatal: the graded frame is still returned, so a missing warp
+            // shader degrades to "the CRT zone has no visual effect" rather than
+            // to "the game renders ungraded" (which is what joining the core
+            // EnsureShaders() gate would have caused).
+            OZ_WARN("PostFX: CRTWarp.fs failed to load - ZONE_CRT has no warp pass");
+            return false;
+        }
+        m_locWarp     = GetShaderLocation(m_warpShader, "uWarpIntensity");
+        m_locWarpTime = GetShaderLocation(m_warpShader, "uTime");
+        return true;
+    }
+
+    // Ease the warp toward its target in time, not in frames - a long frame must
+    // not make the transition snap. 0.35 s matches the gravity blend's feel.
+    void AdvanceWarp() {
+        const float settle = 0.35f;
+        float dt = GetFrameTime();
+        if (dt <= 0.0f || dt > 0.25f) dt = 0.0f;   // paused / alt-tabbed: hold
+        const float step = dt / settle;
+        if (m_warpCurrent < m_warpTarget)
+            m_warpCurrent = std::min(m_warpTarget, m_warpCurrent + step);
+        else
+            m_warpCurrent = std::max(m_warpTarget, m_warpCurrent - step);
+    }
+
     void EnsureSize(int w, int h) {
         if (m_ldr.id > 0 && m_ldr.texture.width == w && m_ldr.texture.height == h) return;
 
+        DestroyTarget(m_warp);
         DestroyTarget(m_bright);
         DestroyTarget(m_blurA);
         DestroyTarget(m_blurB);
         DestroyTarget(m_ldr);
+        // The old texture ids are gone; a stale handle here is the documented
+        // "use a texture unloaded two frames ago" crash class.
+        m_resolved = Texture2D{0};
 
         const int bw = std::max(1, w / 2);
         const int bh = std::max(1, h / 2);
@@ -263,22 +343,37 @@ private:
         m_blurB  = makeHalf(bw, bh);
         m_ldr    = LoadRenderTexture(w, h);
         if (m_ldr.id > 0) SetTextureFilter(m_ldr.texture, TEXTURE_FILTER_BILINEAR);
+        // The warp output is display-ready LDR, so RGBA8 is correct and cheap -
+        // it never needs HDR headroom.
+        m_warp = LoadRenderTexture(w, h);
+        if (m_warp.id > 0) SetTextureFilter(m_warp.texture, TEXTURE_FILTER_BILINEAR);
     }
 
     RenderTexture2D m_bright{0};
     RenderTexture2D m_blurA{0};
     RenderTexture2D m_blurB{0};
     RenderTexture2D m_ldr{0};
+    RenderTexture2D m_warp{0};
+
+    // What Resolve() returned last: the warped frame while ZONE_CRT is active, the
+    // graded one otherwise. The pause menu's frozen frame reads this, so it shows
+    // exactly what the player was looking at.
+    Texture2D m_resolved{0};
 
     Shader m_brightShader{0};
     Shader m_blurShader{0};
     Shader m_gradeShader{0};
     Shader m_addShader{0};
+    Shader m_warpShader{0};
     bool m_shadersTried = false;
+    bool m_warpTried = false;
+    float m_warpCurrent = 0.0f;
+    float m_warpTarget  = 0.0f;
 
     int m_locThreshold = -1, m_locKnee = -1, m_locDirection = -1;
     int m_locExposure = -1, m_locContrast = -1, m_locSaturation = -1;
     int m_locVignette = -1, m_locTint = -1, m_locStrength = -1;
+    int m_locWarp = -1, m_locWarpTime = -1;
 
     PostGrade m_grade;
 };

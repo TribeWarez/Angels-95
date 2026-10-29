@@ -62,9 +62,16 @@ inline constexpr uint32_t SURF_COLLISION_PROXY   = (1u << 4);
 // worlds only use flags=8/16/32768), so it is safe. CPU-side only — no
 // Surface.fs SF_* counterpart, like SURF_PORTAL/MIRROR.
 inline constexpr uint32_t SURF_OCCLUDER          = (1u << 0);
-// Quantum obstacle (Phase 7.2): the brush is solid only when the camera is NOT
-// looking at it. CPU-side collision toggle + ghostly overlay; bit 1 is also
-// historically unallocated. No Surface.fs SF_* counterpart yet.
+// Quantum obstacle (Phase 7.2): the brush is SKIPPED by the world pass and its
+// collision is disabled while the camera can see it, i.e. solid only when the
+// player is not looking. Two things make that work, and both are required:
+//   * `DynamicCollision` (Physics/DynamicCollision.hpp) holds its AABB, because a
+//     brush toggled at runtime cannot live in the static CSG output - that output
+//     has no brush identity. RebuildCollisionVolumes therefore EXCLUDES a quantum
+//     brush from CSG even without SURF_NO_BSP_CUTS, so one flag is enough.
+//   * `OzoneRenderable::quantumHidden` is written ONCE per frame by
+//     Core.hpp's UpdateQuantumObstacles from the same AabbInFrustum call the draw
+//     pass would use, so collision and rendering cannot disagree mid-frame.
 inline constexpr uint32_t SURF_QUANTUM           = (1u << 1);
 
 // Gain the sky pass applies to a SURF_FAKEBACKDROP face.
@@ -268,6 +275,20 @@ struct BrushSurface {
     // Effective properties for a face (override or default).
     const SurfaceProps& Resolve(SurfaceFace f) const {
         return IsFaceOverridden(f) ? face[(int)f] : def;
+    }
+
+    // True when the brush-wide default OR any resolved face carries `bit`.
+    //
+    // Some flags describe how the WHOLE BRUSH is treated rather than how a face is
+    // shaded - SURF_QUANTUM (dynamic collision), SURF_NO_BSP_CUTS (collision
+    // exclusion), SURF_OCCLUDER (occlusion plane). Collision cannot express a
+    // half-solid brush, so "one face says so" has to mean the brush does. Use this
+    // for those; keep Resolve() for anything the shader applies per face.
+    bool HasAnywhere(uint32_t bit) const {
+        if (def.Has(bit)) return true;
+        for (int f = 0; f < FACE_COUNT; f++)
+            if (IsFaceOverridden((SurfaceFace)f) && face[f].Has(bit)) return true;
+        return false;
     }
 
     // True when the brush needs the per-face draw path.

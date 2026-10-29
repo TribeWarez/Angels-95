@@ -315,6 +315,21 @@ void ExportToOzone(std::ostream& output) {
                << " swim_up="   << ph.swimUpSpeed
                << " ladder_speed="  << ph.ladderSpeed
                << " fly_mult="  << ph.flySpeedMult;
+        // A tilted / inverted gravity vector survives a save ONLY as
+        // `gravity_vector=`; `gravity=` above always reconstructs a straight-down
+        // vector, so emitting the vector last lets it win. Conditions:
+        //   * no spaces anywhere - the OZONE tokenizer has no quote handling and
+        //     splits on whitespace, so "(1, 0, 0)" would truncate to "(1,".
+        //   * OZONE axis order: the parser maps ozone(x,y,z) -> engine(x,z,y), so
+        //     the inverse writes (engineX, engineZ, engineY).
+        const bool straightDown =
+            fabsf(ph.gravityVector.x) < 1e-4f &&
+            fabsf(ph.gravityVector.z) < 1e-4f &&
+            fabsf(ph.gravityVector.y + ph.gravity) < 1e-3f;
+        if (!straightDown) {
+            output << " gravity_vector=(" << ph.gravityVector.x << ","
+                   << ph.gravityVector.z << "," << ph.gravityVector.y << ")";
+        }
         output << "\n";
     }
 

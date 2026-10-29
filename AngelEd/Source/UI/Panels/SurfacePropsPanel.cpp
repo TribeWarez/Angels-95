@@ -71,6 +71,10 @@ static const SurfaceFlagRow kSurfaceFlagRows[] = {
     { L"No Fog",              SURF_NO_FOG,          true },
     { L"No BSP Cuts",         SURF_NO_BSP_CUTS,     true },
     { L"Sky Portal",          SURF_PORTAL,          true },
+    // Quantum obstacle (Phase 7.2): solid only while the camera cannot see it.
+    // Live because the CPU side is wired - DynamicCollision side-list + the
+    // once-per-frame toggle in Core.hpp.
+    { L"Quantum",             oz::surface::SURF_QUANTUM, true },
     // --- planned: shown, disabled ---
     { L"Mirror (planned)",    SURF_MIRROR,          false },
 };

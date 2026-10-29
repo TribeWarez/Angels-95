@@ -68,7 +68,7 @@ level is built around.
 
 ### Editor 
 
-<img src="GameData/Screenshots/Editopr.png" width="32%" alt="Editor" />
+<img src="GameData/Screenshots/Editor.png" width="32%" alt="Editor" />
 <img src="GameData/Screenshots/AngelEd_b122.png" width="32%" alt="Editor Version b122" />
 
 ### Engine Test

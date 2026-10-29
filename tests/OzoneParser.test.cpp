@@ -1,10 +1,12 @@
 // OzoneParser test — standalone, no raylib dependency
 #include "../Source/World/OzoneParser.hpp"
+#include "../Source/World/SurfaceFlags.hpp"
 #include "../Source/Physics/PhysicsInfo.hpp"
 #include "../Source/World/ZoneTypes.hpp"
 #include <cstdio>
 #include <cmath>
 #include <string>
+#include <vector>
 
 int test_count = 0, pass_count = 0;
 
@@ -385,6 +387,20 @@ static void test_zone_gravity_type() {
     else printf("FAIL\n");
 }
 
+// ZONE_CRT drives the PostFX warp pass. It is named "crt" in OZONE (the zone line
+// token), and the name must round-trip or the editor's exporter would write a
+// token the parser maps back to water.
+static void test_zone_crt_type() {
+    test_count++;
+    printf("  TEST ZoneType crt mapping... ");
+    bool ok = ZoneTypeFromString("crt") == ZoneType::ZONE_CRT
+        && ZoneTypeFromString("CRT") == ZoneType::ZONE_CRT
+        && std::string(ZoneTypeName(ZoneType::ZONE_CRT)) == "crt"
+        && (int)ZoneType::ZONE_CRT == 7;
+    if (ok) { pass_count++; printf("PASS\n"); }
+    else printf("FAIL\n");
+}
+
 // A quoted texPath used to be truncated at the first space: the plain
 // `texPath=` test matched the quoted form before the quote-aware branch could
 // run, so the value silently became `"my` and pointed at a missing file.
@@ -683,6 +699,32 @@ static void test_malformed_values_do_not_throw() {
     if (ok) { pass_count++; printf("PASS\n"); }
 }
 
+static void test_sektor01_scar_content() {
+    auto e = OzoneParser::parse_file("GameData/Worlds/Sektor_01_SilentPines/World.ozone");
+    if (e.empty()) { printf("  SKIP Sektor_01 scar content (world not found from cwd)\n"); return; }
+    test_count++;
+    printf("  TEST Sektor_01 scar uses gravity/CRT/quantum... ");
+    bool gravity = false, crt = false;
+    int quantum = 0;
+    bool hasScarSky = false, hasOuterSky = false;
+    for (const auto& p : e) {
+        if (p.type == OzonePrimitiveType::ENTITY_ZONE) {
+            if (p.entitySubType == "gravity" && p.physics.gravityVector.y > 0.1f)
+                gravity = true;   // engine +Y = straight up
+            if (p.entitySubType == "crt") crt = true;
+            if (p.entitySubType == "sky" && p.name == "silentpines_scar") hasScarSky = true;
+            if (p.entitySubType == "sky" && p.name == "silentpines_sky") hasOuterSky = true;
+        }
+        if (p.surface.def.flags & oz::surface::SURF_QUANTUM) quantum++;
+    }
+    // The interior sky pocket must be smaller than the outer world sky so the
+    // runtime's smallest-containing-volume rule resolves it indoors.
+    bool ok = gravity && crt && quantum >= 2 && hasScarSky && hasOuterSky;
+    if (ok) { pass_count++; printf("PASS\n"); }
+    else printf("FAIL: gravity=%d crt=%d quantum=%d scarSky=%d outerSky=%d\n",
+                gravity, crt, quantum, hasScarSky, hasOuterSky);
+}
+
 int main() {
     printf("OzoneParser tests:\n");
     test_portal();
@@ -707,6 +749,7 @@ int main() {
     test_zone_default_physics();
     test_zone_gravity_vector();
     test_zone_gravity_type();
+    test_zone_crt_type();
     test_texpath_quoted_with_space();
     test_texpath_unquoted_still_works();
     test_texpath_quoted_then_flags();
@@ -719,6 +762,7 @@ int main() {
     test_surface_glow_triple();
     test_surface_unknown_face_ignored();
     test_skybox_primitive();
+    test_sektor01_scar_content();
 
     printf("\nResults: %d/%d passed\n", pass_count, test_count);
     return (pass_count == test_count) ? 0 : 1;

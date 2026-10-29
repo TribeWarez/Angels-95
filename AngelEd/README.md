@@ -1,6 +1,6 @@
-# OTEditor
+# AngelEd (OTEditor)
 
-OTEditor is a Windows level editor for the AngelTech / Angels95 game engine. It combines Win32 native panels with a raylib 3D viewport for creating and editing game worlds.
+AngelEd is a Windows level editor for the AngelTech / Angels95 game engine. It combines Win32 native panels with a raylib 3D viewport for creating and editing game worlds.
 
 ## Features
 
@@ -38,7 +38,7 @@ OTEditor is a Windows level editor for the AngelTech / Angels95 game engine. It 
 .\build-native-win.ps1
 ```
 
-This builds all targets (Angels95, oz_server, oz_editor, OzPack) and assembles the `System/` release.
+This builds all targets (Angels95, AngelServ, AngelEd, OzPack) and assembles the `System/` release.
 
 ### MSYS2 / MINGW64
 
@@ -47,13 +47,13 @@ This builds all targets (Angels95, oz_server, oz_editor, OzPack) and assembles t
 .\build.ps1
 ```
 
-Both scripts produce `System/oz_editor.exe` along with INI files and launch scripts.
+Both scripts produce `System/AngelEd.exe` along with INI files and launch scripts.
 
 ## Usage
 
 1. Launch the editor:
    ```
-   System\oz_editor.exe
+   System\AngelEd.exe
    ```
 
 2. Open a world:
@@ -71,7 +71,7 @@ Both scripts produce `System/oz_editor.exe` along with INI files and launch scri
 
 ## Configuration
 
-`System/oz_editor.ini`:
+`System/AngelEd.ini`:
 ```ini
 [Editor]
 GridSize=1.0
@@ -85,10 +85,10 @@ Height=900
 
 ## Architecture
 
-- **Entry point:** `OTEditor/Source/Main.cpp`
-- **Win32 dialogs:** `OTEditor/Source/Win32Dialogs.cpp` — uses `HWND` handles stored as `void*` for cross-platform compat
-- **Editor state:** `OTEditor/Source/Editor.hpp` — world cache, models, placement modes
-- **Engine integration:** Links `oz_pawn_system.o`, `oz_ozone_loader.o`, `OzoneParser.o`
+- **Entry point:** `AngelEd/Source/Main.cpp`
+- **Win32 dialogs:** `AngelEd/Source/` panels and `Subsystems/` helpers - `HWND` handles are stored as `void*` for cross-platform compat
+- **Editor state:** `AngelEd/Source/Core/EditorState.hpp` - world cache, models, placement modes
+- **Engine integration:** Links `OzPawnSystem.o`, `OzOzoneLoader.o`, `OzoneParser.o`
 
 ## License
 

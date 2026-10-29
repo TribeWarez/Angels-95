@@ -1773,13 +1773,15 @@ void OzoneLoader::Draw(Camera3D& camera, bool cullBackfaces) {
 void OzoneLoader::DrawWorldGeometry(Camera3D& camera) {
     FrustumPlane planes[6];
     BuildFrustum(camera, planes);
-    // Zone-based PVS: collect the camera's active zones (+ adjacent via portals
-    // is approximated by all zones overlapping the camera point). Renderables
-    // whose centre lies in none of those zones are skipped.
-    BoundingBox camBox = { {camera.position.x-0.1f, camera.position.y-0.1f, camera.position.z-0.1f},
-                           {camera.position.x+0.1f, camera.position.y+0.1f, camera.position.z+0.1f} };
-    auto activeZones = ZoneManager::Instance().GetActiveZones(camera.position, camBox);
-    std::vector<ZoneVolumeNode*> activeZonePtrs = activeZones;
+    // No zone-based PVS here. A zone is an OPEN gameplay volume (sky, water,
+    // reverb, gravity, CRT), not a closed occlusion cell, and it routinely
+    // overlaps other zones. Culling "renderables whose centre is inside an
+    // inactive zone" made the shrine and the river vanish from the bridge and
+    // every other landmark disappear as soon as its local volume stopped
+    // containing the camera - a regression that grew with the number of zones
+    // in a world. Visibility is decided by the frustum below plus the explicit
+    // SURF_OCCLUDER planes; anything beyond that needs real portal adjacency,
+    // which zones do not carry.
 
     // Portal-plane occluders, collected ONCE (not per renderable): each is a
     // plane {normal, centre} in engine space. A `pln` carries its authored
@@ -1811,30 +1813,16 @@ void OzoneLoader::DrawWorldGeometry(Camera3D& camera) {
         // Collision proxies are never drawn in-game, whatever the editor toggle
         // says: they exist to stop the player falling through a prop.
         if (r.surfaceFlags & SURF_COLLISION_PROXY) continue;
+        // Quantum obstacle: hidden exactly while it is being LOOKED AT. The
+        // decision is not made here - `quantumHidden` is written once per frame by
+        // Core.hpp's UpdateQuantumObstacles from the same AabbInFrustum call the
+        // cull below would use, so this pass, the collision side-list and the
+        // editor can never disagree about which state the brush is in.
+        if (r.quantumHidden) continue;
         if (r.hasBounds && (r.bounds.min.x < r.bounds.max.x ||
                             r.bounds.min.y < r.bounds.max.y ||
                             r.bounds.min.z < r.bounds.max.z) &&
             !AabbInFrustum(planes, r.bounds)) continue;
-        // PVS filter: if zones exist and the camera is in a subset of them,
-        // skip renderables that lie inside a zone that is NOT active. Renderables
-        // outside every zone are always drawn.
-        if (!ZoneManager::Instance().GetZones().empty() && !activeZonePtrs.empty() &&
-            activeZonePtrs.size() < ZoneManager::Instance().GetZones().size()) {
-            Vector3 c = { (r.bounds.min.x+r.bounds.max.x)*0.5f,
-                          (r.bounds.min.y+r.bounds.max.y)*0.5f,
-                          (r.bounds.min.z+r.bounds.max.z)*0.5f };
-            bool inAnyZone = false;
-            bool inActive = false;
-            for (auto& z : ZoneManager::Instance().GetZones()) {
-                if (c.x >= z.bounds.min.x && c.x <= z.bounds.max.x &&
-                    c.y >= z.bounds.min.y && c.y <= z.bounds.max.y &&
-                    c.z >= z.bounds.min.z && c.z <= z.bounds.max.z) {
-                    inAnyZone = true;
-                    for (auto* a : activeZonePtrs) if (a->id == z.id) { inActive = true; break; }
-                }
-            }
-            if (inAnyZone && !inActive) continue;
-        }
         // Occlusion: a renderable on the far side of any occluder plane is skipped.
         if (!occluders.empty()) {
             Vector3 rc = { (r.bounds.min.x+r.bounds.max.x)*0.5f,
@@ -1949,11 +1937,20 @@ void OzoneLoader::ComputeCollisionAABB(int type, const std::vector<float>& args,
 // ---------------------------------------------------------------------------
 void OzoneLoader::RebuildCollisionVolumes() {
     m_collisionVolumes.clear();
+    // Rebuilt here, together with the volumes, so the side-list can never describe
+    // a previous world or a brush that a History undo removed.
+    m_dynamicCollision.Clear();
+    m_quantumIndices.clear();
 
     // Phase 1: collect all brush AABBs with their CSG operations
     CsgProcessor csg;
-    for (auto& r : m_renderables) {
+    for (size_t ri = 0; ri < m_renderables.size(); ++ri) {
+        auto& r = m_renderables[ri];
         if (!r.loaded) continue;
+        // Quantum state is re-derived every rebuild: a brush edited from quantum to
+        // solid (or back) must not keep the previous run's flags.
+        r.isQuantum = false;
+        r.quantumHidden = false;
         // A skybox is a hollow room, not a solid. Feeding it to CSG would put an
         // invisible wall around the player and, worse, any `sub` against it would
         // carve away the sky. Render-only by construction.
@@ -1964,13 +1961,6 @@ void OzoneLoader::RebuildCollisionVolumes() {
         // claimed the flag did. It did not, and the flag had no other consumer at
         // all, so it round-tripped through every .ozone doing nothing.
         if (r.typeId == (int)OzonePrimitiveType::SKYBOX) continue;
-
-        // SURF_NO_BSP_CUTS, made real: opt a brush out of collision entirely.
-        // Cosmetic-only geometry (a trigger volume's visual, a skybox authored as a
-        // plain box, a decorative wall the player should pass through) previously
-        // had no way to say so - the collision world is AABB-only and every loaded
-        // brush was a solid unless it was an entity.
-        if (r.surface.def.flags & (uint32_t)oz::surface::SURF_NO_BSP_CUTS) continue;
         // Skip entity types Ã¢â‚¬â€ handled by PawnSystem
         if (r.typeId == (int)OzonePrimitiveType::ENTITY_PLAYERSTART ||
             r.typeId == (int)OzonePrimitiveType::ENTITY_PICKUP    ||
@@ -2018,6 +2008,39 @@ void OzoneLoader::RebuildCollisionVolumes() {
         if (brush.maxX - brush.minX < 0.02f) { brush.minX -= 0.05f; brush.maxX += 0.05f; }
         if (brush.maxY - brush.minY < 0.02f) { brush.minY -= 0.05f; brush.maxY += 0.05f; }
         if (brush.maxZ - brush.minZ < 0.02f) { brush.minZ -= 0.05f; brush.maxZ += 0.05f; }
+
+        // --- Quantum obstacles (Phase 7.2) ---------------------------------
+        // A quantum brush goes to the DYNAMIC side-list, never to CSG. That is not
+        // an optimisation: the static collision world is a CSG *output* whose
+        // volumes carry no brush identity (Subtract replaces one solid with up to
+        // six, MergePass swap-removes), so "remove the volumes that came from
+        // brush N" cannot be expressed. The side-list is the supported mechanism,
+        // and it means SURF_QUANTUM alone is enough - the author does not also need
+        // SURF_NO_BSP_CUTS, which would be an invisible trap (forget it and the
+        // brush is a permanently solid wall whose quantum flag does nothing).
+        //
+        // HasAnywhere, not def.flags: collision is per brush, so a flag set on one
+        // face has to count for the whole brush or the mechanic is untrustworthy.
+        if (r.surface.HasAnywhere((uint32_t)oz::surface::SURF_QUANTUM)) {
+            r.isQuantum = true;
+            oz::physics::DynamicBlocker b;
+            b.minX = brush.minX; b.minY = brush.minY; b.minZ = brush.minZ;
+            b.maxX = brush.maxX; b.maxY = brush.maxY; b.maxZ = brush.maxZ;
+            b.enabled = true;
+            b.ownerId = (int)ri;
+            m_dynamicCollision.Add(b);
+            m_quantumIndices.push_back((int)ri);
+            continue;
+        }
+
+        // SURF_NO_BSP_CUTS, made real: opt a brush out of collision entirely.
+        // Cosmetic-only geometry (a trigger volume's visual, a skybox authored as a
+        // plain box, a decorative wall the player should pass through) previously
+        // had no way to say so - the collision world is AABB-only and every loaded
+        // brush was a solid unless it was an entity. Checked AFTER the quantum
+        // branch above, which must reach the side-list regardless of this flag.
+        if (r.surface.def.flags & (uint32_t)oz::surface::SURF_NO_BSP_CUTS) continue;
+
         brush.op   = (CsgOp)r.csgOp;
         csg.Apply(brush);
     }
@@ -2087,8 +2110,17 @@ void OzoneLoader::RebuildCollisionVolumes() {
     // solids" - it is one brush whose carve was abandoned.
     if (csg.overflow_count() > 0) {
         OZ_WARN("CSG: %d brush(es) hit the %d-volume per-brush carve budget and "
-                "stopped early — geometry you intended to cut is still solid",
+                "stopped early - geometry you intended to cut is still solid",
                 csg.overflow_count(), CsgProcessor::MAX_SPLITS);
+    }
+
+    // Quantum obstacles are NOT in the CSG output by construction, so say how many
+    // were moved to the dynamic side-list. Without this a world whose SURF_QUANTUM
+    // brushes were all skipped (typo'd flag, wrong brush type) looks identical to
+    // one that has none, and the only symptom is "the mechanic does nothing".
+    if (!m_quantumIndices.empty()) {
+        OZ_INFO("Quantum obstacles: %d brush(es) registered in the dynamic side-list",
+                (int)m_quantumIndices.size());
     }
     m_lastCsgOverflow = csg.overflow_count();
 

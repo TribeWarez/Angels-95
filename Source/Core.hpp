@@ -9,6 +9,8 @@
 #include "Renderer/OzAssetMapper.hpp"
 #include "Audio/SoundManager.hpp"
 #include "World/OzOzoneLoader.hpp"
+#include "World/OzoneFrustum.hpp"   // BuildFrustum/AabbInFrustum: the quantum toggle
+                                    // must use the SAME frustum the draw pass does
 #include "Pawn/OzPawnSystem.hpp"
 #include "Pawn/CombatMath.hpp"
 #include "Package/PackageAssetLoader.hpp"
@@ -161,12 +163,70 @@ public:
                     best = top;
             }
         }
+        // Quantum floor candidate (Phase 7.2). The side-list is queried with the
+        // SAME rule as a brush top - highest support at or below feet + step - so a
+        // quantum slab the player is not looking at can be stood on. Reading it
+        // here as well as in OverlapsObstacle is what keeps "solid" consistent:
+        // a floor that blocks would be un-standable, and one that neither blocks
+        // nor supports is a hole the player falls through.
+        auto& dyn = ozLoader.GetDynamicCollision();
+        if (dyn.Count() > 0) {
+            const float dynTop = dyn.TopUnder(x, z, kNoGroundY);
+            if (dynTop > best && dynTop <= supportCeiling)
+                best = dynTop;
+        }
         if (best > kNoGroundY)
             return GroundSample{best, true};
         return GroundSample{0.0f, false};
     }
+    // Support below the player along -`up`, for tilted gravity (Phase 7.1b).
+    // The XZ chunk grid cannot accelerate a tilted ray, so this walks the volume
+    // list - the same cost class as the projectile world sweep, and only reached in
+    // a world whose gravity is not +Y (ClampToGround keeps the column query
+    // otherwise), so an ordinary level never pays for it.
+    GroundSample SampleGroundAlong(Vector3 origin, const Vector3& up, float maxDist) override {
+        auto& ozLoader = OzoneLoader::Instance();
+        const Vector3 dir = {-up.x, -up.y, -up.z};
+        const Ray ray{origin, dir};
+        float best = maxDist;
+        bool hit = false;
+        auto test = [&](const BoundingBox& bb) {
+            const RayCollision c = GetRayCollisionBox(ray, bb);
+            if (c.hit && c.distance >= 0.0f && c.distance <= best) {
+                best = c.distance;
+                hit = true;
+            }
+        };
+        for (auto& cv : ozLoader.GetCollisionVolumes()) {
+            if (cv.isHeightmap) continue;
+            test(cv.aabb);
+        }
+        auto& dyn = ozLoader.GetDynamicCollision();
+        for (int i = 0; i < (int)dyn.Count(); ++i) {
+            const auto* b = dyn.At(i);
+            if (!b || !b->enabled) continue;
+            test(BoundingBox{{b->minX, b->minY, b->minZ}, {b->maxX, b->maxY, b->maxZ}});
+        }
+        if (!hit) {
+            // Outdoor terrain has no per-cell AABB; the column sampler is the only
+            // ground query it has, and it is meaningful only while up is mostly
+            // vertical. Documented limitation, not a silent fallback: a fully rolled
+            // camera over a heightmap has no ground.
+            if (ozLoader.HasHeightmap() && up.y > 0.5f) {
+                const GroundSample g = SampleGround(origin.x, origin.z, origin.y);
+                if (g.valid) {
+                    const Vector3 p = {origin.x, g.y, origin.z};
+                    return GroundSample{Vector3DotProduct(p, up), true};
+                }
+            }
+            return GroundSample{0.0f, false};
+        }
+        const Vector3 p = Vector3Add(origin, Vector3Scale(dir, best));
+        return GroundSample{Vector3DotProduct(p, up), true};
+    }
 
-    bool OverlapsObstacle(const BoundingBox& player, float feetY) override {
+    bool OverlapsObstacle(const BoundingBox& player, Vector3 feetPoint,
+                          const Vector3& up) override {
         auto& ozLoader = OzoneLoader::Instance();
         auto& chunkMgr = ozLoader.GetChunkManager();
         std::vector<int> nearIndices;
@@ -176,9 +236,13 @@ public:
         // when |x - z| happened to fall inside the 3x3 cell window. Worlds whose
         // spawn sits off that diagonal (World_endless_snow at z=-410,
         // Dust_Ravine, Dessert_Dreams) had no wall collision at all.
+        //
+        // The chunk index stays XZ: the player box is a world AABB, so the cells it
+        // spans are the same ones whatever the gravity axis is.
         chunkMgr.GetVolumesNearBox(player.min.x, player.min.z,
                                    player.max.x, player.max.z, nearIndices);
         auto& vols = ozLoader.GetCollisionVolumes();
+        const float feetUp = Vector3DotProduct(feetPoint, up);
         for (int idx : nearIndices) {
             if (idx >= 0 && idx < (int)vols.size() &&
                 CheckCollisionBoxes(player, vols[idx].aabb))
@@ -187,7 +251,15 @@ public:
                 // face is within the step-up tolerance of the feet is walked
                 // over by ClampToGround. This is a hard threshold, so anything
                 // taller still blocks and walls stay solid.
-                if (vols[idx].aabb.max.y <= feetY + kStepHeight)
+                //
+                // Measured ALONG `up`, not in world Y - a tilted body would
+                // otherwise treat every surface above it as a wall. At +Y this is
+                // exactly `aabb.max.y`.
+                const BoundingBox& a = vols[idx].aabb;
+                const float topUp = oz::physics::DynamicCollision::TopAlongUp(
+                    a.min.x, a.min.y, a.min.z, a.max.x, a.max.y, a.max.z,
+                    up.x, up.y, up.z);
+                if (topUp <= feetUp + kStepHeight)
                     continue;
                 // The heightmap is the ground: support comes from the ground
                 // clamp, not the obstacle test.
@@ -196,6 +268,17 @@ public:
                 return true;
             }
         }
+        // Quantum obstacles (Phase 7.2): an ENABLED side-list blocker above the
+        // step tolerance blocks exactly like a brush volume. The step rule is
+        // applied inside OverlapsEnabledAbove so a quantum floor supports instead
+        // of blocking (see SampleGround's twin note); writing the test here instead
+        // would be a second copy of that rule and they would drift.
+        auto& dyn = ozLoader.GetDynamicCollision();
+        if (dyn.Count() > 0 &&
+            dyn.OverlapsEnabledAbove(player.min.x, player.min.y, player.min.z,
+                                     player.max.x, player.max.y, player.max.z,
+                                     feetUp + kStepHeight, up.x, up.y, up.z))
+            return true;
         return false;
     }
 };
@@ -347,7 +430,7 @@ auto LoadWorld()
 
     // Reset movement state so player falls to new world's collision
     g_playerMovement.onGround = false;
-    g_playerMovement.velocityY = 0.0f;
+    g_playerMovement.velocityUp = 0.0f;
 
     // Reset cross-world state that would otherwise persist across LoadWorld calls
     g_damageCooldown = 0.0f;
@@ -1726,12 +1809,24 @@ void UpdatePlayer()
         PlayerController::Instance().StopWalkLoop();
     }
 
-    AngelTechData.MainCamera.position.y += bobY;
-    // Move the target by the bob DELTA, not the absolute bob: UpdateLookAndMove
-    // already folded last frame's bob into the target through the camera
-    // position, so an absolute add would double it and pitch the view. The delta
-    // keeps target - position == look direction, i.e. a true eye bob.
-    AngelTechData.MainCamera.target.y += (bobY - s_prevBobY);
+    // Bob along the gravity axis, not world Y: in a tilted-gravity zone a Y bob
+    // sways the view sideways relative to the body. `up` is the same axis the
+    // movement basis and the ground clamp use, so the bob stays "vertical" for the
+    // player whichever way down is.
+    {
+        const Vector3& up = g_playerMovement.up;
+        const float d = bobY - s_prevBobY;
+        AngelTechData.MainCamera.position.x += up.x * bobY;
+        AngelTechData.MainCamera.position.y += up.y * bobY;
+        AngelTechData.MainCamera.position.z += up.z * bobY;
+        // Move the target by the bob DELTA, not the absolute bob: UpdateLookAndMove
+        // already folded last frame's bob into the target through the camera
+        // position, so an absolute add would double it and pitch the view. The delta
+        // keeps target - position == look direction, i.e. a true eye bob.
+        AngelTechData.MainCamera.target.x += up.x * d;
+        AngelTechData.MainCamera.target.y += up.y * d;
+        AngelTechData.MainCamera.target.z += up.z * d;
+    }
     s_prevBobY = bobY;
 
     // Feed the weapon view-model so it sways on the same phase.
@@ -1988,8 +2083,78 @@ static void SweepProjectilesVsWorld(float dt)
     }
 }
 
+// ---------------------------------------------------------------------------
+// Quantum obstacles (Phase 7.2)
+//
+// ONE decision per frame, shared by the world pass and the collision side-list: a
+// SURF_QUANTUM brush is solid (and drawn) only while the camera cannot see it.
+// Runs before the world pass and before the ground clamp / obstacle test, so
+// neither can observe a half-updated state inside a frame (and the 60 Hz sub-steps
+// all see the same state, because this is a per-frame call, not a sim-step one).
+//
+// The `engulfed` case is the trap. Walking into a hidden (non-solid) brush and then
+// looking away would solidify it AROUND the player, and a blocked move rolls back
+// the whole step (PlayerPhysics::RestorePosition), which reads as being stuck in a
+// wall. So a brush never becomes solid while the player's body is inside it -
+// where "inside" deliberately excludes resting on top, or every quantum floor
+// would switch off the moment the player stood on it.
+// ---------------------------------------------------------------------------
+constexpr const char* kQuantumLoopKey  = "quantum_static";
+// GameData/-rooted: LoadSoundWithFallback resolves GameData-relative keys, and the
+// other core sounds use the same form ("GameData/Audio/Sounds/Entities/...").
+constexpr const char* kQuantumLoopPath = "GameData/Audio/Sounds/Entities/quantum_static.wav";
+
+static void UpdateQuantumObstacles(const Camera3D& cam)
+{
+    auto& loader = OzoneLoader::Instance();
+    auto& dyn    = loader.GetDynamicCollision();
+    bool inViewAny = false;
+
+    if (dyn.Count() > 0) {
+        FrustumPlane planes[6];
+        BuildFrustum(cam, planes);
+        const BoundingBox& pb = g_playerMovement.PlayerBounds;
+        const auto& indices = loader.GetQuantumIndices();
+        for (size_t i = 0; i < indices.size(); ++i) {
+            OzoneRenderable* r = loader.Get(indices[i]);
+            const oz::physics::DynamicBlocker* b = dyn.At((int)i);
+            if (!r || !b) continue;
+            const BoundingBox box = {{b->minX, b->minY, b->minZ},
+                                     {b->maxX, b->maxY, b->maxZ}};
+            const bool inView = AabbInFrustum(planes, box);
+            // "Buried in it", not "resting on it". Require a non-degenerate player
+            // box: on the first frame PlayerBounds is still {0,0,0}-{0,0,0}, which
+            // trivially overlaps every brush containing the origin and would make
+            // such a brush read as engulfed before the player has been placed.
+            const bool boundsValid = pb.max.x > pb.min.x || pb.max.y > pb.min.y ||
+                                     pb.max.z > pb.min.z;
+            const bool engulfed =
+                boundsValid &&
+                pb.max.x > b->minX && pb.min.x < b->maxX &&
+                pb.max.z > b->minZ && pb.min.z < b->maxZ &&
+                pb.min.y < b->maxY - oz::physics::kStepHeight;
+            const bool solid = !inView && !engulfed;
+            r->quantumHidden = inView;
+            dyn.SetEnabled((int)i, solid);
+            if (inView) inViewAny = true;
+        }
+    }
+
+    // Quantum static: audible only while something is actually phasing out - the cue
+    // that "the thing you are looking at is not really there". StartLoopSound is
+    // idempotent for the same key+path, so polling it per frame is free, and
+    // ResetWorldAudio() releases it on a world change.
+    auto& sm = SoundManager::Instance();
+    if (inViewAny) sm.StartLoopSound(kQuantumLoopKey, kQuantumLoopPath, 0.35f, 1.0f);
+    else if (sm.IsLoopPlaying(kQuantumLoopKey)) sm.StopLoopSound(kQuantumLoopKey);
+}
+
 void DrawWorld()
 {
+    // Quantum state first: the world pass reads `quantumHidden` and the collision
+    // queries below read the side-list, and both must come from this frame's
+    // decision.
+    UpdateQuantumObstacles(AngelTechData.MainCamera);
     // Detect sky zone BEFORE the render target is bound. The portal view needs
     // the zone anchor, and raylib cannot nest render textures: EndTextureMode
     // rebinds the default framebuffer, not the previously bound one. So the
@@ -2118,11 +2283,14 @@ if (inSkyZone)
     // physics module via the adapter below.
     {
         oz::physics::OzoneCollisionQuery q;
-        Vector3 cp = AngelTechData.MainCamera.position;
-        // Effective eye height shrinks while crouching (dynamic player stance)
-        float playerFeet = cp.y - g_playerMovement.EyeHeight;
-        if (oz::physics::PlayerPhysics().TestObstacleOverlap(g_playerMovement.PlayerBounds,
-                                                             playerFeet, q))
+        const Vector3 cp = AngelTechData.MainCamera.position;
+        // Feet point along the gravity axis: the obstacle test measures its
+        // step-up tolerance from here, so it must move with the body's up, not
+        // drop a world-Y coordinate (which a tilted body would read as a wall).
+        const Vector3 playerFeet = Vector3Subtract(
+            cp, Vector3Scale(g_playerMovement.up, g_playerMovement.EyeHeight));
+        if (oz::physics::PlayerPhysics().TestObstacleOverlap(
+                g_playerMovement.PlayerBounds, playerFeet, g_playerMovement.up, q))
             ObjectCollision = true;
     }
 
@@ -2134,10 +2302,11 @@ if (inSkyZone)
         oz::physics::PlayerPhysics pphys;
         oz::physics::PlayerPhysics::Motion motion;
         motion.onGround = g_playerMovement.onGround;
-        motion.velocityY = g_playerMovement.velocityY;
-        pphys.ClampToGround(AngelTechData.MainCamera, motion, g_playerMovement.EyeHeight, q);
+        motion.velocityUp = g_playerMovement.velocityUp;
+        pphys.ClampToGround(AngelTechData.MainCamera, motion, g_playerMovement.EyeHeight,
+                            g_playerMovement.up, q);
         g_playerMovement.onGround = motion.onGround;
-        g_playerMovement.velocityY = motion.velocityY;
+        g_playerMovement.velocityUp = motion.velocityUp;
     }
 
     UpdatePlayer();
@@ -2608,7 +2777,7 @@ if (inSkyZone)
             g_playerMovement.OldX = AngelTechData.MainCamera.position.x;
             g_playerMovement.OldY = AngelTechData.MainCamera.position.y;
             g_playerMovement.OldZ = AngelTechData.MainCamera.position.z;
-            g_playerMovement.velocityY = 0.0f;
+            g_playerMovement.velocityUp = 0.0f;
             g_playerMovement.onGround = true;
             g_portalTransitionPending = false;
 
