@@ -134,6 +134,17 @@ static void test_main_uses_one_viewport_helper() {
     check(main.find("SetPaneProjection") != std::string::npos &&
           main.find("SetPaneViewport") != std::string::npos,
           "each pane gets its own aspect-correct projection and GL viewport");
+    // Phase 2: picking and the gizmo must project THROUGH the active pane. A
+    // GetMouseRay/GetWorldToScreen call left in either file maps the mouse over the
+    // whole window and mis-aims every click in a split.
+    const std::string gizmo = ReadFile("AngelEd/Source/Subsystems/Gizmo.cpp");
+    const std::string sel   = ReadFile("AngelEd/Source/Subsystems/Selection.cpp");
+    check(!gizmo.empty() && gizmo.find("GetWorldToScreen(") == std::string::npos &&
+          gizmo.find("WorldToScreenInRect") != std::string::npos,
+          "the gizmo projects through the active pane, not the window");
+    check(!sel.empty() && sel.find("GetMouseRay(") == std::string::npos &&
+          sel.find("RayFromPane") != std::string::npos,
+          "picking builds a pane-aware ray");
 }
 
 int main() {

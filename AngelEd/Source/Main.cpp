@@ -37,6 +37,7 @@
 #include "Core/EditorShell.hpp"
 #include "Core/EditorState.hpp"
 #include "Core/Viewport.hpp"
+#include "Core/ViewportRay.hpp"
 #include "Subsystems/Placement.hpp"
 #include "Subsystems/LevelState.hpp"
 #include "Subsystems/History.hpp"
@@ -123,13 +124,19 @@ static void EditorViewportRectsNow(std::vector<ed::viewport::VpRect>& out) {
     ed::viewport::Split(EditorViewportAreaNow(), rows, cols, out);
 }
 
-// Input is gated to the PRIMARY pane (index 0). In a split, the mouse ray is still
-// built from the primary camera, so accepting clicks in a secondary pane would
-// pick against the wrong view; input routing across panes is the next phase.
+// Input is accepted over ANY pane; the pane under the press becomes the active
+// input pane (Phase 2). The primary render pass follows the active pane.
 static bool EditorViewportContains(Vector2 p) {
     std::vector<ed::viewport::VpRect> rects;
     EditorViewportRectsNow(rects);
-    return !rects.empty() && ed::viewport::Contains(rects[0], p.x, p.y);
+    return ed::viewport::IndexAt(rects, p.x, p.y) >= 0;
+}
+
+static ed::viewport::VpRect Editor_ActiveRect(const std::vector<ed::viewport::VpRect>& rects) {
+    if (rects.empty()) return EditorViewportAreaNow();
+    int a = g_editorPanels.viewActive;
+    if (a < 0 || a >= (int)rects.size()) a = 0;
+    return rects[a];
 }
 
 // Secondary-pane cameras are DERIVED from the primary each frame, so panning the
@@ -153,6 +160,21 @@ static Camera3D MakeSecondaryCam(int pane, const Camera3D& primary) {
             break;
     }
     return c;
+}
+
+// Per-pane cameras. The active pane's camera mirrors OTEditor.MainCamera (which
+// every input/preset path already edits); the others are edited only by becoming
+// active. Initialised once: pane 0 = the startup camera, 1 = top ortho, 2 = side
+// ortho, 3 = a perspective clone.
+static Camera3D g_paneCams[4];
+static bool g_paneCamsInit = false;
+static void Editor_EnsurePaneCams() {
+    if (g_paneCamsInit) return;
+    g_paneCams[0] = OTEditor.MainCamera;
+    g_paneCams[1] = MakeSecondaryCam(1, OTEditor.MainCamera);
+    g_paneCams[2] = MakeSecondaryCam(2, OTEditor.MainCamera);
+    g_paneCams[3] = MakeSecondaryCam(3, OTEditor.MainCamera);
+    g_paneCamsInit = true;
 }
 
 // Override the projection BeginMode3D just pushed with one whose aspect matches
@@ -316,6 +338,31 @@ int main(int argc, char **argv){
             DispatchMessage(&msg);
         }
 
+        // --- Multi-viewport input ownership (Phase 2) -------------------------
+        // Mirror the active pane's camera into OTEditor.MainCamera (the variable
+        // every input/preset/ray path already edits), publish its rect for the
+        // pane-aware ray/gizmo helpers, and switch panes on a press.
+        Editor_EnsurePaneCams();
+        {
+            std::vector<ed::viewport::VpRect> prects;
+            EditorViewportRectsNow(prects);
+            int a = g_editorPanels.viewActive;
+            if (a < 0 || a >= (int)prects.size()) { a = 0; g_editorPanels.viewActive = 0; }
+            OTEditor.MainCamera = g_paneCams[a];
+            g_activeViewportRect = prects.empty() ? EditorViewportAreaNow() : prects[a];
+
+            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) ||
+                IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
+                const Vector2 mp = GetMousePosition();
+                const int hit = ed::viewport::IndexAt(prects, mp.x, mp.y);
+                if (hit >= 0 && hit != a) {
+                    g_paneCams[a] = OTEditor.MainCamera;   // keep uncommitted edits
+                    g_editorPanels.viewActive = hit;
+                    OTEditor.MainCamera = g_paneCams[hit];
+                    g_activeViewportRect = prects[hit];
+                }
+            }
+        }
         // A placement click is a ONE-FRAME request: the release below sets it and
         // the commit block later in THIS frame consumes it. Clearing it here means
         // a click that could not commit (ghost disarmed by the same frame) can
@@ -617,7 +664,7 @@ int main(int argc, char **argv){
                 Vector2 mp = GetMousePosition();
                 if (EditorViewportContains(mp)) {
                     if (!g_terrainHistPushed) { HistoryPush(); g_terrainHistPushed = true; }
-                    Ray ray = GetMouseRay(mp, OTEditor.MainCamera);
+                    Ray ray = RayFromPane(mp, OTEditor.MainCamera, g_activeViewportRect);
                     Vector3 hmPos = oz.GetHeightmapPosition();
                     float scale = oz.GetHeightmapScale();
                     float sx = oz.GetHeightmapCellSize() * (oz.GetHeightmapGridW() - 1) * scale;
@@ -1049,8 +1096,7 @@ int main(int argc, char **argv){
         // Scissor + viewport + a pane-aspect projection keep each view framed.
         std::vector<ed::viewport::VpRect> vpRects;
         EditorViewportRectsNow(vpRects);
-        const ed::viewport::VpRect vpPrimary =
-            vpRects.empty() ? EditorViewportAreaNow() : vpRects[0];
+        const ed::viewport::VpRect vpPrimary = Editor_ActiveRect(vpRects);
         BeginScissorMode((int)vpPrimary.x, (int)vpPrimary.y, (int)vpPrimary.w, (int)vpPrimary.h);
         SetPaneViewport(vpPrimary);
 
@@ -1965,12 +2011,19 @@ AngelTechEditor.DrawModel = false;
         EndMode3D();
         EndScissorMode();
 
-        // --- Secondary panes (Phase 1): read-only reference views. Each draws the
-        // sky, grid, world and actors from its own camera. No gizmo/overlays yet -
-        // the primary pane remains the editing surface.
-        for (size_t pi = 1; pi < vpRects.size(); pi++) {
+        // Commit this frame's camera edits (navigation, terrain-follow) back to the
+        // active pane so they persist when another pane becomes active.
+        if (g_editorPanels.viewActive >= 0 && g_editorPanels.viewActive < 4)
+            g_paneCams[g_editorPanels.viewActive] = OTEditor.MainCamera;
+
+        // --- Secondary panes (Phase 2): every pane EXCEPT the active one is drawn
+        // read-only from its own stored camera. The active pane above carries the
+        // gizmo/overlays and owns input, so the editing surface is whichever pane
+        // the user last clicked.
+        for (size_t pi = 0; pi < vpRects.size(); pi++) {
+            if ((int)pi == g_editorPanels.viewActive) continue;
             const ed::viewport::VpRect& r = vpRects[pi];
-            Camera3D cam = MakeSecondaryCam((int)pi, OTEditor.MainCamera);
+            Camera3D cam = g_paneCams[pi];
             BeginScissorMode((int)r.x, (int)r.y, (int)r.w, (int)r.h);
             SetPaneViewport(r);
             BeginMode3D(cam);

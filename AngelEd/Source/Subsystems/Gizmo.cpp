@@ -150,7 +150,7 @@ static GizmoHandle Gizmo_Pick(Vector2 mouse, const Camera3D& cam, int toolMode) 
         for (int i = 0; i <= 64; i++) {
             const float a = (float)i / 64.0f * 2.0f * PI;
             Vector3 wp = {pivot.x + cosf(a) * r, pivot.y, pivot.z + sinf(a) * r};
-            Vector2 sp = GetWorldToScreen(wp, cam);
+            Vector2 sp = WorldToScreenInRect(wp, cam, g_activeViewportRect);
             if (i > 0) {
                 const float d = DistToSegment2D(mouse, prev, sp);
                 if (d < bestDist) { bestDist = d; best = GizmoHandle::RotateY; }
@@ -160,7 +160,7 @@ static GizmoHandle Gizmo_Pick(Vector2 mouse, const Camera3D& cam, int toolMode) 
         return best;
     }
 
-    const Vector2 sp = GetWorldToScreen(pivot, cam);
+    const Vector2 sp = WorldToScreenInRect(pivot, cam, g_activeViewportRect);
     // Centre handle wins ties: it is the smallest target.
     const float dc = sqrtf((mouse.x - sp.x) * (mouse.x - sp.x) + (mouse.y - sp.y) * (mouse.y - sp.y));
     if (dc < 9.0f) return GizmoHandle::Screen;
@@ -171,7 +171,7 @@ static GizmoHandle Gizmo_Pick(Vector2 mouse, const Camera3D& cam, int toolMode) 
     const GizmoHandle axes[3] = {GizmoHandle::AxisX, GizmoHandle::AxisY, GizmoHandle::AxisZ};
     for (GizmoHandle h : axes) {
         const Vector3 tip = Vector3Add(pivot, Vector3Scale(AxisVector(h), len));
-        const Vector2 tp = GetWorldToScreen(tip, cam);
+        const Vector2 tp = WorldToScreenInRect(tip, cam, g_activeViewportRect);
         // Skip an axis whose shaft is (nearly) parallel to the view direction:
         // it projects to a few pixels at the pivot, so it is both unaimable and
         // wins the distance test against the axis the user is actually pointing
@@ -187,7 +187,7 @@ static GizmoHandle Gizmo_Pick(Vector2 mouse, const Camera3D& cam, int toolMode) 
     if (toolMode == 1) {
         const GizmoHandle planes[3] = {GizmoHandle::PlaneXY, GizmoHandle::PlaneYZ, GizmoHandle::PlaneXZ};
         for (GizmoHandle h : planes) {
-            const Vector2 pc = GetWorldToScreen(PlaneCenter(pivot, h, len), cam);
+            const Vector2 pc = WorldToScreenInRect(PlaneCenter(pivot, h, len), cam, g_activeViewportRect);
             const float d = sqrtf((mouse.x - pc.x) * (mouse.x - pc.x) + (mouse.y - pc.y) * (mouse.y - pc.y));
             if (d < 9.0f) return h;
         }
@@ -209,7 +209,7 @@ bool Gizmo_BeginDrag(Vector2 mouse, const Camera3D& cam, int toolMode) {
     if (h == GizmoHandle::None) return false;
 
     const Vector3 pivot = Gizmo_Pivot();
-    const Ray ray = GetMouseRay(mouse, cam);
+    const Ray ray = RayFromPane(mouse, cam, g_activeViewportRect);
     const ozg::Vec3 ro = ToOz(ray.position);
     const ozg::Vec3 rd = ozg::Normalize(ToOz(ray.direction));
     const ozg::Vec3 p = ToOz(pivot);
@@ -246,7 +246,7 @@ void Gizmo_UpdateDrag(Vector2 mouse, const Camera3D& cam, int toolMode) {
     if (!Gizmo_IsDragging()) return;
     const GizmoHandle h = g_gizmoDragHandle;
     const Vector3 pivot = Gizmo_Pivot();
-    const Ray ray = GetMouseRay(mouse, cam);
+    const Ray ray = RayFromPane(mouse, cam, g_activeViewportRect);
     const ozg::Vec3 ro = ToOz(ray.position);
     const ozg::Vec3 rd = ozg::Normalize(ToOz(ray.direction));
     const ozg::Vec3 p = g_gizmoStartPivot;

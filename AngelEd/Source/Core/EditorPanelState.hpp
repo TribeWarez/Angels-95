@@ -118,6 +118,9 @@ struct EditorPanelState {
     // Phase 1: secondary panes are read-only ortho/persp views derived from the
     // primary camera; input stays on the primary (pane 0). Persisted in Phase 3.
     int viewLayout = 0;
+    // Which pane owns input (Phase 2). Clicking a pane sets this; the active pane's
+    // camera is mirrored into OTEditor.MainCamera for the existing input paths.
+    int viewActive = 0;
     // Gizmo snapping. The value is the grid step; 0 = off. Held Ctrl toggles it
     // momentarily (see Gizmo_SnapStep), Shift = fine 0.1. Persisted in
     // [Options] gizmo_snap so it no longer resets to Off on every launch, which

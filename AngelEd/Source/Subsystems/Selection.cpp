@@ -282,7 +282,10 @@ static RayCollision RaycastTestWindZones(Ray ray, EditorSelection& out) {
     return best;
 }
 static bool EditorRaycastAt(Vector2 mousePos, EditorSelection& out) {
-    Ray ray = GetMouseRay(mousePos, OTEditor.MainCamera);
+    // Pane-aware: raylib's GetMouseRay maps the mouse over the whole window, so in
+    // a split it aims the ray at the wrong place. g_activeViewportRect is the pane
+    // that owns input (set each frame in Main.cpp).
+    Ray ray = RayFromPane(mousePos, OTEditor.MainCamera, g_activeViewportRect);
 #ifdef DEBUG_EDITOR_TRACE
     EditorLog("MouseAt: x=%.0f y=%.0f)", mousePos.x, mousePos.y);
 #endif   
@@ -386,7 +389,7 @@ static bool RayTri(const Ray& ray, const Vector3& v0, const Vector3& v1, const V
 
 static SurfaceFacePick PickSurfaceFace(Vector2 mousePos) {
     SurfaceFacePick best;
-    Ray ray = GetMouseRay(mousePos, OTEditor.MainCamera);
+    Ray ray = RayFromPane(mousePos, OTEditor.MainCamera, g_activeViewportRect);
     int count = OzoneLoader::Instance().Count();
     for (int i = 0; i < count; i++) {
         OzoneRenderable* r = OzoneLoader::Instance().Get(i);
