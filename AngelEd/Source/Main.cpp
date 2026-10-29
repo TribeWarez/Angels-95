@@ -2105,6 +2105,17 @@ AngelTechEditor.DrawModel = false;
                 g_placeMode == PlaceMode::NODE ? "NODE" : "ENV";
             int volCount = (int)OzoneLoader::Instance().GetCollisionVolumes().size();
             int chunkCount = OzoneLoader::Instance().GetChunkManager().CellCount();
+            // World size (Phase 5.3): the same live containers the viewport draws,
+            // so the number cannot disagree with the scene.
+            g_worldStats.brushes = OzoneLoader::Instance().Count();
+            g_worldStats.meshes = (int)PawnSystem::Instance().GetMeshObjects().size();
+            g_worldStats.npcs = 0;
+            for (const auto& p : PawnSystem::Instance().GetPawns()) if (p.active) g_worldStats.npcs++;
+            g_worldStats.lights = (int)PawnSystem::Instance().GetLights().size();
+            g_worldStats.pickups = (int)PawnSystem::Instance().GetPickups().size();
+            g_worldStats.pathnodes = (int)PawnSystem::Instance().GetPathNodes().size();
+            g_worldStats.windzones = (int)PawnSystem::Instance().GetWindZones().size();
+            g_worldStats.doors = (int)PawnSystem::Instance().GetDoors().size();
             UpdateStatsSidebar(
                 AngelTechEditor.X, AngelTechEditor.Y, AngelTechEditor.Z,
                 AngelTechEditor.W, AngelTechEditor.H, AngelTechEditor.L,
@@ -2112,7 +2123,8 @@ AngelTechEditor.DrawModel = false;
                 volCount, chunkCount, modeStr,
                 OTEditor.MainCamera.position.x,
                 OTEditor.MainCamera.position.y,
-                OTEditor.MainCamera.position.z);
+                OTEditor.MainCamera.position.z,
+                g_worldStats);
         }
         DrawFPS(GetScreenWidth() - 60, kEditorToolbarHeight + 8);
 

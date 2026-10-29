@@ -486,4 +486,21 @@ inline EditorPanelState g_editorPanels;
 // downward into UI. Setting a flag is not a mutation.
 inline void MarkWorldGraphDirty() { g_editorPanels.worldGraphDirty = true; }
 
+// ---------------------------------------------------------------------------
+// World size counts (Phase 5.3) — the Stats sidebar's "what is in this level"
+// line. Filled once per frame in Main.cpp from the same live containers the
+// viewport draws, so the number can never disagree with the scene.
+// ---------------------------------------------------------------------------
+struct EditorWorldStats {
+    int brushes  = 0;
+    int meshes   = 0;
+    int npcs     = 0;
+    int lights   = 0;
+    int pickups  = 0;
+    int pathnodes = 0;
+    int windzones = 0;
+    int doors    = 0;
+};
+inline EditorWorldStats g_worldStats{};
+
 #endif // ANGEL_ED_CORE_EDITORPANELSTATE_HPP

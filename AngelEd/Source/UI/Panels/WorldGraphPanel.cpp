@@ -82,6 +82,14 @@ static std::string g_wgFilter;
 static int g_wgSelType = -1;
 static int g_wgSelIndex = -1;
 
+// Phase 5.2 (lazy WorldGraph): entry indices grouped by group name, rebuilt with
+// the entries. A group's leaf rows are inserted only when it is expanded, so a
+// refresh costs O(groups) tree inserts rather than O(objects). The entries
+// themselves are still materialised once per rebuild (cheap; GetMeshBoundingBox
+// per brush is the only real work), because selection/reveal need the index
+// space to be stable.
+static std::unordered_map<std::string, std::vector<int>> g_wgGroupMembers;
+
 static std::wstring WgWiden(const std::string& s) {
     if (s.empty()) return L"";
     int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
@@ -403,12 +411,34 @@ static void WgInsertEntry(HWND tree, HTREEITEM group, int entryIndex) {
     TreeView_InsertItem(tree, &ins);
 }
 
+// Populate a group's leaf rows on demand. A no-op when the group already has
+// children, so the TVN_ITEMEXPANDED handler and the selection restore can both
+// call it without knowing which one ran first.
+static void WgPopulateGroup(HWND tree, HTREEITEM group) {
+    if (!group) return;
+    if (TreeView_GetChild(tree, group)) return;   // already populated
+    wchar_t label[128] = {};
+    TVITEMW it = {};
+    it.mask = TVIF_TEXT;
+    it.hItem = group;
+    it.pszText = label;
+    it.cchTextMax = 128;
+    if (!TreeView_GetItem(tree, &it)) return;
+    std::string key = WgNarrow(label);
+    const size_t paren = key.find("  (");
+    if (paren != std::string::npos) key = key.substr(0, paren);
+    auto mit = g_wgGroupMembers.find(key);
+    if (mit == g_wgGroupMembers.end()) return;
+    for (int idx : mit->second) WgInsertEntry(tree, group, idx);
+}
+
 static void WgBuildTree(HWND tree) {
     const bool searching = !g_wgFilter.empty();
     g_wgRebuilding = true;
 
     if (!searching) WgCaptureExpansion(tree);
     TreeView_DeleteAllItems(tree);
+    g_wgGroupMembers.clear();
 
     // Root: the world name.
     std::string worldName = "World";
@@ -435,20 +465,23 @@ static void WgBuildTree(HWND tree) {
     // it - the hierarchy then looks completely empty. Expand after the groups are
     // inserted (below).
 
-    int totalShown = 0;
+    // Build the per-group member lists once (used by lazy population). Filter
+    // here because BuildWorldGraphEntries materialises every entry regardless of
+    // the search box; the tree shows only matches.
+    for (int i = 0; i < (int)g_worldGraphEntries.size(); i++) {
+        if (!WgMatchesFilter(g_worldGraphEntries[i])) continue;
+        g_wgGroupMembers[g_worldGraphEntries[i].group].push_back(i);
+    }
+
+    std::vector<std::pair<std::string, HTREEITEM>> groupItems;
     for (int gi = 0; gi < kGroupCount; gi++) {
         const std::string groupName = kGroupOrder[gi];
 
-        // Count matching leaves first, so an empty group is not inserted at all.
-        std::vector<int> members;
-        for (int i = 0; i < (int)g_worldGraphEntries.size(); i++) {
-            if (g_worldGraphEntries[i].group != groupName) continue;
-            if (!WgMatchesFilter(g_worldGraphEntries[i])) continue;
-            members.push_back(i);
-        }
-        if (members.empty()) continue;
+        auto membersIt = g_wgGroupMembers.find(groupName);
+        if (membersIt == g_wgGroupMembers.end() || membersIt->second.empty()) continue;
 
-        std::string groupText = groupName + "  (" + std::to_string(members.size()) + ")";
+        std::string groupText = groupName + "  (" +
+                                std::to_string(membersIt->second.size()) + ")";
         std::wstring groupLabel = WgWiden(groupText);
         TVINSERTSTRUCTW gins = {};
         gins.hParent = root;
@@ -458,9 +491,7 @@ static void WgBuildTree(HWND tree) {
         gins.item.lParam = 0;
         HTREEITEM group = TreeView_InsertItem(tree, &gins);
         if (!group) continue;
-
-        for (int idx : members) WgInsertEntry(tree, group, idx);
-        totalShown += (int)members.size();
+        groupItems.emplace_back(groupName, group);
 
         bool expand = searching || groupName == "Map";
         if (!searching) {
@@ -470,20 +501,28 @@ static void WgBuildTree(HWND tree) {
             if (it != g_wgGroupExpanded.end()) expand = it->second;
             else if (groupName != "Brushes" && groupName != "Meshes") expand = true;
         }
-        TreeView_Expand(tree, group, expand ? TVE_EXPAND : TVE_COLLAPSE);
+        // Populate BEFORE expanding: an item with no children cannot be opened.
+        if (expand) {
+            WgPopulateGroup(tree, group);
+            TreeView_Expand(tree, group, TVE_EXPAND);
+        }
     }
 
     // The root has children now, so this is the point at which expanding it
     // actually shows the hierarchy.
     TreeView_Expand(tree, root, TVE_EXPAND);
 
-    // Restore the row that was selected before the rebuild.
+    // Restore the row that was selected before the rebuild. Its group may not be
+    // populated yet (lazy), so populate + expand it first.
     if (g_wgSelType >= 0) {
         int entryIndex = -1;
         if (WgFindEntry(g_wgSelType, g_wgSelIndex, entryIndex)) {
-            HTREEITEM g = TreeView_GetChild(tree, root);
-            while (g) {
-                for (HTREEITEM c = TreeView_GetChild(tree, g); c;
+            const std::string& grp = g_worldGraphEntries[entryIndex].group;
+            for (auto& [name, group] : groupItems) {
+                if (name != grp) continue;
+                WgPopulateGroup(tree, group);
+                TreeView_Expand(tree, group, TVE_EXPAND);
+                for (HTREEITEM c = TreeView_GetChild(tree, group); c;
                      c = TreeView_GetNextSibling(tree, c)) {
                     TVITEMW it = {};
                     it.mask = TVIF_PARAM;
@@ -496,7 +535,6 @@ static void WgBuildTree(HWND tree) {
                         return;
                     }
                 }
-                g = TreeView_GetNextSibling(tree, g);
             }
         }
     }
@@ -626,6 +664,8 @@ static void WgRevealCurrentSelection(HWND tree) {
     HTREEITEM root = TreeView_GetRoot(tree);
     for (HTREEITEM g = root ? TreeView_GetChild(tree, root) : nullptr; g;
          g = TreeView_GetNextSibling(tree, g)) {
+        // Lazy groups have no children until expanded; populate first.
+        WgPopulateGroup(tree, g);
         for (HTREEITEM c = TreeView_GetChild(tree, g); c;
              c = TreeView_GetNextSibling(tree, c)) {
             TVITEMW it = {};
@@ -707,6 +747,15 @@ static LRESULT CALLBACK WorldGraphProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) 
             switch (nm->code) {
             case TVN_SELCHANGEDW:
                 if (!g_wgRebuilding) WgSelectFromTree(g_wgTree, false);
+                break;
+            case TVN_ITEMEXPANDEDW:
+                // Lazy population: insert a group's leaves the first time it
+                // opens, so a refresh never creates O(objects) tree items.
+                if (!g_wgRebuilding) {
+                    NMTREEVIEWW* ntv = (NMTREEVIEWW*)l;
+                    if (ntv && ntv->itemNew.hItem && ntv->action == TVE_EXPAND)
+                        WgPopulateGroup(g_wgTree, ntv->itemNew.hItem);
+                }
                 break;
             case NM_DBLCLK:
                 if (!g_wgRebuilding) WgSelectFromTree(g_wgTree, true);

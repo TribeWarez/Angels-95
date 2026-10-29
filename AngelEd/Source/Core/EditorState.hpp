@@ -200,19 +200,8 @@ inline bool g_terrainHistPushed = false;
 inline std::vector<ed::Event> g_editorPlacementEvents;
 inline std::vector<ed::Event> g_editorPropsEvents;
 
-// World size indicator (Phase 5.3)
-struct EditorWorldStats {
-    int brushes = 0;
-    int meshes = 0;
-    int npcs = 0;
-    int lights = 0;
-    int pickups = 0;
-    int pathnodes = 0;
-    int windzones = 0;
-    int doors = 0;
-};
-inline EditorWorldStats g_worldStats{};
-
-void EditorUpdateStatus(const char* text);
+// World size counts (Phase 5.3) live in Core/EditorPanelState.hpp next to
+// g_editorPanels, because UiPanels.hpp (the Stats sidebar's declaration) already
+// includes that header and must know the type.
 
 #endif // ANGEL_ED_CORE_EDITORSTATE_HPP

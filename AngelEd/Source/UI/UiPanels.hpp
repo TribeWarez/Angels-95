@@ -156,7 +156,8 @@ void UpdateStatsSidebar(float posX, float posY, float posZ,
                         float rot, float scale,
                         int collisionVols, int chunks,
                         const char* mode,
-                        float camX, float camY, float camZ);
+                        float camX, float camY, float camZ,
+                        const EditorWorldStats& stats);
 void LayoutStatsSidebar(int clientW, int clientH, int topOffset, int width);
 int GetStatsSidebarWidth();
 #else
@@ -193,7 +194,7 @@ inline void UpdateModelPreview(void*, int, int) {}
 inline void ScanModelBrowserFiles() {}
 inline bool ChooseOpenWorldFile(std::string&) { return false; }
 inline bool ChooseSaveWorldFile(std::string&) { return false; }
-inline void UpdateStatsSidebar(float, float, float, float, float, float, float, float, int, int, const char*, float, float, float) {}
+inline void UpdateStatsSidebar(float, float, float, float, float, float, float, float, int, int, const char*, float, float, float, const EditorWorldStats&) {}
 inline void LayoutStatsSidebar(int, int, int, int) {}
 inline int GetStatsSidebarWidth() { return 200; }
 inline void RefreshPortalList() {}

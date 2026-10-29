@@ -21,6 +21,7 @@ static const int ID_SB_CAM_L   = 907;
 static const int ID_SB_CAM     = 908;
 static const int ID_SB_SEP1    = 909;
 static const int ID_SB_SEP2    = 910;
+static const int ID_SB_WORLD   = 911;   // world size: brushes/meshes/npcs
 // Toolbox button IDs
 static const int ID_TB_CSG_BOX    = 920;
 static const int ID_TB_CSG_CYL    = 921;
@@ -40,6 +41,7 @@ static const int ID_TB_SHOW_COLLISION = 933;
 static HWND g_sbPos = nullptr, g_sbSize = nullptr, g_sbRot = nullptr;
 static HWND g_sbColl = nullptr, g_sbChunks = nullptr, g_sbMode = nullptr;
 static HWND g_sbCam = nullptr;
+static HWND g_sbWorld = nullptr;
 static HBRUSH g_sbBgBrush = nullptr;
 
 int GetStatsSidebarWidth() { return STATS_SIDEBAR_W; }
@@ -59,7 +61,8 @@ void UpdateStatsSidebar(float posX, float posY, float posZ,
                         float rot, float scale,
                         int collisionVols, int chunks,
                         const char* mode,
-                        float camX, float camY, float camZ) {
+                        float camX, float camY, float camZ,
+                        const EditorWorldStats& stats) {
     HWND hwnd = (HWND)g_editorPanels.hStatsSidebar;
     if (!hwnd) return;
 
@@ -92,6 +95,12 @@ swprintf(buf, 128, L"Collision: %d vols", collisionVols);
     }
     swprintf(buf, 128, L"%.1f %.1f %.1f", camX, camY, camZ);
     setA(g_sbCam, buf);
+
+    // World size (Phase 5.3): one line, brushes / meshes / NPCs, so the level's
+    // weight is visible without expanding the WorldGraph.
+    swprintf(buf, 128, L"World: %d br  %d mesh  %d NPC",
+             stats.brushes, stats.meshes, stats.npcs);
+    setA(g_sbWorld, buf);
 }
 
 static LRESULT CALLBACK StatsSidebarProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
@@ -112,8 +121,8 @@ static LRESULT CALLBACK StatsSidebarProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l
         g_sbMode   = CreateLabel(hwnd, L"Mode: MODEL", x, y, lw, 18, ID_SB_MODE); y += 26;
         CreateLabel(hwnd, L"---", x, y, lw, 16, ID_SB_SEP2); y += 20;
         CreateLabel(hwnd, L"Camera:", x, y, lw, 18, ID_SB_CAM_L); y += 20;
-        g_sbCam    = CreateLabel(hwnd, L"0.0 0.0 0.0", x, y, lw, 18, ID_SB_CAM);
-        y += 10;
+        g_sbCam    = CreateLabel(hwnd, L"0.0 0.0 0.0", x, y, lw, 18, ID_SB_CAM); y += 20;
+        g_sbWorld  = CreateLabel(hwnd, L"World: 0 br  0 mesh  0 NPC", x, y, lw, 18, ID_SB_WORLD); y += 10;
 
         // --- Primitives section (icons) ---
         CreateLabel(hwnd, L"Primitives", x, y, lw, 18, 950); y += 22;
@@ -225,7 +234,7 @@ static LRESULT CALLBACK StatsSidebarProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l
     }
     case WM_DESTROY:
         g_editorPanels.hStatsSidebar = nullptr;
-        g_sbPos = g_sbSize = g_sbRot = g_sbColl = g_sbChunks = g_sbMode = g_sbCam = nullptr;
+        g_sbPos = g_sbSize = g_sbRot = g_sbColl = g_sbChunks = g_sbMode = g_sbCam = g_sbWorld = nullptr;
         break;
     default:
         return DefWindowProc(hwnd, msg, w, l);
