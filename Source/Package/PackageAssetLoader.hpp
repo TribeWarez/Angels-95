@@ -267,7 +267,9 @@ inline Texture2D LoadTextureWithFallback(const char* path) {
     if (data) {
         std::string normalized = path;
         for (auto& c : normalized) if (c == '\\') c = '/';
-        std::string ext = normalized.substr(normalized.rfind('.'));
+        const size_t dot = normalized.rfind('.');
+        if (dot == std::string::npos) return Texture2D{0};   // no extension: cannot pick a decoder
+        std::string ext = normalized.substr(dot);
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
         // Raylib's LoadImageFromMemory (which LoadTextureFromImage uses) needs
         // the extension *with* its leading dot, e.g. ".png". Passing "png"
@@ -393,7 +395,9 @@ inline Image LoadImageWithFallback(const char* path) {
     if (data) {
         std::string normalized = path;
         for (auto& c : normalized) if (c == '\\') c = '/';
-        std::string ext = normalized.substr(normalized.rfind('.'));
+        const size_t dot = normalized.rfind('.');
+        if (dot == std::string::npos) return Image{0};   // no extension: cannot pick a decoder
+        std::string ext = normalized.substr(dot);
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
         // Extension (including the leading dot) is required by raylib's
         // LoadImageFromMemory.

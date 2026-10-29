@@ -83,7 +83,14 @@ void ShowTextureManager(bool show) {
 // only the cells that actually paint pay for one.
 static HBITMAP BuildTextureThumbnail(HWND hwnd, const ResourceEntry& tex) {
     Image img = LoadImageWithFallback(tex.path.c_str());
-    if (!img.data) return nullptr;
+    if (!img.data) {
+        // Silent before: a cell with no art and no log is indistinguishable from
+        // "this texture does not exist". Name the path so a bad import/format is
+        // diagnosable. (The UI layer cannot see EditorLog - it lives in the Main
+        // TU - so this goes to stderr, which the editor's console shows.)
+        fprintf(stderr, "[TextureManager] thumbnail failed to load '%s'\n", tex.path.c_str());
+        return nullptr;
+    }
 
     ImageResize(&img, TEX_THUMB_SIZE, TEX_THUMB_SIZE);
     ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
@@ -672,7 +679,8 @@ static LRESULT CALLBACK TextureMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) 
                     SetWindowTextA(hSrc, TextFormat("Source: %s", p.c_str()));
                     Image tmp = LoadImageWithFallback(p.c_str());
                     if (tmp.data) {
-                        SetWindowTextA(hDims, TextFormat("%dx%d package", tmp.width, tmp.height));
+                        SetWindowTextA(hDims, TextFormat("%dx%d %s", tmp.width, tmp.height,
+                                                         g_textureFiles[sel].fromPackage ? "package" : "file"));
                         RECT pr; GetWindowRect(hPreview, &pr);
                         int pw = pr.right - pr.left - 4, ph = pr.bottom - pr.top - 4;
                         if (pw < 1) pw = 100;
@@ -699,6 +707,9 @@ static LRESULT CALLBACK TextureMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) 
                         }
                         UnloadImage(tmp);
                         UnloadImage(rs);
+                    } else {
+                        SetWindowTextA(hDims, "Preview unavailable (see console)");
+                        fprintf(stderr, "[TextureManager] preview failed to load '%s'\n", p.c_str());
                     }
                 }
             }

@@ -120,13 +120,33 @@ AssetScopeNode BuildAssetScope(const std::vector<AssetScopeItem>& items,
     return root;
 }
 
+// Dedupe identity: display name PLUS lowercase extension.
+//
+// Keying on the bare stem collapsed `Bricks.bmp` onto `Bricks.png` (or vice
+// versa) and kept only whichever sorted first, which is why an imported .bmp
+// "disappeared" whenever a same-stem PNG already existed. The extension is taken
+// from the path (the package key and the on-disk path both end in one), so a
+// package copy of the SAME filename still collapses onto the real file.
+static std::string AssetItemKey(const AssetScopeItem& a) {
+    std::string base = a.path;
+    const size_t slash = base.find_last_of("/\\");
+    if (slash != std::string::npos) base = base.substr(slash + 1);
+    const size_t dot = base.rfind('.');
+    std::string ext = (dot == std::string::npos) ? std::string() : base.substr(dot);
+    for (auto& c : ext)
+        if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+    return a.name + ext;
+}
+
 void DedupeAssetItemsByName(std::vector<AssetScopeItem>& items) {
-    // stable_sort so two items with the same name AND the same fromPackage keep
-    // enumeration order - the sort below only decides which of a same-named PAIR is a
-    // package copy, not how two real files order against each other.
+    // stable_sort so two items with the same key AND the same fromPackage keep
+    // enumeration order - the sort below only decides which of a same-named PAIR
+    // is a package copy, not how two real files order against each other.
     std::stable_sort(items.begin(), items.end(),
         [](const AssetScopeItem& a, const AssetScopeItem& b) {
-            if (a.name != b.name) return a.name < b.name;
+            const std::string ka = AssetItemKey(a);
+            const std::string kb = AssetItemKey(b);
+            if (ka != kb) return ka < kb;
             // false (0, a real file) sorts before true (1, a package copy), so after
             // std::unique keeps the FIRST of each run it is the real file that
             // survives. Reversing this silently makes packaged assets shadow local
@@ -134,6 +154,8 @@ void DedupeAssetItemsByName(std::vector<AssetScopeItem>& items) {
             return static_cast<int>(a.fromPackage) < static_cast<int>(b.fromPackage);
         });
     auto last = std::unique(items.begin(), items.end(),
-        [](const AssetScopeItem& a, const AssetScopeItem& b) { return a.name == b.name; });
+        [](const AssetScopeItem& a, const AssetScopeItem& b) {
+            return AssetItemKey(a) == AssetItemKey(b);
+        });
     items.erase(last, items.end());
 }

@@ -328,16 +328,29 @@ static void test_dedupe_prefers_real_file() {
     check(v3[0].name == "Apple" && v3[1].name == "mango" && v3[2].name == "zebra",
           "the result is sorted by name");
 
-    // Two real files with the same stem in different folders: the dedup key is the
-    // display name, so this COLLAPSES them. That is the pre-existing behaviour of both
-    // browsers (they both deduped on name) and is pinned here rather than left
+    // Two real files with the same stem AND extension in different folders: the
+    // dedup key is name+extension, so this COLLAPSES them. That is the
+    // pre-existing behaviour of both browsers and is pinned here rather than left
     // implicit - it is a real limitation of a name-keyed asset browser.
     std::vector<AssetScopeItem> v4 = {
         Loose("rock", "C:/repo/GameData/A/rock.glb"),
         Loose("rock", "C:/repo/GameData/B/rock.glb"),
     };
     DedupeAssetItemsByName(v4);
-    check(v4.size() == 1, "same-stem files in different folders collapse (name is the key)");
+    check(v4.size() == 1, "same-stem same-extension files collapse");
+
+    // Same stem, DIFFERENT extension: two distinct assets. This is the .bmp import
+    // bug - an imported Bricks.bmp used to collapse onto a shipped Bricks.png and
+    // silently vanish from both browsers.
+    std::vector<AssetScopeItem> v6 = {
+        Loose("Bricks", "C:/repo/GameData/Tex/Bricks.png"),
+        Loose("Bricks", "C:/repo/GameData/Tex/Bricks.bmp"),
+    };
+    DedupeAssetItemsByName(v6);
+    check(v6.size() == 2, "same stem with different extensions are both kept");
+    check(v6[0].path.find(".bmp") != std::string::npos ||
+          v6[1].path.find(".bmp") != std::string::npos,
+          "the .bmp survives alongside the .png");
 
     // Two package copies with one name: stable_sort must still leave exactly one.
     std::vector<AssetScopeItem> v5 = {
