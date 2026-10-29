@@ -469,6 +469,13 @@ test_autoconvex: tests/AutoConvex.test.cpp Source/Physics/AutoConvex.cpp
 test_gizmomath: tests/GizmoMath.test.cpp AngelEd/Source/Subsystems/GizmoMath.hpp
 	$(SERVER_CXX) $(TEST_FLAGS) -I. tests/GizmoMath.test.cpp -o $@
 
+# Editor viewport layout math (Phase 0 of multiple viewports). Header-only and
+# raylib-free, so it builds headless. Pins area insets, rows x cols tiling with
+# no gaps/overlap, half-open hit testing, and that Main.cpp no longer carries the
+# six-copy "inside the viewport" gate.
+test_viewport: tests/Viewport.test.cpp AngelEd/Source/Core/Viewport.hpp
+	$(SERVER_CXX) $(TEST_FLAGS) -I. tests/Viewport.test.cpp -o $@
+
 # Gameplay keybinds: defaults, INI round-trip, conflict swap. Links raylib for
 # the KEY_* constants, like test_entity_manager, but opens no window.
 test_keybinds: tests/Keybinds.test.cpp Source/Input/Keybinds.hpp Source/IniConfig.hpp
@@ -550,7 +557,7 @@ TEST_SUITES := test_parser test_context test_registry test_entity_manager \
                test_network test_game_state test_ozanim test_ozls_writer \
                test_autoconvex test_csg test_brushmesh test_surface test_gametype \
                test_editorbus test_assetscope test_events test_game test_gizmomath \
-               test_keybinds test_menu test_clientsettings test_material
+               test_keybinds test_menu test_clientsettings test_material test_viewport
 
 # The editor is built twice from two hand-maintained object lists - AngelEd/Makefile
 # and the inline `g++` list in ci.yml - because CI does not use the Makefile. They

@@ -36,6 +36,7 @@
 
 #include "Core/EditorShell.hpp"
 #include "Core/EditorState.hpp"
+#include "Core/Viewport.hpp"
 #include "Subsystems/Placement.hpp"
 #include "Subsystems/LevelState.hpp"
 #include "Subsystems/History.hpp"
@@ -98,6 +99,20 @@
 #include "Core/EditorMenus.cpp"
 #include "Subsystems/AnimEditing.cpp"
 #include "Core/EditorDispatcher.cpp"
+
+// -----------------------------------------------------------------------------
+// Viewport geometry (Phase 0 of multi-viewport). ONE definition of "inside the 3D
+// view", replacing six copies of the sidebar/toolbar comparison. The layout is
+// still single-pane here; the split render/input lands in the later phases, but
+// every input site already asks this helper instead of re-deriving the bounds.
+// -----------------------------------------------------------------------------
+static ed::viewport::VpRect EditorViewportAreaNow() {
+    return ed::viewport::Area((float)GetScreenWidth(), (float)GetScreenHeight(),
+                              (float)GetStatsSidebarWidth(), (float)kEditorToolbarHeight);
+}
+static bool EditorViewportContains(Vector2 p) {
+    return ed::viewport::Contains(EditorViewportAreaNow(), p.x, p.y);
+}
 
 // -----------------------------------------------------------------------------
 // main()
@@ -289,7 +304,7 @@ int main(int argc, char **argv){
 
         // Viewport bounds check â€” all raycasts only fire when mouse is inside 3D viewport
         Vector2 _mp = GetMousePosition();
-        bool _inViewport = (_mp.x >= (float)GetStatsSidebarWidth() && _mp.y >= (float)kEditorToolbarHeight);
+        bool _inViewport = EditorViewportContains(_mp);
 
         // Hover raycast (throttled every 4 frames for performance)
         {
@@ -425,7 +440,7 @@ int main(int argc, char **argv){
 
         if (g_editorPanels.animEditVerts && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             Vector2 mp = GetMousePosition();
-            if (mp.x >= (float)GetStatsSidebarWidth() && mp.y >= (float)kEditorToolbarHeight) {
+            if (EditorViewportContains(mp)) {
                 MeshObjectNode* vn = PawnSystem::Instance().GetMeshObject(g_editorPanels.animTargetMesh);
                 oz::AnimatedMesh* vam = AnimTarget();
                 if (vn && vn->editPose && vam) {
@@ -464,7 +479,7 @@ int main(int argc, char **argv){
             if (!g_suppressViewportDrag && g_sel.type != SelType::NONE &&
                 !g_editorPanels.animEditVerts) {
                 Vector2 mp = GetMousePosition();
-                if (mp.x >= (float)GetStatsSidebarWidth() && mp.y >= (float)kEditorToolbarHeight) {
+                if (EditorViewportContains(mp)) {
                     // Handles win over the generic "press on the object" drag: if a
                     // handle was hit, the drag is constrained to that axis/plane.
                     if (Gizmo_BeginDrag(mp, OTEditor.MainCamera,
@@ -497,7 +512,7 @@ int main(int argc, char **argv){
                 g_lbDown = false;
                 Vector2 mp = GetMousePosition();
                 if (!g_editorPanels.animEditVerts && g_placeMode != PlaceMode::TERRAIN &&
-                    mp.x >= (float)GetStatsSidebarWidth() && mp.y >= (float)kEditorToolbarHeight) {
+                    EditorViewportContains(mp)) {
                     // A placement ghost is armed: a CLICK places it. Without this
                     // the click fell through to EditorPickEntity, missed (a ghost
                     // is not pickable), set DrawModel=false and made the ghost
@@ -535,7 +550,7 @@ int main(int argc, char **argv){
             auto& oz = OzoneLoader::Instance();
             if (oz.HasHeightmap()) {
                 Vector2 mp = GetMousePosition();
-                if (mp.x >= (float)GetStatsSidebarWidth() && mp.y >= (float)kEditorToolbarHeight) {
+                if (EditorViewportContains(mp)) {
                     if (!g_terrainHistPushed) { HistoryPush(); g_terrainHistPushed = true; }
                     Ray ray = GetMouseRay(mp, OTEditor.MainCamera);
                     Vector3 hmPos = oz.GetHeightmapPosition();
@@ -609,7 +624,7 @@ int main(int argc, char **argv){
             g_rbDown = false;
             // Re-check viewport bounds with fresh cursor position
             Vector2 _mp_rel = GetMousePosition();
-            bool _inVpRel = (_mp_rel.x >= (float)GetStatsSidebarWidth() && _mp_rel.y >= (float)kEditorToolbarHeight);
+            bool _inVpRel = EditorViewportContains(_mp_rel);
             // Per-FACE surface pick, done BEFORE the entity pick so the menu can
             // offer "Surface Properties (N Selected)". Triangle-level rather than
             // AABB-level, so clicking the top of a wall selects the +Y face and
