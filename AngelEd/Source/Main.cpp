@@ -323,9 +323,11 @@ int main(int argc, char **argv){
     // before the first load.
     HotReload_Start();
 
-    // Headless-ish check hook: OZ_ED_DETACH=1 pops pane 0 out at startup so the
-    // render-to-texture + GDI present path can be exercised without clicking the
-    // toolbar chip.
+    // Restore popped-out panes from [Views] (Tier A persistence), then the
+    // OZ_ED_DETACH=1 check hook for exercising the FBO + GDI path.
+    for (int i = 0; i < 4; i++)
+        if (g_editorPanels.detachedMask & (1 << i))
+            DetachedPane_Detach(i, g_editorPanels.detachW, g_editorPanels.detachH);
     if (getenv("OZ_ED_DETACH")) DetachedPane_Detach(0, 960, 540);
 
     // Suppress raylib's texture-not-found warnings from .obj material refs

@@ -137,6 +137,11 @@ static void LoadPanelLayouts() {
     if (g_editorPanels.viewActive < 0) g_editorPanels.viewActive = 0;
     if (g_editorPanels.viewActive > 3) g_editorPanels.viewActive = 3;
     g_editorPanels.viewMaximized = cfg.GetBool("Views", "maximized", false);
+    g_editorPanels.detachedMask = cfg.GetInt("Views", "detached_mask", 0);
+    g_editorPanels.detachW = cfg.GetInt("Views", "detach_w", 960);
+    g_editorPanels.detachH = cfg.GetInt("Views", "detach_h", 540);
+    if (g_editorPanels.detachW < 320) g_editorPanels.detachW = 320;
+    if (g_editorPanels.detachH < 240) g_editorPanels.detachH = 240;
 
     // Restore the MAIN window's size/position before the panels are created so
     // the docked stats sidebar is laid out against the right client rect. The
@@ -221,6 +226,9 @@ void SavePanelLayouts() {
     cfg.SetInt("Views", "layout", g_editorPanels.viewLayout);
     cfg.SetInt("Views", "active", g_editorPanels.viewActive);
     cfg.SetBool("Views", "maximized", g_editorPanels.viewMaximized);
+    cfg.SetInt("Views", "detached_mask", g_editorPanels.detachedMask);
+    cfg.SetInt("Views", "detach_w", g_editorPanels.detachW);
+    cfg.SetInt("Views", "detach_h", g_editorPanels.detachH);
     cfg.Save(kEditorIniPath);
 }
 

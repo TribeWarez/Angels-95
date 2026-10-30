@@ -124,6 +124,10 @@ struct EditorPanelState {
     // Temporarily show the active pane across the whole viewport (the layout is
     // kept, so un-maximizing restores the split).
     bool viewMaximized = false;
+    // Detached (popped-out) panes, as a bitmask, plus the window size to use when
+    // one is restored on startup. Persisted in [Views].
+    int detachedMask = 0;
+    int detachW = 960, detachH = 540;
     // Gizmo snapping. The value is the grid step; 0 = off. Held Ctrl toggles it
     // momentarily (see Gizmo_SnapStep), Shift = fine 0.1. Persisted in
     // [Options] gizmo_snap so it no longer resets to Off on every launch, which

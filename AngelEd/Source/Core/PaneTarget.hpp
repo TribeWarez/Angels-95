@@ -24,6 +24,7 @@ struct PaneTarget {
     RenderTexture2D rt{};   // valid while detached; recreated on resize
     void* hwnd = nullptr;   // HWND of the detached window (opaque here)
     bool rtDirty = false;   // set by WM_SIZE, consumed by EnsurePaneRT
+    double lastPresent = 0.0; // presentation cadence (the readback is not free)
 };
 
 inline PaneTarget g_paneTargets[4];
