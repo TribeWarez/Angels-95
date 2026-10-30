@@ -151,6 +151,17 @@ static void test_main_uses_one_viewport_helper() {
     const std::string uishell = ReadFile("AngelEd/Source/UI/UiShell.cpp");
     check(!uishell.empty() && uishell.find("\"Views\", \"layout\"") != std::string::npos,
           "the viewport layout persists in [Views]");
+    // Tier A: a detached pane renders into its own framebuffer and is presented by
+    // a GDI blit (no second GL context).
+    check(main.find("PaneIsDetached") != std::string::npos &&
+          main.find("BeginTextureMode(g_paneTargets") != std::string::npos,
+          "a detached pane renders into its own RenderTexture2D");
+    const std::string detached = ReadFile("AngelEd/Source/Core/DetachedPane.cpp");
+    check(!detached.empty() &&
+          detached.find("DetachedPane_Present") != std::string::npos &&
+          detached.find("StretchDIBits") != std::string::npos &&
+          detached.find("LoadImageFromTexture") != std::string::npos,
+          "the detached window is presented by a texture readback + GDI blit");
 }
 
 int main() {

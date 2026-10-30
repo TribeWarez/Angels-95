@@ -100,6 +100,8 @@
 #include "Core/EditorMenus.cpp"
 #include "Subsystems/AnimEditing.cpp"
 #include "Core/EditorDispatcher.cpp"
+#include "Core/PaneTarget.hpp"
+#include "Core/DetachedPane.cpp"
 
 // -----------------------------------------------------------------------------
 // Viewport geometry (Phase 0 of multi-viewport). ONE definition of "inside the 3D
@@ -320,6 +322,11 @@ int main(int argc, char **argv){
     // re-applies the current world's defs, and there is nothing to recover
     // before the first load.
     HotReload_Start();
+
+    // Headless-ish check hook: OZ_ED_DETACH=1 pops pane 0 out at startup so the
+    // render-to-texture + GDI present path can be exercised without clicking the
+    // toolbar chip.
+    if (getenv("OZ_ED_DETACH")) DetachedPane_Detach(0, 960, 540);
 
     // Suppress raylib's texture-not-found warnings from .obj material refs
     SetTraceLogLevel(LOG_ERROR);
@@ -1110,9 +1117,22 @@ int main(int argc, char **argv){
         // Scissor + viewport + a pane-aspect projection keep each view framed.
         std::vector<ed::viewport::VpRect> vpRects;
         EditorViewportRectsNow(vpRects);
-        const ed::viewport::VpRect vpPrimary = Editor_ActiveRect(vpRects);
-        BeginScissorMode((int)vpPrimary.x, (int)vpPrimary.y, (int)vpPrimary.w, (int)vpPrimary.h);
-        SetPaneViewport(vpPrimary);
+        // A pane renders into the main window (scissor) OR into its own framebuffer
+        // when it has been popped out (Tier A). Everything below is identical for
+        // both; only the target wrap and the framed rect differ.
+        const int vpActive = g_editorPanels.viewActive;
+        const bool vpFbo = PaneIsDetached(vpActive);
+        if (vpFbo) DetachedPane_EnsureRT(vpActive);
+        const ed::viewport::VpRect vpPrimary = vpFbo
+            ? PaneRenderRect(vpActive, vpRects)
+            : Editor_ActiveRect(vpRects);
+        if (vpFbo) {
+            BeginTextureMode(g_paneTargets[vpActive].rt);
+            ClearBackground(BLACK);
+        } else {
+            BeginScissorMode((int)vpPrimary.x, (int)vpPrimary.y, (int)vpPrimary.w, (int)vpPrimary.h);
+            SetPaneViewport(vpPrimary);
+        }
 
         BeginMode3D(OTEditor.MainCamera);
         SetPaneProjection(OTEditor.MainCamera, vpPrimary);
@@ -2023,7 +2043,7 @@ AngelTechEditor.DrawModel = false;
         }
 
         EndMode3D();
-        EndScissorMode();
+        if (vpFbo) EndTextureMode(); else EndScissorMode();
 
         // Commit this frame's camera edits (navigation, terrain-follow) back to the
         // active pane so they persist when another pane becomes active.
@@ -2036,10 +2056,17 @@ AngelTechEditor.DrawModel = false;
         // the user last clicked.
         for (size_t pi = 0; pi < vpRects.size(); pi++) {
             if ((int)pi == g_editorPanels.viewActive) continue;
-            const ed::viewport::VpRect& r = vpRects[pi];
+            const bool fb = PaneIsDetached((int)pi);
+            if (fb) DetachedPane_EnsureRT((int)pi);
+            const ed::viewport::VpRect r = fb ? PaneRenderRect((int)pi, vpRects) : vpRects[pi];
             Camera3D cam = g_paneCams[pi];
-            BeginScissorMode((int)r.x, (int)r.y, (int)r.w, (int)r.h);
-            SetPaneViewport(r);
+            if (fb) {
+                BeginTextureMode(g_paneTargets[pi].rt);
+                ClearBackground(BLACK);
+            } else {
+                BeginScissorMode((int)r.x, (int)r.y, (int)r.w, (int)r.h);
+                SetPaneViewport(r);
+            }
             BeginMode3D(cam);
             SetPaneProjection(cam, r);
             if (wantSky) {
@@ -2058,8 +2085,13 @@ AngelTechEditor.DrawModel = false;
                 PawnSystem::Instance().DrawEntities(cam, bbShader);
             }
             EndMode3D();
-            EndScissorMode();
+            if (fb) EndTextureMode(); else EndScissorMode();
         }
+
+        // Present every popped-out pane into its own window (Tier A: GPU readback +
+        // GDI blit, no second GL context).
+        for (int i = 0; i < 4; i++)
+            if (g_paneTargets[i].detached) DetachedPane_Present(i);
 
         // Restore the full-window viewport for the 2D pass. A pane viewport left
         // active would draw the toolbar and every panel into that sub-rect.
@@ -2072,13 +2104,25 @@ AngelTechEditor.DrawModel = false;
 
         BeginDrawing();
         // Multi-viewport pane chrome: a divider per pane and a brighter edge on
-        // the primary (input) pane, so the read-only reference panes read as such.
-        if (g_editorPanels.viewLayout != 0 && !g_editorPanels.viewMaximized) {
+        // the active (input) pane, so the read-only reference panes read as such.
+        // A popped-out pane's slot is a dark "Detached" card instead of a divider.
+        if ((g_editorPanels.viewLayout != 0 || PaneIsDetached(g_editorPanels.viewActive)) &&
+            !g_editorPanels.viewMaximized) {
             std::vector<ed::viewport::VpRect> pr;
             EditorViewportRectsNow(pr);
             for (size_t i = 0; i < pr.size(); i++) {
-                const Color edge = (i == 0) ? (Color){90, 120, 170, 255}
-                                            : (Color){60, 60, 70, 255};
+                const bool detached = PaneIsDetached((int)i);
+                const bool active = ((int)i == g_editorPanels.viewActive);
+                if (detached) {
+                    DrawRectangle((int)pr[i].x, (int)pr[i].y, (int)pr[i].w, (int)pr[i].h,
+                                  (Color){24, 24, 28, 255});
+                    const char* txt = "Detached viewport";
+                    int tw2 = MeasureText(txt, 14);
+                    DrawText(txt, (int)(pr[i].x + (pr[i].w - tw2) * 0.5f),
+                             (int)(pr[i].y + pr[i].h * 0.5f - 7), 14, LIGHTGRAY);
+                }
+                const Color edge = active ? (Color){90, 120, 170, 255}
+                                          : (Color){60, 60, 70, 255};
                 DrawRectangleLinesEx({pr[i].x, pr[i].y, pr[i].w, pr[i].h}, 1.0f, edge);
             }
         }
@@ -2374,6 +2418,30 @@ AngelTechEditor.DrawModel = false;
                         g_editorPanels.viewMaximized = !g_editorPanels.viewMaximized;
                     }
                     bx += mw + 2;
+                }
+                // Pop the active pane out into its own window (Tier A). The main
+                // window keeps its slot, which draws a "Detached" card.
+                {
+                    const int a = g_editorPanels.viewActive;
+                    const bool don = (a >= 0 && a < 4) && g_paneTargets[a].detached;
+                    const char* lbl = don ? "Pop:On" : "Pop:Off";
+                    const int pw = (int)strlen(lbl) * 7 + 10;
+                    DrawRectangle(bx, by, pw, rowH,
+                                  don ? (Color){70, 90, 120, 255} : (Color){45, 45, 50, 255});
+                    DrawText(lbl, bx + 4, by + 5, 12, don ? WHITE : LIGHTGRAY);
+                    if (CheckCollisionPointRec(GetMousePosition(),
+                                               {(float)bx, (float)by, (float)pw, (float)rowH}) &&
+                        IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && a >= 0 && a < 4) {
+                        if (g_paneTargets[a].detached) {
+                            DetachedPane_Attach(a);
+                        } else {
+                            std::vector<ed::viewport::VpRect> rr;
+                            EditorViewportRectsNow(rr);
+                            const ed::viewport::VpRect r = Editor_ActiveRect(rr);
+                            DetachedPane_Detach(a, (int)r.w, (int)r.h);
+                        }
+                    }
+                    bx += pw + 2;
                 }
             }
         }
@@ -3107,6 +3175,9 @@ AngelTechEditor.DrawModel = false;
     // resources, before CloseWindow(), while the GL context is still alive.
     oz::SkyPortal::Instance().Shutdown();
     UnloadRenderTexture(g_previewRT);
+    // Popped-out panes own a RenderTexture2D + an HWND; release both while the GL
+    // context is still alive.
+    DetachedPane_Shutdown();
 #ifdef _WIN32
     DestroyAllEditorWindows();
 #endif
