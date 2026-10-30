@@ -25,9 +25,20 @@ struct PaneTarget {
     void* hwnd = nullptr;   // HWND of the detached window (opaque here)
     bool rtDirty = false;   // set by WM_SIZE, consumed by EnsurePaneRT
     double lastPresent = 0.0; // presentation cadence (the readback is not free)
+    // Tier B: a shared WGL context for this window. When sharedOk, the pane's
+    // colour texture is sampled directly (no readback); otherwise the GDI path is
+    // used. Kept opaque so this header needs no GL headers.
+    void* glctx = nullptr;  // HGLRC
+    void* gldc = nullptr;   // HDC (released on attach)
+    bool sharedOk = false;
 };
 
 inline PaneTarget g_paneTargets[4];
+
+// Per-pane cameras. The active pane's camera is mirrored into
+// OTEditor.MainCamera for the existing input/preset paths; a detached window
+// edits its own entry directly (Tier C camera navigation).
+inline Camera3D g_paneCams[4];
 
 // The rect a pane's 3D pass should frame: the target's own size when detached
 // (0,0,rt.w,rt.h), otherwise its screen rect.

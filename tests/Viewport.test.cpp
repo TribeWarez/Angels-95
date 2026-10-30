@@ -162,6 +162,17 @@ static void test_main_uses_one_viewport_helper() {
           detached.find("StretchDIBits") != std::string::npos &&
           detached.find("LoadImageFromTexture") != std::string::npos,
           "the detached window is presented by a texture readback + GDI blit");
+    // Tier B: a shared WGL context + textured-quad present (no readback), with the
+    // GDI path kept as a fallback. Tier C: the pop-out navigates its pane camera.
+    check(detached.find("wglShareLists") != std::string::npos &&
+          detached.find("SwapBuffers") != std::string::npos &&
+          detached.find("glBindTexture") != std::string::npos,
+          "Tier B uses a shared GL context and a textured-quad present");
+    check(detached.find("WM_MOUSEWHEEL") != std::string::npos &&
+          detached.find("g_paneCams") != std::string::npos,
+          "the popped-out pane is navigable (Tier C camera)");
+    check(detached.find("StretchDIBits") != std::string::npos,
+          "the readback path is kept as the fallback");
 }
 
 int main() {

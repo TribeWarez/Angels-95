@@ -172,7 +172,6 @@ static Camera3D MakeSecondaryCam(int pane, const Camera3D& primary) {
 // every input/preset path already edits); the others are edited only by becoming
 // active. Initialised once: pane 0 = the startup camera, 1 = top ortho, 2 = side
 // ortho, 3 = a perspective clone.
-static Camera3D g_paneCams[4];
 static bool g_paneCamsInit = false;
 static void Editor_EnsurePaneCams() {
     if (g_paneCamsInit) return;
