@@ -280,6 +280,7 @@ int main(int argc, char **argv){
     // Settings-menu check marks are only correct after LoadPanelLayouts has read
     // [Options] inside CreateAllEditorWindows.
     Editor_SyncUnrealMenuChecks();
+    Editor_SyncViewMenuChecks();
 #endif
 
     // Load editor world
@@ -1009,6 +1010,25 @@ int main(int argc, char **argv){
                 }
             }
         }
+        // View > Show Ambient / Show Fog are PREVIEW masks, not document edits.
+        // Re-read the store every frame and mask only the uniforms, so toggling
+        // back restores exactly what the level (or the selected zone preview)
+        // published; OzoneLoader's authored values are never overwritten.
+        if (OTEditor.LitFogShader.id > 0) {
+            float fogCol[3], fogStart, fogEnd, fogDensity, fogIntensity;
+            OzoneLoader::Instance().GetWorldFog(fogCol, fogStart, fogEnd, fogDensity, fogIntensity);
+            if (!g_editorPanels.viewFog) fogIntensity = 0.0f;
+            if (OTEditor.FogIntensityLoc >= 0)
+                SetShaderValue(OTEditor.LitFogShader, OTEditor.FogIntensityLoc,
+                               &fogIntensity, SHADER_UNIFORM_FLOAT);
+
+            float amb[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+            OzoneLoader::Instance().GetWorldAmbient(amb);
+            if (!g_editorPanels.viewAmbient) { amb[0] = amb[1] = amb[2] = 0.0f; }
+            if (OTEditor.AmbientLoc >= 0)
+                SetShaderValue(OTEditor.LitFogShader, OTEditor.AmbientLoc,
+                               amb, SHADER_UNIFORM_VEC4);
+        }
 // Level state (GameType / skybox / particles) no longer has a per-frame apply path.
         // It used to: the removed Zone Properties window set one-shot apply flags on a
         // global, and the next frame this block noticed them and wrote LevelMetadata.
@@ -1035,6 +1055,8 @@ int main(int argc, char **argv){
                 float fogStart = 10.0f, fogEnd = 100.0f, fogDensity = 1.0f, fogIntensity = 1.0f;
                 OzoneLoader::Instance().GetWorldFog(fogCol, fogStart, fogEnd,
                                                     fogDensity, fogIntensity);
+                if (!g_editorPanels.viewFog) fogIntensity = 0.0f;
+                if (!g_editorPanels.viewAmbient) { amb[0] = amb[1] = amb[2] = 0.0f; }
                 oz::SurfaceMaterial::Instance().SetFog(fogCol, fogStart, fogEnd,
                                                        fogDensity, fogIntensity);
                 oz::SurfaceMaterial::Instance().UpdateFrame(pawnLights, OTEditor.MainCamera, dt, amb);
@@ -1060,6 +1082,9 @@ int main(int argc, char **argv){
         skyFog.active = true;
         OzoneLoader::Instance().GetWorldFog(skyFog.color, skyFog.start, skyFog.end,
                                             skyFog.density, skyFog.intensity);
+        // Fog preview off must also clear the horizon band on the skybox, not
+        // just the world shader; Sky.fs reads the same intensity.
+        if (!g_editorPanels.viewFog) skyFog.intensity = 0.0f;
 
         if (OTEditor.ShowSkybox) {
             // An explicitly-applied levelinfo skybox path takes priority;

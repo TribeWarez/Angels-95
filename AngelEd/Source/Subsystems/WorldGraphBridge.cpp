@@ -72,6 +72,22 @@ static void Editor_SyncUnrealMenuChecks() {
 #endif
 }
 
+// View > Show Ambient / Show Fog. Same one-definition rule as the Settings
+// checks: the menu is built before [Views] is loaded, so Main.cpp calls this
+// once after CreateAllEditorWindows and again on every toggle.
+static void Editor_SyncViewMenuChecks() {
+#ifdef _WIN32
+    HWND w = (HWND)GetWindowHandle();
+    if (!w) return;
+    HMENU menu = GetMenu(w);
+    if (!menu) return;
+    CheckMenuItem(menu, IDM_VIEW_AMBIENT,
+                  MF_BYCOMMAND | (g_editorPanels.viewAmbient ? MF_CHECKED : MF_UNCHECKED));
+    CheckMenuItem(menu, IDM_VIEW_FOG,
+                  MF_BYCOMMAND | (g_editorPanels.viewFog ? MF_CHECKED : MF_UNCHECKED));
+#endif
+}
+
 static LRESULT CALLBACK EditorWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     // Unsaved-document guard for the window close button / Alt+F4. Returning 0
     // without calling the original proc cancels the close, so GLFW never sees it.
@@ -109,6 +125,16 @@ static LRESULT CALLBACK EditorWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             case IDM_SAVE_LAYOUT:
                 SavePanelLayouts();
                 EditorLog("Pane layout saved to %s", kEditorIniPath);
+                return 0;
+            case IDM_VIEW_AMBIENT:
+                g_editorPanels.viewAmbient = !g_editorPanels.viewAmbient;
+                Editor_SyncViewMenuChecks();
+                EditorLog("Ambient preview %s", g_editorPanels.viewAmbient ? "on" : "off");
+                return 0;
+            case IDM_VIEW_FOG:
+                g_editorPanels.viewFog = !g_editorPanels.viewFog;
+                Editor_SyncViewMenuChecks();
+                EditorLog("Fog preview %s", g_editorPanels.viewFog ? "on" : "off");
                 return 0;
             case IDM_UNREAL_MOVE:
                 g_editorPanels.unrealBrushMove = !g_editorPanels.unrealBrushMove;

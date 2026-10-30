@@ -175,12 +175,44 @@ static void test_main_uses_one_viewport_helper() {
           "the readback path is kept as the fallback");
 }
 
+static void test_environment_preview_toggles() {
+    const std::string main = ReadFile("AngelEd/Source/Main.cpp");
+    const std::string menus = ReadFile("AngelEd/Source/Core/EditorMenus.cpp");
+    const std::string bridge = ReadFile("AngelEd/Source/Subsystems/WorldGraphBridge.cpp");
+    const std::string uishell = ReadFile("AngelEd/Source/UI/UiShell.cpp");
+    const std::string state = ReadFile("AngelEd/Source/Core/EditorPanelState.hpp");
+    if (main.empty() || menus.empty() || bridge.empty() || uishell.empty() || state.empty()) {
+        printf("  SKIP  editor environment preview toggles (sources not found)\n");
+        return;
+    }
+    check(state.find("bool viewAmbient = true;") != std::string::npos &&
+          state.find("bool viewFog = true;") != std::string::npos,
+          "the editor state carries independent ambient and fog preview flags");
+    check(menus.find("IDM_VIEW_AMBIENT") != std::string::npos &&
+          menus.find("IDM_VIEW_FOG") != std::string::npos &&
+          menus.find("Show &Ambient") != std::string::npos &&
+          menus.find("Show &Fog") != std::string::npos,
+          "both toggles have View-menu entries");
+    check(bridge.find("case IDM_VIEW_AMBIENT") != std::string::npos &&
+          bridge.find("case IDM_VIEW_FOG") != std::string::npos &&
+          bridge.find("Editor_SyncViewMenuChecks") != std::string::npos,
+          "menu commands toggle the flags and resync their check marks");
+    check(main.find("if (!g_editorPanels.viewFog) fogIntensity = 0.0f") != std::string::npos &&
+          main.find("if (!g_editorPanels.viewAmbient)") != std::string::npos &&
+          main.find("skyFog.intensity = 0.0f") != std::string::npos,
+          "preview flags mask LitFog, SurfaceMaterial and sky fog independently");
+    check(uishell.find("\"Views\", \"ambient\"") != std::string::npos &&
+          uishell.find("\"Views\", \"fog\"") != std::string::npos,
+          "the two preview choices persist in [Views]");
+}
+
 int main() {
     printf("Viewport tests\n\n");
     test_area_insets();
     test_split_tiles_exactly();
     test_hit_testing_is_half_open();
     test_main_uses_one_viewport_helper();
+    test_environment_preview_toggles();
 
     printf("\nResults: %d/%d passed\n", g_pass, g_pass + g_fail);
     return g_fail == 0 ? 0 : 1;

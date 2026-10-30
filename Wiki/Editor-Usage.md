@@ -40,6 +40,8 @@ Supports the OZONE (`.ozone`) world format. Open/Save dialogs accept `.ozone`. O
 | Light Properties | | Toggle light properties |
 | Heightmap Editor | H | Toggle heightmap editor |
 | World Graph Explorer | | Toggle world graph |
+| Show Ambient | | Toggle the lit-viewport ambient contribution on/off (preview only) |
+| Show Fog | | Toggle the lit-viewport fog (world + sky horizon) on/off (preview only) |
 
 ### Camera
 | Item | Shortcut | Action |
@@ -124,6 +126,12 @@ red. See [Sub needs a solid](#sub-needs-a-solid) below.
 | Sky | Show/hide the viewport skybox backdrop (b64/b67) |
 
 Toggle between modes from the ViewMode toolbar combo.
+
+**View → Show Ambient / Show Fog** are independent lit-preview switches. They
+mask the shader uniforms (including the sky's horizon fog) without changing the
+level, zone or `.ozone` data, and the choice is persisted in `[Views]` in
+`System/AngelEd.ini`. Use them to inspect geometry in a dark or heavily fogged
+area without editing the world.
 
 ## Viewport skybox (b64–b68)
 

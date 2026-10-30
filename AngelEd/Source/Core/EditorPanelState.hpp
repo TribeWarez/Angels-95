@@ -124,6 +124,11 @@ struct EditorPanelState {
     // Temporarily show the active pane across the whole viewport (the layout is
     // kept, so un-maximizing restores the split).
     bool viewMaximized = false;
+    // Lit-viewport preview toggles (View > Show Ambient / Show Fog). They mask
+    // shader uniforms only; they never rewrite the authored world or the
+    // OzoneLoader store. Persisted in [Views].
+    bool viewAmbient = true;
+    bool viewFog = true;
     // Detached (popped-out) panes, as a bitmask, plus the window size to use when
     // one is restored on startup. Persisted in [Views].
     int detachedMask = 0;

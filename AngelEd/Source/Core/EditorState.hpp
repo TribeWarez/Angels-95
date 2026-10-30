@@ -52,6 +52,10 @@ enum EditorMenuCmd {
     // Persist the current panel geometry now instead of only on exit. A layout
     // you just arranged is otherwise kept only if you quit cleanly.
     IDM_SAVE_LAYOUT,
+    // Lit-viewport preview switches (View menu, checkable; persisted [Views]).
+    // They mask the shader uniforms only and never edit the world.
+    IDM_VIEW_AMBIENT,
+    IDM_VIEW_FOG,
     // Editor input options (Settings menu + the toolbar toggle). Same state in
     // both places, so the check mark and the button can never disagree.
     IDM_UNREAL_MOVE,

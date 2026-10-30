@@ -59,6 +59,12 @@ static void CreateEditorMenuBar() {
     AppendMenuA(hView, MF_STRING, IDM_WORLD_GRAPH, menuLabel("World &Hierarchy", EdAction::Hierarchy).c_str());
     AppendMenuA(hView, MF_STRING, IDM_LEVEL_LIST, "Level &List / Campaign");
     AppendMenuA(hView, MF_SEPARATOR, 0, NULL);
+    // Lit-preview environment switches. Checkable, and persisted in [Views];
+    // they only mask the shader uniforms, so a user can inspect geometry in a
+    // dark/foggy level without editing its zone or level values.
+    AppendMenuA(hView, MF_STRING, IDM_VIEW_AMBIENT, "Show &Ambient");
+    AppendMenuA(hView, MF_STRING, IDM_VIEW_FOG, "Show &Fog");
+    AppendMenuA(hView, MF_SEPARATOR, 0, NULL);
     // Panel geometry is user data (System/AngelEd.ini [Layout]), written when the
     // editor exits. Save makes that explicit - it is the only way to keep a layout
     // you just arranged without quitting - and Reset restores the built-ins. Both
