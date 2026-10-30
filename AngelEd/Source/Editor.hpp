@@ -32,7 +32,7 @@ class Editor{
         char Path[512] = {};
         // Environmental settings
         Color FogColor = {200, 200, 210, 255};
-        float FogDensity = 0.02f;
+        float FogDensity = 0.0035f;   // matches the shipped outdoor sky-zone default
         Color AmbientColor = {180, 180, 200, 255};
         float AmbientIntensity = 0.4f;
         // Window flag
@@ -244,18 +244,28 @@ inline void Init(){
         OTEditor.FogColorLoc = GetShaderLocation(OTEditor.LitFogShader, "fogColor");
         OTEditor.FogIntensityLoc = GetShaderLocation(OTEditor.LitFogShader, "fogIntensity");
         
-        // Set default fog values
+        // Set default fog values. Use the editor's own FogDensity default
+        // (0.0035, matching Sektor_01's shipped sky-zone) rather than the
+        // shader's 1.0 fallback: density is an exponential rate per world
+        // unit, so 1.0 fogs the whole viewport within ~5 units. Publish the
+        // same values to OzoneLoader so the SurfaceMaterial pass and the
+        // View > Show Fog mask read the same store instead of silently
+        // disagreeing with LitFog.
         float fogStart = 10.0f;
         float fogEnd = 100.0f;
-        float fogDensity = 1.0f;
-        float fogColor[3] = {0.7f, 0.7f, 0.8f};
+        float fogDensity = OTEditor.FogDensity;
+        float fogColor[3] = { (float)OTEditor.FogColor.r / 255.0f,
+                              (float)OTEditor.FogColor.g / 255.0f,
+                              (float)OTEditor.FogColor.b / 255.0f };
         float fogIntensity = 1.0f;
-        
+
         SetShaderValue(OTEditor.LitFogShader, OTEditor.FogStartLoc, &fogStart, SHADER_UNIFORM_FLOAT);
         SetShaderValue(OTEditor.LitFogShader, OTEditor.FogEndLoc, &fogEnd, SHADER_UNIFORM_FLOAT);
         SetShaderValue(OTEditor.LitFogShader, OTEditor.FogDensityLoc, &fogDensity, SHADER_UNIFORM_FLOAT);
         SetShaderValue(OTEditor.LitFogShader, OTEditor.FogColorLoc, fogColor, SHADER_UNIFORM_VEC3);
         SetShaderValue(OTEditor.LitFogShader, OTEditor.FogIntensityLoc, &fogIntensity, SHADER_UNIFORM_FLOAT);
+        OzoneLoader::Instance().SetWorldFog(fogColor, fogStart, fogEnd,
+                                            fogDensity, fogIntensity);
         
         // Ambient uniform
         OTEditor.AmbientLoc = GetShaderLocation(OTEditor.LitFogShader, "ambient");
