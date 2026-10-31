@@ -107,7 +107,11 @@ static LRESULT CALLBACK EditorWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
                 // executable instead of silently launching nothing.
                 PlayTestCurrentWorld();
             } return 0;
-            case IDM_EXIT:          CloseWindow(); return 0;
+            // Route exit through WM_CLOSE so the unsaved-document prompt runs.
+            // Calling CloseWindow() here bypassed ConfirmDiscardDocument (which
+            // is only reachable from WM_CLOSE) and closed the window from inside
+            // a menu callback; Ctrl+Q already used the PostMessage path.
+            case IDM_EXIT:          PostMessageA(hWnd, WM_CLOSE, 0, 0); return 0;
             case IDM_MODEL_BRW:     ToggleModelBrowser(); return 0;
             case IDM_SOUND_MGR:     ToggleSoundMgr(); return 0;
             case IDM_TEXTURE_MGR:   ToggleTextureMgr(); return 0;

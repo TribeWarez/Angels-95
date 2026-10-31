@@ -610,8 +610,13 @@ static void PropsApplyScroll(HWND hwnd) {
 
     for (const auto& row : g_propsRows) {
         if (!IsWindow(row.first)) continue;
+        // NO SWP_NOMOVE here: it makes Windows ignore the X/Y arguments, so the
+        // computed `row.second - g_propsScroll` was discarded and the panel never
+        // scrolled. Every panel taller than the screen (a weapon def is ~30 rows
+        // plus the read-only dump) then had its bottom rows AND its Apply/Close
+        // buttons off-screen and unreachable, with a scrollbar that moved.
         SetWindowPos(row.first, nullptr, 0, row.second - g_propsScroll, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
     SCROLLINFO si = { sizeof(SCROLLINFO), SIF_POS, 0, 0, 0, 0 };
@@ -865,8 +870,11 @@ static void PopulatePropertiesPanel(HWND hwnd) {
     // layout cursor, and checkboxes are laid out inline rather than through the
     // field helpers above.
     auto addCheckBox = [&](const wchar_t* label, int id, bool checked, int* cursor, int rowH_) {
+        // WS_TABSTOP: the panel's Tab ring skips controls without it, so every
+        // checkbox (Friendly Fire, Override Fog, Whole brush, ...) was
+        // unreachable from the keyboard while the panel advertised navigation.
         HWND h = CreateCtrl(hwnd, L"BUTTON", label, x, *cursor, lw + 40, 22,
-                            id, BS_AUTOCHECKBOX);
+                            id, BS_AUTOCHECKBOX | WS_TABSTOP);
         SendMessage(h, BM_SETCHECK, checked ? BST_CHECKED : BST_UNCHECKED, 0);
         *cursor += rowH_;
         return h;

@@ -75,6 +75,11 @@ static const SurfaceFlagRow kSurfaceFlagRows[] = {
     // Live because the CPU side is wired - DynamicCollision side-list + the
     // once-per-frame toggle in Core.hpp.
     { L"Quantum",             oz::surface::SURF_QUANTUM, true },
+    // Occluder: a face that hides geometry behind it without being drawn by the
+    // world pass. Live (OzOzoneLoader's occlusion test), but until now it had no
+    // row at all - the only way to author it was hand-editing the .ozone, while
+    // the test register already claimed it was offered as a checkbox.
+    { L"Occluder",            oz::surface::SURF_OCCLUDER, true },
     // --- planned: shown, disabled ---
     { L"Mirror (planned)",    SURF_MIRROR,          false },
 };
@@ -199,8 +204,10 @@ static void SpfBuildFlagsPage(HWND hwnd) {
     const int colW = ((pr.right - x0 - 8) / 3) > 120 ? ((pr.right - x0 - 8) / 3) : 120;
 
     CreateLabel(hwnd, L"Apply to:", x0, y0, 70, 20, 0);
+    // WS_TABSTOP: a combo needs it to be focusable at all, and the panel's Tab
+    // ring only walks WS_TABSTOP descendants.
     HWND hScope = CreateCtrl(hwnd, L"COMBOBOX", L"", x0 + 74, y0, colW * 2 - 74, 200,
-                             ID_SPF_SCOPESEL, CBS_DROPDOWNLIST);
+                             ID_SPF_SCOPESEL, CBS_DROPDOWNLIST | WS_TABSTOP);
     SendMessage(hScope, CB_ADDSTRING, 0, (LPARAM)L"Selected faces");
     SendMessage(hScope, CB_ADDSTRING, 0, (LPARAM)L"Whole brush (brush default)");
     SendMessage(hScope, CB_SETCURSEL,
@@ -240,7 +247,7 @@ static void SpfBuildAlignPage(HWND hwnd) {
     int x = 12, y = 8;
     CreateLabel(hwnd, L"Texture slot:", x, y, 100, 20, 0);
     HWND hCombo = CreateCtrl(hwnd, L"COMBOBOX", L"", x + 104, y, 120, 240,
-                            ID_SPF_SLOTSEL, CBS_DROPDOWNLIST);
+                            ID_SPF_SLOTSEL, CBS_DROPDOWNLIST | WS_TABSTOP);
     // 0 = "keep the brush's own texture", then one entry per tileset texture.
     SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"(brush default)");
     const int n = OzoneLoader::Instance().TilesetCount();
@@ -579,9 +586,16 @@ void ShowSurfacePropsScoped(bool show, int renderable, uint32_t faceMask,
     TabCtrl_SetCurSel(s_hSpfTab, s_spfTab);
 
     const int bw = 84;
-    CreateButton(hwnd, L"Apply", 0, 0, bw, 26, ID_SPF_APPLY);
-    CreateButton(hwnd, L"Reset", 0, 0, bw, 26, ID_SPF_RESET);
-    CreateButton(hwnd, L"Close", 0, 0, bw, 26, ID_SPF_CLOSE);
+    // Create the three persistent buttons only when they do not already exist.
+    // The teardown above deliberately keeps them, and this used to recreate them
+    // unconditionally: every right-click added three more child HWNDs (never
+    // freed, and they joined the Tab ring) at (0,0) over the tab strip.
+    if (!GetDlgItem(hwnd, ID_SPF_APPLY))
+        CreateButton(hwnd, L"Apply", 0, 0, bw, 26, ID_SPF_APPLY);
+    if (!GetDlgItem(hwnd, ID_SPF_RESET))
+        CreateButton(hwnd, L"Reset", 0, 0, bw, 26, ID_SPF_RESET);
+    if (!GetDlgItem(hwnd, ID_SPF_CLOSE))
+        CreateButton(hwnd, L"Close", 0, 0, bw, 26, ID_SPF_CLOSE);
     SpfFitWindow(hwnd);
 
     SpfBuildAll(hwnd);

@@ -1097,10 +1097,12 @@ static void test_dead_flags_are_still_dead() {
     const int deadCount = (int)(sizeof(dead) / sizeof(dead[0]));
     check(deadCount == 13, "the dead-flag register has 13 entries");
 
-    // The dialog's Flags tab exposes 17 rows: these 17 live flags plus MIRROR
+    // The dialog's Flags tab exposes 18 rows: these 17 live flags plus MIRROR
     // shown-but-disabled as "(planned)". SURF_PORTAL moved out of the planned
     // group when the sky portal landed - it is now a real render pass. SURF_QUANTUM
     // moved out when the dynamic-collision side-list gained its first consumer.
+    // SURF_OCCLUDER was already counted here while having NO row at all; it has
+    // one now, and the check below enforces that for every live flag.
     const uint32_t live[] = {
         SURF_FAKEBACKDROP, SURF_INVISIBLE, SURF_MASKED, SURF_TRANSLUCENT,
         SURF_ALPHABLEND, SURF_MODULATED, SURF_TWO_SIDED, SURF_UNLIT,
@@ -1110,6 +1112,26 @@ static void test_dead_flags_are_still_dead() {
     };
     const int liveCount = (int)(sizeof(live) / sizeof(live[0]));
     check(liveCount == 17, "17 flags are live and offered as enabled checkboxes");
+
+    // Every LIVE flag needs a row in the dialog. The old test only asserted that
+    // no DEAD flag was offered, so SURF_OCCLUDER was counted live while having no
+    // checkbox at all - the only way to author it was hand-editing the .ozone.
+    // Kept in the same order as live[] above.
+    {
+        const char* liveNames[] = {
+            "SURF_FAKEBACKDROP", "SURF_INVISIBLE", "SURF_MASKED", "SURF_TRANSLUCENT",
+            "SURF_ALPHABLEND", "SURF_MODULATED", "SURF_TWO_SIDED", "SURF_UNLIT",
+            "SURF_FAKE_LIT", "SURF_GLOW", "SURF_PAN_U", "SURF_PAN_V",
+            "SURF_NO_FOG", "SURF_NO_BSP_CUTS", "SURF_PORTAL", "SURF_OCCLUDER",
+            "SURF_QUANTUM",
+        };
+        const int namedCount = (int)(sizeof(liveNames) / sizeof(liveNames[0]));
+        const std::string panel = ReadFile("AngelEd/Source/UI/Panels/SurfacePropsPanel.cpp");
+        bool everyLiveHasRow = !panel.empty() && namedCount == liveCount;
+        for (const char* n : liveNames)
+            if (panel.find(n) == std::string::npos) everyLiveHasRow = false;
+        check(everyLiveHasRow, "every live flag has a Surface Properties row");
+    }
 
     bool overlap = false;
     for (int i = 0; i < liveCount; i++)

@@ -301,7 +301,12 @@ static HBITMAP LoadUiBitmap(const std::string& name) {
 
 static HWND CreateIconButton(HWND hParent, const wchar_t* text, int x, int y,
                              int w, int h, int id, const std::string& icon) {
-    HWND b = CreateWindowEx(0, L"BUTTON", text, WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
+    // WS_TABSTOP for the same reason CreateButton has it: EditorUi_HandleMessage's
+    // Tab ring only walks WS_TABSTOP descendants, and every owner-draw button in
+    // the editor (the whole CSG toolbox, Import/Export, Heightmap ops) goes
+    // through this helper.
+    HWND b = CreateWindowEx(0, L"BUTTON", text,
+                            WS_CHILD | WS_VISIBLE | BS_OWNERDRAW | WS_TABSTOP,
                             x, y, w, h, hParent, (HMENU)(INT_PTR)id, g_hInst, nullptr);
     HBITMAP bm = LoadUiBitmap(icon);
     if (!bm) OZ_WARN("CreateIconButton: no icon '%s' for control id %d", icon.c_str(), id);

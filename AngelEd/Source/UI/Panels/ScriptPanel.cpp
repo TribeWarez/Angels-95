@@ -368,7 +368,12 @@ static LRESULT CALLBACK ScriptMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
             }
             ofs << ScriptTemplate(name, type);
             ofs.close();
-            LightningEntityRegistry::Instance().Init();
+            // ReloadFile, never Init(): Init() rebuilds the registry containers
+            // and can relocate every EntityDef, while LightningEntityManager
+            // instances, SkyZoneNode::def and the open Properties panel hold raw
+            // EntityDef* for the session. That is a use-after-free triggered from
+            // the UI, and the hot-reload subsystem exists precisely to avoid it.
+            LightningEntityRegistry::Instance().ReloadFile(out.string());
             if (g_editorPanels.hPawnMgr)
                 SendMessage((HWND)g_editorPanels.hPawnMgr, WM_USER + 50, 0, 0);
             ShellExecuteA(hwnd, "open", out.string().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
@@ -378,7 +383,9 @@ static LRESULT CALLBACK ScriptMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
         } else if (id == ID_SCRIPT_REFRESH) {
             ScanScriptFiles();
         } else if (id == ID_SCRIPT_RELOAD) {
-            LightningEntityRegistry::Instance().Init();
+            // In-place per-file reload (see the New Script comment above).
+            for (const auto& se : g_scripts)
+                LightningEntityRegistry::Instance().ReloadFile(se.path);
             ScanScriptFiles();
             if (g_editorPanels.hPawnMgr)
                 SendMessage((HWND)g_editorPanels.hPawnMgr, WM_USER + 50, 0, 0);
@@ -397,7 +404,9 @@ static LRESULT CALLBACK ScriptMgrProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
                 if (MessageBoxA(hwnd, q.c_str(), "Delete Script", MB_YESNO | MB_ICONWARNING) == IDYES) {
                     std::error_code ec;
                     fs::remove(e.path, ec);
-                    LightningEntityRegistry::Instance().Init();
+                    // A deleted file removes the entry in place (see ReloadFile);
+                    // Init() here would relocate every live EntityDef*.
+                    LightningEntityRegistry::Instance().ReloadFile(e.path);
                     ScanScriptFiles();
                     if (g_editorPanels.hPawnMgr)
                         SendMessage((HWND)g_editorPanels.hPawnMgr, WM_USER + 50, 0, 0);

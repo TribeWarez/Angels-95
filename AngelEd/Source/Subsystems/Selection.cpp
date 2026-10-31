@@ -281,6 +281,10 @@ static RayCollision RaycastTestWindZones(Ray ray, EditorSelection& out) {
     }
     return best;
 }
+// Fill the rotation/scale fields the Properties panel seeds itself from.
+// Defined below (it needs FindPlayerStartById); declared here for the raycast.
+static void FillSelectionTransform(EditorSelection& s);
+
 static bool EditorRaycastAt(Vector2 mousePos, EditorSelection& out) {
     // Pane-aware: raylib's GetMouseRay maps the mouse over the whole window, so in
     // a split it aims the ray at the wrong place. g_activeViewportRect is the pane
@@ -341,6 +345,7 @@ static bool EditorRaycastAt(Vector2 mousePos, EditorSelection& out) {
     testWithSel(RaycastTestWindZones(ray, tmp), tmp, 1.2f);
 
     out = bestSel;
+    FillSelectionTransform(out);
     return best.hit;
 }
 
@@ -484,6 +489,54 @@ PlayerStartNode* FindPlayerStartById(int id) {
     for (auto& s : PawnSystem::Instance().GetPlayerStarts())
         if ((int)s.id == id) return &s;
     return nullptr;
+}
+
+// Publish the selected entity's rotation/scale onto the selection.
+//
+// `EditorSelection::hasRotation` was NEVER set to true anywhere, so
+// `propsTargetHasRotation` (seeded from it) was always false and PropsApply's
+// rotation writes - the one gate that protects an authored yaw from being zeroed
+// by an unrelated Apply - were dead. The Rot row therefore showed 0 for every
+// selection and an edit could never be applied. Both pick paths (the viewport
+// raycast and the World Hierarchy) go through here, so a rotated brush selected
+// from either shows its real angle, and a type with no yaw keeps hasRotation
+// false (so Apply never writes 0 over it).
+static void FillSelectionTransform(EditorSelection& s) {
+    s.rotation = 0.0f;
+    s.scale = 1.0f;
+    s.hasRotation = false;
+    switch (s.type) {
+        case SelType::BRUSH: {
+            // Renderable rotation is radians; the panel edits degrees.
+            OzoneRenderable* r = OzoneLoader::Instance().Get(s.index);
+            if (r) {
+                s.rotation = r->rotation * RAD2DEG;
+                s.scale    = r->scale;
+                s.hasRotation = true;
+            }
+            break;
+        }
+        case SelType::MESH: {
+            MeshObjectNode* m = PawnSystem::Instance().GetMeshObject(s.index);
+            if (m) {
+                s.rotation = m->yaw;          // already degrees
+                s.scale    = m->scale;
+                s.hasRotation = true;
+            }
+            break;
+        }
+        case SelType::PARTICLE: {
+            ParticleEmitterNode* e = PawnSystem::Instance().GetParticleEmitter(s.index);
+            if (e) { s.rotation = e->yaw; s.hasRotation = true; }
+            break;
+        }
+        case SelType::SPAWN: {
+            PlayerStartNode* p = FindPlayerStartById(s.index);
+            if (p) { s.rotation = p->yaw; s.hasRotation = true; }
+            break;
+        }
+        default: break;
+    }
 }
 
 // Centre the camera on the current selection. Distance and direction are kept,
@@ -959,6 +1012,11 @@ static bool AdoptSelection(const ed::Selection& pick) {
     g_sel.index = pick.ref.index;
     g_sel.name = pick.name;
     g_sel.pos = {pick.x, pick.y, pick.z};
+    // Resolve rotation/scale from the LIVE entity, exactly as the viewport pick
+    // path does. ed::Selection carries only the transform it needs for the
+    // gizmo, so without this the Rot row showed - and Apply wrote - the previous
+    // selection's angle.
+    FillSelectionTransform(g_sel);
     EditorLog("Selected from WorldGraph: %s (type=%d idx=%d)",
               g_sel.name.c_str(), (int)g_sel.type, g_sel.index);
     // SelType::MAP is the level, not a placed object: it has no transform, so

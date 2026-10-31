@@ -1790,7 +1790,10 @@ void OzoneLoader::DrawWorldGeometry(Camera3D& camera) {
     std::vector<Occluder> occluders;
     for (auto& o : m_renderables) {
         if (!o.loaded) continue;
-        if (!(o.surface.def.flags & SURF_OCCLUDER)) continue;
+        // HasAnywhere, not def.flags: the flag is per FACE in the dialog, and a
+        // per-face Occluder was silently inert because only the brush-wide
+        // default was consulted (the same omission SURF_QUANTUM had).
+        if (!o.surface.HasAnywhere((uint32_t)SURF_OCCLUDER)) continue;
         Occluder oc;
         oc.c = { (o.bounds.min.x+o.bounds.max.x)*0.5f,
                  (o.bounds.min.y+o.bounds.max.y)*0.5f,
