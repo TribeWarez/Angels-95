@@ -72,6 +72,9 @@ bool OmegaClient::has_server_profile() const {
     return m_client.has_server_profile();
 }
 
+bool OmegaClient::has_player_id() const { return m_client.has_profile_player_id(); }
+uint32_t OmegaClient::player_id() const { return m_client.profile_player_id(); }
+
 void OmegaClient::update(float cam_x, float cam_y, float cam_z,
                          float cam_yaw, float cam_pitch, uint8_t stance) {
     m_client.update();
@@ -445,11 +448,39 @@ void OmegaClient::handle_message(const net::NetworkMessage& msg) {
         }
         case net::MessageType::PLAYER_HURT: {
             if (msg.size < sizeof(net::PlayerHurtData)) return;
-            const std::lock_guard<std::mutex> lock(m_msg_mutex);
             net::PlayerHurtData pud;
             memcpy(&pud, msg.payload, sizeof(pud));
+            // This used to be broadcast to EVERY player and applied as "you were
+            // hit", so one player's damage overwrote everyone's health and played
+            // the hurt/death sound on all of them. The server now addresses it to
+            // the victim only, but an older server still broadcasts - so filter on
+            // the victim id. Ids are slot indices (0 is real), hence the validity
+            // flag rather than a sentinel.
+            if (!net::DirectedIsForSelf(m_client.has_profile_player_id(),
+                                        m_client.profile_player_id(), pud.player_id))
+                break;
+            const std::lock_guard<std::mutex> lock(m_msg_mutex);
             if (m_on_player_hurt)
                 m_on_player_hurt(pud.damage, pud.remaining_health);
+            break;
+        }
+        case net::MessageType::PLAYER_STATE: {
+            // Server-side damage/death/respawn for THIS player. Only sent to the
+            // player it names; the id filter is defensive against a future
+            // broadcast and costs nothing.
+            if (msg.size < sizeof(net::PlayerStateData)) return;
+            net::PlayerStateData ps;
+            memcpy(&ps, msg.payload, sizeof(ps));
+            if (!net::DirectedIsForSelf(m_client.has_profile_player_id(),
+                                        m_client.profile_player_id(), ps.player_id))
+                break;
+            const std::lock_guard<std::mutex> lock(m_msg_mutex);
+            m_playerState = ps;
+            m_hasPlayerState = true;
+            if (m_on_player_state)
+                m_on_player_state(ps.health, ps.max_health, ps.damage, ps.dead != 0,
+                                  ps.respawn_seconds, ps.teleport != 0,
+                                  ps.x, ps.y, ps.z);
             break;
         }
         case net::MessageType::SCORE_STATE: {
@@ -755,6 +786,10 @@ void OmegaClient::on_disconnected() {
     m_lastWorldChangeAt = 0.0;
     m_hasWorldSpawn = false;
     m_serverMission.clear();   // per-session server state (co-op beats)
+    // Health is per-session server state as well: carrying the last PLAYER_STATE
+    // into the next session would show a dead/hurt HUD from a server we left.
+    m_playerState = net::PlayerStateData{};
+    m_hasPlayerState = false;
 }
 
 std::string OmegaClient::consume_pending_scene_data() {

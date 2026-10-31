@@ -1219,6 +1219,9 @@ bool GameState::respawn_dead_player(ServerPlayer& player) {
     player.dead = false;
     player.respawn_at = 0.0;
     OZ_INFO("Player %s respawned in world %d", player.name, player.world_index);
+    // Tell the victim. Without this the client kept playing from the death spot
+    // with a stale (or zero) health bar while the server had already moved it.
+    if (m_onPlayerState) m_onPlayerState(player, PlayerStateEvent::Respawn, 0);
     return true;
 }
 
@@ -1258,6 +1261,7 @@ void GameState::damage_player(ServerPlayer& player, int amount,
     // ends resolve damage identically. This used to be a flat 20% cut that
     // ignored the defense stat entirely.
     if (player.dead) return;   // already dead; ignore further damage
+    const float health_before = player.health;
     float mitigated = oz::MitigateDamage((float)amount, (float)player.armor);
     player.health -= (int)mitigated;
     if (player.health < 0) player.health = 0;
@@ -1268,6 +1272,13 @@ void GameState::damage_player(ServerPlayer& player, int amount,
         if (attacker_id != UINT32_MAX && attacker_id != player.id)
             register_kill(attacker_id, player.id, source);
     }
+    // The victim's client learns its new health/death state here. This is the
+    // whole of the server -> client damage path: before it, NPC contact, enemy
+    // projectiles and PvP reduced the server's copy only, so the HUD never moved
+    // and a death was invisible until the silent 3 s teleport.
+    if (m_onPlayerState)
+        m_onPlayerState(player, PlayerStateEvent::Damage,
+                        (int)std::max(0.0f, health_before - player.health));
 }
 
 void GameState::register_kill(uint32_t killer_id, uint32_t victim_id,

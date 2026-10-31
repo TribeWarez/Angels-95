@@ -151,6 +151,15 @@ enum class MessageType : uint32_t {
     // Client -> server: request a world chunk by index. Server answers with a
     // WORLD_CHANGE-style payload scoped to that chunk (Phase 6 scaffold).
     REQUEST_CHUNK = 33,
+    // Server -> client: THIS player's authoritative health/death state. Sent only
+    // to the player it names. Server-side damage (NPC contact, projectiles, PvP)
+    // used to be invisible to its victim: the server deducted health, set
+    // dead/respawn_at and teleported them to spawn 3 s later, but the client was
+    // told nothing, so the HUD stayed at 100 and the player kept playing from the
+    // death spot. A brand-new MessageType is forward/backward compatible by
+    // definition (an older client hits `default` and ignores it), so
+    // PROTOCOL_VERSION stays at 2 - the same reasoning as SCORE_STATE.
+    PLAYER_STATE = 34,
 };
 
 // Melee stamina: the server keeps its own pool per player so a swinging client
@@ -236,6 +245,18 @@ struct ProfileStateData {
     char     displayName[PLAYER_NAME_MAX];
 };
 #pragma pack(pop)
+
+// Is a DIRECTED server message (PLAYER_STATE, the PLAYER_HURT echo) meant for
+// this client?
+//
+// `have_self` is the PROFILE_STATE validity flag, not a sentinel id: player ids
+// are slot indices, so 0 is a REAL player and "-1 means unknown" is not
+// expressible. Comparing against 0 would drop every message addressed to the
+// first player; requiring a valid flag before filtering keeps a message that
+// arrives before PROFILE_STATE (UDP orders nothing) from being discarded.
+inline bool DirectedIsForSelf(bool have_self, uint32_t self_id, uint32_t message_id) {
+    return !have_self || message_id == self_id;
+}
 
 // ---------------------------------------------------------------------------
 // Profile sanitising (server side; exposed for tests)
@@ -439,6 +460,31 @@ struct PlayerHurtData {
     uint32_t player_id; // victim
     int damage;
     float remaining_health;
+};
+
+// Server -> client: one player's authoritative health/death state.
+//
+// SCALE/UNITS: health and max_health are the SERVER's integers. `teleport` is 1
+// only on a respawn (the server has already moved its own copy of the player, so
+// the client must follow); a damage update must never yank the player to spawn.
+// `respawn_seconds` is the remaining wait, for a countdown UI.
+//
+// Gated on sizeof(): unlike a tail appended to an existing message, an older peer
+// has no case for this type at all, so a full-size requirement costs no
+// compatibility. Extending it later should follow the optional-tail pattern.
+struct PlayerStateData {
+    uint32_t player_id;
+    int32_t  health;
+    int32_t  max_health;
+    // Health actually removed by this event. The client needs it for the hurt
+    // feedback and the `player.hurt` event: deriving it from consecutive health
+    // values would fire a false hurt on the first message of a session (health
+    // restored from a save is often below max).
+    int32_t  damage;
+    uint32_t dead;             // 1 = dead, respawn pending
+    float    respawn_seconds;  // remaining wait; 0 when alive
+    uint32_t teleport;         // 1 = move the local player to (x,y,z)
+    float    x, y, z;
 };
 
 struct PlayerKillData {
@@ -648,7 +694,19 @@ public:
     // server replies; `has_server_profile` tells them apart.
     bool has_server_profile() const { return m_server_profile_valid; }
     const ServerProfile& server_profile() const { return m_server_profile; }
-    void clear_server_profile() { m_server_profile_valid = false; m_server_profile = ServerProfile(); }
+
+    // The id the server assigned us, from PROFILE_STATE. A separate validity flag
+    // because 0 is a REAL id (ids are slot indices): "not told yet" and "I am
+    // player 0" must not be conflated - the same distinction server_world_index()
+    // makes with -1.
+    bool has_profile_player_id() const { return m_profile_player_id_valid; }
+    uint32_t profile_player_id() const { return m_profile_player_id; }
+    void clear_server_profile() {
+        m_server_profile_valid = false;
+        m_server_profile = ServerProfile();
+        m_profile_player_id_valid = false;
+        m_profile_player_id = 0;
+    }
 
     bool is_connected() const { return m_connected; }
     bool is_connecting() const { return m_connecting; }
@@ -698,6 +756,9 @@ private:
     // Profile the server confirmed via PROFILE_STATE.
     ServerProfile m_server_profile;
     bool          m_server_profile_valid = false;
+    // Our own server-assigned id, from PROFILE_STATE (see has_profile_player_id).
+    uint32_t      m_profile_player_id = 0;
+    bool          m_profile_player_id_valid = false;
 
     // Fill `out` with the auth payload for `token`, truncating every string to
     // its wire cap so the copy into NetworkMessage::payload is always safe.

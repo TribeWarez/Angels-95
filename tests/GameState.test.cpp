@@ -351,6 +351,67 @@ static int test_damage_player_honors_armor() {
     PASS(); return 0; END_TEST();
 }
 
+// The server -> client damage path. damage_player used to reduce the server's
+// copy only, so the victim's HUD never moved, no hurt/death feedback fired, and
+// the 3 s respawn teleport was invisible. The callback is what the server turns
+// into PLAYER_STATE.
+static int test_damage_notifies_player_state() {
+    TEST("damage_player and respawn notify the player-state callback");
+    GameState gs;
+    uint32_t pid = gs.add_player(30, "Notified");
+    ServerPlayer* p = gs.get_player(pid);
+    CHECK(p != nullptr);
+    p->health = 100.0f;
+    p->max_health = 100.0f;
+
+    WorldState ws = make_test_world(0);
+    ws.has_spawn = true;
+    ws.spawn_x = 5.0f; ws.spawn_y = 1.0f; ws.spawn_z = -5.0f;
+    gs.worlds().push_back(ws);
+
+    // NOTE: no CHECK macros inside the lambda. They expand to `return 1;`, which
+    // gives the lambda an int return type while other paths fall off the end -
+    // undefined behaviour, and GCC emits ud2 there (SIGILL on the success path).
+    int damageCalls = 0, respawnCalls = 0, lastDamage = -1;
+    bool sawDead = false, respawnAlive = false, respawnFull = false;
+    gs.set_on_player_state([&](const ServerPlayer& sp,
+                               GameState::PlayerStateEvent ev, int damage) {
+        if (ev == GameState::PlayerStateEvent::Damage) {
+            damageCalls++;
+            lastDamage = damage;
+            sawDead = sp.dead;
+        } else {
+            respawnCalls++;
+            respawnAlive = !sp.dead;
+            respawnFull = (sp.health == sp.max_health);
+        }
+    });
+
+    gs.damage_player(*p, 25);
+    CHECK_EQ(damageCalls, 1);
+    CHECK_EQ(lastDamage, 25);
+    CHECK(!sawDead);
+
+    // The killing blow must notify again, this time with dead set.
+    gs.damage_player(*p, 500);
+    CHECK_EQ(damageCalls, 2);
+    CHECK(sawDead);
+    CHECK_EQ(p->health, 0.0f);
+
+    // Already dead: no further notifications (damage_player early-outs).
+    gs.damage_player(*p, 10);
+    CHECK_EQ(damageCalls, 2);
+
+    // The respawn event is what tells the client to follow the server's teleport.
+    CHECK(gs.respawn_dead_player(*p));
+    CHECK_EQ(respawnCalls, 1);
+    CHECK(respawnAlive);
+    CHECK(respawnFull);
+    CHECK_APROX(p->position.x, 5.0f, 0.01f);
+    CHECK_APROX(p->position.z, -5.0f, 0.01f);
+    PASS(); return 0; END_TEST();
+}
+
 // --- Tier 0: trust / idempotency regressions ---
 
 static int test_add_player_idempotent() {
@@ -1715,6 +1776,7 @@ int main() {
     failures += test_ammo_pickup_no_xp_granted();
     failures += test_collect_pickup_rejects_foreign_world();
     failures += test_damage_player_honors_armor();
+    failures += test_damage_notifies_player_state();
     failures += test_add_player_idempotent();
     failures += test_player_position_flag();
     failures += test_npc_death_and_revive();

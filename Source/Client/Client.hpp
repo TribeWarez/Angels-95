@@ -209,6 +209,35 @@ public:
         m_on_player_hurt = std::move(cb);
     }
 
+    // Authoritative health/death for THIS player (PLAYER_STATE). `teleport` is
+    // true only on a server respawn, where (x,y,z) is the position the server
+    // already moved us to. Called under m_msg_mutex like the other callbacks -
+    // do not call back into the client.
+    void set_on_player_state(std::function<void(int health, int max_health, int damage,
+                                                bool dead, float respawn_seconds,
+                                                bool teleport,
+                                                float x, float y, float z)> cb) {
+        m_on_player_state = std::move(cb);
+    }
+
+    // The id the server assigned us (from PROFILE_STATE). Needed to attribute
+    // directed messages; `has_player_id()` distinguishes "not told yet" from the
+    // real id 0. -1 is never returned: read has_player_id() first.
+    bool has_player_id() const;
+    uint32_t player_id() const;
+
+    // Last authoritative state the server sent for this player. Valid once
+    // has_player_state() is true; a HUD can read it without waiting for the next
+    // packet. Snapshot under the lock like the other accessors.
+    bool has_player_state() const {
+        std::lock_guard<std::mutex> l(m_msg_mutex);
+        return m_hasPlayerState;
+    }
+    net::PlayerStateData player_state() const {
+        std::lock_guard<std::mutex> l(m_msg_mutex);
+        return m_playerState;
+    }
+
     // Fired whenever the server's pickup view changed (a respawn, a collect, a
     // re-sync snapshot). The argument is a SNAPSHOT taken under m_msg_mutex and
     // released before the callback runs — calling a consumer that touched the
@@ -277,6 +306,9 @@ private:
     std::vector<ClientObjective> m_objectives;
     std::vector<RemotePlayer> m_remote_players;
     std::vector<ClientProjectile> m_projectiles;
+    // Last PLAYER_STATE, guarded by m_msg_mutex.
+    net::PlayerStateData m_playerState{};
+    bool m_hasPlayerState = false;
     int m_xp = 0;
     int m_level = 1;
     int m_xp_to_next = 100;
@@ -291,6 +323,9 @@ private:
     std::function<void(int item_id, int quantity)> m_on_item_collected;
     std::function<void(const char* weapon_def_name)> m_on_weapon_collected;
     std::function<void(int damage, float remaining_health)> m_on_player_hurt;
+    std::function<void(int health, int max_health, int damage,
+                       bool dead, float respawn_seconds, bool teleport,
+                       float x, float y, float z)> m_on_player_state;
     std::function<void(const std::vector<ClientPickup>&)> m_on_pickups_changed;
     std::function<void(int world_index, bool accepted)> m_on_world_changed;
 

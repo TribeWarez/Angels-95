@@ -934,6 +934,35 @@ static void test_discovery_tail() {
     printf("PASS\n");
 }
 
+// Directed messages (PLAYER_STATE, the PLAYER_HURT echo) name their recipient.
+// Player ids are slot indices, so 0 is a REAL player: the validity flag is what
+// distinguishes "not told yet" from "I am player 0", and a sentinel comparison
+// would silently drop every message addressed to the first player.
+static void test_directed_message_attribution() {
+    test_count++;
+    printf("  TEST directed messages are attributed by id (0 is a real player)... ");
+    const bool ok =
+        net::DirectedIsForSelf(false, 0, 7) &&   // not told yet: accept
+        net::DirectedIsForSelf(false, 0, 0) &&
+        net::DirectedIsForSelf(true, 0, 0) &&    // I am player 0
+        net::DirectedIsForSelf(true, 3, 3) &&
+        !net::DirectedIsForSelf(true, 3, 4) &&   // someone else
+        !net::DirectedIsForSelf(true, 0, 1);
+    if (ok) { pass_count++; printf("PASS\n"); }
+    else printf("FAIL\n");
+}
+
+// A fixed 40-byte record. A silent layout change would make each side read
+// different fields as health, which is the class of bug this message exists to
+// fix; the assertion forces a deliberate decision.
+static void test_player_state_payload_size() {
+    test_count++;
+    printf("  TEST PLAYER_STATE payload is a stable 40-byte record... ");
+    const bool ok = sizeof(net::PlayerStateData) == 40;
+    if (ok) { pass_count++; printf("PASS\n"); }
+    else printf("FAIL: sizeof=%zu\n", sizeof(net::PlayerStateData));
+}
+
 int main() {
     printf("Network packet tests:\n");
     test_magic_constant();
@@ -960,6 +989,8 @@ int main() {
     test_world_change_roundtrip();
     test_world_change_without_spawn_tail();
     test_discovery_tail();
+    test_directed_message_attribution();
+    test_player_state_payload_size();
 
     printf("\nResults: %d/%d passed\n", pass_count, test_count);
     return (pass_count == test_count) ? 0 : 1;

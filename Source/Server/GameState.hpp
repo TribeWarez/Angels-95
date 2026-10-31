@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <functional>
 #include <cstdint>
 #include <cmath>
 #include <algorithm>
@@ -458,6 +459,20 @@ public:
                        uint32_t attacker_id = UINT32_MAX,
                        oz::gametype::DamageSource source = oz::gametype::DamageSource::WORLD);
 
+    // Server -> the affected client. `Damage` means health changed (the client
+    // must not be teleported), `Respawn` means the server has already moved its
+    // own copy of the player back to spawn, so the client must follow.
+    //
+    // A callback rather than "the server polls for changes": GameState owns WHEN
+    // a player is hurt, but it has no socket, and a dirty-flag poll would add a
+    // tick of latency to every hit and would have to distinguish damage from
+    // respawn anyway. Sending from inside damage_player() is safe - the server
+    // loop is single-threaded.
+    enum class PlayerStateEvent { Damage, Respawn };
+    // `damage` is the health actually removed by this event (0 for a respawn).
+    using PlayerStateFn = std::function<void(const ServerPlayer&, PlayerStateEvent, int damage)>;
+    void set_on_player_state(PlayerStateFn fn) { m_onPlayerState = std::move(fn); }
+
     // Advance a world objective (COOP). Returns true if progress changed.
     bool AdvanceObjective(WorldState& ws, const std::string& id, int delta);
     // Advance every objective of a given type (kill / collect). A non-empty
@@ -576,6 +591,8 @@ private:
     uint32_t m_tick_count = 0;
     std::vector<WorldState> m_worlds;
     std::vector<RespawnedPickupInfo> m_respawned_this_tick;
+    // Set by the server (see set_on_player_state); may be empty in tests.
+    PlayerStateFn m_onPlayerState;
 
     // `--mission <name>`: mark every world BEFORE the pinned starting mission
     // in the mission graph as mission_skipped. Runs at the end of init_worlds

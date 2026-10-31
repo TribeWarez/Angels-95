@@ -315,6 +315,50 @@ static void send_world_change(net::NetworkPlayer& player, int world_index, bool 
             player.id, world_index, wcd.accepted);
 }
 
+// PLAYER_STATE -> the ONE player it names.
+//
+// Directed on purpose. The old PLAYER_HURT relay was broadcast, and the client
+// applies it as "you were hit", so one player's damage rewrote everyone's health
+// and played the hurt/death sound on all of them.
+//
+// `teleport` is set only on a respawn: the server has already moved its own copy
+// of the player to the world spawn, so the client must follow. A damage update
+// must never yank the player back to spawn.
+static void send_player_state(const ServerPlayer& sp, bool teleport, int damage) {
+    if (!g_game_server) return;
+    net::PlayerStateData ps{};
+    ps.player_id   = sp.id;
+    ps.health      = (int32_t)sp.health;
+    ps.max_health  = (int32_t)sp.max_health;
+    ps.damage      = (int32_t)damage;
+    ps.dead        = sp.dead ? 1u : 0u;
+    if (sp.dead && sp.respawn_at > 0.0) {
+        const double left = sp.respawn_at - (double)time(nullptr);
+        ps.respawn_seconds = left > 0.0 ? (float)left : 0.0f;
+    }
+    if (teleport) {
+        const WorldState* ws = g_game_state.get_world(sp.world_index);
+        if (ws && ws->has_spawn) {
+            ps.teleport = 1;
+            ps.x = ws->spawn_x;
+            ps.y = ws->spawn_y;
+            ps.z = ws->spawn_z;
+        }
+    }
+    net::NetworkMessage msg{};
+    msg.magic = net::MAGIC;
+    msg.type = static_cast<uint32_t>(net::MessageType::PLAYER_STATE);
+    msg.size = sizeof(ps);
+    msg.sequence = 0;
+    msg.timestamp = static_cast<uint32_t>(time(nullptr));
+    memcpy(msg.payload, &ps, sizeof(ps));
+    for (const auto& np : g_game_server->players()) {
+        if (np.id != sp.id) continue;
+        g_game_server->send_message(const_cast<net::NetworkPlayer&>(np), msg);
+        break;
+    }
+}
+
 static void on_player_join(net::NetworkPlayer& player) {
     OZ_INFO("Player %s (id=%u) joined from %s:%u",
             player.name, player.id, player.ip_address, player.port);
@@ -377,6 +421,10 @@ static void on_player_join(net::NetworkPlayer& player) {
     send_world_change(player, wi, /*accepted=*/true);
 
     send_pickup_snapshot(player, wi);
+
+    // The client used to start every session assuming 100 health. Health is
+    // restored from the save (and may legitimately be below max), so state it.
+    if (sp) send_player_state(*sp, /*teleport=*/false, /*damage=*/0);
 }
 
 static void on_player_leave(net::NetworkPlayer& player) {
@@ -776,15 +824,19 @@ static void on_server_message(const net::NetworkMessage& msg,
                 OZ_INFO("PLAYER_HURT: victim=%u damage=%d health=%.0f",
                         phd.player_id, phd.damage, phd.remaining_health);
             }
-            // Broadcast hurt event to all players (for HUD/audio feedback)
-            net::NetworkMessage relay;
+            // Relay to the VICTIM ONLY. This was a broadcast, and the client
+            // applies PLAYER_HURT as "you were hit" - so one player's hazard
+            // damage overwrote every other player's health and played the
+            // hurt/death sound on all of them. The victim is the sender (checked
+            // above), so send back to it.
+            net::NetworkMessage relay{};
             relay.magic = net::MAGIC;
             relay.type = static_cast<uint32_t>(net::MessageType::PLAYER_HURT);
             relay.size = sizeof(phd);
             relay.sequence = 0;
             relay.timestamp = static_cast<uint32_t>(time(nullptr));
             memcpy(relay.payload, &phd, sizeof(phd));
-            g_game_server->broadcast_message(relay);
+            g_game_server->send_message(const_cast<net::NetworkPlayer&>(sender), relay);
             break;
         }
         case net::MessageType::PLAYER_KILL: {
@@ -1308,6 +1360,15 @@ int main(int argc, char** argv) {
     }
 
     g_game_state.init_worlds(g_gamedata_dir, g_world_list);
+
+    // The only server -> client damage notification. GameState owns when a player
+    // is hurt or respawned; this turns that into the directed PLAYER_STATE the
+    // victim can actually act on. Registered here because it needs BOTH the game
+    // state and the network server, and must not fire before either exists.
+    g_game_state.set_on_player_state([](const ServerPlayer& sp,
+                                        GameState::PlayerStateEvent ev, int damage) {
+        send_player_state(sp, ev == GameState::PlayerStateEvent::Respawn, damage);
+    });
 
     // --world is a plain-co-op placement pin. The campaign frontier owns join
     // placement, so combining them would be a silent contradiction.

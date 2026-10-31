@@ -89,6 +89,12 @@ const char* message_type_string(MessageType type) {
         case MessageType::REQUEST_WORLD:    return "REQUEST_WORLD";
         case MessageType::WORLD_CHANGE:     return "WORLD_CHANGE";
         case MessageType::PLAYER_PROFILE:   return "PLAYER_PROFILE";
+        case MessageType::PLAYER_STATE:     return "PLAYER_STATE";
+        // These were missing, so OBJECTIVE_STATE (the co-op objective stream)
+        // logged as UNKNOWN on every packet.
+        case MessageType::OBJECTIVE_STATE:  return "OBJECTIVE_STATE";
+        case MessageType::PARTY_HELLO:      return "PARTY_HELLO";
+        case MessageType::PARTY_STATE:      return "PARTY_STATE";
 case MessageType::REQUEST_CHUNK:    return "REQUEST_CHUNK";
         case MessageType::WEAPON_AMMO:      return "WEAPON_AMMO";
         case MessageType::SERVER_CHALLENGE: return "SERVER_CHALLENGE";
@@ -928,6 +934,12 @@ void NetworkClient::update() {
                     m_server_profile.team          = ps.team;
                     m_server_profile.requestedTeam = ClampRequestedTeam(ps.requestedTeam);
                     m_server_profile_valid = true;
+                    // Our own id. Directed server messages (PLAYER_STATE, and the
+                    // PLAYER_HURT relay) are attributed with it; it used to be
+                    // parsed and thrown away, which is why no inbound message
+                    // could ever ask "is this about me?".
+                    m_profile_player_id = ps.playerId;
+                    m_profile_player_id_valid = true;
                     if (ps.nameWasChanged)
                         printf("Client: server adjusted display name to '%s'\n",
                                m_server_profile.displayName.c_str());

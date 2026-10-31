@@ -903,6 +903,42 @@ ShowSpellbook = false;
         oz::events::EventBus::Instance().Emit(ev);
     });
 
+    // Authoritative health/death/respawn from the server (PLAYER_STATE).
+    //
+    // Before this, server-side damage was invisible to its victim: NPC contact,
+    // enemy projectiles and PvP reduced the SERVER's copy only, so the HUD never
+    // moved, no hurt/death feedback fired, and the silent 3 s respawn left the
+    // client playing from the death spot while the server had already moved it.
+    g_client.set_on_player_state([](int health, int max_health, int damage,
+                                    bool dead, float respawn_seconds, bool teleport,
+                                    float x, float y, float z) {
+        (void)respawn_seconds;   // reserved for a countdown UI
+        auto& lem = LightningEntityManager::Instance();
+        // Absolute, server-owned values. Deriving health from local deltas is how
+        // the two sides came to disagree in the first place.
+        if (max_health > 0) lem.SetPlayerStat("max_health", (float)max_health);
+        lem.SetPlayerHealth((float)health);
+
+        if (teleport) {
+            // The server has already moved ITS copy to the world spawn; follow it,
+            // or every later PLAYER_UPDATE is measured against the death spot and
+            // the 25-unit teleport clamp rejects them.
+            AngelTechData.MainCamera.position = {x, y, z};
+            SnapCameraFeetToGround(AngelTechData.MainCamera);
+        }
+
+        if (dead)                 PlayerController::Instance().PlayHurt(true);
+        else if (damage > 0)      PlayerController::Instance().PlayHurt(false);
+
+        if (dead || damage > 0) {
+            oz::events::Event ev;
+            ev.topic = dead ? "player.death" : "player.hurt";
+            ev.s0 = "Player";
+            ev.f0 = (float)damage;
+            oz::events::EventBus::Instance().Emit(ev);
+        }
+    });
+
     // Weapon pickup granted by the server (item_id 15) — add to hotbar.
     g_client.set_on_weapon_collected([](const char* weapon_def_name) {
         InventoryBehaviour::Instance().OnWeaponCollected(weapon_def_name);
