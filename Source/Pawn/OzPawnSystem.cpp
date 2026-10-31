@@ -16,10 +16,14 @@
 #include "../GameplayFlags.hpp"
 #include "../Events/EventBus.hpp"
 #include <rlgl.h>
+#include "../World/OzoneFrustum.hpp"   // per-pane prop culling (BuildFrustum/AabbInFrustum)
+#include "../Diagnostics/FrameProfiler.hpp"
+#include "../Diagnostics/PerfToggles.hpp"
 #include <cmath>
 #include <algorithm>
 #include <functional>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <unordered_map>
 
@@ -1813,6 +1817,14 @@ void PawnSystem::DrawEntities(Camera3D& camera, Shader litShader, Shader windSha
     }
 
     // Placed static/skeletal map-object meshes (GameEngine.Mesh.*)
+    //
+    // Frustum-culled per pane. The client measured ~5 ms/frame with 92 props and
+    // the editor paid it once PER VIEWPORT (4 panes = 4x), all of it on props the
+    // camera could not see. The box is deliberately conservative (max abs bound
+    // x scale around the origin) and ignores yaw, so it can only cull something
+    // that is genuinely outside every frustum plane.
+    FrustumPlane meshPlanes[6];
+    BuildFrustum(camera, meshPlanes);
     for (auto& n : m_meshObjects) {
         if (!n.mesh) {
             if (!n.animFile.empty())
@@ -1826,6 +1838,28 @@ void PawnSystem::DrawEntities(Camera3D& camera, Shader litShader, Shader windSha
                     n.meshPath, n.texturePath, n.baseDir, true);
         }
         if (!n.mesh || !n.mesh->Valid()) continue;
+
+        {
+            const BoundingBox& lb = n.mesh->Bounds();
+            const float s = fabsf(n.scale);
+            const float rx = fmaxf(fabsf(lb.min.x), fabsf(lb.max.x));
+            const float ry = fmaxf(fabsf(lb.min.y), fabsf(lb.max.y));
+            const float rz = fmaxf(fabsf(lb.min.z), fabsf(lb.max.z));
+            // Yaw is deliberately ignored, so the horizontal half-extent must be
+            // the DIAGONAL (sqrt(x^2+z^2)): per-axis max bounds are not a yaw
+            // upper bound for an off-centre model, and using them culled the
+            // rotated end of a long prop. The 1-unit pad covers edge popping.
+            const float horiz = sqrtf(rx * rx + rz * rz) * s + 1.0f;
+            const float vy = ry * s + 1.0f;
+            BoundingBox wb;
+            wb.min = {n.position.x - horiz, n.position.y - vy, n.position.z - horiz};
+            wb.max = {n.position.x + horiz, n.position.y + vy, n.position.z + horiz};
+            if (oz::diag::PerfOn("cull") && !AabbInFrustum(meshPlanes, wb)) {
+                OZ_PROFILE_COUNT("props.culled");
+                continue;
+            }
+        }
+        OZ_PROFILE_COUNT("props.drawn");
 
         if (!n.animFile.empty()) {
             // External vertex-keyframe clip (apply-pose-then-draw).

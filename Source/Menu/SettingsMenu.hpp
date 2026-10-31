@@ -184,7 +184,9 @@ void UpdateSettings() {
         // LoadRenderTexture, which silently downgraded the scene to RGBA8 and
         // threw away the bloom headroom until the next restart.
         oz::PostFX::DestroyTarget(Target);
-        Target = oz::PostFX::CreateTarget(int(1280 * ResolutionScale), int(720 * ResolutionScale));
+        Target = oz::PostFX::CreateTarget(int(1280 * ResolutionScale),
+                                          int(720 * ResolutionScale),
+                                          !PeriodRenderProfile);
     }
     y += 98;
 

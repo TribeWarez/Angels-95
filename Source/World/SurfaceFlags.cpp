@@ -87,11 +87,33 @@ void BrushSurface::ResetToDefault() {
     selectionMask = 0;
 }
 
+// A brush-wide property that only exists as a SHADER UNIFORM. `texPath`,
+// `texSlot` and the UV scale/offset are NOT in this set: they land in the
+// model's material or are baked into the mesh's texcoords by
+// ApplyRenderableUV, so all six faces sample identically and the single-draw
+// fast path produces the same image.
+//
+// This distinction is the difference between 1 and 6 draw calls (and ~12× the
+// uniform uploads) per brush. It used to be absent, so every world whose brushes
+// authored `texPath=` - Sektor_01_SilentPines (266/266), World_endless_snow
+// (251/251), KryoArchipel (91/91) - drew every face separately for no visual
+// reason. Keep this list about uniforms only; do not add a texture/UV field.
+static bool PropsNeedSurfaceShader(const oz::surface::SurfaceProps& p) {
+    if (p.flags != 0) return true;
+    if (!p.material.empty()) return true;
+    if (p.panU != 0.0f || p.panV != 0.0f) return true;
+    if (p.alpha != 1.0f || p.alphaCutoff != 0.0f) return true;
+    if (p.glowR != 0.0f || p.glowG != 0.0f || p.glowB != 0.0f) return true;
+    if (p.glowScale != 1.0f) return true;
+    return false;
+}
+
 bool BrushSurface::NeedsPerFaceDraw() const {
-    if (def.IsNonDefault()) return true;
+    // Any face override may differ from its neighbours (texture, flags, UV), so
+    // it genuinely needs its own draw.
     for (int i = 0; i < FACE_COUNT; i++)
         if (overridden[i]) return true;
-    return false;
+    return PropsNeedSurfaceShader(def);
 }
 
 void BrushSurface::SelectOnly(SurfaceFace f) {

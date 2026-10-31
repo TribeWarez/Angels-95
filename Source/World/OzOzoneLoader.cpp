@@ -15,14 +15,51 @@
 #include "../Material/MaterialRegistry.hpp"
 #include "../Physics/OzBsp.hpp"
 #include "../Physics/AutoConvex.hpp"
+#include "../Diagnostics/FrameProfiler.hpp"
+#include "../Diagnostics/PerfToggles.hpp"
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <cmath>
 #include <chrono>
+#include <string>
+#include <unordered_map>
 
 // Defined with the other per-face surface helpers further down, but needed by
 // DrawSurface() which comes first.
 static void BuildFaceMeshes(OzoneRenderable& r);
+
+// Cache the world-space AABB used by the frustum cull and the backdrop pass.
+//
+// `hasBounds` was declared on OzoneRenderable and NEVER assigned, so both
+// `if (r.hasBounds && ...)` gates in DrawWorldGeometry/Draw were dead: every
+// brush in every world was submitted to the draw loop on every frame, in the
+// client AND once per editor pane. That is why frustum culling appeared to do
+// nothing on large maps.
+//
+// Rotation-aware for the same reason collision is (RotatedAabbY): an unrotated
+// box for a rotated beam is not conservative, so a cull would pop its ends off
+// screen. The small pad keeps a brush exactly on a frustum plane from flickering.
+static void UpdateRenderableBounds(OzoneRenderable& r) {
+    r.hasBounds = false;
+    if (!r.loaded || r.model.meshCount <= 0 || !r.model.meshes) return;
+    const BoundingBox mb = GetMeshBoundingBox(r.model.meshes[0]);
+    const AabbBox local{mb.min.x, mb.min.y, mb.min.z, mb.max.x, mb.max.y, mb.max.z};
+    const AabbBox world = RotatedAabbY(local, r.rotation,
+                                       r.position.x, r.position.y, r.position.z,
+                                       r.scale);
+    // Deliberately generous. A 0.05-unit pad made objects pop the instant
+    // their AABB touched a frustum plane; a margin of 1 unit plus 2% of the
+    // brush's largest extent keeps edge geometry alive for a few frames of
+    // movement without re-introducing the "draw the whole world" cost.
+    const float ex = world.maxX - world.minX;
+    const float ey = world.maxY - world.minY;
+    const float ez = world.maxZ - world.minZ;
+    const float pad = 1.0f + 0.02f * fmaxf(ex, fmaxf(ey, ez));
+    r.bounds.min = {world.minX - pad, world.minY - pad, world.minZ - pad};
+    r.bounds.max = {world.maxX + pad, world.maxY + pad, world.maxZ + pad};
+    r.hasBounds = true;
+}
 #include <algorithm>
 #include <fstream>
 #include <unordered_map>
@@ -1047,18 +1084,47 @@ static void StoreCylinderShape(OzoneRenderable& r, const OzonePrimitive& prim) {
 // Accepts, in order: an existing path, a repo-relative GameData/ path, an
 // absolute path, and finally a world-relative path (oztex/...).
 // ---------------------------------------------------------------------------
+// Resolved-path cache. DrawSurface resolves a face texture EVERY FRAME, and
+// this function used to stat() the filesystem before even checking the
+// GameData/ prefix, so Sektor_01 paid ~1,600 stat() calls per frame. The cache
+// is keyed on (world dirs, raw string) and cleared by OzoneLoader::Unload, so a
+// world switch cannot leak an old world's resolution into the next one.
+static std::unordered_map<std::string, std::string>& WorldAssetPathCache() {
+    static std::unordered_map<std::string, std::string> cache;
+    return cache;
+}
+
 static std::string ResolveWorldAssetPath(const std::string& raw,
                                          const std::string& gameDataWorldDir,
                                          const std::string& worldDir) {
     std::string s = StripQuotes(raw);
     if (s.empty()) return s;
-    if (IsPathFile(s.c_str())) return s;
-    if (s.rfind("GameData/", 0) == 0 || s.rfind("GameData\\", 0) == 0) return s;
-    bool absolute = (s.size() > 1 && s[1] == ':') || s[0] == '/' || s[0] == '\\';
-    if (absolute) return s;
-    if (!gameDataWorldDir.empty()) return gameDataWorldDir + s;
-    if (!worldDir.empty()) return worldDir + s;
-    return s;
+
+    const std::string key = gameDataWorldDir + '\x1f' + worldDir + '\x1f' + s;
+    auto& cache = WorldAssetPathCache();
+    auto it = cache.find(key);
+    if (it != cache.end()) return it->second;
+
+    std::string resolved;
+    // Repo-relative content is left as-is FIRST: it cannot be a relative path
+    // that needs resolving, and testing it with IsPathFile was the stat that ran
+    // per face per frame.
+    if (s.rfind("GameData/", 0) == 0 || s.rfind("GameData\\", 0) == 0) {
+        resolved = s;
+    } else {
+        const bool absolute = (s.size() > 1 && s[1] == ':') || s[0] == '/' || s[0] == '\\';
+        if (absolute) {
+            resolved = s;
+        } else {
+            OZ_PROFILE_COUNT("tex.stat");   // unique path, resolved once per world
+            if (IsPathFile(s.c_str())) resolved = s;
+            else if (!gameDataWorldDir.empty()) resolved = gameDataWorldDir + s;
+            else if (!worldDir.empty()) resolved = worldDir + s;
+            else resolved = s;
+        }
+    }
+    cache.emplace(key, resolved);
+    return resolved;
 }
 
 // ---------------------------------------------------------------------------
@@ -1217,6 +1283,7 @@ Model OzoneLoader::BuildFromPrimitive(int type, const std::vector<float>& args) 
 bool OzoneLoader::LoadPrimitives(std::vector<OzonePrimitive>& primitives,
                                  const std::string& gameDataWorldDir,
                                  const std::string& worldDir) {
+    InvalidateFaceFlagCache();
     // Entities are parsed into a plain set first; the orchestrator decides when
     // (and whether) to inject them into the runtime systems.
     ParseOzoneEntities(primitives, m_worldDir, m_zoneCounters, m_entities);
@@ -1286,6 +1353,7 @@ bool OzoneLoader::LoadPrimitives(std::vector<OzonePrimitive>& primitives,
             // filters read) agree with the owner. Hand-assigning surfaceFlags
             // here was the one writer going the wrong direction.
             DeriveLegacyRenderable(sb);
+            UpdateRenderableBounds(sb);
             m_renderables.push_back(sb);
             continue;
         }
@@ -1344,6 +1412,7 @@ r.csgOp = prim.csgOp;
     StoreCylinderShape(r, prim);
     // Apply texture override if set
     if (r.texSlot > 0) ApplyTexSlotToModel(r.model, r.texSlot);
+    UpdateRenderableBounds(r);
     m_renderables.push_back(r);
     // Apply optional texture UV scaling/offset
     if (prim.texScaleU != 1.0f || prim.texScaleV != 1.0f ||
@@ -1360,6 +1429,7 @@ r.csgOp = prim.csgOp;
     }
     }
 
+    InvalidateFaceFlagCache();
     return true;
 }
 
@@ -1475,21 +1545,10 @@ void OzoneLoader::DrawGlowGeometry(Camera3D& camera) {
     auto& sm = oz::SurfaceMaterial::Instance();
     if (!sm.Ready()) return;
 
-    // Cheap pre-scan so a level with no glowing brush pays two vector walks and
-    // no GL state changes. Resolved per FACE, not per brush, so a brush whose
-    // def carries the flag but whose only glowing face is invisible does not open
-    // a blend state for nothing.
-    bool any = false;
-    for (auto& r : m_renderables) {
-        if (!r.loaded || (r.surfaceFlags & SURF_COLLISION_PROXY)) continue;
-        if (r.typeId == (int)OzonePrimitiveType::HEIGHTMAP) continue;
-        for (int f = 0; f < FACE_COUNT; f++) {
-            const SurfaceProps& p = r.surface.Resolve((SurfaceFace)f);
-            if (p.Has(SURF_GLOW) && !p.Has(SURF_INVISIBLE)) { any = true; break; }
-        }
-        if (any) break;
-    }
-    if (!any || !sm.Ready()) return;
+    // Cached per-face scan shared with the portal/backdrop passes. Resolved per
+    // FACE, not per brush, so a brush whose def carries the flag but whose only
+    // glowing face is invisible does not open a blend state for nothing.
+    if (!HasGlowFaces()) return;
 
     BeginBlendMode(BLEND_ADDITIVE);
     rlDisableDepthMask();
@@ -1600,10 +1659,15 @@ void OzoneLoader::DrawSurface(OzoneRenderable& r, SurfacePass pass) {
 
     Material mat = r.model.materials[0];
 
+    bool countedPerFace = false;
     for (int f = 0; f < FACE_COUNT; f++) {
         const SurfaceProps& p = r.surface.Resolve((SurfaceFace)f);
         if (!FaceBelongsToPass((SurfaceFace)f, p, pass)) continue;
         if (r.faceMesh[f].vaoId == 0) continue;   // no geometry on this axis
+        if (!countedPerFace) {
+            OZ_PROFILE_COUNT("brush.perface");
+            countedPerFace = true;
+        }
 
         // Per-face texture. A face's texSlot/texPath were stored, exported and
         // round-tripped for as long as they existed and NEVER bound, so the
@@ -1613,7 +1677,7 @@ void OzoneLoader::DrawSurface(OzoneRenderable& r, SurfacePass pass) {
         // POINTER to its maps array, so writing maps[DIFFUSE] reaches the model's
         // own material. Save and restore around the draw: without the restore the
         // last face's texture would become the next frame's baseline.
-        const Texture2D faceTex = ResolveFaceTextureHandle(p);
+        const Texture2D faceTex = ResolveFaceTextureHandle(r, f);
         MaterialMap* diff = &mat.maps[MATERIAL_MAP_DIFFUSE];
         const MaterialMap saved = *diff;
         if (faceTex.id > 0) diff->texture = faceTex;
@@ -1633,6 +1697,9 @@ void OzoneLoader::DrawSurface(OzoneRenderable& r, SurfacePass pass) {
         mat.shader = sm.Get();
         sm.ApplyUniforms(p);
         sm.BeginSurfaceState(p);
+        OZ_PROFILE_COUNT("draw.calls");
+        OZ_PROFILE_COUNT("draw.faces");
+        OZ_PROFILE_ADD("uniform.upload", 12);   // ApplyUniforms' scalar/vector set
         DrawMesh(r.faceMesh[f], mat, mdl);
         sm.EndSurfaceState();
 
@@ -1667,14 +1734,42 @@ bool OzoneLoader::EnsureSkyPortalShader() {
     return true;
 }
 
-bool OzoneLoader::HasSkyPortalFaces() const {
+void OzoneLoader::EnsureFaceFlagCache() const {
     using namespace oz::surface;
+    if (m_faceFlagCache >= 0) return;
+
+    int bits = 0;
     for (const auto& r : m_renderables) {
         if (!r.loaded) continue;
-        for (int f = 0; f < FACE_COUNT; f++)
-            if (r.surface.Resolve((SurfaceFace)f).Has(SURF_PORTAL)) return true;
+        const bool proxy = (r.surfaceFlags & SURF_COLLISION_PROXY) != 0;
+        const bool heightmap = r.typeId == (int)OzonePrimitiveType::HEIGHTMAP;
+        for (int f = 0; f < FACE_COUNT; ++f) {
+            const SurfaceProps& p = r.surface.Resolve((SurfaceFace)f);
+            if (p.Has(SURF_PORTAL)) bits |= 1;
+            // The glow/backdrop passes skip proxies and heightmaps; mirror that
+            // so their cached answer can never enable a pass that draws nothing.
+            if (!proxy && !heightmap) {
+                if (p.Has(SURF_GLOW) && !p.Has(SURF_INVISIBLE)) bits |= 2;
+                if (p.Has(SURF_FAKEBACKDROP) && !p.Has(SURF_INVISIBLE)) bits |= 4;
+            }
+        }
     }
-    return false;
+    m_faceFlagCache = bits;
+}
+
+bool OzoneLoader::HasSkyPortalFaces() const {
+    EnsureFaceFlagCache();
+    return (m_faceFlagCache & 1) != 0;
+}
+
+bool OzoneLoader::HasGlowFaces() const {
+    EnsureFaceFlagCache();
+    return (m_faceFlagCache & 2) != 0;
+}
+
+bool OzoneLoader::HasBackdropFaces() const {
+    EnsureFaceFlagCache();
+    return (m_faceFlagCache & 4) != 0;
 }
 
 void OzoneLoader::DrawSkyPortals(Camera3D& camera, Texture2D skyView, int vpW, int vpH) {
@@ -1733,6 +1828,9 @@ static inline void DrawRenderable(OzoneRenderable& r) {
         OzoneLoader::Instance().DrawSurface(r);
         return;
     }
+    OZ_PROFILE_COUNT("brush.fast");
+    OZ_PROFILE_COUNT("draw.calls");
+    OZ_PROFILE_COUNT("draw.faces");
     // DrawModelEx composes scale * rotate * translate, the same matrix
     // RenderableModelMatrix builds for the surface path. This used to be
     // DrawModel(model, position, scale, WHITE), which has NO rotation term, so a
@@ -1757,6 +1855,7 @@ static inline void DrawRenderable(OzoneRenderable& r) {
 // contiguous in space.
 // ---------------------------------------------------------------------------
 void OzoneLoader::DrawBlendedFaces(Camera3D& camera, const std::vector<int>& visible) {
+    OZ_PROFILE_SCOPE("ozone.blended");
     using namespace oz::surface;
     // The surface shader is what carries the blend state. Without it the opaque
     // pass fell back to DrawModelEx, which drew the WHOLE brush - so drawing it
@@ -1799,29 +1898,39 @@ void OzoneLoader::Draw(Camera3D& camera, bool cullBackfaces) {
     oz::SetBackfaceCulling(cullBackfaces);
 
     FrustumPlane planes[6];
-    BuildFrustum(camera, planes);
+    BuildFrustum(camera, planes, m_cullAspect);
     std::vector<int> visible;
-    visible.reserve(m_renderables.size());
-    for (int i = 0; i < (int)m_renderables.size(); i++) {
-        OzoneRenderable& r = m_renderables[(size_t)i];
-        if (!r.loaded) continue;
-        // Generated collision proxies are invisible unless the editor has
-        // explicitly asked for them - otherwise a single AutoConvex pass would
-        // bury the level in a wall of grey boxes.
-        if ((r.surfaceFlags & SURF_COLLISION_PROXY) && !m_drawCollisionProxies) continue;
-        if (r.hasBounds && (r.bounds.min.x < r.bounds.max.x ||
-                            r.bounds.min.y < r.bounds.max.y ||
-                            r.bounds.min.z < r.bounds.max.z) &&
-            !AabbInFrustum(planes, r.bounds)) continue;
-        visible.push_back(i);
+    {
+        OZ_PROFILE_SCOPE("ozone.cull");
+        visible.reserve(m_renderables.size());
+        for (int i = 0; i < (int)m_renderables.size(); i++) {
+            OzoneRenderable& r = m_renderables[(size_t)i];
+            if (!r.loaded) continue;
+            // Generated collision proxies are invisible unless the editor has
+            // explicitly asked for them - otherwise a single AutoConvex pass would
+            // bury the level in a wall of grey boxes.
+            if ((r.surfaceFlags & SURF_COLLISION_PROXY) && !m_drawCollisionProxies) continue;
+            if (oz::diag::PerfOn("cull") && r.hasBounds &&
+                (r.bounds.min.x < r.bounds.max.x ||
+                 r.bounds.min.y < r.bounds.max.y ||
+                 r.bounds.min.z < r.bounds.max.z) &&
+                !AabbInFrustum(planes, r.bounds)) continue;
+            visible.push_back(i);
+        }
     }
-    for (int i : visible) {
-        OzoneRenderable& r = m_renderables[(size_t)i];
-        if (r.typeId == (int)OzonePrimitiveType::HEIGHTMAP && m_hmReady) {
-            DrawModelEx(m_hmModel, m_hmPosition, (Vector3){0,1,0}, 0,
-                        (Vector3){m_hmScale, m_hmScale, m_hmScale}, WHITE);
-        } else {
-            DrawRenderable(r);
+    OZ_PROFILE_ADD("brush.total", visible.size());
+    {
+        OZ_PROFILE_SCOPE("ozone.draw");
+        for (int i : visible) {
+            OzoneRenderable& r = m_renderables[(size_t)i];
+            if (r.typeId == (int)OzonePrimitiveType::HEIGHTMAP && m_hmReady) {
+                OZ_PROFILE_COUNT("draw.calls");
+                OZ_PROFILE_COUNT("draw.faces");
+                DrawModelEx(m_hmModel, m_hmPosition, (Vector3){0,1,0}, 0,
+                            (Vector3){m_hmScale, m_hmScale, m_hmScale}, WHITE);
+            } else {
+                DrawRenderable(r);
+            }
         }
     }
     // Transparent faces last, so the editor shows the same water the game does.
@@ -1835,7 +1944,7 @@ void OzoneLoader::Draw(Camera3D& camera, bool cullBackfaces) {
 // such a face was drawn by BOTH this pass and the sky pass.
 void OzoneLoader::DrawWorldGeometry(Camera3D& camera) {
     FrustumPlane planes[6];
-    BuildFrustum(camera, planes);
+    BuildFrustum(camera, planes, m_cullAspect);
     // No zone-based PVS here. A zone is an OPEN gameplay volume (sky, water,
     // reverb, gravity, CRT), not a closed occlusion cell, and it routinely
     // overlaps other zones. Culling "renderables whose centre is inside an
@@ -1888,10 +1997,13 @@ void OzoneLoader::DrawWorldGeometry(Camera3D& camera) {
         // cull below would use, so this pass, the collision side-list and the
         // editor can never disagree about which state the brush is in.
         if (r.quantumHidden) return false;
-        if (r.hasBounds && (r.bounds.min.x < r.bounds.max.x ||
-                            r.bounds.min.y < r.bounds.max.y ||
-                            r.bounds.min.z < r.bounds.max.z) &&
-            !AabbInFrustum(planes, r.bounds)) return false;
+        if (oz::diag::PerfOn("cull") && r.hasBounds &&
+            (r.bounds.min.x < r.bounds.max.x ||
+             r.bounds.min.y < r.bounds.max.y ||
+             r.bounds.min.z < r.bounds.max.z) &&
+            !AabbInFrustum(planes, r.bounds)) {
+            return false;
+        }
         // Occlusion: a renderable on the far side of any occluder plane is skipped.
         if (!occluders.empty()) {
             Vector3 rc = { (r.bounds.min.x+r.bounds.max.x)*0.5f,
@@ -1911,17 +2023,26 @@ void OzoneLoader::DrawWorldGeometry(Camera3D& camera) {
     };
 
     std::vector<int> visible;
-    visible.reserve(m_renderables.size());
-    for (int i = 0; i < (int)m_renderables.size(); i++)
-        if (isVisible(m_renderables[(size_t)i])) visible.push_back(i);
+    {
+        OZ_PROFILE_SCOPE("ozone.cull");
+        visible.reserve(m_renderables.size());
+        for (int i = 0; i < (int)m_renderables.size(); i++)
+            if (isVisible(m_renderables[(size_t)i])) visible.push_back(i);
+    }
+    OZ_PROFILE_ADD("brush.total", visible.size());
 
-    for (int i : visible) {
-        OzoneRenderable& r = m_renderables[(size_t)i];
-        if (r.typeId == (int)OzonePrimitiveType::HEIGHTMAP && m_hmReady) {
-            DrawModelEx(m_hmModel, m_hmPosition, (Vector3){0,1,0}, 0,
-                        (Vector3){m_hmScale, m_hmScale, m_hmScale}, WHITE);
-        } else {
-            DrawRenderable(r);
+    {
+        OZ_PROFILE_SCOPE("ozone.draw");
+        for (int i : visible) {
+            OzoneRenderable& r = m_renderables[(size_t)i];
+            if (r.typeId == (int)OzonePrimitiveType::HEIGHTMAP && m_hmReady) {
+                OZ_PROFILE_COUNT("draw.calls");
+                OZ_PROFILE_COUNT("draw.faces");
+                DrawModelEx(m_hmModel, m_hmPosition, (Vector3){0,1,0}, 0,
+                            (Vector3){m_hmScale, m_hmScale, m_hmScale}, WHITE);
+            } else {
+                DrawRenderable(r);
+            }
         }
     }
     // Glass and water LAST, so opaque geometry (drawn with depth writes) cannot
@@ -2344,6 +2465,8 @@ int OzoneLoader::AddBrushRenderable(int primType, const Vector3& pos,
     // then drawn in game on the next reload.
     r.surface.def.flags = (uint32_t)surfaceFlags;
     DeriveLegacyRenderable(r);
+    UpdateRenderableBounds(r);
+    InvalidateFaceFlagCache();
     m_renderables.push_back(r);
     return (int)m_renderables.size() - 1;
 }
@@ -2483,6 +2606,17 @@ Texture2D OzoneLoader::ResolveFaceTextureHandle(const oz::surface::SurfaceProps&
     return Texture2D{0};
 }
 
+Texture2D OzoneLoader::ResolveFaceTextureHandle(OzoneRenderable& r, int face) {
+    using namespace oz::surface;
+    if (face < 0 || face >= FACE_COUNT) return Texture2D{0};
+    if (r.faceTexCached[face]) return r.faceTexHandle[face];
+
+    const Texture2D tex = ResolveFaceTextureHandle(r.surface.Resolve((SurfaceFace)face));
+    r.faceTexHandle[face] = tex;
+    r.faceTexCached[face] = true;
+    return tex;
+}
+
 bool OzoneLoader::ApplyRenderableTexture(int idx, const char* path) {    OzoneRenderable* r = Get(idx);
     if (!r || !r->loaded || r->model.meshCount == 0) return false;
 
@@ -2505,6 +2639,7 @@ bool OzoneLoader::ApplyRenderableTexture(int idx, const char* path) {    OzoneRe
     // the lazy draw path builds the sub-meshes if they do not exist yet.
     r->surface.def.texPath = path ? path : "";
     DeriveLegacyRenderable(*r);
+    InvalidateFaceTexCache(*r);
 
     r->model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = tex;
     if (GetLitFogShader().id > 0)
@@ -2659,6 +2794,8 @@ void OzoneLoader::SetRenderableFace(int idx, oz::surface::SurfaceFace face,
     // r->texPath is non-empty, so re-deriving the flag bit alone would discard a
     // brush-wide texture or UV edit on save. See DeriveLegacySurfaceMirror.
     DeriveLegacyRenderable(*r);
+    InvalidateFaceTexCache(*r);
+    InvalidateFaceFlagCache();
     // Brush-wide U/V scale and offset live in surface.def but the MESH texcoords
     // are what actually get sampled, so a brush-wide UV edit has to be pushed into
     // the mesh too. Per-face UV is handled by RebuildSurfaceMeshes: each face
@@ -2676,6 +2813,8 @@ void OzoneLoader::ResetRenderableSurface(int idx) {
     if (!r) return;
     r->surface.ResetToDefault();
     DeriveLegacyRenderable(*r);
+    InvalidateFaceTexCache(*r);
+    InvalidateFaceFlagCache();
     RebuildSurfaceMeshes(idx);
 }
 
@@ -2689,6 +2828,8 @@ void OzoneLoader::ResetRenderableSurfaceDefault(int idx) {
     if (!r) return;
     r->surface.def = oz::surface::SurfaceProps{};
     DeriveLegacyRenderable(*r);
+    InvalidateFaceTexCache(*r);
+    InvalidateFaceFlagCache();
     // def's UVs are back at 1/0, so re-tile the mesh from the pristine snapshot.
     ApplyRenderableUV(idx, 1.0f, 1.0f, 0.0f, 0.0f);
     RebuildSurfaceMeshes(idx);
@@ -2714,6 +2855,7 @@ void OzoneLoader::RemoveRenderable(int idx) {
     // still point at.
     if (r->loaded) UnloadModel(r->model);
     m_renderables.erase(m_renderables.begin() + idx);
+    InvalidateFaceFlagCache();
 }
 
 // ---------------------------------------------------------------------------
@@ -2828,6 +2970,9 @@ void OzoneLoader::UpdateBrushRenderable(int idx, const Vector3& pos, const Vecto
     // Update transform
     r->position = pos;
     r->rotation = rot * DEG2RAD; // caller passes degrees; store radians
+    UpdateRenderableBounds(*r);
+    InvalidateFaceTexCache(*r);
+    InvalidateFaceFlagCache();
 }
 
 void OzoneLoader::SetWorldAmbient(float r, float g, float b, float a) {
@@ -2913,6 +3058,7 @@ void OzoneLoader::GetWorldFog(float colorOut[3], float& start, float& end,
 // through DrawSurface. See SurfaceMaterial::SetFullBright.
 // ---------------------------------------------------------------------------
 void OzoneLoader::DrawZoneGeometry(Camera3D& camera, const BoundingBox& zoneBounds) {
+    OZ_PROFILE_SCOPE("ozone.backdropPass");
     using namespace oz::surface;
     auto& sm = oz::SurfaceMaterial::Instance();
 
@@ -2928,18 +3074,7 @@ void OzoneLoader::DrawZoneGeometry(Camera3D& camera, const BoundingBox& zoneBoun
     // SF_FAKEBACKDROP branch in Surface.fs.
     const float kBackdropPassGain = oz::surface::kBackdropGain;
 
-    bool any = false;
-    for (auto& r : m_renderables) {
-        if (!r.loaded) continue;
-        if (r.surfaceFlags & SURF_COLLISION_PROXY) continue;
-        if (r.typeId == (int)OzonePrimitiveType::HEIGHTMAP) continue;
-        for (int f = 0; f < FACE_COUNT; f++) {
-            const SurfaceProps& p = r.surface.Resolve((SurfaceFace)f);
-            if (p.Has(SURF_FAKEBACKDROP) && !p.Has(SURF_INVISIBLE)) { any = true; break; }
-        }
-        if (any) break;
-    }
-if (!any) return;
+    if (!HasBackdropFaces()) return;
 
     // No surface shader: DrawSurface's fallback would DrawModel the whole brush,
     // which for this pass is actually the right thing - a painted backdrop still
@@ -2983,14 +3118,19 @@ if (!any) return;
             continue;
 
         // Optional bounds filter: skip if the brush AABB doesn't overlap the zone.
-        BoundingBox mb = GetMeshBoundingBox(r.model.meshes[0]);
-        BoundingBox worldBounds;
-        worldBounds.min = {r.position.x + mb.min.x * r.scale,
-                           r.position.y + mb.min.y * r.scale,
-                           r.position.z + mb.min.z * r.scale};
-        worldBounds.max = {r.position.x + mb.max.x * r.scale,
-                           r.position.y + mb.max.y * r.scale,
-                           r.position.z + mb.max.z * r.scale};
+        // `r.bounds` is the cached rotation-aware world AABB (UpdateRenderableBounds).
+        // This used to call GetMeshBoundingBox - an O(vertices) walk - for every
+        // renderable, every frame, in the backdrop pass.
+        BoundingBox worldBounds = r.bounds;
+        if (!r.hasBounds) {
+            const BoundingBox mb = GetMeshBoundingBox(r.model.meshes[0]);
+            worldBounds.min = {r.position.x + mb.min.x * r.scale,
+                               r.position.y + mb.min.y * r.scale,
+                               r.position.z + mb.min.z * r.scale};
+            worldBounds.max = {r.position.x + mb.max.x * r.scale,
+                               r.position.y + mb.max.y * r.scale,
+                               r.position.z + mb.max.z * r.scale};
+        }
         if (!CheckCollisionBoxes(worldBounds, zoneBounds)) continue;
 
         bool drawable = false;
@@ -3026,6 +3166,10 @@ void OzoneLoader::DrawZoneGeometry(Camera3D& camera) {
 // Unload
 // ---------------------------------------------------------------------------
 void OzoneLoader::Unload() {
+    // The resolved-path cache is world-scoped: a path resolved against the old
+    // world dir must not be reused by the next world.
+    WorldAssetPathCache().clear();
+    m_faceFlagCache = -1;
     for (auto& r : m_renderables) {
         // r.customTex is a BORROWED handle owned by m_faceTexCache (freed below,
         // once per path). Unloading it per renderable double-frees a texture
@@ -3069,4 +3213,9 @@ void OzoneLoader::Unload() {
 OzoneRenderable* OzoneLoader::Get(int index) {
     if (index < 0 || index >= (int)m_renderables.size()) return nullptr;
     return &m_renderables[index];
+}
+
+void OzoneLoader::RefreshRenderableBounds(int idx) {
+    OzoneRenderable* r = Get(idx);
+    if (r) UpdateRenderableBounds(*r);
 }

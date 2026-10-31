@@ -58,11 +58,15 @@ public:
     // a half-float colour attachment plus a depth renderbuffer. If the driver
     // cannot complete it (no float-texture support) it falls back to RGBA8, which
     // still renders correctly - the grade just cannot bloom above 1.0.
-    static RenderTexture2D CreateTarget(int w, int h) {
+    static RenderTexture2D CreateTarget(int w, int h, bool hdr = true) {
         RenderTexture2D t{};
         if (!IsWindowReady()) return t;
         w = std::max(1, w);
         h = std::max(1, h);
+        // Period render profile: no bloom/grade means the half-float colour
+        // attachment is pure bandwidth. LoadRenderTexture gives a complete RGBA8
+        // target with depth in one call.
+        if (!hdr) return LoadRenderTexture(w, h);
 
         t.id = rlLoadFramebuffer();
         if (t.id == 0) return LoadRenderTexture(w, h);

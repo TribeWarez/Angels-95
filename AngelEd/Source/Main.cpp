@@ -50,6 +50,10 @@
 // and the Subsystems do not need (or want) any of this.
 #include "UI/UiPanels.hpp"
 #include "EditorKeys.hpp"
+#include "Diagnostics/FrameProfiler.hpp"
+#include "Diagnostics/ProfilerOverlay.hpp"
+#include "Diagnostics/PerfToggles.hpp"
+#include "Diagnostics/BenchMode.hpp"
 
 // DO NOT REORDER THESE. Fragments carry no forward declarations of their own, so
 // several statics and functions are declared in the fragment ABOVE their user.
@@ -215,25 +219,37 @@ int main(int argc, char **argv){
     // wave of silent failures instead of one clear error. See EnsureProjectRoot() in
     // Core/EditorShell.cpp.
     EnsureProjectRoot();
+    oz::diag::RegisterBuiltinCounters();
 
     // Shortcut overrides must be loaded before the menu is built, because the menu
     // labels are generated from this table.
     EdKeys::Load();
+
+    // Pre-scan for the benchmark BEFORE InitWindow: the window flags (vsync) and
+    // the frame cap are creation-time decisions, and the detailed parse below
+    // happens after the window exists. Without this a benchmark ran pinned to
+    // 16.67 ms by vsync and reported exactly 60 FPS on every world.
+    bool benchRequested = false;
+    for (int i = 1; i < argc; ++i)
+        if (strncmp(argv[i], "--bench", 7) == 0) { benchRequested = true; break; }
 
     EditorLog("=== AngelEd starting ===");
     // RESIZABLE: the viewport, toolbar and docked stats sidebar all lay out from
     // GetScreenWidth()/GetScreenHeight() each frame, so the only thing missing was
     // the flag. The size/position is restored and saved in System/AngelEd.ini
     // [Layout] (main_x/y/w/h) by Load/SavePanelLayouts.
-    SetConfigFlags(FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
-    InitWindow(1280, 720, "AngelEd");
+    SetConfigFlags(benchRequested ? FLAG_WINDOW_RESIZABLE
+                                  : (FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE));
+    InitWindow(1280, 720, benchRequested ? "AngelEd [bench]" : "AngelEd");
     // Below this the toolbar and the fixed-width stats sidebar start overlapping
     // the viewport, so refuse to shrink further rather than render a broken layout.
     SetWindowMinSize(1024, 640);
     CreateEditorMenuBar();
     SetTraceLogLevel(LOG_WARNING);
-    InitAudioDevice();
-    SetTargetFPS(60);
+    if (!benchRequested) {
+        InitAudioDevice();
+        SetTargetFPS(60);   // a benchmark measures the uncapped frame
+    }
     GuiLoadStyleDark();
 
     // Load editor toolbar icons
@@ -243,14 +259,45 @@ int main(int argc, char **argv){
     // default to "../GameData/World.ozone", which does not exist in ANY layout -
     // worlds live at GameData/Worlds/<Name>/World.ozone, and the path also assumed
     // cwd == System/, contradicting the "System/AngelEd.ini" load eight lines below.
-    if (argc > 1 && argv[1]) {
-        g_documentPath = fs::path(argv[1]);
-    } else {
-        g_documentPath.clear();
+    // Arguments: an optional world path plus the FrameProfiler benchmark flags.
+    // Parsed in ONE pass so `--bench ... World.ozone` and `World.ozone --bench`
+    // both work, and so a flag can never be mistaken for the document path.
+    g_documentPath.clear();
+    for (int i = 1; i < argc; ++i) {
+        const char* arg = argv[i];
+        auto& bench = oz::diag::Bench();
+        if (strcmp(arg, "--bench") == 0 || strcmp(arg, "--bench-frames") == 0) {
+            bench.active = true;
+            if (i + 1 < argc && argv[i + 1][0] != '-')
+                bench.frames = std::max(1, atoi(argv[++i]));
+        } else if (strcmp(arg, "--bench-warmup") == 0 && i + 1 < argc) {
+            bench.active = true;
+            bench.warmup = std::max(0, atoi(argv[++i]));
+        } else if (strcmp(arg, "--bench-csv") == 0 && i + 1 < argc) {
+            bench.active = true;
+            bench.csvPath = argv[++i];
+        } else if (strcmp(arg, "--bench-views") == 0 && i + 1 < argc) {
+            bench.active = true;
+            bench.views = std::clamp(atoi(argv[++i]), 0, 3);
+        } else if (strcmp(arg, "--bench-no-overlays") == 0) {
+            bench.active = true;
+            g_editorPanels.perfOverlay = false;
+        } else if (arg[0] != '-') {
+            g_documentPath = fs::path(arg);
+        }
+    }
+    if (g_documentPath.empty()) {
         fs::path first = FirstAvailableWorld();
         if (!first.empty()) g_documentPath = first;
         else EditorLog("No world argument and no world found under GameData/Worlds/ - "
                        "starting with an empty scene.");
+    }
+
+    if (oz::diag::Bench().active) {
+        EditorLog("Bench: document='%s' frames=%d warmup=%d views=%d csv='%s'",
+                  g_documentPath.string().c_str(), oz::diag::Bench().frames,
+                  oz::diag::Bench().warmup, oz::diag::Bench().views,
+                  oz::diag::Bench().csvPath.c_str());
     }
     SetWorldDirectory(g_documentPath.empty() ? fs::path()
                                              : g_documentPath.parent_path());
@@ -282,6 +329,19 @@ int main(int argc, char **argv){
     Editor_SyncUnrealMenuChecks();
     Editor_SyncViewMenuChecks();
 #endif
+
+    if (oz::diag::Bench().active) {
+        // AFTER CreateAllEditorWindows, because LoadPanelLayouts reads [Views]
+        // from System/AngelEd.ini and would otherwise overwrite --bench-views.
+        // Detached panes are disabled so the benchmark never opens a second
+        // window or pays the Tier-A readback.
+        auto& b = oz::diag::Bench();
+        if (b.views >= 0) g_editorPanels.viewLayout = b.views;
+        g_editorPanels.viewMaximized = false;
+        g_editorPanels.detachedMask = 0;
+        g_editorPanels.perfOverlay = false;
+        EditorLog("Bench layout: views=%d", g_editorPanels.viewLayout);
+    }
 
     // Load editor world
     Init();
@@ -338,8 +398,21 @@ int main(int argc, char **argv){
 
     EnableCursor();
 
+    auto& benchSession = oz::diag::Bench();
+    int benchFrame = 0;
+
     while (!WindowShouldClose())
     {
+        // Profiler frame boundary. Header-only and always-on; the overlay is
+        // what the toolbar toggles. RAII so a future early `continue` cannot
+        // leave the frame open.
+        oz::diag::FrameGuard oz_frame_guard;
+        {
+            std::string stutter;
+            if (oz::diag::Profiler().TakeStutterReport(stutter))
+                EditorLog("Perf %s", stutter.c_str());
+        }
+
         // Process Win32 messages for child panels
         MSG msg;
         while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -402,7 +475,10 @@ int main(int argc, char **argv){
         // BEFORE the event drains and the WorldGraph consume below, so a panel
         // refresh cannot race a pending placement/undo in the same frame. It
         // never marks the world dirty: defs are not world entities.
-        HotReload_Poll();
+        {
+            OZ_PROFILE_SCOPE("ed.hotreload");
+            HotReload_Poll();
+        }
 
         // Window title = document + unsaved marker. Updated only on change, so it
         // does not spam SetWindowText once per frame.
@@ -444,6 +520,7 @@ int main(int argc, char **argv){
                 // (the gizmo/placement-ghost flag).
                 if (_inViewport) {
                     g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
+                    OZ_PROFILE_SCOPE("ed.hover");
                     EditorHoverEntity();
                 } else {
                     g_hoverSel = { SelType::NONE, -1, "", {0,0,0} };
@@ -1036,7 +1113,9 @@ int main(int argc, char **argv){
         // flags, the global and this block all went together.
 
         // Submit lights and viewPos for Lit mode
-        if (OTEditor.ViewMode == LightingMode::LIT && OTEditor.LitFogShader.id > 0) {
+        if (OTEditor.ViewMode == LightingMode::LIT && OTEditor.LitFogShader.id > 0 &&
+            oz::diag::PerfOn("lights")) {
+            OZ_PROFILE_SCOPE("ed.lighting");
             auto& pawnLights = PawnSystem::Instance().GetLights();
             float dt = GetFrameTime();
             LitLightning_Update(pawnLights, OTEditor.LitFogShader, OTEditor.MainCamera, dt);
@@ -1118,7 +1197,8 @@ int main(int argc, char **argv){
         const bool skyPortals = wantSky && g_editorPanels.viewLayout == 0 &&
                                 OzoneLoader::Instance().HasSkyPortalFaces();
 
-        if (skyPortals) {
+        if (skyPortals && oz::diag::PerfOn("sky") && oz::diag::PerfOn("portals")) {
+            OZ_PROFILE_SCOPE("ed.skyPortalRender");
             SkyZoneNode* sky = PawnSystem::Instance().GetActiveSkyZone();
             const Vector3 anchor = sky ? sky->position : OTEditor.MainCamera.position;
             oz::SkyPortal::Instance().Render(
@@ -1176,23 +1256,37 @@ int main(int argc, char **argv){
         // copy at radius 1000 with no fog, so the editor's sky had a different
         // angular size and no horizon fog).
         // -------------------------------------------------------------------
-        if (wantSky) {
+        if (wantSky && oz::diag::PerfOn("sky")) {
+            OZ_PROFILE_SCOPE("ed.sky");
             oz::Skybox::Instance().Draw(
                 OTEditor.MainCamera.position, s_skyTex, Texture2D{0},
                 /*cullBackfaces=*/OTEditor.ViewMode != LightingMode::WIREFRAME,
                 &skyFog);
         }
 
-        DrawGrid(1000, 10.0f);
+        if (oz::diag::PerfOn("grid")) {
+            OZ_PROFILE_SCOPE("ed.grid");
+            DrawGrid(1000, 10.0f);
+        }
 
         // OZONE world geometry. The caller's view mode IS the culling intent.
-        OzoneLoader::Instance().Draw(OTEditor.MainCamera,
-                                     OTEditor.ViewMode != LightingMode::WIREFRAME);
+        // The cull aspect must be THIS pane's aspect: BuildFrustum otherwise
+        // uses the whole-window aspect, which is too narrow for a 2x1 pane and
+        // culls geometry the pane can see.
+        {
+            OZ_PROFILE_SCOPE("ed.world");
+            OzoneLoader::Instance().SetCullAspect(vpPrimary.h > 0.0f
+                                                      ? vpPrimary.w / vpPrimary.h
+                                                      : 0.0f);
+            OzoneLoader::Instance().Draw(OTEditor.MainCamera,
+                                         OTEditor.ViewMode != LightingMode::WIREFRAME);
+        }
 
         // SURF_PORTAL faces sample the sky view rendered before BeginMode3D.
         // Drawn after the world so geometry in front of a portal occludes it -
         // the same ordering the client uses. Split panes skip this (see skyPortals).
-        if (skyPortals) {
+        if (skyPortals && oz::diag::PerfOn("portals")) {
+            OZ_PROFILE_SCOPE("ed.portalPass");
             OzoneLoader::Instance().DrawSkyPortals(OTEditor.MainCamera,
                                                    oz::SkyPortal::Instance().View(),
                                                    GetScreenWidth(), GetScreenHeight());
@@ -1264,10 +1358,14 @@ int main(int argc, char **argv){
         // the ONLY thing the glow COLOUR affects, surfGlow was not authorable:
         // you could set the colour and see no difference at all.
         // No-op unless a surface actually carries SURF_GLOW.
-        OzoneLoader::Instance().DrawGlowGeometry(OTEditor.MainCamera);
+        if (oz::diag::PerfOn("glow")) {
+            OZ_PROFILE_SCOPE("ed.glowPass");
+            OzoneLoader::Instance().DrawGlowGeometry(OTEditor.MainCamera);
+        }
 
         // Pawn system (use lit shader for billboards when in lit/unlit mode)
         {
+            OZ_PROFILE_SCOPE("ed.entities");
             Shader bbShader = {0};
             if (OTEditor.ViewMode == LightingMode::LIT) bbShader = OTEditor.LitFogShader;
             else if (OTEditor.ViewMode == LightingMode::UNLIT) bbShader = OTEditor.UnlitShader;
@@ -1628,8 +1726,13 @@ if (g_editorPanels.showCollisionBounds) {
                             if (g_editorPanels.currentToolMode == 3) r->rotation = AngelTechEditor.R * DEG2RAD;
                             if (r->position.x != oldPos.x || r->position.y != oldPos.y ||
                                 r->position.z != oldPos.z || r->scale != oldScale ||
-                                r->rotation != oldRot)
+                                r->rotation != oldRot) {
                                 g_editorPanels.collisionDirty = true;
+                                // Culling must see the NEW transform immediately;
+                                // otherwise the selected brush is culled against
+                                // its old AABB and vanishes as soon as you drag it.
+                                OzoneLoader::Instance().RefreshRenderableBounds(rIdx);
+                            }
                         }
                     }
                     // Rebuild the CSG world once, AFTER the drag, not every frame.
@@ -2087,6 +2190,7 @@ AngelTechEditor.DrawModel = false;
         // the user last clicked.
         for (size_t pi = 0; pi < vpRects.size(); pi++) {
             if ((int)pi == g_editorPanels.viewActive) continue;
+            OZ_PROFILE_SCOPE("ed.scene.pane");
             const bool fb = PaneIsDetached((int)pi);
             if (fb) DetachedPane_EnsureRT((int)pi);
             const ed::viewport::VpRect r = fb ? PaneRenderRect((int)pi, vpRects) : vpRects[pi];
@@ -2100,16 +2204,17 @@ AngelTechEditor.DrawModel = false;
             }
             BeginMode3D(cam);
             SetPaneProjection(cam, r);
-            if (wantSky) {
+            if (wantSky && oz::diag::PerfOn("sky")) {
                 oz::Skybox::Instance().Draw(
                     cam.position, s_skyTex, Texture2D{0},
                     /*cullBackfaces=*/OTEditor.ViewMode != LightingMode::WIREFRAME,
                     &skyFog);
             }
-            DrawGrid(1000, 10.0f);
+            if (oz::diag::PerfOn("grid")) DrawGrid(1000, 10.0f);
+            OzoneLoader::Instance().SetCullAspect(r.h > 0.0f ? r.w / r.h : 0.0f);
             OzoneLoader::Instance().Draw(cam,
                                          OTEditor.ViewMode != LightingMode::WIREFRAME);
-            {
+            if (!g_editorPanels.perfPaneFast) {
                 Shader bbShader = {0};
                 if (OTEditor.ViewMode == LightingMode::LIT) bbShader = OTEditor.LitFogShader;
                 else if (OTEditor.ViewMode == LightingMode::UNLIT) bbShader = OTEditor.UnlitShader;
@@ -2122,8 +2227,11 @@ AngelTechEditor.DrawModel = false;
 
         // Present every popped-out pane into its own window (Tier A: GPU readback +
         // GDI blit, no second GL context).
-        for (int i = 0; i < 4; i++)
-            if (g_paneTargets[i].detached) DetachedPane_Present(i);
+        {
+            OZ_PROFILE_SCOPE("ed.present");
+            for (int i = 0; i < 4; i++)
+                if (g_paneTargets[i].detached) DetachedPane_Present(i);
+        }
 
         // Restore the full-window viewport for the 2D pass. A pane viewport left
         // active would draw the toolbar and every panel into that sub-rect.
@@ -2475,6 +2583,61 @@ AngelTechEditor.DrawModel = false;
                     }
                     bx += pw + 2;
                 }
+
+                // FrameProfiler overlay. The client toggles it from its top menu
+                // bar / F9; the editor has no free function key (F8-F10 are panel
+                // toggles), so this toolbar chip is the entry point. Collection is
+                // always on; this only shows/hides the panel.
+                bx += 8;
+                {
+                    const char* lbl = g_editorPanels.perfOverlay ? "Perf:On" : "Perf:Off";
+                    const int pw = (int)strlen(lbl) * 7 + 10;
+                    const bool on = g_editorPanels.perfOverlay;
+                    DrawRectangle(bx, by, pw, rowH,
+                                  on ? (Color){70, 90, 120, 255} : (Color){45, 45, 50, 255});
+                    DrawText(lbl, bx + 4, by + 5, 12, on ? WHITE : LIGHTGRAY);
+                    if (CheckCollisionPointRec(GetMousePosition(),
+                                               {(float)bx, (float)by, (float)pw, (float)rowH}) &&
+                        IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                        g_editorPanels.perfOverlay = !g_editorPanels.perfOverlay;
+                        EditorLog("Perf overlay %s", g_editorPanels.perfOverlay ? "ON" : "OFF");
+                    }
+                    bx += pw + 2;
+
+                    if (on) {
+                        const char* xl = g_editorPanels.perfOverlayExpanded ? "PerfX:On" : "PerfX:Off";
+                        const int xw = (int)strlen(xl) * 7 + 10;
+                        const bool xon = g_editorPanels.perfOverlayExpanded;
+                        DrawRectangle(bx, by, xw, rowH,
+                                      xon ? (Color){70, 90, 120, 255} : (Color){45, 45, 50, 255});
+                        DrawText(xl, bx + 4, by + 5, 12, xon ? WHITE : LIGHTGRAY);
+                        if (CheckCollisionPointRec(GetMousePosition(),
+                                                   {(float)bx, (float)by, (float)xw, (float)rowH}) &&
+                            IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                            g_editorPanels.perfOverlayExpanded = !g_editorPanels.perfOverlayExpanded;
+                        }
+                        bx += xw + 2;
+                    }
+
+                    // Secondary panes: level geometry only (Fast) or the full
+                    // prop/NPC set (Full). Fast is the default because a 2x2
+                    // layout otherwise pays the entity draw cost four times.
+                    const char* pl = g_editorPanels.perfPaneFast ? "Panes:Fast" : "Panes:Full";
+                    const int pw2 = (int)strlen(pl) * 7 + 10;
+                    DrawRectangle(bx, by, pw2, rowH,
+                                  g_editorPanels.perfPaneFast ? (Color){70, 90, 120, 255}
+                                                              : (Color){45, 45, 50, 255});
+                    DrawText(pl, bx + 4, by + 5, 12,
+                             g_editorPanels.perfPaneFast ? WHITE : LIGHTGRAY);
+                    if (CheckCollisionPointRec(GetMousePosition(),
+                                               {(float)bx, (float)by, (float)pw2, (float)rowH}) &&
+                        IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                        g_editorPanels.perfPaneFast = !g_editorPanels.perfPaneFast;
+                        EditorLog("Secondary panes: %s",
+                                  g_editorPanels.perfPaneFast ? "geometry only" : "full");
+                    }
+                    bx += pw2 + 2;
+                }
             }
         }
         int sbW = GetStatsSidebarWidth();
@@ -2509,6 +2672,12 @@ AngelTechEditor.DrawModel = false;
                 g_worldStats);
         }
         DrawFPS(GetScreenWidth() - 60, kEditorToolbarHeight + 8);
+        if (g_editorPanels.perfOverlay) {
+            OZ_PROFILE_SCOPE("ed.perfOverlay");
+            oz::diag::DrawProfilerOverlay(kEditorToolbarHeight + 8,
+                                          GetStatsSidebarWidth() + 8,
+                                          g_editorPanels.perfOverlayExpanded);
+        }
 
         // --- Event bus drain + dispatch ---------------------------------------
         //
@@ -3005,6 +3174,19 @@ AngelTechEditor.DrawModel = false;
 #endif
         EndDrawing();
 
+        if (benchSession.active) {
+            ++benchFrame;
+            if (benchFrame == benchSession.warmup) {
+                oz::diag::Profiler().Reset();
+                EditorLog("Bench: warm-up complete, measuring %d frames",
+                          benchSession.frames);
+            }
+            if (benchFrame >= benchSession.warmup + benchSession.frames) {
+                benchSession.done = true;
+                break;
+            }
+        }
+
         // Keep the camera aim point available to Win32 panels, which spawn
         // entities synchronously (see Win32Dialogs SpawnSelectedPawnTreeItem).
         g_editorPanels.spawnPos[0] = OTEditor.MainCamera.target.x;
@@ -3191,6 +3373,23 @@ AngelTechEditor.DrawModel = false;
 
         }  // EditorUi_ViewportHasFocus()
 
+    }
+
+    if (benchSession.active && benchSession.done) {
+        char header[768];
+        std::snprintf(header, sizeof(header),
+                      "# AngelEd\n# document=%s\n# views=%d\n"
+                      "# frames=%d warmup=%d\n# resolution=%dx%d\n",
+                      g_documentPath.string().c_str(), g_editorPanels.viewLayout,
+                      benchSession.frames, benchSession.warmup,
+                      GetScreenWidth(), GetScreenHeight());
+        if (oz::diag::Profiler().DumpCSV(benchSession.csvPath.c_str(), header,
+                                         benchSession.frames))
+            EditorLog("Bench CSV -> %s (%d frames)", benchSession.csvPath.c_str(),
+                      benchSession.frames);
+        else
+            EditorLog("Bench CSV: could not write %s", benchSession.csvPath.c_str());
+        EditorLog("Bench summary:\n%s", oz::diag::Profiler().Summary().c_str());
     }
 
     // Cleanup

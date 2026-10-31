@@ -61,6 +61,9 @@ struct Light {
 };
 
 uniform Light lights[MAX_LIGHTS];
+// Submitted-slot count; see LitFog.fs. Kept identical so a surface brush and
+// the lit room around it evaluate the same number of lights.
+uniform int uLightCount;
 uniform vec4 ambient;
 uniform vec3 viewPos;
 uniform float uTime;
@@ -306,7 +309,7 @@ void main()
     // torch tint, so a per-face brush disagreed with the wall beside it.
     vec3 scatterAccum = vec3(0.0);
 
-    for (int i = 0; i < MAX_LIGHTS; i++)
+    for (int i = 0; i < uLightCount; i++)
     {
         if (lights[i].enabled == 1)
         {

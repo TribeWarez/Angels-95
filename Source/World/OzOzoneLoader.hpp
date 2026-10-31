@@ -65,6 +65,13 @@ struct OzoneRenderable {
     // One sub-mesh per dominant-axis face, built lazily by BuildFaceMeshes().
     // vaoId == 0 means "not built" (or "this face has no geometry").
     Mesh faceMesh[oz::surface::FACE_COUNT] = {};
+    // Resolved face-texture handles, cached per renderable per face. DrawSurface
+    // resolves a texture EVERY frame; without this it rebuilt a std::string and
+    // hit the path/texture hash maps even when the face had not changed.
+    // Handles are borrowed from m_faceTexCache and invalidated by every surface
+    // writer (see InvalidateFaceTexCache call sites).
+    Texture2D faceTexHandle[oz::surface::FACE_COUNT] = {};
+    bool faceTexCached[oz::surface::FACE_COUNT] = {};
     float texScaleU = 1.0f;      // extra texture tiling ON TOP of the generated
     float texScaleV = 1.0f;      // mesh UVs (multiplier, not an absolute)
     float texOffsetU = 0.0f;     // texture shift U
@@ -316,6 +323,19 @@ public:
     // "all renderables" path). DrawWorldGeometry always hides them, so the
     // client can never see them.
     void SetDrawCollisionProxies(bool on) { m_drawCollisionProxies = on; }
+
+    // Viewport aspect for the frustum cull. 0 = GetScreenWidth/Height (the
+    // client). AngelEd sets the ACTIVE PANE's aspect before each Draw: a split
+    // pane has its own projection, and using the window aspect built a frustum
+    // that was too narrow for the 2x1 layout and culled visible geometry.
+    void SetCullAspect(float aspect) { m_cullAspect = (aspect > 0.0f) ? aspect : 0.0f; }
+    float GetCullAspect() const { return m_cullAspect; }
+
+    // Recompute one renderable's cull AABB after a transform write. AngelEd's
+    // gizmo sync writes r->position/scale/rotation directly every frame (the
+    // collision rebuild is deliberately deferred to drag end), so without this
+    // the selected brush is culled against its OLD box while being moved.
+    void RefreshRenderableBounds(int idx);
     bool GetDrawCollisionProxies() const { return m_drawCollisionProxies; }
 
     // Apply UV transform to a renderable's mesh (updates texcoords on GPU)
@@ -427,6 +447,17 @@ void ResetRenderableSurfaceDefault(int idx);
     // the (cheap but pointless) sky-view render on this.
     bool HasSkyPortalFaces() const;
 
+    // Same question for the other two per-face flags that have a dedicated
+    // pass. All three share ONE cached scan (m_faceFlagCache); the passes used
+    // to walk every renderable x 6 faces on every frame, twice for portals and
+    // twice for glow.
+    bool HasGlowFaces() const;
+    bool HasBackdropFaces() const;
+
+    // Resolve a FACE handle through the renderable's cache. The props-only
+    // overload below stays for the editor's one-shot probe.
+    Texture2D ResolveFaceTextureHandle(OzoneRenderable& r, int face);
+
     // Editor integration — heightmap generation (called from editor main loop)
     Model BuildHeightmap(const std::string& imagePath, const std::string& texPath,
                          const std::vector<float>& args);
@@ -526,6 +557,7 @@ private:
     std::vector<int> m_quantumIndices;
     WorldChunkManager m_chunkManager;
     bool m_drawCollisionProxies = false;  // editor-only debug view of SURF_COLLISION_PROXY
+    float m_cullAspect = 0.0f;            // 0 = window aspect; editor sets the pane aspect
     float m_worldAmbient[4] = {0.1f, 0.1f, 0.1f, 1.0f};  // see SetWorldAmbient
     float m_worldFogColor[3] = {0.7f, 0.7f, 0.8f};      // see SetWorldFog
     float m_worldFogStart = 10.0f;
@@ -556,6 +588,20 @@ private:
     // handful of times instead of 70 (and avoids the double-free a second owner
     // would cause).
     std::unordered_map<std::string, Texture2D> m_faceTexCache;
+
+    // Cached "does any face carry X" scan. Bits: 1 portal, 2 glow, 4 backdrop.
+    // -1 means "not computed since the last mutation". Every surface writer
+    // invalidates it; the three Has*Faces() accessors share one pass.
+    mutable int m_faceFlagCache = -1;
+    void InvalidateFaceFlagCache() const { m_faceFlagCache = -1; }
+    void EnsureFaceFlagCache() const;
+
+    void InvalidateFaceTexCache(OzoneRenderable& r) {
+        for (int f = 0; f < oz::surface::FACE_COUNT; ++f) {
+            r.faceTexHandle[f] = Texture2D{0};
+            r.faceTexCached[f] = false;
+        }
+    }
 
     std::string m_worldDir;        // current world directory (for .ozls def matching)
     int m_lastCsgOverflow = 0;     // overflow_count() from the last collision rebuild

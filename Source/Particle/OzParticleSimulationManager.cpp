@@ -2,6 +2,7 @@
 #include "../Pawn/OzPawnSystem.hpp"
 #include "../Package/PackageAssetLoader.hpp"
 #include "../Renderer/CullState.hpp"
+#include "../Diagnostics/FrameProfiler.hpp"
 #include "raymath.h"
 #include <rlgl.h>
 #include <cmath>
@@ -302,12 +303,19 @@ void OzParticleSimulationManager::DrawInstanced(Camera3D& camera,
         // then drew the entire hidden ambient field as well.
         if (p.active && (ambient || p.gameplay) && p.billboard && p.texture.id > 0)
             visible.push_back(&p);
+    OZ_PROFILE_ADD("particle.drawn", visible.size());
     if (visible.empty()) return;
     std::sort(visible.begin(), visible.end(),
               [&](const Particle* a, const Particle* b) {
                   return Vector3DistanceSqr(a->position, camera.position) >
                          Vector3DistanceSqr(b->position, camera.position);
               });
+    // Period-profile draw cap. Sorted far-to-near, so keeping the tail keeps the
+    // particles nearest the camera (the visible ones) and drops the distant
+    // ambient haze first.
+    if (m_drawBudget > 0 && (int)visible.size() > m_drawBudget)
+        visible.erase(visible.begin(),
+                      visible.begin() + ((int)visible.size() - m_drawBudget));
 
     // Walk the sorted list in per-texture runs. Each run is uploaded and drawn as
     // its OWN instanced draw starting at instance 0: rlDrawVertexArrayInstanced
@@ -624,6 +632,7 @@ void OzParticleSimulationManager::Shutdown() {
 void OzParticleSimulationManager::Draw(Camera3D& camera,
                                        const std::vector<LightNode>* transientLights) {
     if (m_live <= 0) return;
+    OZ_PROFILE_ADD("particle.live", m_live);
 
     // The "Particles" master toggle gates the AMBIENT layer (OZONE emitters and
     // weather) only. Gameplay bursts - muzzle smoke, impact sparks and the
@@ -672,13 +681,17 @@ void OzParticleSimulationManager::Draw(Camera3D& camera,
     // still occludes particles: depth TEST stays enabled, only the write is off.)
     rlDisableDepthMask();
     BeginBlendMode(BLEND_ALPHA);
+    int immediateDrawn = 0;
     for (auto& p : m_pool) {
         if (!p.active) continue;
         if (!ambient && !p.gameplay) continue;   // ambient layer is toggled off
         // Skip textured billboards when the instanced shader already drew them.
         if (instancedDrew && p.billboard && p.texture.id > 0) continue;
+        if (m_drawBudget > 0 && immediateDrawn >= m_drawBudget) break;
         const RenderState rs = ComputeRenderState(p, lit);
         if (rs.size <= 0.001f) continue;
+        ++immediateDrawn;
+        OZ_PROFILE_COUNT("particle.drawn");
 
         // billboard is now meaningful: a sphere regardless of texture. The
         // texture==0 fallback below is unchanged (that is how a Burst without a

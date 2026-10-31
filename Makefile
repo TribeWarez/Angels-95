@@ -413,7 +413,7 @@ test_entity_manager: tests/LightningEntityManager.test.cpp Source/Script/Lightni
 # OMEGA_PAWNSYSTEM_TEST opts LightningEntityManager.cpp back into the real
 # PawnSystem/raylib melee path (test_pawn_system links raylib + OzPawnSystem.cpp).
 # Without it the file compiles headless and the melee resolution is stubbed out.
-test_pawn_system: tests/OzPawnSystem.test.cpp Source/Pawn/OzPawnSystem.cpp Source/World/ZoneManager.cpp Source/Audio/SoundManager.cpp Source/Physics/OzBsp.cpp Source/Physics/WorldChunk.cpp Source/Physics/PlayerPhysics.cpp Source/Log.cpp Source/Renderer/OzAssetMapper.cpp Source/Script/LightningEntityManager.cpp Source/Script/LightningEntityRegistry.cpp Source/Script/LightningScriptContext.cpp Source/Script/LightningScriptParser.cpp Source/Events/EventBus.cpp Source/Events/ObjectiveSystem.cpp Source/Renderer/Mesh/Mesh.cpp Source/Renderer/Mesh/SkeletalMesh.cpp Source/Renderer/Mesh/MeshCache.cpp Source/Renderer/Mesh/AnimatedMesh.cpp Source/Package/Anim/OzAnimFormat.cpp Source/Material/OzMaterial.cpp Source/Material/MaterialRegistry.cpp Source/Particle/OzParticleSimulationManager.cpp Source/Renderer/LitLightning.cpp Source/Renderer/rlights/rlights.cpp
+test_pawn_system: tests/OzPawnSystem.test.cpp Source/Pawn/OzPawnSystem.cpp Source/World/OzoneFrustum.cpp Source/World/ZoneManager.cpp Source/Audio/SoundManager.cpp Source/Physics/OzBsp.cpp Source/Physics/WorldChunk.cpp Source/Physics/PlayerPhysics.cpp Source/Log.cpp Source/Renderer/OzAssetMapper.cpp Source/Script/LightningEntityManager.cpp Source/Script/LightningEntityRegistry.cpp Source/Script/LightningScriptContext.cpp Source/Script/LightningScriptParser.cpp Source/Events/EventBus.cpp Source/Events/ObjectiveSystem.cpp Source/Renderer/Mesh/Mesh.cpp Source/Renderer/Mesh/SkeletalMesh.cpp Source/Renderer/Mesh/MeshCache.cpp Source/Renderer/Mesh/AnimatedMesh.cpp Source/Package/Anim/OzAnimFormat.cpp Source/Material/OzMaterial.cpp Source/Material/MaterialRegistry.cpp Source/Particle/OzParticleSimulationManager.cpp Source/Renderer/LitLightning.cpp Source/Renderer/rlights/rlights.cpp
 	$(COMP) $(TEST_FLAGS) -DOMEGA_PAWNSYSTEM_TEST $(RAYLIB_INC) -ISource $^ $(BUILD_DIR)/miniz.o -o $@ $(LDFLAGS) $(LDEXTRA)
 
 test_ozone_parser: tests/OzoneParser.test.cpp Source/World/OzoneParser.cpp Source/World/SurfaceFlags.cpp Source/Log.cpp
@@ -470,6 +470,12 @@ test_assetscope: tests/AssetScope.test.cpp AngelEd/Source/Resources/AssetScope.c
 # AutoConvex is raylib-free, so this suite builds headless with SERVER_CXX.
 test_autoconvex: tests/AutoConvex.test.cpp Source/Physics/AutoConvex.cpp
 	$(SERVER_CXX) $(TEST_FLAGS) -ISource $^ -o $@
+
+# FrameProfiler is header-only and raylib-free, so this suite builds headless.
+# Deliberately names the .cpp instead of using $^: the header is a prerequisite
+# for rebuilds, not a second translation unit.
+test_profiler: tests/Profiler.test.cpp Source/Diagnostics/FrameProfiler.hpp
+	$(SERVER_CXX) $(TEST_FLAGS) -ISource tests/Profiler.test.cpp -o $@
 
 # Editor gizmo geometry (ray/axis, ray/plane, snapping). Header-only and
 # raylib-free, so it builds headless. The gizmo itself is Win32/raylib code and
@@ -566,7 +572,8 @@ TEST_SUITES := test_parser test_context test_registry test_entity_manager \
                test_network test_game_state test_ozanim test_ozls_writer \
                test_autoconvex test_csg test_brushmesh test_surface test_gametype \
                test_editorbus test_assetscope test_events test_game test_gizmomath \
-               test_keybinds test_menu test_clientsettings test_material test_viewport
+               test_keybinds test_menu test_clientsettings test_material test_viewport \
+               test_profiler
 
 # The editor is built twice from two hand-maintained object lists - AngelEd/Makefile
 # and the inline `g++` list in ci.yml - because CI does not use the Makefile. They
@@ -602,7 +609,7 @@ test: check-editor-objects $(TEST_SUITES) worldcheck
 	@echo ""
 	@echo "=== worldcheck (.ozone auditor, every shipped world) ==="
 	@for w in GameData/Worlds/*/World.ozone; do \
-	  ./worldcheck "$$w" || echo "  worldcheck $$w" >> $(TEST_FAIL_FILE); \
+	  ./worldcheck "$$w" --perf || echo "  worldcheck $$w" >> $(TEST_FAIL_FILE); \
 	done
 	@echo ""
 	@echo "=== worldcheck --asset-refs (every .ozls/.cfg path reference) ==="
@@ -624,4 +631,4 @@ test: check-editor-objects $(TEST_SUITES) worldcheck
 	@echo "All suites passed."
 
 clean:
-	rm -rf $(BUILD_DIR) *.exe AngelServ Angels95 AngelMaster OzPack *.o AngelEd/*.o AngelEd/Source/*.o test_context test_parser test_registry test_ozone_parser test_world_roundtrip test_entity_manager test_pawn_system test_join_uri test_master test_network test_game_state test_ozanim test_ozls_writer test_autoconvex test_csg test_brushmesh test_surface test_gametype test_editorbus test_assetscope test_events test_game test_gizmomath test_keybinds test_menu test_clientsettings test_material test_viewport worldcheck
+	rm -rf $(BUILD_DIR) *.exe AngelServ Angels95 AngelMaster OzPack *.o AngelEd/*.o AngelEd/Source/*.o test_context test_parser test_registry test_ozone_parser test_world_roundtrip test_entity_manager test_pawn_system test_join_uri test_master test_network test_game_state test_ozanim test_ozls_writer test_autoconvex test_csg test_brushmesh test_surface test_gametype test_editorbus test_assetscope test_events test_game test_gizmomath test_keybinds test_menu test_clientsettings test_material test_viewport test_profiler worldcheck

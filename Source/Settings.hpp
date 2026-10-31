@@ -11,6 +11,11 @@ static bool HeadBob = true;
 static bool PixelShader = false;
 static bool ParticlesEnabled = true;
 static bool FPSEnabled = false;
+// FrameProfiler overlay. Collection itself is always on (see Diagnostics/
+// FrameProfiler.hpp); these two only decide what is drawn. Persisted in
+// [AngelTech.Debug], unlike the ablation switches in PerfToggles.hpp.
+static bool PerfOverlay = true;
+static bool PerfOverlayExpanded = false;
 static bool ShowLogWindow = false;
 static float ResolutionScale = 1.0f;
 // Multiplier on top of the automatic DPI/resolution scale. 1.0 = automatic.
@@ -49,6 +54,12 @@ static Color FogTint = {200, 200, 210, 255}; // fog color (R,G,B,A)
 // Applied to oz::PostFX each frame in Main.cpp. Defaults mirror PostGrade so a
 // fresh install looks the same whether or not the ini has the keys yet.
 static bool  PostFXEnabled = true;
+// Period render profile: bypass the HDR/bloom chain, use an RGBA8 scene target,
+// cap the light loop on the GPU and cap the number of particles drawn. It is a
+// performance profile, not a post-FX switch: the user's Post FX settings are
+// left untouched so turning the profile off restores them. Persisted in
+// [AngelTech.Render] period_profile.
+static bool  PeriodRenderProfile = false;
 static float PostExposure  = 1.00f;      // 0.25..3.0
 static float PostBloom     = 0.85f;      // 0.0..3.0 (additive bloom strength)
 static float PostVignette  = 0.22f;      // 0.0..0.8

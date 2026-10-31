@@ -70,6 +70,11 @@ struct Light {
 };
 
 uniform Light lights[MAX_LIGHTS];
+// Number of slots actually submitted this frame (0..MAX_LIGHTS). The array
+// stays MAX_LIGHTS for compatibility, but the loop must not evaluate the
+// disabled tail: on period hardware that was up to 64 attenuation/spot/effect
+// evaluations per fragment for lights that contribute nothing.
+uniform int uLightCount;
 uniform vec4 ambient;
 uniform vec3 viewPos;
 uniform float uTime;
@@ -245,7 +250,7 @@ void main()
     // In-scattered light for the fog tint, accumulated in the SAME loop below.
     vec3 scatterAccum = vec3(0.0);
 
-    for (int i = 0; i < MAX_LIGHTS; i++)
+    for (int i = 0; i < uLightCount; i++)
     {
         if (lights[i].enabled == 1)
         {

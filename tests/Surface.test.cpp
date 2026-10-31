@@ -165,6 +165,27 @@ static void test_brush_needs_per_face() {
     BrushSurface d;
     d.SetFace(FACE_PX, SurfaceProps{});   // override that equals the default
     check(d.NeedsPerFaceDraw(), "an explicit override is honoured even when equal");
+
+    // Brush-wide texture/UV properties are baked into the material/mesh, so they
+    // must NOT force six draws. This is what made textured worlds quadratically
+    // expensive: 266 brushes x 6 faces in Sektor_01.
+    BrushSurface texBrush;
+    texBrush.def.texPath = "GameData/Tex/World/stone.png";
+    check(!texBrush.NeedsPerFaceDraw(), "a brush-wide texPath stays on the fast path");
+    BrushSurface slotBrush;
+    slotBrush.def.texSlot = 3;
+    check(!slotBrush.NeedsPerFaceDraw(), "a brush-wide texSlot stays on the fast path");
+    BrushSurface uvBrush;
+    uvBrush.def.uvScaleU = 4.0f; uvBrush.def.uvOffsetV = 0.5f;
+    check(!uvBrush.NeedsPerFaceDraw(), "brush-wide UV scale/offset stays on the fast path");
+
+    // Shader-visible properties still require the surface program.
+    BrushSurface matBrush;
+    matBrush.def.material = "RustyMetal";
+    check(matBrush.NeedsPerFaceDraw(), "a baked material needs the surface path");
+    BrushSurface panBrush;
+    panBrush.def.panU = 0.25f;
+    check(panBrush.NeedsPerFaceDraw(), "a pan speed needs the surface path");
 }
 
 static void test_clear_and_reset() {
@@ -491,6 +512,37 @@ static void test_light_budget_parity() {
     check(transient > 0 && transient < cLit,
           "the transient reservation is non-zero and smaller than the total budget "
           "(so a full-budget world is knowingly over-subscribed when one is live)");
+}
+
+// The light loop must stop at the SUBMITTED count, not at MAX_LIGHTS.
+//
+// Both shaders used `for (i < MAX_LIGHTS)` and the C++ side disabled the tail by
+// uploading 12 zeroed uniforms per unused slot. On a period-class GPU that is 64
+// attenuation/spot/effect evaluations per fragment for lights that contribute
+// nothing. A missing uLightCount declaration compiles fine and would silently
+// make the loop run 0 times (no lights at all), so this pins all three halves:
+// both declarations, both loop bounds and the C++ upload.
+static void test_light_count_uniform() {
+    const std::string lit = ReadFile("GameData/Shaders/Lights/LitFog.fs");
+    const std::string surf = ReadFile("GameData/Shaders/Surface.fs");
+    const std::string cpp = ReadFile("Source/Renderer/LitLightning.cpp");
+    if (lit.empty() || surf.empty() || cpp.empty()) {
+        printf("  SKIP  light count uniform (shader or source not found from cwd)\n");
+        return;
+    }
+    check(lit.find("uniform int uLightCount") != std::string::npos,
+          "LitFog.fs declares uLightCount");
+    check(surf.find("uniform int uLightCount") != std::string::npos,
+          "Surface.fs declares uLightCount - otherwise a surface brush evaluates "
+          "a different number of lights from the room beside it");
+    check(lit.find("i < uLightCount") != std::string::npos,
+          "LitFog.fs loops to uLightCount, not MAX_LIGHTS");
+    check(surf.find("i < uLightCount") != std::string::npos,
+          "Surface.fs loops to uLightCount, not MAX_LIGHTS");
+    check(cpp.find("uLightCount") != std::string::npos,
+          "LitLightning resolves the uLightCount location");
+    check(cpp.find("SetShaderLightCount") != std::string::npos,
+          "LitLightning uploads the submitted count (and the 1-light fallback)");
 }
 
 // The THREE fogFactorAt copies.
@@ -1828,6 +1880,7 @@ int main() {
     test_legacy_flag_derivation();
     test_shader_bit_parity();
     test_light_budget_parity();
+    test_light_count_uniform();
     test_light_uniform_upload_parity();
     test_shaders_braces_balance();
     test_lighting_model_parity();

@@ -146,6 +146,13 @@ public:
                Color color, Color colorEnd, float sizeStart, float sizeEnd,
                float lifetime, float gravity = 0.0f, Texture2D tex = {0});
 
+    // Cap the number of particles the DRAW path emits (0 = no cap). Used by
+    // the period render profile: the simulation budget is unchanged, so combat
+    // bursts still exist, but a 2,000-particle ambient field cannot dominate a
+    // period-class fill rate.
+    void SetDrawBudget(int maxDrawn) { m_drawBudget = maxDrawn > 0 ? maxDrawn : 0; }
+    int DrawBudget() const { return m_drawBudget; }
+
     int LiveCount() const { return m_live; }
 
     // Per-source accounting. One pool is shared by three sources with THREE
@@ -308,6 +315,7 @@ private:
     std::unordered_map<std::string, Texture2D> m_texCache;
     std::unordered_map<uint32_t, float> m_spawnAccum;
     bool m_enabled = true;
+    int  m_drawBudget = 0;   // 0 = unlimited; period render profile sets a cap
 
     // Instanced renderer state. Zero ids mean "not initialised".
     unsigned int m_quadVao = 0;      // VAO combining the quad + instance attributes

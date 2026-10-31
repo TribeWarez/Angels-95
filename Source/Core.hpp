@@ -21,6 +21,9 @@
 #include "Renderer/PlayerModel.hpp"
 #include "Renderer/CullState.hpp"
 #include "Renderer/ShadingTuning.hpp"
+#include "Diagnostics/FrameProfiler.hpp"
+#include "Diagnostics/PerfToggles.hpp"
+#include "Diagnostics/BenchMode.hpp"
 #include "Particle/OzParticleSimulationManager.hpp"
 #include "Pawn/AngelPlayer/PlayerController.hpp"
 // LoadWorld() resets the HUD's per-world transients (XP baseline / banners), so
@@ -708,6 +711,11 @@ inline void SyncLitFogFromStore(const float color[3], float start, float end,
 
 void UpdateLightSources()
 {
+    OZ_PROFILE_SCOPE("frame.lighting");
+    // Ablation switch: leave the last uploaded light state in place. That is a
+    // diagnostic (it changes what the scene looks like), never a shipped mode.
+    if (!oz::diag::PerfOn("lights")) return;
+
     // Lighting now lives in Renderer/LitLightning (LitLightning_UpdateFrame).
     // Kept as a thin engine-side adapter that supplies the engine globals.
     LitLightning_UpdateFrame(PawnSystem::Instance().GetLights(), AngelTechData.Lights,
@@ -1184,7 +1192,8 @@ void AngelTechInit()
 
     AngelTechData.GameLights[0] = CreateLight(LIGHT_DIRECTIONAL, {AngelTechData.MainCamera.position.x, AngelTechData.MainCamera.position.y, AngelTechData.MainCamera.position.z}, Vector3Zero(), WHITE, AngelTechData.Lights);
 
-    Target = oz::PostFX::CreateTarget(GetScreenWidth(), GetScreenHeight());
+    Target = oz::PostFX::CreateTarget(GetScreenWidth(), GetScreenHeight(),
+                                      !PeriodRenderProfile);
 
     // Pre-cache weapon object models from entity definitions (Object1-5)
     {
@@ -1424,7 +1433,8 @@ void PlayHomeScreen()
     {
         g_skipMenu = false;
         oz::PostFX::DestroyTarget(Target);
-        Target = oz::PostFX::CreateTarget(GetScreenWidth(), GetScreenHeight());
+        Target = oz::PostFX::CreateTarget(GetScreenWidth(), GetScreenHeight(),
+                                      !PeriodRenderProfile);
         AngelTechData.Deaths = 1;
         return;
     }
@@ -1472,7 +1482,8 @@ void PlayHomeScreen()
     if (menu.ShouldLoadGame() || menu.GetSelectedWorld())
     {
         oz::PostFX::DestroyTarget(Target);
-        Target = oz::PostFX::CreateTarget(GetScreenWidth(), GetScreenHeight());
+        Target = oz::PostFX::CreateTarget(GetScreenWidth(), GetScreenHeight(),
+                                      !PeriodRenderProfile);
         AngelTechData.Deaths = 1;
     }
 
@@ -2160,14 +2171,20 @@ void DrawWorld()
     // Quantum state first: the world pass reads `quantumHidden` and the collision
     // queries below read the side-list, and both must come from this frame's
     // decision.
-    UpdateQuantumObstacles(AngelTechData.MainCamera);
+    {
+        OZ_PROFILE_SCOPE("world.quantum");
+        UpdateQuantumObstacles(AngelTechData.MainCamera);
+    }
     // Detect sky zone BEFORE the render target is bound. The portal view needs
     // the zone anchor, and raylib cannot nest render textures: EndTextureMode
     // rebinds the default framebuffer, not the previously bound one. So the
     // portal pass has to run while nothing else owns the target.
-    PawnSystem::Instance().UpdateSkyZone(
-        AngelTechData.MainCamera.position,
-        g_playerMovement.PlayerBounds);
+    {
+        OZ_PROFILE_SCOPE("world.skyzone");
+        PawnSystem::Instance().UpdateSkyZone(
+            AngelTechData.MainCamera.position,
+            g_playerMovement.PlayerBounds);
+    }
     const bool inSkyZone = PawnSystem::Instance().IsInSkyZone();
 
     // -----------------------------------------------------------------------
@@ -2222,7 +2239,16 @@ void DrawWorld()
                                     Target.texture.height == s_lastWinH);
         if ((winW != s_lastWinW || winH != s_lastWinH) && wasFullWindow) {
             oz::PostFX::DestroyTarget(Target);
-            Target = oz::PostFX::CreateTarget(winW, winH);
+            Target = oz::PostFX::CreateTarget(winW, winH, !PeriodRenderProfile);
+        }
+        // The Period profile changes the colour format (RGBA16F -> RGBA8), which
+        // is a creation-time decision. Recreate once on a live toggle rather than
+        // leaving the old target until the next resize.
+        static bool s_lastPeriod = PeriodRenderProfile;
+        if (s_lastPeriod != PeriodRenderProfile) {
+            oz::PostFX::DestroyTarget(Target);
+            Target = oz::PostFX::CreateTarget(winW, winH, !PeriodRenderProfile);
+            s_lastPeriod = PeriodRenderProfile;
         }
         s_lastWinW = winW;
         s_lastWinH = winH;
@@ -2234,7 +2260,9 @@ void DrawWorld()
     // pay nothing. `Target`'s size is passed because the face shader samples in
     // gl_FragCoord space, and Target can be resolution-scaled.
     // -----------------------------------------------------------------------
-    if (wantSky && OzoneLoader::Instance().HasSkyPortalFaces()) {
+    if (wantSky && oz::diag::PerfOn("sky") && oz::diag::PerfOn("portals") &&
+        OzoneLoader::Instance().HasSkyPortalFaces()) {
+        OZ_PROFILE_SCOPE("world.skyPortalRender");
         SkyZoneNode* sky = PawnSystem::Instance().GetActiveSkyZone();
         const Vector3 anchor = sky ? sky->position : AngelTechData.MainCamera.position;
         oz::SkyPortal::Instance().Render(
@@ -2266,7 +2294,8 @@ void DrawWorld()
     // Sides use an authored side texture when available; otherwise oz::Skybox
     // falls back to the cap so the sky renders all around (previously they drew a
     // flat colour and appeared black).
-    if (wantSky) {
+    if (wantSky && oz::diag::PerfOn("sky")) {
+        OZ_PROFILE_SCOPE("world.skybox");
         // Culling ON for the rest of the frame: the generated OZONE brushes have
         // correct winding and want it. Imported meshes opt back out via
         // oz::ScopedCullOff in oz::Mesh::Draw (see Renderer/CullState.hpp - this
@@ -2283,6 +2312,7 @@ void DrawWorld()
     // -----------------------------------------------------------------------
 if (inSkyZone)
     {
+        OZ_PROFILE_SCOPE("world.skyPass");
         rlDisableDepthMask();
         OzoneLoader::Instance().DrawZoneGeometry(AngelTechData.MainCamera);
         rlEnableDepthMask();
@@ -2293,7 +2323,10 @@ if (inSkyZone)
     SoundManager::Instance().UpdateSoundZones(ZoneManager::Instance().GetPlayerRegion());
     SoundManager::Instance().Update();
 
-    OzoneLoader::Instance().DrawWorldGeometry(AngelTechData.MainCamera);
+    {
+        OZ_PROFILE_SCOPE("world.geometry");
+        OzoneLoader::Instance().DrawWorldGeometry(AngelTechData.MainCamera);
+    }
 
     // -----------------------------------------------------------------------
     // PORTAL PASS — SURF_PORTAL faces sample the sky view rendered above. They
@@ -2302,7 +2335,9 @@ if (inSkyZone)
     // world so geometry in front of a portal occludes it, and before the glow
     // pass so an additive halo cannot leak through a hole.
     // -----------------------------------------------------------------------
-    if (wantSky && OzoneLoader::Instance().HasSkyPortalFaces()) {
+    if (wantSky && oz::diag::PerfOn("portals") &&
+        OzoneLoader::Instance().HasSkyPortalFaces()) {
+        OZ_PROFILE_SCOPE("world.portalPass");
         OzoneLoader::Instance().DrawSkyPortals(AngelTechData.MainCamera,
                                                oz::SkyPortal::Instance().View(),
                                                Target.texture.width, Target.texture.height);
@@ -2311,7 +2346,10 @@ if (inSkyZone)
     // Additive re-draw of every SURF_GLOW face, after the opaque world so the
     // halo lands on top of the composited image. No-op unless a surface actually
     // carries the flag, so this costs two vector scans on a normal frame.
-    OzoneLoader::Instance().DrawGlowGeometry(AngelTechData.MainCamera);
+    if (oz::diag::PerfOn("glow")) {
+        OZ_PROFILE_SCOPE("world.glowPass");
+        OzoneLoader::Instance().DrawGlowGeometry(AngelTechData.MainCamera);
+    }
 
     // OZONE brush collision — chunk-accelerated query, delegated to the
     // physics module via the adapter below.
@@ -2380,7 +2418,8 @@ if (inSkyZone)
 
     // Combat FX — projectile rendering, impacts, decals, muzzle flash and
     // remote players all live here so they render inside the 3D camera pass.
-    {
+    if (oz::diag::PerfOn("fx")) {
+        OZ_PROFILE_SCOPE("world.fx");
         CombatFX::Instance().Update(GetFrameTime());
         PawnSystem::Instance().DrawProjectiles(AngelTechData.MainCamera, AngelTechData.Lights);
         CombatFX::Instance().Draw3D(AngelTechData.MainCamera);
@@ -2407,14 +2446,23 @@ if (inSkyZone)
         static constexpr double kSimTick = 1.0 / 60.0;
         s_sim_accumulator += GetFrameTime();
         int steps = 0;
-        while (s_sim_accumulator >= kSimTick && steps < 4) {
-            s_sim_accumulator -= kSimTick;
-            UpdateEntitiesSim(static_cast<float>(kSimTick));
-            // Wall/terrain impact sweep, then update projectiles (age, movement, gravity)
-            SweepProjectilesVsWorld(static_cast<float>(kSimTick));
-            PawnSystem::Instance().UpdateProjectiles(static_cast<float>(kSimTick));
-            ++steps;
+        {
+            OZ_PROFILE_SCOPE("world.sim");
+            // --bench-phase render freezes the simulation so a frame-time number
+            // describes the renderer alone. A benchmark that keeps ticking NPCs,
+            // projectiles and script contexts is measuring content, not cost.
+            if (!oz::diag::Bench().freezeSim) {
+                while (s_sim_accumulator >= kSimTick && steps < 4) {
+                    s_sim_accumulator -= kSimTick;
+                    UpdateEntitiesSim(static_cast<float>(kSimTick));
+                    // Wall/terrain impact sweep, then update projectiles (age, movement, gravity)
+                    SweepProjectilesVsWorld(static_cast<float>(kSimTick));
+                    PawnSystem::Instance().UpdateProjectiles(static_cast<float>(kSimTick));
+                    ++steps;
+                }
+            }
         }
+        OZ_PROFILE_ADD("sim.steps", steps);
         if (steps >= 4 && s_sim_accumulator >= kSimTick)
             s_sim_accumulator = 0.0; // drift guard: discard excess catch-up
 
@@ -2423,8 +2471,20 @@ if (inSkyZone)
         // The user's Particles toggle is pushed in here, once a frame, because
         // it is a header-static and every TU including Settings.hpp has its own
         // copy of it.
-        OzParticleSimulationManager::Instance().SetEnabled(ParticlesEnabled);
-        OzParticleSimulationManager::Instance().Update(GetFrameTime());
+        // Period profile: cap the DRAW count, not the simulation. The ambient
+        // field still exists and gameplay bursts are still spawned; they just
+        // cannot flood a period-class fill rate.
+        OzParticleSimulationManager::Instance().SetDrawBudget(PeriodRenderProfile ? 800 : 0);
+        if (oz::diag::PerfOn("particles")) {
+            OZ_PROFILE_SCOPE("world.particlesUpdate");
+            OzParticleSimulationManager::Instance().SetEnabled(ParticlesEnabled);
+            // Render-phase benchmark: keep the live field (so the draw path is
+            // measured) but do not advance it.
+            if (!oz::diag::Bench().freezeSim)
+                OzParticleSimulationManager::Instance().Update(GetFrameTime());
+        } else {
+            OzParticleSimulationManager::Instance().SetEnabled(false);
+        }
 
         // Motion-comfort flag for the HUD cues (see GameplayFlags.hpp): the
         // HeadBob toggle is the player-facing "less motion" control, so the
@@ -2441,20 +2501,33 @@ if (inSkyZone)
         // fed only emitter definitions and must stay free of camera/gameplay
         // input. Gated on the user's global Particles toggle, which is a master
         // switch and is not derived from the level.
-        if (ParticlesEnabled)
+        if (ParticlesEnabled && oz::diag::PerfOn("particles") &&
+            !oz::diag::Bench().freezeSim) {
+            OZ_PROFILE_SCOPE("world.weather");
             OzParticleSimulationManager::Instance().UpdateWeather(
                 GetFrameTime(), AngelTechData.MainCamera.position);
+        }
 
         // Draw pawns / entity billboards exactly once per frame (kept out of
         // the sim steps so a catch-up frame doesn't re-draw the scene).
-        PawnSystem::Instance().DrawAll(AngelTechData.MainCamera, AngelTechData.Lights);
-        PawnSystem::Instance().DrawEntities(AngelTechData.MainCamera, AngelTechData.Lights, AngelTechData.WindShader);
-        DrawLightFlares(AngelTechData.MainCamera);
+        if (oz::diag::PerfOn("pawns")) {
+            OZ_PROFILE_SCOPE("world.pawns");
+            PawnSystem::Instance().DrawAll(AngelTechData.MainCamera, AngelTechData.Lights);
+        }
+        if (oz::diag::PerfOn("props")) {
+            OZ_PROFILE_SCOPE("world.entities");
+            PawnSystem::Instance().DrawEntities(AngelTechData.MainCamera, AngelTechData.Lights, AngelTechData.WindShader);
+        }
+        if (oz::diag::PerfOn("lights")) {
+            OZ_PROFILE_SCOPE("world.lightFlares");
+            DrawLightFlares(AngelTechData.MainCamera);
+        }
 
         // First-person weapon view-model (drawn on top of the world).
         // Suppressed for --shot captures: the view-model is camera-locked UI,
         // not the level, and it covers a third of the frame.
-        if (!(g_shot.active && g_shot.hideHud)) {
+        if (!(g_shot.active && g_shot.hideHud) && oz::diag::PerfOn("pawns")) {
+            OZ_PROFILE_SCOPE("world.viewmodel");
             oz::ViewModel::Instance().Update(GetFrameTime());
             oz::ViewModel::Instance().Draw(AngelTechData.MainCamera, AngelTechData.Lights);
         }
@@ -2476,7 +2549,8 @@ if (inSkyZone)
     // LightningScript entity tick
     {
         float dt = GetFrameTime();
-        LightningEntityManager::Instance().Update(dt);
+        if (!oz::diag::Bench().freezeSim)
+            LightningEntityManager::Instance().Update(dt);
 
         // Sync pending script effects into PawnSystem's active SkyZoneNode
         PawnSystem::Instance().SyncSkyboxState();

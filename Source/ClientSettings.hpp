@@ -67,6 +67,7 @@ static inline void LoadClientSettings() {
     // HDR bloom + grade. Clamped here so a hand-edited ini cannot push exposure
     // to a value that blows the whole frame to white.
     PostFXEnabled = Bool(cfg, R, "post_fx", PostFXEnabled);
+    PeriodRenderProfile = Bool(cfg, R, "period_profile", PeriodRenderProfile);
     PostExposure  = CfgClampF(Float(cfg, R, "post_exposure", PostExposure), 0.25f, 3.0f);
     PostBloom     = CfgClampF(Float(cfg, R, "post_bloom", PostBloom), 0.0f, 3.0f);
     PostVignette  = CfgClampF(Float(cfg, R, "post_vignette", PostVignette), 0.0f, 0.8f);
@@ -140,7 +141,9 @@ static inline void LoadClientSettings() {
                                   1.0f, 30.0f);
     g_showNetStats    = Bool(cfg, N, "show_net_stats", g_showNetStats);
 
-    Debug          = Bool(cfg, kDebug, "debug", Debug);
+    Debug              = Bool(cfg, kDebug, "debug", Debug);
+    PerfOverlay        = Bool(cfg, kDebug, "perf_overlay", PerfOverlay);
+    PerfOverlayExpanded = Bool(cfg, kDebug, "perf_overlay_expanded", PerfOverlayExpanded);
     g_debugEnabled = Debug;   // mirror into the cross-TU flag (see DebugFlags.hpp)
 }
 
@@ -179,6 +182,7 @@ static inline void SaveClientSettings() {
     cfg.SetInt(R,   "fog_tint_g", FogTint.g);
     cfg.SetInt(R,   "fog_tint_b", FogTint.b);
     cfg.SetBool(R,  "post_fx",       PostFXEnabled);
+    cfg.SetBool(R,  "period_profile", PeriodRenderProfile);
     cfg.SetFloat(R, "post_exposure", PostExposure);
     cfg.SetFloat(R, "post_bloom",    PostBloom);
     cfg.SetFloat(R, "post_vignette", PostVignette);
@@ -230,6 +234,8 @@ static inline void SaveClientSettings() {
     cfg.SetBool(N,  "show_net_stats", g_showNetStats);
 
     cfg.SetBool(kDebug, "debug", Debug);
+    cfg.SetBool(kDebug, "perf_overlay", PerfOverlay);
+    cfg.SetBool(kDebug, "perf_overlay_expanded", PerfOverlayExpanded);
 
     // Fixed section order = a stable, diffable, hand-editable file. SaveOrdered
     // appends anything not named here, so unknown sections survive the round

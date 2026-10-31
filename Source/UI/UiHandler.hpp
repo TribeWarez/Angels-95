@@ -13,6 +13,10 @@ struct MenuBarCallbacks {
     std::function<void()> onToggleSettings;
     std::function<void()> onToggleAdvancedSettings;
     std::function<void()> onAbout;
+    // FrameProfiler. The toolbar/menu entry is the discoverable toggle; F9 and
+    // the console `/perf` command drive the same flag.
+    std::function<void()> onTogglePerfOverlay;
+    std::function<void()> onDumpPerf;
 };
 
 // Installs the native (Win32) menu bar on the active raylib window and

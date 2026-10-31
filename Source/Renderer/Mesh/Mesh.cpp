@@ -1,5 +1,6 @@
 #include "Mesh.hpp"
 #include "../../Package/PackageAssetLoader.hpp"
+#include "../../Diagnostics/FrameProfiler.hpp"
 #include "raymath.h"
 #include <cstddef>
 
@@ -97,17 +98,44 @@ bool Mesh::Load(const std::string& meshPath, const std::string& texPath,
 
 namespace {
 // Cached gate locations, per shader program (there is one LitFog in practice).
+//
+// BindMaterial runs once per lit mesh draw, and it used to resolve five uniform
+// locations with GetShaderLocation on every one of them - ~600 lookups/frame in
+// a Mesh.*-heavy world. Uniform locations are fixed after link, so the whole set
+// is resolved once per program id.
 struct MaterialGateLocs {
     unsigned int id = 0;
     int normal = -1;
+    int normalStrength = -1;
     int emissive = -1;
+    int emissiveScale = -1;
+    int skinning = -1;
+    int normalMap = -1;
+    int emissiveMap = -1;
+
+    // Last value actually uploaded to THIS program. GLSL uniforms persist for
+    // the program's lifetime, so an upload whose value is unchanged is pure
+    // overhead. The pair (normal, emissive) is reset after every mesh draw so a
+    // normal-mapped prop cannot leak its gate onto the brushes that follow; the
+    // cache makes that reset a no-op in the common case.
+    int lastNormal = 0;
+    int lastEmissive = 0;
+    int lastSkinning = 0;
+    float lastStrength = 1.0f;
+    float lastEmissiveScale = 1.0f;
 };
 MaterialGateLocs& GatesFor(Shader shader) {
     static MaterialGateLocs g;
     if (g.id != shader.id) {
-        g.id       = shader.id;
-        g.normal   = GetShaderLocation(shader, "uHasNormalMap");
-        g.emissive = GetShaderLocation(shader, "uHasEmissive");
+        g = MaterialGateLocs{};
+        g.id             = shader.id;
+        g.normal         = GetShaderLocation(shader, "uHasNormalMap");
+        g.normalStrength = GetShaderLocation(shader, "uNormalStrength");
+        g.emissive       = GetShaderLocation(shader, "uHasEmissive");
+        g.emissiveScale  = GetShaderLocation(shader, "uEmissiveScale");
+        g.skinning       = GetShaderLocation(shader, "uSkinning");
+        g.normalMap      = GetShaderLocation(shader, "normalMap");
+        g.emissiveMap    = GetShaderLocation(shader, "emissiveMap");
     }
     return g;
 }
@@ -127,12 +155,26 @@ static void ClearMaterialGates(Shader shader) {
     if (shader.id == 0) return;
     MaterialGateLocs& g = GatesFor(shader);
     const int zero = 0;
-    if (g.normal >= 0)   SetShaderValue(shader, g.normal, &zero, SHADER_UNIFORM_INT);
-    if (g.emissive >= 0) SetShaderValue(shader, g.emissive, &zero, SHADER_UNIFORM_INT);
+    if (g.lastNormal != 0) {
+        if (g.normal >= 0) SetShaderValue(shader, g.normal, &zero, SHADER_UNIFORM_INT);
+        g.lastNormal = 0;
+    }
+    if (g.lastEmissive != 0) {
+        if (g.emissive >= 0) SetShaderValue(shader, g.emissive, &zero, SHADER_UNIFORM_INT);
+        g.lastEmissive = 0;
+    }
+    // Skinning is a per-mesh property too; a brush after a skinned prop must not
+    // keep the branch on (its mesh has no bone attributes, but the shader would
+    // still evaluate the branch).
+    if (g.lastSkinning != 0) {
+        if (g.skinning >= 0) SetShaderValue(shader, g.skinning, &zero, SHADER_UNIFORM_INT);
+        g.lastSkinning = 0;
+    }
 }
 
 void Mesh::BindMaterial(Shader shader) const {
     if (shader.id == 0) return;
+    MaterialGateLocs& g = GatesFor(shader);
     const int hasNormal = (m_material.normal.id > 0) ? 1 : 0;
     const int hasEmissive = (m_material.emissive.id > 0) ? 1 : 0;
     const float strength = m_material.normalStrength;
@@ -140,15 +182,39 @@ void Mesh::BindMaterial(Shader shader) const {
     // 1 only on a GPU-skinning build; the CPU path already posed the vertices.
     const int skinning = NeedsShaderSkinning() ? 1 : 0;
 
-    SetShaderValue(shader, GetShaderLocation(shader, "uHasNormalMap"), &hasNormal, SHADER_UNIFORM_INT);
-    SetShaderValue(shader, GetShaderLocation(shader, "uNormalStrength"), &strength, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(shader, GetShaderLocation(shader, "uHasEmissive"), &hasEmissive, SHADER_UNIFORM_INT);
-    SetShaderValue(shader, GetShaderLocation(shader, "uEmissiveScale"), &emissiveScale, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(shader, GetShaderLocation(shader, "uSkinning"), &skinning, SHADER_UNIFORM_INT);
-    if (hasNormal)
-        SetShaderValueTexture(shader, GetShaderLocation(shader, "normalMap"), m_material.normal);
-    if (hasEmissive)
-        SetShaderValueTexture(shader, GetShaderLocation(shader, "emissiveMap"), m_material.emissive);
+    int uploads = 0;
+    auto setInt = [&](int loc, int& last, int value) {
+        if (last == value) return;
+        if (loc >= 0) SetShaderValue(shader, loc, &value, SHADER_UNIFORM_INT);
+        last = value;
+        ++uploads;
+    };
+    setInt(g.normal, g.lastNormal, hasNormal);
+    setInt(g.emissive, g.lastEmissive, hasEmissive);
+    setInt(g.skinning, g.lastSkinning, skinning);
+    if (g.lastStrength != strength) {
+        if (g.normalStrength >= 0)
+            SetShaderValue(shader, g.normalStrength, &strength, SHADER_UNIFORM_FLOAT);
+        g.lastStrength = strength;
+        ++uploads;
+    }
+    if (g.lastEmissiveScale != emissiveScale) {
+        if (g.emissiveScale >= 0)
+            SetShaderValue(shader, g.emissiveScale, &emissiveScale, SHADER_UNIFORM_FLOAT);
+        g.lastEmissiveScale = emissiveScale;
+        ++uploads;
+    }
+    if (hasNormal) {
+        SetShaderValueTexture(shader, g.normalMap, m_material.normal);
+        ++uploads;
+    }
+    if (hasEmissive) {
+        SetShaderValueTexture(shader, g.emissiveMap, m_material.emissive);
+        ++uploads;
+    }
+
+    OZ_PROFILE_COUNT("mesh.bind");
+    OZ_PROFILE_ADD("uniform.upload", (uint64_t)uploads);
 }
 
 void Mesh::ApplyMaterialMaps() {

@@ -26,6 +26,7 @@
 // ============================================================================
 
 #include "UiCommon.hpp"
+#include "Diagnostics/BenchMode.hpp"   // SavePanelLayouts must not write during a benchmark
 
 // ---------------------------------------------------------------------------
 // Panels. Each is one window: its control IDs, its window procedure, and its
@@ -117,6 +118,9 @@ static void LoadPanelLayouts() {
     // available before the first frame, and are read/written by the same file
     // the panel geometry already uses.
     g_editorPanels.unrealBrushMove = cfg.GetBool("Options", "unreal_brush_move", false);
+    g_editorPanels.perfOverlay = cfg.GetBool("Options", "perf_overlay", true);
+    g_editorPanels.perfOverlayExpanded = cfg.GetBool("Options", "perf_overlay_expanded", false);
+    g_editorPanels.perfPaneFast = cfg.GetBool("Options", "perf_pane_fast", true);
     g_editorPanels.unrealMoveSpeed = cfg.GetInt("Options", "unreal_move_speed", 1);
     if (g_editorPanels.unrealMoveSpeed < 0) g_editorPanels.unrealMoveSpeed = 0;
     if (g_editorPanels.unrealMoveSpeed > 2) g_editorPanels.unrealMoveSpeed = 2;
@@ -181,6 +185,9 @@ static void LoadPanelLayouts() {
 }
 
 void SavePanelLayouts() {
+    // A benchmark run must not overwrite the user's [Layout]/[Views]/[Options]
+    // with the forced single-view (or --bench-views) layout it measured.
+    if (oz::diag::Bench().active) return;
     IniConfig cfg;
     cfg.Load(kEditorIniPath);   // keep every unrelated section
 
@@ -224,6 +231,9 @@ void SavePanelLayouts() {
     // Input options. Written here because this is the one function that already
     // owns "editor preferences that are not document state", and it runs on exit.
     cfg.SetBool("Options", "unreal_brush_move", g_editorPanels.unrealBrushMove);
+    cfg.SetBool("Options", "perf_overlay", g_editorPanels.perfOverlay);
+    cfg.SetBool("Options", "perf_overlay_expanded", g_editorPanels.perfOverlayExpanded);
+    cfg.SetBool("Options", "perf_pane_fast", g_editorPanels.perfPaneFast);
     cfg.SetInt("Options", "unreal_move_speed", g_editorPanels.unrealMoveSpeed);
     cfg.SetFloat("Options", "gizmo_snap", g_editorPanels.gizmoSnap);
     cfg.SetFloat("Options", "gizmo_angle_snap", g_editorPanels.gizmoAngleSnap);

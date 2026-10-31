@@ -227,6 +227,16 @@ struct EditorPanelState {
     // wireframes so it is possible to see what the player will actually stand
     // on, and also reveals the generated SURF_COLLISION_PROXY boxes.
     bool showCollisionBounds = false;
+    // FrameProfiler overlay. Collection is always on; this only controls the
+    // on-screen panel. Persisted in [Options] perf_overlay, unlike the ablation
+    // switches in Diagnostics/PerfToggles.hpp.
+    bool perfOverlay = true;
+    bool perfOverlayExpanded = false;
+    // Secondary (non-active) panes draw level geometry only. Props/NPCs are the
+    // expensive half of a pane and a reference view does not need them; a 2x2
+    // layout otherwise pays ~5 ms of entity drawing four times over. Toggle off
+    // for a fully populated 4-view. Persisted because it is a workflow choice.
+    bool perfPaneFast = true;
     // Set when a Sub/Intersect brush produced no collision volume at all. The
     // sidebar paints the collision count red until the next brush is committed.
     bool collisionOpWarning = false;

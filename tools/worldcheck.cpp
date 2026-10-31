@@ -583,12 +583,137 @@ void auditAssetRefs(const std::string& gameDataRoot) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// --perf: static budget audit.
+//
+// This is the CI-able half of the FrameProfiler work. It cannot measure a GPU,
+// but the costs that actually collapsed Sektor_01 (per-face brush count and the
+// resulting draw calls, the light budget, emitter demand) are all visible in the
+// OZONE text. Warn-only: shipped content already has some heavy worlds and a
+// hard failure here would block every unrelated change.
+// ---------------------------------------------------------------------------
+static void PerfReport(const std::vector<OzonePrimitive>& prims) {
+    using namespace oz::surface;
+
+    int brushes = 0, perFace = 0, textured = 0, flags = 0, material = 0;
+    int facesTotal = 0, facesBlended = 0, facesGlow = 0, facesPortal = 0, facesBackdrop = 0;
+    int lights = 0, meshes = 0, portals = 0, emitters = 0;
+    int windZones = 0, pathNodes = 0, triggers = 0;
+    double particleDemand = 0.0;
+
+    for (const auto& p : prims) {
+        if (p.type >= OzonePrimitiveType::ENTITY_PLAYERSTART) {
+            switch (p.type) {
+                case OzonePrimitiveType::ENTITY_LIGHT: ++lights; break;
+                case OzonePrimitiveType::ENTITY_PORTAL: ++portals; break;
+                case OzonePrimitiveType::ENTITY_MESH_STATIC:
+                case OzonePrimitiveType::ENTITY_MESH_SKELETAL: ++meshes; break;
+                case OzonePrimitiveType::ENTITY_WIND_ZONE: ++windZones; break;
+                case OzonePrimitiveType::ENTITY_PATH_NODE: ++pathNodes; break;
+                case OzonePrimitiveType::ENTITY_TRIGGER: ++triggers; break;
+                case OzonePrimitiveType::ENTITY_PARTICLE_EMITTER: {
+                    ++emitters;
+                    // ParticleEmitter <type> x y z [rate life ...]; named
+                    // overrides win over the positional slot (same rule the loader
+                    // uses). Demand = steady live particles for that emitter.
+                    auto arg = [&](int idx, double def) {
+                        for (const auto& ov : p.particleOverrides)
+                            if (ov.first == idx) return (double)ov.second;
+                        return (idx >= 0 && idx < (int)p.args.size()) ? (double)p.args[(size_t)idx] : def;
+                    };
+                    const double rate = arg(3, 0.0);
+                    const double life = arg(4, 0.0);
+                    if (rate > 0.0 && life > 0.0) particleDemand += rate * life;
+                    break;
+                }
+                default: break;
+            }
+            continue;
+        }
+        if (p.type > OzonePrimitiveType::PLANE) continue;   // skybox/heightmap handled elsewhere
+        // AutoConvex collision proxies are never drawn. Counting them as
+        // per-face brushes made TestMap look like a 1,375-draw world.
+        if ((p.surface.def.flags & SURF_COLLISION_PROXY) ||
+            (p.surfaceFlags & SURF_COLLISION_PROXY))
+            continue;
+
+        ++brushes;
+        if (!p.texPath.empty() || p.surface.def.texSlot > 0) ++textured;
+        if (p.surface.def.flags != 0) ++flags;
+        if (!p.surface.def.material.empty()) ++material;
+        if (p.surface.NeedsPerFaceDraw()) ++perFace;
+
+        for (int f = 0; f < FACE_COUNT; ++f) {
+            const SurfaceProps& fp = p.surface.Resolve((SurfaceFace)f);
+            ++facesTotal;
+            if (fp.Has(SURF_TRANSLUCENT) || fp.Has(SURF_ALPHABLEND) || fp.Has(SURF_MODULATED))
+                ++facesBlended;
+            if (fp.Has(SURF_GLOW) && !fp.Has(SURF_INVISIBLE)) ++facesGlow;
+            if (fp.Has(SURF_PORTAL)) ++facesPortal;
+            if (fp.Has(SURF_FAKEBACKDROP) && !fp.Has(SURF_INVISIBLE)) ++facesBackdrop;
+        }
+    }
+
+    // Upper bound: a per-face brush issues one draw per face that has geometry.
+    // Five or six is the real shape of a box/cylinder; using six keeps the audit
+    // conservative (it can over-report, never under-report).
+    const int fastBrushes = brushes - perFace;
+    const int drawCalls = fastBrushes + perFace * FACE_COUNT;
+
+    printf("\n--- perf budget ---\n");
+    printf("  brushes: %d (fast %d, per-face %d, textured %d, flagged %d, material %d)\n",
+           brushes, fastBrushes, perFace, textured, flags, material);
+    printf("  faces: %d (blended %d, glow %d, portal %d, backdrop %d)\n",
+           facesTotal, facesBlended, facesGlow, facesPortal, facesBackdrop);
+    printf("  estimated draw calls: ~%d (budget 500)\n", drawCalls);
+    printf("  lights: %d (budget 24; 32 slots - 8 transient)\n", lights);
+    printf("  meshes: %d, emitters: %d, portals: %d, triggers: %d, wind: %d, path: %d\n",
+           meshes, emitters, portals, triggers, windZones, pathNodes);
+    printf("  particle demand: %.0f steady (budget 20000)\n", particleDemand);
+
+    if (drawCalls > 500) {
+        char msg[256];
+        snprintf(msg, sizeof msg,
+                 "perf: ~%d draw calls; %d per-face brushes (SURF flags/material/"
+                 "alpha/glow/pan or face overrides force the slow path)", drawCalls, perFace);
+        warn(msg);
+    }
+    if (perFace > 100) {
+        char msg[256];
+        snprintf(msg, sizeof msg,
+                 "perf: %d per-face brushes - check whether a brush-wide flag/"
+                 "material is really needed", perFace);
+        warn(msg);
+    }
+    if (lights > 24) {
+        char msg[256];
+        snprintf(msg, sizeof msg,
+                 "perf: %d lights; only 24 world lights survive with transients "
+                 "resident, the rest are decided per frame by the distance sort", lights);
+        warn(msg);
+    }
+    if (particleDemand > 20000.0) {
+        char msg[256];
+        snprintf(msg, sizeof msg,
+                 "perf: emitter demand %.0f particles; the pool cap is 2384 emitter "
+                 "slots, so this world is permanently saturated", particleDemand);
+        warn(msg);
+    }
+    if (meshes > 100) {
+        char msg[256];
+        snprintf(msg, sizeof msg,
+                 "perf: %d placed mesh props; they are frustum-culled per pane now, "
+                 "but still one draw each when visible", meshes);
+        warn(msg);
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
     if (argc < 2) {
         printf("usage: worldcheck <world.ozone> [--glb-bounds <file.json>] "
-               "[--headroom-all] [--asset-refs]\n");
+               "[--headroom-all] [--asset-refs] [--perf]\n");
         return 2;
     }
     std::string worldPath = argv[1];
@@ -599,10 +724,12 @@ int main(int argc, char** argv) {
     // Audit GameData's .ozls/.cfg path keys against the filesystem. Run once
     // (not per world) - it is GameData-wide, not world-scoped.
     bool assetRefs = false;
+    bool perf = false;
     for (int i = 2; i < argc; i++) {
         if (std::strcmp(argv[i], "--glb-bounds") == 0 && i + 1 < argc) glbJson = argv[i + 1];
         else if (std::strcmp(argv[i], "--headroom-all") == 0)    headroomAll = true;
         else if (std::strcmp(argv[i], "--asset-refs") == 0)      assetRefs = true;
+        else if (std::strcmp(argv[i], "--perf") == 0)            perf = true;
     }
 
     std::string worldDir = dirName(worldPath);
@@ -615,6 +742,8 @@ int main(int argc, char** argv) {
         return 1;
     }
     printf("  parsed %zu primitives\n\n", prims.size());
+
+    if (perf) PerfReport(prims);
 
     // ---- minimal JSON scan for glb bounds: "path" + "min":[..] "max":[..]
     std::map<std::string, Box3> models;

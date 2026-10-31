@@ -7,6 +7,8 @@
 // separate objects.
 // ============================================================================
 
+#include <string>   // std::wstring caches for the label change detection
+
 // =====================================================================
 // Stats Sidebar Ã¢â‚¬â€ docked native left panel (stats + toolbox)
 // =====================================================================
@@ -59,6 +61,18 @@ void LayoutStatsSidebar(int clientW, int clientH, int topOffset, int width) {
     int w = width > 0 ? width : STATS_SIDEBAR_W;
     int h = clientH - topOffset;
     if (h < 1) h = 1;
+
+    // SetWindowPos with SWP_SHOWWINDOW on every frame invalidated the whole
+    // sidebar (and its child STATIC controls) once per frame. The docked panel
+    // only changes on a resize, a layout change or a window recreation.
+    static HWND s_lastHwnd = nullptr;
+    static int s_lastW = -1, s_lastH = -1, s_lastTop = -1;
+    if (s_lastHwnd == hwnd && s_lastW == w && s_lastH == h && s_lastTop == topOffset)
+        return;
+    s_lastHwnd = hwnd;
+    s_lastW = w;
+    s_lastH = h;
+    s_lastTop = topOffset;
     SetWindowPos(hwnd, HWND_TOP, 0, topOffset, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
 
@@ -72,41 +86,54 @@ void UpdateStatsSidebar(float posX, float posY, float posZ,
     HWND hwnd = (HWND)g_editorPanels.hStatsSidebar;
     if (!hwnd) return;
 
+    // Only push a label when its text actually changed. This used to call
+    // SetWindowTextW nine times per frame; each one invalidates the STATIC and
+    // makes GDI repaint the panel, for values that change once per drag.
+    static HWND s_lastHwnd = nullptr;
+    static std::wstring s_pos, s_size, s_rot, s_coll, s_chunks, s_mode, s_cam, s_world;
+    if (s_lastHwnd != hwnd) {
+        s_lastHwnd = hwnd;
+        s_pos.clear(); s_size.clear(); s_rot.clear(); s_coll.clear();
+        s_chunks.clear(); s_mode.clear(); s_cam.clear(); s_world.clear();
+    }
     wchar_t buf[128];
-    auto setA = [](HWND h, const wchar_t* t) {
-        if (h) SetWindowTextW(h, t);
+    auto setA = [](HWND h, const wchar_t* t, std::wstring& cache) {
+        if (h && cache != t) {
+            SetWindowTextW(h, t);
+            cache = t;
+        }
     };
 
     swprintf(buf, 128, L"Pos: %.1f %.1f %.1f", posX, posY, posZ);
-    setA(g_sbPos, buf);
+    setA(g_sbPos, buf, s_pos);
     swprintf(buf, 128, L"Size: %.1f x %.1f x %.1f", sizeX, sizeY, sizeZ);
-    setA(g_sbSize, buf);
+    setA(g_sbSize, buf, s_size);
     swprintf(buf, 128, L"Rot: %.0f  Scale: %.1f", rot, scale);
-    setA(g_sbRot, buf);
-swprintf(buf, 128, L"Collision: %d vols", collisionVols);
+    setA(g_sbRot, buf, s_rot);
+    swprintf(buf, 128, L"Collision: %d vols", collisionVols);
     // A Sub/Intersect brush that produced no volume leaves the brush rendering
     // but the player falling through it, and that is invisible from the
     // viewport. Say so on the counter until the next brush is committed.
     if (g_editorPanels.collisionOpWarning)
         swprintf(buf, 128, L"Collision: %d vols  << NO SOLID", collisionVols);
-    setA(g_sbColl, buf);
+    setA(g_sbColl, buf, s_coll);
     swprintf(buf, 128, L"Chunks: %d", chunks);
-    setA(g_sbChunks, buf);
+    setA(g_sbChunks, buf, s_chunks);
     {
         wchar_t modeW[32] = L"MODEL";
         if (mode && mode[0])
             MultiByteToWideChar(CP_UTF8, 0, mode, -1, modeW, 32);
         swprintf(buf, 128, L"Mode: %ls", modeW);
-        setA(g_sbMode, buf);
+        setA(g_sbMode, buf, s_mode);
     }
     swprintf(buf, 128, L"%.1f %.1f %.1f", camX, camY, camZ);
-    setA(g_sbCam, buf);
+    setA(g_sbCam, buf, s_cam);
 
     // World size (Phase 5.3): one line, brushes / meshes / NPCs, so the level's
     // weight is visible without expanding the WorldGraph.
     swprintf(buf, 128, L"World: %d br  %d mesh  %d NPC",
              stats.brushes, stats.meshes, stats.npcs);
-    setA(g_sbWorld, buf);
+    setA(g_sbWorld, buf, s_world);
 }
 
 static LRESULT CALLBACK StatsSidebarProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {

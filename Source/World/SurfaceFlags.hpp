@@ -292,6 +292,12 @@ struct BrushSurface {
     }
 
     // True when the brush needs the per-face draw path.
+    //
+    // This is about SHADER UNIFORMS and FACE OVERRIDES, not about whether a
+    // texture was authored: a brush-wide texPath/texSlot/UV is already baked
+    // into the model material or the mesh texcoords, so it draws identically
+    // with one DrawModelEx. Treating it as "non-default" made whole worlds
+    // (Sektor_01, World_endless_snow, KryoArchipel) pay 6 draws per brush.
     bool NeedsPerFaceDraw() const;
     // True when the brush-wide default alone already forces the surface shader.
     bool DefIsNonDefault() const { return def.IsNonDefault(); }

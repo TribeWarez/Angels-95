@@ -26,8 +26,13 @@
 #include "Menu/SkillTree.hpp"
 #include "Menu/SpellBook.hpp"
 #include "UI/UiHandler.hpp"
+#include "Diagnostics/FrameProfiler.hpp"
+#include "Diagnostics/ProfilerOverlay.hpp"
+#include "Diagnostics/PerfToggles.hpp"
+#include "Diagnostics/BenchMode.hpp"
 #include <cmath>
 #include <memory>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
@@ -472,6 +477,88 @@ static void ExecuteConsoleCommand(const char* cmd) {
         // dialog does not pause from here - the console is an overlay too.)
         advopts::Toggle();
         OZ_INFO("Advanced Options %s", advopts::g_open ? "open" : "closed");
+    } else if (strncmp(cmd, "/perf", 5) == 0 && (cmd[5] == '\0' || cmd[5] == ' ')) {
+        // FrameProfiler control. /perf with no argument toggles the overlay, the
+        // same action as the toolbar chip and F9, so the three cannot diverge.
+        const char* arg = cmd + 5;
+        while (*arg == ' ') arg++;
+        auto& prof = oz::diag::Profiler();
+
+        auto perfHeader = [&](char* out, size_t cap) {
+            std::snprintf(out, cap,
+                          "# Angels95 build=%s\n# world=%s\n# resolution=%dx%d\n"
+                          "# overlay=%d expanded=%d\n",
+                          oz::kBuildVersion, g_world_to_load,
+                          GetScreenWidth(), GetScreenHeight(),
+                          PerfOverlay ? 1 : 0, PerfOverlayExpanded ? 1 : 0);
+        };
+
+        if (!*arg) {
+            PerfOverlay = !PerfOverlay;
+            OZ_INFO("Perf overlay %s", PerfOverlay ? "ON" : "OFF");
+        } else if (strcmp(arg, "on") == 0) {
+            prof.SetEnabled(true);
+            prof.Reset();
+            OZ_INFO("Perf collection ON (reset)");
+        } else if (strcmp(arg, "off") == 0) {
+            prof.SetEnabled(false);
+            OZ_INFO("Perf collection OFF");
+        } else if (strcmp(arg, "reset") == 0) {
+            prof.Reset();
+            OZ_INFO("Perf counters reset");
+        } else if (strcmp(arg, "expanded") == 0) {
+            PerfOverlayExpanded = !PerfOverlayExpanded;
+            OZ_INFO("Perf overlay %s", PerfOverlayExpanded ? "EXPANDED" : "COMPACT");
+        } else if (strcmp(arg, "top") == 0 || strcmp(arg, "dump") == 0) {
+            const std::string summary = prof.Summary();
+            OZ_INFO("Perf summary:\n%s", summary.c_str());
+            if (strcmp(arg, "dump") == 0) {
+                char header[512];
+                perfHeader(header, sizeof(header));
+                const char* path = "System/perf_summary.txt";
+                if (prof.DumpSummary(path, header))
+                    OZ_INFO("Perf summary appended to %s", path);
+                else
+                    OZ_WARN("Perf summary: could not write %s", path);
+            }
+        } else if (strcmp(arg, "csv") == 0 || strncmp(arg, "csv ", 4) == 0) {
+            const char* path = arg + 3;
+            while (*path == ' ') path++;
+            if (!*path) path = "System/perf_frames.csv";
+            char header[512];
+            perfHeader(header, sizeof(header));
+            if (prof.DumpCSV(path, header, 0))
+                OZ_INFO("Perf CSV written: %s (%d frames)", path, prof.FramesRecorded());
+            else
+                OZ_WARN("Perf CSV: could not write %s", path);
+        } else if (strncmp(arg, "isolate", 7) == 0) {
+            const char* p = arg + 7;
+            while (*p == ' ') p++;
+            if (!*p) {
+                OZ_INFO("Perf isolate systems: %s", oz::diag::PerfSystemList());
+            } else {
+                char name[64];
+                int n = 0;
+                while (*p && *p != ' ' && n < (int)sizeof(name) - 1)
+                    name[n++] = *p++;
+                name[n] = '\0';
+                while (*p == ' ') p++;
+                bool on;
+                if (strcmp(p, "on") == 0) on = true;
+                else if (strcmp(p, "off") == 0) on = false;
+                else on = !oz::diag::PerfOn(name);
+                if (!oz::diag::PerfSet(name, on))
+                    OZ_WARN("Perf isolate: unknown system '%s' (try: %s)",
+                            name, oz::diag::PerfSystemList());
+                else
+                    OZ_INFO("Perf isolate %s = %s", name, on ? "ON" : "OFF");
+            }
+        } else if (strcmp(arg, "list") == 0) {
+            OZ_INFO("Perf isolate systems: %s", oz::diag::PerfSystemList());
+        } else {
+            OZ_INFO("Usage: /perf [on|off|reset|expanded|top|dump|csv [path]|"
+                    "isolate <system> [on|off]|list]");
+        }
     } else if (strncmp(cmd, "/connect ", 9) == 0 || strcmp(cmd, "/connect") == 0) {
         const char* arg = (cmd[8] == ' ') ? cmd + 9 : "";
         while (*arg == ' ') arg++;
@@ -575,9 +662,12 @@ static void HandleConsoleInput() {
 
 int main(int argc, char** argv){
     RelocateToInstallRoot();
+    oz::diag::RegisterBuiltinCounters();
 
     // CLI args
     bool worldExplicit = false;
+    bool periodExplicit = false;
+    bool periodRequested = false;
     for (int i = 1; i < argc; i++) {
         const char* arg = argv[i];
         const std::string argLower = JoinUri::Lower(arg);
@@ -611,6 +701,75 @@ int main(int argc, char** argv){
                 OZ_WARN("Bad --shot-cam (expected x,y,z,yaw[,pitch]): %s", argv[i]);
         } else if (strcmp(arg, "--shot-hud") == 0) {
             g_shot.hideHud = false;
+        } else if (strcmp(arg, "--period") == 0) {
+            periodExplicit = true;
+            periodRequested = true;
+        } else if (strcmp(arg, "--no-period") == 0) {
+            periodExplicit = true;
+            periodRequested = false;
+        } else if (strcmp(arg, "--no-cull") == 0) {
+            oz::diag::PerfSet("cull", false);
+        } else if (strcmp(arg, "--cull") == 0) {
+            oz::diag::PerfSet("cull", true);
+        } else if (strcmp(arg, "--bench") == 0 || strcmp(arg, "--bench-frames") == 0) {
+            // --bench takes an OPTIONAL frame count; only consume the next argv
+            // when it looks like a number, or `--bench --bench-cam ...` would eat
+            // the flag as a frame count.
+            auto& b = oz::diag::Bench();
+            b.active = true;
+            g_skipMenu = true;
+            if (i + 1 < argc && argv[i + 1][0] != '-')
+                b.frames = std::max(1, atoi(argv[++i]));
+            else if (strcmp(arg, "--bench-frames") == 0)
+                OZ_WARN("--bench-frames needs a frame count");
+        } else if (strcmp(arg, "--bench-warmup") == 0 && i + 1 < argc) {
+            oz::diag::Bench().active = true;
+            g_skipMenu = true;
+            oz::diag::Bench().warmup = std::max(0, atoi(argv[++i]));
+        } else if (strcmp(arg, "--bench-csv") == 0 && i + 1 < argc) {
+            oz::diag::Bench().active = true;
+            g_skipMenu = true;
+            oz::diag::Bench().csvPath = argv[++i];
+        } else if (strcmp(arg, "--bench-cam") == 0 && i + 1 < argc) {
+            auto& b = oz::diag::Bench();
+            b.active = true;
+            g_skipMenu = true;
+            if (ParseShotCam(argv[++i], b.cam)) b.hasCam = true;
+            else OZ_WARN("Bad --bench-cam (expected x,y,z,yaw[,pitch]): %s", argv[i]);
+        } else if (strcmp(arg, "--bench-phase") == 0 && i + 1 < argc) {
+            auto& b = oz::diag::Bench();
+            b.active = true;
+            g_skipMenu = true;
+            const std::string phase = JoinUri::Lower(argv[++i]);
+            if (phase == "render") b.freezeSim = true;
+            else if (phase == "all") b.freezeSim = false;
+            else OZ_WARN("Bad --bench-phase (expected render|all): %s", phase.c_str());
+        } else if (strcmp(arg, "--bench-res") == 0 && i + 1 < argc) {
+            auto& b = oz::diag::Bench();
+            b.active = true;
+            g_skipMenu = true;
+            int w = 0, h = 0;
+            if (sscanf(argv[++i], "%dx%d", &w, &h) == 2 && w >= 320 && h >= 240) {
+                b.width = w; b.height = h;
+            } else {
+                OZ_WARN("Bad --bench-res (expected WxH): %s", argv[i]);
+            }
+        } else if (strcmp(arg, "--bench-disable") == 0 && i + 1 < argc) {
+            auto& b = oz::diag::Bench();
+            b.active = true;
+            g_skipMenu = true;
+            std::string list = argv[++i];
+            size_t start = 0;
+            while (start <= list.size()) {
+                size_t comma = list.find(',', start);
+                std::string name = list.substr(start, comma == std::string::npos
+                                                        ? std::string::npos
+                                                        : comma - start);
+                if (!name.empty() && !oz::diag::PerfSet(name.c_str(), false))
+                    OZ_WARN("--bench-disable: unknown system '%s'", name.c_str());
+                if (comma == std::string::npos) break;
+                start = comma + 1;
+            }
         } else if (strcmp(arg, "--menu-shot") == 0 && i + 1 < argc) {
             const std::string page = JoinUri::Lower(argv[++i]);
             if (page == "home") g_menuShotPage = 0;
@@ -644,6 +803,14 @@ int main(int argc, char** argv){
             if (!ApplyJoinTarget(arg))
                 OZ_WARN("Unrecognized join URI: %s", arg);
         }
+    }
+
+    // A benchmark is a measurement run, not a capture: mixing the two would let
+    // the screenshot readback (a synchronous GPU->CPU copy) dominate every
+    // frame. Bench wins and the conflicting mode is reported.
+    if (oz::diag::Bench().active && g_shot.active) {
+        OZ_WARN("--bench and --shot are mutually exclusive; running the benchmark");
+        g_shot.active = false;
     }
 
     // --host / --host-mission: spawn a local dedicated server, then
@@ -691,6 +858,10 @@ int main(int argc, char** argv){
     // VSync and MSAA are applied by InitWindow.
     LoadClientSettings();
 
+    // --period/--no-period are explicit CLI overrides; the INI load above would
+    // otherwise replace the value parsed from argv.
+    if (periodExplicit) PeriodRenderProfile = periodRequested;
+
     if (g_menuShotPage >= 0 && g_shot.resWidth > 0 && g_shot.resHeight > 0) {
         ConfigWindowWidth = g_shot.resWidth;
         ConfigWindowHeight = g_shot.resHeight;
@@ -718,11 +889,41 @@ ShowSkillTree = false;
 ShowSpellbook = false;
     }
 
+    if (oz::diag::Bench().active) {
+        // Same determinism contract as --shot, plus: the overlay must not draw
+        // (it would add work to the frame being measured), the frame rate must be
+        // uncapped, and the warm-up window is the caller's to choose.
+        auto& b = oz::diag::Bench();
+        // A benchmark must not inherit the user's saved window size: two runs of
+        // the same world at 960x540 and 1280x720 are not comparable. Pin the
+        // default to 1280x720 and let --bench-res override it explicitly.
+        ConfigWindowWidth  = (b.width  > 0) ? b.width  : 1280;
+        ConfigWindowHeight = (b.height > 0) ? b.height : 720;
+        VSYNCToggle   = false;
+        MXAAToggle    = false;
+        PixelShader   = false;
+        JitterEnabled = false;
+        FogEnabled    = false;
+        HeadBob       = false;
+        Debug         = false;
+        FPSEnabled    = false;
+        PerfOverlay   = false;
+        ShowSettings  = false;
+        ShowInventory = false;
+        ShowSkillTree = false;
+        ShowSpellbook = false;
+        OZ_INFO("Bench: world='%s' frames=%d warmup=%d phase=%s csv='%s' res=%dx%d",
+                g_world_to_load, b.frames, b.warmup,
+                b.freezeSim ? "render" : "all", b.csvPath.c_str(),
+                ConfigWindowWidth, ConfigWindowHeight);
+    }
+
     // Browser deep links (angels95://join/...) need an OS protocol handler.
     // HKCU / user .desktop only, so no elevation is required.
-    if (!g_shot.active && ProtocolHandler::EnsureRegistered())
+    const bool benchRun = oz::diag::Bench().active;
+    if (!g_shot.active && !benchRun && ProtocolHandler::EnsureRegistered())
         OZ_INFO("Protocol handler: angels95:// -> %s", ProtocolHandler::ExecutablePath().c_str());
-    else if (!g_shot.active)
+    else if (!g_shot.active && !benchRun)
         OZ_WARN("Protocol handler: angels95:// registration unavailable");
     if (VSYNCToggle) SetConfigFlags(FLAG_VSYNC_HINT);
     if (MXAAToggle)  SetConfigFlags(FLAG_MSAA_4X_HINT);
@@ -741,11 +942,14 @@ ShowSpellbook = false;
                g_shot.active ? "Angels95 [shot]" : "Angels95");
     SetWindowMinSize(960, 600);
     SetExitKey(0);
-    SetTargetFPS(60);
+    if (!benchRun) SetTargetFPS(60);   // a benchmark measures the uncapped frame
+    // The window is created hidden for the splash gate; a benchmark has no
+    // splash and needs a real backbuffer/swap or every number would be CPU-only.
+    if (benchRun) ClearWindowState(FLAG_WINDOW_HIDDEN);
 
-    // Audio is pointless for a capture run and the device init adds latency and
-    // a failure mode on headless CI boxes.
-    if (!g_shot.active) {
+    // Audio is pointless for a capture/benchmark run and the device init adds
+    // latency and a failure mode on headless CI boxes.
+    if (!g_shot.active && !benchRun) {
         InitAudioDevice();
 
         if (IsAudioDeviceReady()) {
@@ -811,6 +1015,26 @@ ShowSpellbook = false;
             }
         },
         []() { oz::ui::ShowAboutDialog(); },
+        // Perf > Toggle Perf Overlay (same flag as F9 and /perf).
+        []() {
+            PerfOverlay = !PerfOverlay;
+            OZ_INFO("Perf overlay %s", PerfOverlay ? "ON" : "OFF");
+        },
+        // Perf > Dump Perf Report.
+        []() {
+            auto& prof = oz::diag::Profiler();
+            char header[512];
+            std::snprintf(header, sizeof(header),
+                          "# Angels95 build=%s\n# world=%s\n# resolution=%dx%d\n",
+                          oz::kBuildVersion, g_world_to_load,
+                          GetScreenWidth(), GetScreenHeight());
+            const std::string summary = prof.Summary();
+            OZ_INFO("Perf summary:\n%s", summary.c_str());
+            if (prof.DumpSummary("System/perf_summary.txt", header))
+                OZ_INFO("Perf summary appended to System/perf_summary.txt");
+            else
+                OZ_WARN("Perf summary: could not write System/perf_summary.txt");
+        },
     });
 
     static bool g_returnToMenu = false;
@@ -830,7 +1054,7 @@ ShowSpellbook = false;
     // booting, but BEFORE PlayHomeScreen(), which blocks on menu.Tick(): a
     // hidden Win32 window is not hit-tested, so the title menu would receive no
     // clicks at all and the process would look hung.
-    PlaySplashScreen();
+    if (!oz::diag::Bench().active) PlaySplashScreen();
 
     // Set by the screenshot tick once every camera is captured. It ends both
     // loops without closing the window, so the single CloseWindow() at the end
@@ -1152,9 +1376,34 @@ ShowSpellbook = false;
 
     HideCursor(); 
     DisableCursor();  
-    
+
+    auto& benchSession = oz::diag::Bench();
+    int benchFrameCount = 0;
+
     while (!WindowShouldClose() && !g_returnToMenu && !g_quitRequested)
     {
+        // Profiler frame boundary. RAII, not Begin/End pair: the pause and
+        // game-over paths below `continue` after EndDrawing, and a manual pair
+        // would leave those frames permanently open.
+        oz::diag::FrameGuard oz_frame_guard;
+
+        // Stutter capture is produced by the previous EndFrame; log it here so
+        // the report is written outside the measured frame.
+        {
+            std::string stutter;
+            if (oz::diag::Profiler().TakeStutterReport(stutter))
+                OZ_WARN("Perf %s", stutter.c_str());
+        }
+
+        // F9 = compact/expanded toggle. Shift+F9 flips the detail level, so the
+        // toolbar/menu/console/hotkey all drive the same two flags.
+        if (IsKeyPressed(KEY_F9)) {
+            if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT))
+                PerfOverlayExpanded = !PerfOverlayExpanded;
+            else
+                PerfOverlay = !PerfOverlay;
+        }
+
         // Borderless window drag (Alt+Left), so the window can be moved while
         // paused or in a menu even though it has no OS title bar.
         HandleBorderlessWindowDrag();
@@ -1211,9 +1460,12 @@ ShowSpellbook = false;
             // Put the frozen world back on screen. Use the RESOLVED (graded) image
             // when the post chain has one - drawing the float scene here would skip
             // the grade and could clip.
-            Texture2D frozen = oz::PostFX::Instance().Ready()
-                                   ? oz::PostFX::Instance().ResolvedTexture()
-                                   : Target.texture;
+            // ResolvedTexture() is {0} until Resolve() has run at least once.
+            // The period profile (and an unavailable post chain) skips Resolve
+            // entirely, so fall back to the scene target instead of drawing a
+            // null texture over the pause menu.
+            Texture2D resolvedFrame = oz::PostFX::Instance().ResolvedTexture();
+            Texture2D frozen = (resolvedFrame.id > 0) ? resolvedFrame : Target.texture;
             DrawTexturePro(frozen,
                            (Rectangle){0, 0, (float)frozen.width, (float)-frozen.height},
                            (Rectangle){0, 0, (float)GetScreenWidth(),
@@ -1462,7 +1714,19 @@ ShowSpellbook = false;
             }
         }
 
-        DrawWorld();
+        // Benchmark camera: same fixed-frame contract as a shot, applied every
+        // frame so mouse-look/physics cannot drift the viewpoint between runs.
+        if (benchSession.active) {
+            g_playerMovement.isNoClip = true;
+            g_playerMovement.LookInit = true;
+            if (benchSession.hasCam)
+                ApplyShotCamera(AngelTechData.MainCamera, benchSession.cam);
+        }
+
+        {
+            OZ_PROFILE_SCOPE("frame.world");
+            DrawWorld();
+        }
 
         BeginDrawing();  
 
@@ -1491,8 +1755,16 @@ ShowSpellbook = false;
         // Resolve the HDR scene through bloom + grade into the LDR result. The
         // Pixel/Jitter post shaders below still expect a display-ready texture, so
         // they draw the RESOLVED image, not the float scene.
-        Texture2D resolved = oz::PostFX::Instance().Resolve(
-            Target, Target.texture.width, Target.texture.height);
+        //
+        // `postfx` is an ablation switch, not a setting: turning it off shows the
+        // raw scene target, which is how you tell a fill-rate problem in the
+        // post chain from one in the world pass.
+        Texture2D resolved = {0};
+        if (!PeriodRenderProfile && oz::diag::PerfOn("postfx")) {
+            OZ_PROFILE_SCOPE("frame.postfx");
+            resolved = oz::PostFX::Instance().Resolve(
+                Target, Target.texture.width, Target.texture.height);
+        }
         Texture2D finalTex = (resolved.id > 0) ? resolved : Target.texture;
 
         // Apply post-processing shaders during final blit
@@ -1834,7 +2106,29 @@ ShowSpellbook = false;
             oz::DrawCrosshair(frame);
         }
 
+        // Perf overlay: last, so it sits above every HUD element, and suppressed
+        // in screenshot mode (a capture must never contain the profiler).
+        if (PerfOverlay && !g_shot.active) {
+            OZ_PROFILE_SCOPE("hud.perf_overlay");
+            oz::diag::DrawProfilerOverlay(8, 8, PerfOverlayExpanded);
+        }
+
         EndDrawing();
+
+        // Benchmark bookkeeping. `warmup` frames absorb shader compilation,
+        // first-use texture uploads and cache warm-up; the history is reset
+        // exactly at that boundary so the CSV contains only measured frames.
+        if (benchSession.active) {
+            ++benchFrameCount;
+            if (benchFrameCount == benchSession.warmup) {
+                oz::diag::Profiler().Reset();
+                OZ_INFO("Bench: warm-up complete, measuring %d frames", benchSession.frames);
+            }
+            if (benchFrameCount >= benchSession.warmup + benchSession.frames) {
+                benchSession.done = true;
+                break;
+            }
+        }
 
         // Screenshot capture. Runs after EndDrawing so LoadImageFromScreen sees
         // the finished frame, and it consumes the loop when every camera is done.
@@ -1854,6 +2148,31 @@ ShowSpellbook = false;
 
 
     } // end inner game loop
+
+    // Benchmark result. Dumped AFTER the loop so the final measured frame's
+    // EndFrame has already landed in the history.
+    if (benchSession.active && benchSession.done) {
+        char header[768];
+        std::snprintf(header, sizeof(header),
+                      "# Angels95 build=%s\n# world=%s\n# frames=%d warmup=%d phase=%s\n"
+                      "# resolution=%dx%d\n# camera=%s\n",
+                      oz::kBuildVersion, g_world_to_load,
+                      benchSession.frames, benchSession.warmup,
+                      benchSession.freezeSim ? "render" : "all",
+                      GetScreenWidth(), GetScreenHeight(),
+                      benchSession.hasCam ? "custom" : "playerstart");
+        if (oz::diag::Profiler().DumpCSV(benchSession.csvPath.c_str(), header,
+                                         benchSession.frames))
+            OZ_INFO("Bench CSV -> %s (%d frames)", benchSession.csvPath.c_str(),
+                    benchSession.frames);
+        else
+            OZ_WARN("Bench CSV: could not write %s", benchSession.csvPath.c_str());
+        const std::string summary = oz::diag::Profiler().Summary();
+        OZ_INFO("Bench summary:\n%s", summary.c_str());
+        oz::diag::Profiler().DumpSummary("System/perf_summary.txt", header);
+        // End the outer loop through the same flag every other exit path uses.
+        g_quitRequested = true;
+    }
 
     // Cleanup before returning to menu
     g_client.disconnect();

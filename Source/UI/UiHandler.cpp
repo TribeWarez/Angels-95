@@ -14,6 +14,8 @@ constexpr UINT kIdmFileQuit = 1003;
 constexpr UINT kIdmSettings = 2001;
 constexpr UINT kIdmAdvancedSettings = 2002;
 constexpr UINT kIdmAbout    = 3001;
+constexpr UINT kIdmPerfOverlay = 4001;
+constexpr UINT kIdmPerfDump    = 4002;
 
 WNDPROC g_originalWndProc = nullptr;
 const MenuBarCallbacks* g_callbacks = nullptr;
@@ -38,6 +40,12 @@ LRESULT CALLBACK ClientWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
                 return 0;
             case kIdmAbout:
                 if (g_callbacks->onAbout) g_callbacks->onAbout();
+                return 0;
+            case kIdmPerfOverlay:
+                if (g_callbacks->onTogglePerfOverlay) g_callbacks->onTogglePerfOverlay();
+                return 0;
+            case kIdmPerfDump:
+                if (g_callbacks->onDumpPerf) g_callbacks->onDumpPerf();
                 return 0;
         }
     }
@@ -70,6 +78,14 @@ void CreateNativeMenuBar(const MenuBarCallbacks& callbacks) {
     // popup handle that was never created, which did not compile.
     AppendMenuA(hSettingsMenu, MF_STRING, kIdmAdvancedSettings, "&Advanced Options...");
     AppendMenuA(hMenuBar, MF_POPUP, (UINT_PTR)hSettingsMenu, "&Settings");
+    // Perf menu. The client has no other discoverable entry point for the
+    // FrameProfiler (F9 and `/perf` are the other two, and both drive the same
+    // flag), so it lives at the top level rather than under Settings: it is a
+    // diagnostic surface, not a player preference.
+    HMENU hPerfMenu = CreatePopupMenu();
+    AppendMenuA(hPerfMenu, MF_STRING, kIdmPerfOverlay, "&Toggle Perf Overlay\tF9");
+    AppendMenuA(hPerfMenu, MF_STRING, kIdmPerfDump, "&Dump Perf Report");
+    AppendMenuA(hMenuBar, MF_POPUP, (UINT_PTR)hPerfMenu, "&Perf");
     HMENU hAboutMenu = CreatePopupMenu();
     AppendMenuA(hAboutMenu, MF_STRING, kIdmAbout, "&About Angels95...");
     AppendMenuA(hMenuBar, MF_POPUP, (UINT_PTR)hAboutMenu, "&?");

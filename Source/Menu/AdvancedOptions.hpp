@@ -290,6 +290,10 @@ inline std::vector<Row>& Rows() {
                            "Blood decals and death gore."));
     rows.push_back(BoolRow(N_Effects, "Post FX", &PostFXEnabled, nullptr,
                            "HDR bloom + display grade."));
+    rows.push_back(BoolRow(N_Effects, "Period Render Profile", &PeriodRenderProfile, nullptr,
+                           "Bypass HDR/bloom, use an RGBA8 scene target, cap the shader "
+                           "light loop and draw at most 800 particles. For low-end / "
+                           "period-class hardware; the Post FX settings are preserved."));
     rows.push_back(FloatRow(N_Effects, "Exposure", &PostExposure, 0.25f, 3.0f));
     rows.push_back(FloatRow(N_Effects, "Bloom", &PostBloom, 0.0f, 3.0f));
     rows.push_back(FloatRow(N_Effects, "Vignette", &PostVignette, 0.0f, 0.8f));

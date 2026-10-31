@@ -19,6 +19,7 @@
 #include "../Source/Renderer/CombatFX.hpp"
 #include "../Source/Renderer/CombatFeedback.hpp"
 #include "../Source/GameplayFlags.hpp"
+#include "../Source/World/OzoneFrustum.hpp"
 #include <cstdio>
 #include <cassert>
 #include <cmath>
@@ -1807,6 +1808,34 @@ static int test_gravity_integrator_falls_along_up() {
     PASS(); return 0; END_TEST();
 }
 
+// The frustum planes were built from only the two DIAGONAL corners of each
+// face, so near/far had zero normals and left/right/top/bottom were duplicates.
+// Culling was dead for years (hasBounds was never assigned), which hid this;
+// once culling worked it rejected visible walls. Pin the shape with a camera
+// looking +X: front passes, behind/above/right fail, every normal is unit.
+static int test_frustum_planes_are_valid() {
+    TEST("frustum planes keep the front and reject behind/above/right");
+    Camera3D cam{};
+    cam.position = {0.0f, 0.0f, 0.0f};
+    cam.target = {10.0f, 0.0f, 0.0f};
+    cam.up = {0.0f, 1.0f, 0.0f};
+    cam.fovy = 60.0f;
+    FrustumPlane planes[6];
+    BuildFrustum(cam, planes, 16.0f / 9.0f);
+    for (int i = 0; i < 6; ++i)
+        CHECK(Vector3Length(planes[i].normal) > 0.9f);
+
+    BoundingBox front = {{95.0f, -5.0f, -5.0f}, {105.0f, 5.0f, 5.0f}};
+    CHECK(AabbInFrustum(planes, front));
+    BoundingBox behind = {{-105.0f, -5.0f, -5.0f}, {-95.0f, 5.0f, 5.0f}};
+    CHECK(!AabbInFrustum(planes, behind));
+    BoundingBox above = {{95.0f, -5.0f, 200.0f}, {105.0f, 5.0f, 220.0f}};
+    CHECK(!AabbInFrustum(planes, above));
+    BoundingBox right = {{95.0f, 200.0f, -5.0f}, {105.0f, 220.0f, 5.0f}};
+    CHECK(!AabbInFrustum(planes, right));
+    PASS(); return 0; END_TEST();
+}
+
 int main() {
     // Unbuffered: this binary is the one suite that has ever died without a
     // diagnostic (a segfault on Linux CI printed nothing, because stdout is
@@ -1865,6 +1894,7 @@ int main() {
     failures += test_spawn_clears_network_ownership();
     failures += test_status_released_when_pawn_becomes_server_owned();
     failures += test_bone_ids_fit_skeleton();
+    failures += test_frustum_planes_are_valid();
 
     fprintf(stdout, "==================\n");
     fprintf(stdout, "%d/%d passed, %d failed\n",

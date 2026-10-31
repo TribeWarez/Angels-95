@@ -3,6 +3,7 @@
 #include "ShadingTuning.hpp"
 #include "../GameplayFlags.hpp"
 #include "../Log.hpp"
+#include "../Diagnostics/FrameProfiler.hpp"
 #include <cmath>
 
 // Transient effect lights. Static storage: effect lights must outlive any single
@@ -43,9 +44,80 @@ void LitLightning_Animate(LightNode& node, float dt) {
 }
 
 // ---------------------------------------------------------------------------
+// Cached uniform locations, per shader PROGRAM.
+//
+// This used to call GetShaderLocation 12 times per light AND 12 times for every
+// unused slot, every frame, for every program (LitFog, Surface.fs, Wind):
+// ~2,300 string-formatted glGetUniformLocation calls per frame, each allocating
+// through TextFormat. Uniform locations are fixed for the lifetime of a linked
+// program, so they are resolved once per program id and reused.
+//
+// The shader-id key also handles a hot-reloaded/re-linked program: a new id is a
+// new cache entry, and the oldest entry is recycled when the table fills.
+// ---------------------------------------------------------------------------
+namespace {
+constexpr int kLightFieldCount = 12;
+constexpr int kLightCachePrograms = 8;
+
+struct ShaderLightLocs {
+    unsigned int id = 0;
+    int locs[MAX_LIGHTS][kLightFieldCount];
+    // Number of slots the fragment loop must evaluate. When the shader has it,
+    // the disabled tail is never read, so it no longer needs to be uploaded at
+    // all. A legacy shader (loc < 0) falls back to the disable-the-tail path.
+    int lightCountLoc = -1;
+    // Legacy path: slots from `lastSubmitted` upward were already disabled last
+    // frame, so only a DROP in the submitted count needs the tail re-uploaded.
+    int lastSubmitted = MAX_LIGHTS;
+    bool uploadedOnce = false;
+};
+ShaderLightLocs g_lightLocs[kLightCachePrograms];
+int g_lightLocPrograms = 0;
+
+ShaderLightLocs* LightLocsFor(Shader shader) {
+    if (shader.id == 0) return nullptr;
+
+    for (int i = 0; i < g_lightLocPrograms; ++i)
+        if (g_lightLocs[i].id == shader.id) return &g_lightLocs[i];
+
+    int slot = (g_lightLocPrograms < kLightCachePrograms)
+                   ? g_lightLocPrograms++
+                   : 0;   // recycle; the engine has three programs, this is defensive
+    ShaderLightLocs& entry = g_lightLocs[slot];
+    entry.id = shader.id;
+    entry.lightCountLoc = GetShaderLocation(shader, "uLightCount");
+
+    for (int i = 0; i < MAX_LIGHTS; ++i) {
+        int* l = entry.locs[i];
+        l[0]  = GetShaderLocation(shader, TextFormat("lights[%i].enabled", i));
+        l[1]  = GetShaderLocation(shader, TextFormat("lights[%i].type", i));
+        l[2]  = GetShaderLocation(shader, TextFormat("lights[%i].position", i));
+        l[3]  = GetShaderLocation(shader, TextFormat("lights[%i].target", i));
+        l[4]  = GetShaderLocation(shader, TextFormat("lights[%i].color", i));
+        l[5]  = GetShaderLocation(shader, TextFormat("lights[%i].intensity", i));
+        l[6]  = GetShaderLocation(shader, TextFormat("lights[%i].radius", i));
+        l[7]  = GetShaderLocation(shader, TextFormat("lights[%i].innerCone", i));
+        l[8]  = GetShaderLocation(shader, TextFormat("lights[%i].outerCone", i));
+        l[9]  = GetShaderLocation(shader, TextFormat("lights[%i].phase", i));
+        l[10] = GetShaderLocation(shader, TextFormat("lights[%i].period", i));
+        l[11] = GetShaderLocation(shader, TextFormat("lights[%i].effect", i));
+    }
+    return &entry;
+}
+
+void SetShaderLightCount(Shader shader, int count) {
+    ShaderLightLocs* entry = LightLocsFor(shader);
+    if (!entry || entry->lightCountLoc < 0) return;
+    if (count < 0) count = 0;
+    if (count > MAX_LIGHTS) count = MAX_LIGHTS;
+    SetShaderValue(shader, entry->lightCountLoc, &count, SHADER_UNIFORM_INT);
+}
+} // namespace
+
+// ---------------------------------------------------------------------------
 // Build an rlights Light struct from a LightNode
 // ---------------------------------------------------------------------------
-static Light BuildRLight(const LightNode& node, Shader shader, int index) {
+static Light BuildRLight(const LightNode& node, const int* locs, int index) {
     Light light = {0};
     light.type = (int)node.type;
     light.enabled = node.active;
@@ -88,18 +160,19 @@ static Light BuildRLight(const LightNode& node, Shader shader, int index) {
     light.hasFlare = node.flare ? 1 : 0;
     light.hasCorona = node.corona ? 1 : 0;
 
-    light.enabledLoc = GetShaderLocation(shader, TextFormat("lights[%i].enabled", index));
-    light.typeLoc = GetShaderLocation(shader, TextFormat("lights[%i].type", index));
-    light.positionLoc = GetShaderLocation(shader, TextFormat("lights[%i].position", index));
-    light.targetLoc = GetShaderLocation(shader, TextFormat("lights[%i].target", index));
-    light.colorLoc = GetShaderLocation(shader, TextFormat("lights[%i].color", index));
-    light.intensityLoc = GetShaderLocation(shader, TextFormat("lights[%i].intensity", index));
-    light.radiusLoc = GetShaderLocation(shader, TextFormat("lights[%i].radius", index));
-    light.innerConeLoc = GetShaderLocation(shader, TextFormat("lights[%i].innerCone", index));
-    light.outerConeLoc = GetShaderLocation(shader, TextFormat("lights[%i].outerCone", index));
-    light.phaseLoc = GetShaderLocation(shader, TextFormat("lights[%i].phase", index));
-    light.periodLoc = GetShaderLocation(shader, TextFormat("lights[%i].period", index));
-    light.effectLoc = GetShaderLocation(shader, TextFormat("lights[%i].effect", index));
+    const int* l = locs + index * kLightFieldCount;
+    light.enabledLoc   = l[0];
+    light.typeLoc      = l[1];
+    light.positionLoc  = l[2];
+    light.targetLoc    = l[3];
+    light.colorLoc     = l[4];
+    light.intensityLoc = l[5];
+    light.radiusLoc    = l[6];
+    light.innerConeLoc = l[7];
+    light.outerConeLoc = l[8];
+    light.phaseLoc     = l[9];
+    light.periodLoc    = l[10];
+    light.effectLoc    = l[11];
 
     return light;
 }
@@ -155,6 +228,14 @@ void LitLightning_SortByDistance(std::vector<LightNode>& lights, Vector3 cameraP
 // ---------------------------------------------------------------------------
 int LitLightning_Update(std::vector<LightNode>& lights, Shader shader, Camera3D camera, float dt) {
     (void)dt;   // animation is LitLightning_Animate's job, called once per frame
+    OZ_PROFILE_SCOPE("lighting.submit");
+
+    // One lookup table per program, resolved on first use. A missing table means
+    // the program has no lights[] uniform at all, which is not an error for a
+    // program that draws unlit geometry.
+    ShaderLightLocs* locEntry = LightLocsFor(shader);
+    if (!locEntry) return 0;
+    const int* lightLocs = &locEntry->locs[0][0];
 
     // Sort active lights by distance to camera
     LitLightning_SortByDistance(lights, camera.position);
@@ -171,7 +252,7 @@ int LitLightning_Update(std::vector<LightNode>& lights, Shader shader, Camera3D 
         if (!node.active) continue;
         if (submitted >= MAX_TRANSIENT_LIGHTS) break;
         if (submitted >= MAX_LIGHTS) break;
-        Light rlight = BuildRLight(node, shader, submitted);
+        Light rlight = BuildRLight(node, lightLocs, submitted);
         UpdateLightValues(shader, rlight);
         submitted++;
     }
@@ -179,33 +260,55 @@ int LitLightning_Update(std::vector<LightNode>& lights, Shader shader, Camera3D 
     for (auto& node : lights) {
         if (!node.active) continue;
         if (submitted >= MAX_LIGHTS) break;
-        Light rlight = BuildRLight(node, shader, submitted);
+        Light rlight = BuildRLight(node, lightLocs, submitted);
         UpdateLightValues(shader, rlight);
         submitted++;
     }
 
-    // Disable remaining light slots. `type` is set to DIRECTIONAL and the radius
-    // left at 0 deliberately: a zero-radius DIRECTIONAL contributes no
-    // attenuation term at all, so a disabled slot costs one branch rather than a
-    // full attenuation evaluation for every fragment.
-    for (int i = submitted; i < MAX_LIGHTS; i++) {
-        Light dummy = {0};
-        dummy.type = LIGHT_DIRECTIONAL;
-        dummy.enabledLoc = GetShaderLocation(shader, TextFormat("lights[%i].enabled", i));
-        dummy.typeLoc = GetShaderLocation(shader, TextFormat("lights[%i].type", i));
-        dummy.positionLoc = GetShaderLocation(shader, TextFormat("lights[%i].position", i));
-        dummy.targetLoc = GetShaderLocation(shader, TextFormat("lights[%i].target", i));
-        dummy.colorLoc = GetShaderLocation(shader, TextFormat("lights[%i].color", i));
-        dummy.intensityLoc = GetShaderLocation(shader, TextFormat("lights[%i].intensity", i));
-        dummy.radiusLoc = GetShaderLocation(shader, TextFormat("lights[%i].radius", i));
-        dummy.innerConeLoc = GetShaderLocation(shader, TextFormat("lights[%i].innerCone", i));
-        dummy.outerConeLoc = GetShaderLocation(shader, TextFormat("lights[%i].outerCone", i));
-        dummy.phaseLoc = GetShaderLocation(shader, TextFormat("lights[%i].phase", i));
-        dummy.periodLoc = GetShaderLocation(shader, TextFormat("lights[%i].period", i));
-        dummy.effectLoc = GetShaderLocation(shader, TextFormat("lights[%i].effect", i));
-        dummy.enabled = false;
-        UpdateLightValues(shader, dummy);
+    int uploads = submitted * 12;
+    if (locEntry->lightCountLoc >= 0) {
+        // The fragment loop stops at the submitted count, so the tail is never
+        // read and does not need disabling at all.
+        SetShaderLightCount(shader, submitted);
+        ++uploads;
+    } else {
+        // Legacy shader without uLightCount: the loop still runs to MAX_LIGHTS,
+        // so disabled slots must stay disabled. Only a DROP in the submitted
+        // count needs the tail re-uploaded - re-uploading all 64 slots every
+        // frame was 12 SetShaderValue calls x (64 - submitted) per program.
+        // `type` is DIRECTIONAL and radius 0 deliberately: a zero-radius
+        // directional contributes no attenuation beyond one branch per fragment.
+        const int previouslyLiveTo = locEntry->uploadedOnce
+                                         ? locEntry->lastSubmitted
+                                         : MAX_LIGHTS;
+        if (submitted < previouslyLiveTo) {
+            for (int i = submitted; i < previouslyLiveTo; i++) {
+                const int* l = lightLocs + i * kLightFieldCount;
+                Light dummy = {0};
+                dummy.type = LIGHT_DIRECTIONAL;
+                dummy.enabledLoc   = l[0];
+                dummy.typeLoc      = l[1];
+                dummy.positionLoc  = l[2];
+                dummy.targetLoc    = l[3];
+                dummy.colorLoc     = l[4];
+                dummy.intensityLoc = l[5];
+                dummy.radiusLoc    = l[6];
+                dummy.innerConeLoc = l[7];
+                dummy.outerConeLoc = l[8];
+                dummy.phaseLoc     = l[9];
+                dummy.periodLoc    = l[10];
+                dummy.effectLoc    = l[11];
+                dummy.enabled = false;
+                UpdateLightValues(shader, dummy);
+            }
+            uploads += (previouslyLiveTo - submitted) * 12;
+        }
+        locEntry->lastSubmitted = submitted;
+        locEntry->uploadedOnce = true;
     }
+
+    OZ_PROFILE_ADD("light.submitted", (uint64_t)submitted);
+    OZ_PROFILE_ADD("uniform.upload", (uint64_t)uploads);
 
     return submitted;
 }
@@ -272,6 +375,9 @@ void LitLightning_UpdateFrame(std::vector<LightNode>& lights, Shader shader,
         fallbackDirectional.enabled = true;
         fallbackDirectional.intensity = 0.4f;
         UpdateLightValues(shader, fallbackDirectional);
+        // Slot 0 is now live for this frame; without this the loop bound would
+        // stay at the submitted count (0) and the fill light would be ignored.
+        SetShaderLightCount(shader, 1);
     }
 
     // Update uTime for GPU light animation
