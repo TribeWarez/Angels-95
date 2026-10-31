@@ -20,6 +20,7 @@
 // ============================================================================
 
 #include "PaneTarget.hpp"
+#include "EditorCamera.hpp"
 
 static const wchar_t* kDetachedPaneClass = L"AngelEdDetachedPane";
 static bool g_detachedPaneClassRegistered = false;
@@ -123,6 +124,11 @@ static void DetachedGL_Release(int i) {
 // Tier C (camera part): navigate the popped-out pane with MMB / wheel, using the
 // same gestures as the main viewport (MMB pan, Shift+MMB vertical, Alt+MMB orbit,
 // wheel dolly). Picking/gizmo in the pop-out is the remaining Tier C work.
+//
+// The maths lives in Core/EditorCamera.hpp. This body used to be a verbatim copy
+// of Main.cpp's block - including its world-X/Z pan, which is only correct for
+// the default 3/4 view - so the pop-out and the viewport could only ever be
+// fixed together or not at all.
 // ---------------------------------------------------------------------------
 struct DetachedInput {
     bool mmb = false;
@@ -133,44 +139,19 @@ static DetachedInput g_detachedInput[4];
 static int DetX(LPARAM l) { return (int)(short)LOWORD(l); }
 static int DetY(LPARAM l) { return (int)(short)HIWORD(l); }
 
-static void DetachedPane_Navigate(int pane, int dx, int dy) {
+static void DetachedPane_Navigate(int pane, int dx, int dy, float paneH) {
     if (pane < 0 || pane > 3) return;
     Camera3D& cam = g_paneCams[pane];
     const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
     const bool alt   = (GetKeyState(VK_MENU) & 0x8000) != 0;
-    const float sens = 0.1f;
-    if (shift) {
-        cam.position.y -= dy * sens;
-        cam.target.y -= dy * sens;
-    } else if (alt) {
-        Vector3 v = Vector3Subtract(cam.position, cam.target);
-        const float radius = Vector3Length(v);
-        if (radius > 0.01f) {
-            float yaw = atan2f(v.x, v.z);
-            float pitch = asinf(v.y / radius);
-            yaw -= dx * 0.01f;
-            pitch += dy * 0.01f;
-            if (pitch > PI / 2 - 0.01f) pitch = PI / 2 - 0.01f;
-            if (pitch < -PI / 2 + 0.01f) pitch = -PI / 2 + 0.01f;
-            v.x = radius * cosf(pitch) * sinf(yaw);
-            v.y = radius * sinf(pitch);
-            v.z = radius * cosf(pitch) * cosf(yaw);
-            cam.position = Vector3Add(cam.target, v);
-        }
-    } else {
-        cam.position.x -= dx * sens;
-        cam.position.z -= dy * sens;
-        cam.target.x -= dx * sens;
-        cam.target.z -= dy * sens;
-    }
+    if (shift)     edcam::PanVertical(cam, (float)dy, paneH);
+    else if (alt)  edcam::Orbit(cam, (float)dx, (float)dy);
+    else           edcam::Pan(cam, (float)dx, (float)dy, paneH);
 }
 
 static void DetachedPane_Dolly(int pane, int notches) {
     if (pane < 0 || pane > 3 || notches == 0) return;
-    Camera3D& cam = g_paneCams[pane];
-    const Vector3 dir = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
-    cam.position = Vector3Add(cam.position, Vector3Scale(dir, notches * 2.0f));
-    cam.target = Vector3Add(cam.target, Vector3Scale(dir, notches * 2.0f));
+    edcam::Dolly(g_paneCams[pane], (float)notches);
 }
 
 static LRESULT CALLBACK DetachedPaneProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
@@ -201,7 +182,9 @@ static LRESULT CALLBACK DetachedPaneProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l
                 const int dy = y - g_detachedInput[pane].lastY;
                 g_detachedInput[pane].lastX = x;
                 g_detachedInput[pane].lastY = y;
-                DetachedPane_Navigate(pane, dx, dy);
+                RECT rc = {};
+                GetClientRect(hwnd, &rc);
+                DetachedPane_Navigate(pane, dx, dy, (float)(rc.bottom - rc.top));
             }
             return 0;
         case WM_MOUSEWHEEL:

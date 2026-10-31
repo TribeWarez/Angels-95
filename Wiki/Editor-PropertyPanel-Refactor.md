@@ -242,13 +242,16 @@ no CI inline-list change, no protocol, no `.ozls` writer, no save format.
 
 | Invariant | Why | Where |
 |---|---|---|
-| `addReadOnlyRow` creates EDITs with **no control ID** | Apply must never reach read-only rows | `Win32Dialogs.cpp:4926` |
-| Per-row control IDs, not shared Preview/Browse + hit-test | a click cannot land on the wrong weapon's sound | `:5542`, `:5281` |
-| `PropsUpdateScroll` runs **after** the resize | `nPage` comes from the client height; reversing it leaves a panel taller than the work area with no scrollbar | `:4776-4780` |
-| `propsPanelPos.w = 540` | `PropsFitWindow` re-applies the create-time width; shrinking it steals the value column | `Win32Dialogs.hpp:374` |
-| `LevelMetadata` / `g_levelMeta` / accessors survive P3 | the Map panel owns them | `Win32Dialogs.cpp:2694-2717` |
-| `envOverrides` export gate `applyFog \|\| applyAmbient \|\| reverbMix > 0` | an explicitly-zeroed reverb is intentionally not emitted | `Main.cpp:1533` |
-| Children move to scroll; owned painting scrolls at paint time | two different mechanisms, do not mix | `:4781` vs `:944` |
+| `addReadOnlyRow` creates EDITs with **no control ID** | Apply must never reach read-only rows | `UI/Panels/PropsPanel.cpp` |
+| Per-row control IDs, not shared Preview/Browse + hit-test | a click cannot land on the wrong weapon's sound | `PropsPanel.cpp` (stat rows) |
+| `PropsUpdateScroll` runs **after** the resize | `nPage` comes from the client height; reversing it leaves a panel taller than the work area with no scrollbar | `PropsPanel.cpp` |
+| `PropsFitWindow` converts the **content** height with `AdjustWindowRectEx` | `SetWindowPos` takes a window height; treating the two as the same spends the caption/border (~31 px) out of the bottom margin and clips Apply/Close | `PropsPanel.cpp` `PropsFitWindow` |
+| `si.nMax = contentH - 1`, `si.nPage = clientH` | Win32 caps `nPos` at `nMax - nPage + 1`; `nMax = contentH - clientH` stops the thumb a whole page short, so the last rows are unreachable | `PropsPanel.cpp` `PropsUpdateScroll` |
+| One right margin that reserves the scrollbar (`kPadRight` + `kScrollRes`) | `rc` is read before `WS_VSCROLL` exists; colour rows used the raw `rc.right` and slid under the bar | `PropsPanel.cpp` `PopulatePropertiesPanel` |
+| `propsPanelPos.w = 540` | `PropsFitWindow` re-applies the create-time width; shrinking it steals the value column | `Core/EditorPanelState.hpp` |
+| `LevelMetadata` / `g_levelMeta` / accessors survive P3 | the Map section owns them | `PropsPanel.cpp` |
+| `envOverrides` export gate `applyFog \|\| applyAmbient \|\| reverbMix > 0` | an explicitly-zeroed reverb is intentionally not emitted | `Subsystems/OzoneExport.cpp` |
+| Children move to scroll; owned painting scrolls at paint time | two different mechanisms, do not mix | `PropsPanel.cpp` vs `TexturePanel.cpp` |
 | A def gets an editable stat row **only** if a runtime consumer exists | see below | `PropsPanel.cpp` `StatSchemaFor` |
 
 ## The schema rule — no editable key without a live consumer

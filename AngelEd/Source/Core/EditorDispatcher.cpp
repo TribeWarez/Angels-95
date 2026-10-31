@@ -150,20 +150,48 @@ static void DispatchFrameEvents(const std::vector<ed::Event>& events) {
                 StopSoundPreview();
                 break;
             case ed::Ev::ApplyTextureToSelection: {
-                // From the Texture Manager's Apply button and grid double-click.
+                // THE one implementation of "apply this texture to that entity".
+                // Callers: the Texture Manager's Apply button / grid double-click
+                // (faceMask 0 = brush-wide) and the viewport's right-click
+                // "Apply Texture" (faceMask = the faces that were picked).
+                //
                 // The selection was CAPTURED into the event at post time; the old
                 // path (Ev::ApplyTextureToModel + a "Model 1..20" dropdown index)
-                // resolved through WDLModels and was a guaranteed silent no-op
-                // for every CSG brush.
+                // resolved through WDLModels and was a guaranteed silent no-op for
+                // every CSG brush.
                 const ed::TextureSelectionApply& apply = ev.textureSelectionApply();
                 if (apply.path.empty() || !apply.target.valid()) break;
                 HistoryPush();
                 if (apply.target.kind == ed::SelKind::Brush) {
-                    const bool applied = OzoneLoader::Instance().ApplyRenderableTexture(
-                        apply.target.index, apply.path.c_str());
-                    EditorLog("Applied texture to brush renderable idx=%d: %s",
-                              apply.target.index, applied ? "ok" : "FAILED");
-                    if (applied) g_editorPanels.textureProbeRenderable = apply.target.index;
+                    const int rIdx = apply.target.index;
+                    OzoneRenderable* brush = OzoneLoader::Instance().Get(rIdx);
+                    if (brush && apply.faceMask != 0) {
+                        // Per-face: keep each face's flags/UV/alpha/glow and
+                        // substitute only the texture. Overwriting the whole
+                        // SurfaceProps here would silently reset every other
+                        // property.
+                        int appliedFaces = 0;
+                        for (int f = 0; f < oz::surface::FACE_COUNT; f++) {
+                            if (!(apply.faceMask & (1u << f))) continue;
+                            oz::surface::SurfaceProps p =
+                                brush->surface.Resolve((oz::surface::SurfaceFace)f);
+                            p.texPath = apply.path;
+                            OzoneLoader::Instance().SetRenderableFace(
+                                rIdx, (oz::surface::SurfaceFace)f, p);
+                            appliedFaces++;
+                        }
+                        EditorLog("Applied texture to %d face(s) of renderable idx=%d: %s",
+                                  appliedFaces, rIdx, apply.path.c_str());
+                        if (g_editorPanels.hSurfaceProps)
+                            SurfacePropsRefresh((HWND)g_editorPanels.hSurfaceProps);
+                        g_editorPanels.textureProbeRenderable = rIdx;
+                    } else {
+                        const bool applied = OzoneLoader::Instance().ApplyRenderableTexture(
+                            rIdx, apply.path.c_str());
+                        EditorLog("Applied texture to brush renderable idx=%d: %s",
+                                  rIdx, applied ? "ok" : "FAILED");
+                        if (applied) g_editorPanels.textureProbeRenderable = rIdx;
+                    }
                 } else if (apply.target.kind == ed::SelKind::Model &&
                            apply.target.index >= 0 && apply.target.index < CachedModelCounter) {
                     const int modelId = CachedModels[apply.target.index].ModelId;

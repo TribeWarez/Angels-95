@@ -25,8 +25,9 @@
 //     different entity than the one the user clicked. That cannot happen to a value
 //     the user just typed. The panel is a normal window, not a modal dialog, but
 //     between the Apply click and this drain - the same frame - nothing pumps input,
-//     so no value can change underneath us. Same argument that keeps
-//     actionApplyTextureToSel a field, and for the same reason.
+//     so no value can change underneath us. (The same argument was used to keep
+//     actionApplyTextureToSel a field; that one has since become a proper event,
+//     because its second implementation had drifted and did not handle Mesh.*.)
 //   - The alternative is a payload with ~87 fields, of which roughly six apply to any
 //     given SelType. Snapshotting 87 to write 6 is worse than reading 6 live.
 //

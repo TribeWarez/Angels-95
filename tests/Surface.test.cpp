@@ -1758,11 +1758,14 @@ static void test_editor_transform_and_surface_wiring() {
           "brush Properties apply converts mesh-centre Pos / top-position");
 
     // --- Move tool knows every movable selection type ------------------------
-    check(main.find("g_sel.type == SelType::MESH") != std::string::npos,
+    // The per-type write-back lives in MoveSelectionCentre (Subsystems/Selection.cpp)
+    // now, shared by the primary and every additional multi-selection member; it
+    // used to be inline in Main.cpp's frame loop. Scan the file that owns it.
+    check(sel.find("sel.type == SelType::MESH") != std::string::npos,
           "Move tool translates Mesh.* entities");
-    check(main.find("g_sel.type == SelType::WINDZONE") != std::string::npos,
+    check(sel.find("sel.type == SelType::WINDZONE") != std::string::npos,
           "Move tool translates WindZone bounds");
-    check(main.find("g_sel.type == SelType::PATHNODE") != std::string::npos,
+    check(sel.find("sel.type == SelType::PATHNODE") != std::string::npos,
           "Move tool translates PathNodes");
 
     // --- Cylinder/sphere resizing uses radii, not diameters ------------------

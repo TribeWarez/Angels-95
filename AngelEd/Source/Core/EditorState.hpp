@@ -67,6 +67,7 @@ enum EditorMenuCmd {
     IDM_VIEW_BOTTOM,
     IDM_VIEW_RIGHT,
     IDM_VIEW_LEFT,
+    IDM_VIEW_FRONT,
     IDM_VIEW_PERSPECTIVE,
     IDM_ABOUT,
     IDM_KEYMAP,
@@ -83,6 +84,10 @@ enum EditorMenuCmd {
     // IDM_SURFACE_PROPS so the two scopes cannot be confused at the call site.
     IDM_SURFACE_PROPS_BRUSH,
     IDM_SURFACE_RESET,
+    // "Snap to Ground / Side" - drop onto the surface below, or push against the
+    // nearest brush face along the view's right axis.
+    IDM_SNAP_GROUND,
+    IDM_SNAP_SIDE,
 };
 
 // Box budget for one "Append AutoConvex Collision" run. Past this the command
@@ -178,10 +183,11 @@ inline std::vector<EditorSelection> g_selSet;
 // Right-click state: drag vs click detection
 inline bool g_rbDown = false;
 inline Vector2 g_rbDownPos{0,0};
-// Left-click state: pick fires on release so a held drag (e.g. moving a
-// placement ghost) is not mistaken for a selection click.
+// Left-click state. Selection happens on PRESS (UnEdClick.cpp); this flag exists
+// ONLY for the placement ghost, which is press-dragged and committed on a release
+// that never moved - committing it on press would make a ghost impossible to place
+// by dragging.
 inline bool g_lbDown = false;
-inline Vector2 g_lbDownPos{0,0};
 // True only while an explicit placement ghost is armed by BeginPlacement (the
 // Model Browser's "Place in World", the Pickups/Node panels, the CSG toolbox does
 // NOT arm it). It is NOT the same thing as AngelTechEditor.DrawModel, which also

@@ -91,14 +91,19 @@ struct PlacementRequest {
 };
 
 // Apply the browser's selected texture to the viewport selection. The SelRef is
-// captured BY VALUE at post time, the same reasoning SelRef itself documents:
-// the Texture Manager is a MODELESS window, so the modal-writer argument that
-// keeps actionApplyTextureToSel honest does not apply here — a queued viewport
-// click between the Apply button and the frame drain must not redirect the
-// apply onto a different brush than the one the user had selected.
+// captured BY VALUE at post time, the same reasoning SelRef itself documents: the
+// Texture Manager is a MODELESS window, so a stale viewport click between the
+// Apply button and the frame drain must not redirect the apply onto a different
+// entity than the one the user had selected.
+//
+// This is the ONE path for every caller: the Texture Manager posts faceMask = 0
+// (brush-wide), and the viewport's right-click menu posts the faces it picked, so
+// "Apply Texture to Surface" and "Apply Texture" cannot drift apart - they used to
+// be two implementations, and the context-menu one never learned about Mesh.*.
 struct TextureSelectionApply {
-    std::string path;   // asset path (loose file or package key)
-    SelRef      target; // captured selection; invalid -> handler skips it
+    std::string path;      // asset path (loose file or package key)
+    SelRef      target;    // captured selection; invalid -> handler skips it
+    uint32_t    faceMask = 0;  // BRUSH only: 1<<face for each picked face; 0 = whole brush
 };
 
 // A heightmap build request. Six separate action* fields used to carry this, and

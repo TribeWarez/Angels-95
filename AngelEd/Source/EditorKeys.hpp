@@ -103,6 +103,60 @@ inline bool CtrlDown() {
 inline bool ShiftDown() {
     return IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
 }
+inline bool AltDown() {
+    return IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT);
+}
+
+// --- Keyboard layout ---------------------------------------------------------
+//
+// raylib/GLFW key codes are POSITIONAL: they are the US virtual-key code of a
+// SCANCODE, so they follow the US physical grid and not the label on the keycap.
+// On German QWERTZ the two letters that swap are exactly the two that matter
+// here: the key labelled Z sits at the US-Y scancode, so pressing it reports
+// KEY_Y. Ctrl+Z therefore matched nothing, Edit: Undo never fired, and the Y
+// nudge stepped the selection down instead. AZERTY swaps A/Q and Z/W; Dvorak
+// moves nearly everything.
+//
+// A stored binding is therefore LOGICAL ("the letter Z") and is resolved to the
+// physical key that produces that letter on the ACTIVE layout. Windows does the
+// layout work for us in both directions once we convert through the scancode:
+//
+//   logical letter --VK_TO_VSC(active)--> scancode --VSC_TO_VK(US)--> raylib key
+//
+// Verified against a real German layout: 'Z' -> scan 0x15 -> VK 0x59 = KEY_Y,
+// and raylib KEY_Y -> scan 0x15 -> VK 0x5A = 'Z'.
+//
+// Note MAPVK_VK_TO_CHAR is NOT usable for this: for A-Z it returns the VK itself
+// regardless of layout, so it looks correct on a US keyboard and does nothing on
+// a QWERTZ one.
+inline HKL UsLayout() {
+    static HKL s_us = nullptr;
+    if (!s_us) {
+        s_us = LoadKeyboardLayoutW(L"00000409", KLF_NOTELLSHELL);
+        if (!s_us) s_us = (HKL)(ULONG_PTR)0x04090409;   // en-US is always present
+    }
+    return s_us;
+}
+
+inline int PhysicalKey(int logical) {
+    if (logical < 'A' || logical > 'Z') return logical;   // only letters move
+    const HKL lay = GetKeyboardLayout(0);
+    const UINT sc = MapVirtualKeyExW((UINT)logical, MAPVK_VK_TO_VSC, lay);
+    if (!sc) return logical;
+    const UINT us = MapVirtualKeyExW(sc, MAPVK_VSC_TO_VK, UsLayout());
+    return us ? (int)us : logical;
+}
+
+// Inverse of PhysicalKey: a key CAPTURED in the keymap dialog is stored as the
+// letter it produces, so the INI stays portable across layouts and machines.
+inline int LogicalKey(int physical) {
+    if (physical < 'A' || physical > 'Z') return physical;
+    const HKL lay = GetKeyboardLayout(0);
+    const UINT sc = MapVirtualKeyExW((UINT)physical, MAPVK_VK_TO_VSC, UsLayout());
+    if (!sc) return physical;
+    const UINT vk = MapVirtualKeyExW(sc, MAPVK_VSC_TO_VK_EX, lay);
+    return (vk >= 'A' && vk <= 'Z') ? (int)vk : physical;
+}
 
 inline int Index(EdAction a) {
     const int i = (int)a;
@@ -110,6 +164,16 @@ inline int Index(EdAction a) {
 }
 
 inline int Key(EdAction a) {
+    EnsureDefaults();
+    const int i = Index(a);
+    // PHYSICAL key, so `IsKeyPressed(EdKeys::Key(...))` sites follow the user's
+    // layout exactly like Pressed() does.
+    return i >= 0 ? PhysicalKey(g_keys[i]) : 0;
+}
+
+// The LOGICAL key of an action (what the shortcut is NAMED after). Shortcut text
+// must use this, not Key(), or a German user reads "Ctrl+Y" for Undo.
+inline int LogicalBinding(EdAction a) {
     EnsureDefaults();
     const int i = Index(a);
     return i >= 0 ? g_keys[i] : 0;
@@ -120,7 +184,7 @@ inline bool Pressed(EdAction a) {
     const int i = Index(a);
     if (i < 0) return false;
     const auto& d = kDefs[i];
-    if (!IsKeyPressed(g_keys[i])) return false;
+    if (!IsKeyPressed(PhysicalKey(g_keys[i]))) return false;
     if (d.ctrl != CtrlDown()) return false;
     if (d.shift != ShiftDown()) return false;
     return true;
@@ -174,11 +238,14 @@ inline int Conflict(EdAction a, int key) {
     return -1;
 }
 
-// Assign a key. Returns the conflicting action index (it is swapped, so no
-// action is left unbound), or -1.
+// Assign a key. `key` is a PHYSICAL key (what the capture dialog saw) and is
+// stored LOGICALLY, so rebinding on one layout does not produce a binding that
+// means a different letter on another. Returns the conflicting action index (it
+// is swapped, so no action is left unbound), or -1.
 inline int Assign(EdAction a, int key) {
     EnsureDefaults();
     const int self = Index(a);
+    key = LogicalKey(key);
     if (self < 0 || key < 32 || key > 348) return -1;
     const int other = Conflict(a, key);
     if (other >= 0) g_keys[other] = g_keys[self];
@@ -192,7 +259,8 @@ inline std::string ShortcutText(EdAction a) {
     std::string s;
     if (kDefs[i].ctrl) s += "Ctrl+";
     if (kDefs[i].shift) s += "Shift+";
-    s += Keybinds::KeyName(Key(a));
+    // The LOGICAL binding, so the hint names the letter on the keycap.
+    s += Keybinds::KeyName(LogicalBinding(a));
     return s;
 }
 

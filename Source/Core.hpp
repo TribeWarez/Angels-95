@@ -2255,13 +2255,27 @@ void DrawWorld()
     }
 
     // -----------------------------------------------------------------------
+    // ONE frustum for this frame, built before the render target is bound.
+    //
+    // The sky-portal view has to be rendered while nothing else owns the target,
+    // i.e. before BeginTextureMode(Target) - which is before the world pass would
+    // normally cull. Building the planes here lets the portal gate and
+    // DrawWorldGeometry share them, and lets the gate ask a PER-FRAME question
+    // ("is a portal on screen?") instead of a world-level one.
+    // -----------------------------------------------------------------------
+    OzoneLoader::Instance().BeginFrame(AngelTechData.MainCamera);
+
+    // -----------------------------------------------------------------------
     // SURF_PORTAL support: pre-render the sky from the zone anchor, half-res.
-    // Gated on the world actually authoring a portal face, so worlds without one
-    // pay nothing. `Target`'s size is passed because the face shader samples in
-    // gl_FragCoord space, and Target can be resolution-scaled.
+    //
+    // Gated on whether a portal face is actually VISIBLE this frame. The old
+    // gate was HasSkyPortalFaces() - a world-level flag - so every world that
+    // authored a portal ring paid a full offscreen sky pass even when the player
+    // was facing away from all of it. `Target`'s size is passed because the face
+    // shader samples in gl_FragCoord space, and Target can be resolution-scaled.
     // -----------------------------------------------------------------------
     if (wantSky && oz::diag::PerfOn("sky") && oz::diag::PerfOn("portals") &&
-        OzoneLoader::Instance().HasSkyPortalFaces()) {
+        OzoneLoader::Instance().AnyPortalFaceVisible()) {
         OZ_PROFILE_SCOPE("world.skyPortalRender");
         SkyZoneNode* sky = PawnSystem::Instance().GetActiveSkyZone();
         const Vector3 anchor = sky ? sky->position : AngelTechData.MainCamera.position;
@@ -2335,8 +2349,8 @@ if (inSkyZone)
     // world so geometry in front of a portal occludes it, and before the glow
     // pass so an additive halo cannot leak through a hole.
     // -----------------------------------------------------------------------
-    if (wantSky && oz::diag::PerfOn("portals") &&
-        OzoneLoader::Instance().HasSkyPortalFaces()) {
+    if (wantSky && oz::diag::PerfOn("sky") && oz::diag::PerfOn("portals") &&
+        OzoneLoader::Instance().AnyPortalFaceVisible()) {
         OZ_PROFILE_SCOPE("world.portalPass");
         OzoneLoader::Instance().DrawSkyPortals(AngelTechData.MainCamera,
                                                oz::SkyPortal::Instance().View(),

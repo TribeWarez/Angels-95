@@ -180,19 +180,15 @@ struct EditorPanelState {
     // Active texture tracking (for context menu apply + auto-apply)
     std::string activeTexturePath;   // currently selected texture in browser
     int activeTextureSlot = 0;       // tileset slot index if applicable
-    // actionApplyTextureToSel deliberately REMAINS a field, the fourth and last
-    // documented exception to "everything becomes an event".
     //
-    // It reads `g_sel` and `activeTexturePath` at drain time, which is normally
-    // the staleness bug this refactor exists to kill. It is safe here for a
-    // specific reason: both writers are context-menu commands, and
-    // TrackPopupMenu is MODAL - the selection cannot move between the click and
-    // the frame that consumes it, because nothing else is pumping input. Capturing
-    // a Selection would mean duplicating the brush renderable resolution (which
-    // depends on g_sel.pos to disambiguate a renderable index from a collision-volume
-    // index) for no behavioural gain.
-    bool actionApplyTextureToSel = false;  // apply activeTexturePath to selected entity
-    // One-shot diagnostic armed by the texture-apply drains: the frame pass logs
+    // actionApplyTextureToSel USED to live here, as the last documented exception
+    // to "everything becomes an event". It is gone: the context menu now posts
+    // ed::Ev::ApplyTextureToSelection like the Texture Manager does, so there is
+    // ONE implementation of the apply. The old drain had its own copy and never
+    // learned about Mesh.*, which is why "apply texture" silently did nothing on a
+    // placed prop.
+    //
+    // One-shot diagnostic armed by the texture-apply handler: the frame pass logs
     // this renderable's draw-path state once (view mode, per-face meshes, bound
     // texture handles) so an "it applied but nothing shows" report carries the
     // answer in AngelEd.log instead of a guess. -1 = nothing pending.

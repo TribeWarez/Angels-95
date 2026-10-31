@@ -59,6 +59,72 @@ namespace {
 constexpr int kLightFieldCount = 12;
 constexpr int kLightCachePrograms = 8;
 
+// What was last uploaded into ONE slot of ONE program.
+//
+// `UpdateLightValues` writes 12 uniforms per light, and each `SetShaderValue` is
+// a `glUseProgram` in raylib's rcore.c. A light's enable/type/colour/intensity/
+// radius/cones/period only change when the light is EDITED, while the array was
+// re-uploaded in full for every program every frame (LitFog, Surface.fs and the
+// Wind program all share this submission path). Comparing against this record
+// skips the unchanged majority; only `phase` (animated lights) and `position`
+// (moving lights) change per frame in practice.
+//
+// Exact bit equality on purpose: a spurious upload costs 12 uniforms, a
+// SUPPRESSED one leaves the program holding someone else's light, so only an
+// exact match may skip. `hasFlare`/`hasCorona` are CPU-side (Core.hpp draws the
+// billboards) and are deliberately absent - they are not uniforms.
+struct UploadedLight {
+    bool    valid = false;
+    int     type = 0;
+    bool    enabled = false;
+    Vector3 position{0.0f, 0.0f, 0.0f};
+    Vector3 target{0.0f, 0.0f, 0.0f};
+    Color   color{0, 0, 0, 0};
+    float   intensity = 0.0f;
+    float   radius = 0.0f;
+    float   innerCone = 0.0f;
+    float   outerCone = 0.0f;
+    float   phase = 0.0f;
+    float   period = 0.0f;
+    int     effect = 0;
+};
+
+// `ignorePhase` exists so the submission path can treat the animation clock
+// separately: it changes every frame on every non-static light, and uploading 12
+// uniforms for a one-float change defeats the cache entirely.
+bool SameUploadedLight(const Light& l, const UploadedLight& u, bool ignorePhase = false) {
+    if (!u.valid) return false;
+    if (!(l.type == u.type && l.enabled == u.enabled &&
+          l.position.x == u.position.x && l.position.y == u.position.y &&
+          l.position.z == u.position.z &&
+          l.target.x == u.target.x && l.target.y == u.target.y &&
+          l.target.z == u.target.z &&
+          l.color.r == u.color.r && l.color.g == u.color.g &&
+          l.color.b == u.color.b && l.color.a == u.color.a &&
+          l.intensity == u.intensity && l.radius == u.radius &&
+          l.innerCone == u.innerCone && l.outerCone == u.outerCone &&
+          l.period == u.period && l.effect == u.effect)) {
+        return false;
+    }
+    return ignorePhase || l.phase == u.phase;
+}
+
+void RememberUploadedLight(const Light& l, UploadedLight& u) {
+    u.valid = true;
+    u.type = l.type;
+    u.enabled = l.enabled;
+    u.position = l.position;
+    u.target = l.target;
+    u.color = l.color;
+    u.intensity = l.intensity;
+    u.radius = l.radius;
+    u.innerCone = l.innerCone;
+    u.outerCone = l.outerCone;
+    u.phase = l.phase;
+    u.period = l.period;
+    u.effect = l.effect;
+}
+
 struct ShaderLightLocs {
     unsigned int id = 0;
     int locs[MAX_LIGHTS][kLightFieldCount];
@@ -70,6 +136,9 @@ struct ShaderLightLocs {
     // frame, so only a DROP in the submitted count needs the tail re-uploaded.
     int lastSubmitted = MAX_LIGHTS;
     bool uploadedOnce = false;
+    // Last values written into each slot of THIS program. Invalidated whole on
+    // program relink and on cache-entry recycle (see LightLocsFor).
+    UploadedLight uploaded[MAX_LIGHTS];
 };
 ShaderLightLocs g_lightLocs[kLightCachePrograms];
 int g_lightLocPrograms = 0;
@@ -84,6 +153,12 @@ ShaderLightLocs* LightLocsFor(Shader shader) {
                    ? g_lightLocPrograms++
                    : 0;   // recycle; the engine has three programs, this is defensive
     ShaderLightLocs& entry = g_lightLocs[slot];
+    // Reset the WHOLE entry when an id is reused. The recycle branch used to
+    // overwrite only `id` and `locs`, leaving `lastSubmitted`/`uploadedOnce`
+    // from the evicted program; with per-slot upload records that would also
+    // leave the new program comparing against another program's uniforms, i.e.
+    // skipping uploads whose values are not in this program at all.
+    entry = ShaderLightLocs{};
     entry.id = shader.id;
     entry.lightCountLoc = GetShaderLocation(shader, "uLightCount");
 
@@ -207,21 +282,87 @@ static int LightSubmitTier(const LightNode& n, Vector3 cameraPos) {
 }
 
 // Order lights for submission: most wanted first, then nearest.
-// Mutates `lights` in place (callers and ExportToOzone rely on the vector being
-// reordered; nothing depends on the previous order).
+// Mutates `lights` in place (callers rely on the vector being reordered; nothing
+// depends on the previous order).
+//
+// DECORATE-SORT. The comparator used to call Vector3Distance(a, cam) and
+// Vector3Distance(b, cam) on every comparison, and LightSubmitTier recomputed it
+// a third time - O(n log n) square roots for an ordering that needs O(n). The
+// keys are computed once per light here; the ordering is unchanged.
+//
+// The index tie-break is deliberate: std::sort is not stable, so two lights that
+// compare equal were ordered arbitrarily. Equal keys mean the comparator cannot
+// distinguish them, so pinning the original order cannot change which lights
+// survive the budget - it only makes a frame reproducible.
 void LitLightning_SortByDistance(std::vector<LightNode>& lights, Vector3 cameraPos) {
-    std::sort(lights.begin(), lights.end(),
-        [cameraPos](const LightNode& a, const LightNode& b) {
-            if (a.active != b.active) return a.active;
+    struct Keyed {
+        size_t index = 0;
+        bool active = false;
+        int tier = 0;
+        float dist = 0.0f;
+    };
+    std::vector<Keyed> keys;
+    keys.reserve(lights.size());
+    for (size_t i = 0; i < lights.size(); ++i) {
+        const LightNode& n = lights[i];
+        keys.push_back(Keyed{i, n.active, LightSubmitTier(n, cameraPos),
+                             Vector3Distance(n.position, cameraPos)});
+    }
+    std::sort(keys.begin(), keys.end(), [](const Keyed& a, const Keyed& b) {
+        if (a.active != b.active) return a.active;
+        if (a.tier != b.tier) return a.tier < b.tier;
+        if (a.dist != b.dist) return a.dist < b.dist;
+        return a.index < b.index;
+    });
 
-            const int ta = LightSubmitTier(a, cameraPos);
-            const int tb = LightSubmitTier(b, cameraPos);
-            if (ta != tb) return ta < tb;
-
-            return Vector3Distance(a.position, cameraPos) <
-                   Vector3Distance(b.position, cameraPos);
-        });
+    std::vector<LightNode> ordered;
+    ordered.reserve(lights.size());
+    for (const Keyed& k : keys) ordered.push_back(std::move(lights[k.index]));
+    lights = std::move(ordered);
 }
+
+// ---------------------------------------------------------------------------
+// "Do the lights still sort the same?" signature.
+//
+// LitLightning_Update runs once per shader PROGRAM, so the same vector was
+// re-sorted three times a frame (LitFog, Surface.fs, Wind.vs) with identical
+// inputs. The sort only has to run when something the comparator reads changes:
+// active, type, radius, position - plus the camera.
+//
+// This is CONTENT-based rather than a frame counter on purpose. A frame token
+// stored by LitLightning_UpdateFrame would not advance when the profiler is
+// disabled (BeginFrame returns early), and AngelEd calls LitLightning_Update
+// directly once per pane (no UpdateFrame at all) - both would serve a stale
+// order, and the order decides WHICH LIGHTS SURVIVE the budget. A hash of the
+// inputs is always correct: equal inputs => the existing order is already a
+// valid sort of them.
+//
+// Any new input to the comparator must be added here.
+// ---------------------------------------------------------------------------
+namespace {
+uint64_t LightSortSignature(const std::vector<LightNode>& lights, Vector3 cameraPos) {
+    uint64_t h = 1469598103934665603ull;   // FNV-1a 64 offset basis
+    auto mix = [&h](const void* data, size_t bytes) {
+        const unsigned char* p = static_cast<const unsigned char*>(data);
+        for (size_t i = 0; i < bytes; ++i) {
+            h ^= (uint64_t)p[i];
+            h *= 1099511628211ull;
+        }
+    };
+    mix(&cameraPos, sizeof(cameraPos));
+    for (const LightNode& n : lights) {
+        const int type = (int)n.type;
+        mix(&n.active, sizeof(n.active));
+        mix(&type, sizeof(type));
+        mix(&n.radius, sizeof(n.radius));
+        mix(&n.position, sizeof(n.position));
+    }
+    return h;
+}
+
+uint64_t g_lastLightSortSig = 0;
+bool g_hasLightSortSig = false;
+} // namespace
 
 // ---------------------------------------------------------------------------
 // Submit lights to one shader program. Does NOT animate - see LitLightning_Animate.
@@ -237,8 +378,15 @@ int LitLightning_Update(std::vector<LightNode>& lights, Shader shader, Camera3D 
     if (!locEntry) return 0;
     const int* lightLocs = &locEntry->locs[0][0];
 
-    // Sort active lights by distance to camera
-    LitLightning_SortByDistance(lights, camera.position);
+    // Sort active lights by distance to camera - but only when the inputs the
+    // comparator reads have actually changed. See LightSortSignature: this call
+    // site runs once per shader program.
+    const uint64_t sortSig = LightSortSignature(lights, camera.position);
+    if (!g_hasLightSortSig || sortSig != g_lastLightSortSig) {
+        LitLightning_SortByDistance(lights, camera.position);
+        g_lastLightSortSig = sortSig;
+        g_hasLightSortSig = true;
+    }
 
     // Submit lights to shader.
     //
@@ -248,24 +396,52 @@ int LitLightning_Update(std::vector<LightNode>& lights, Shader shader, Camera3D 
     // be evicted the moment a world filled the budget - which is presumably why
     // the muzzle flash was implemented as an unlit DrawSphere in the first place.
     int submitted = 0;
+    int uploadedLights = 0;
+    int phaseUploads = 0;
+    int uploads = 0;
+
+    // One submission path for both pools, so the upload cache cannot apply to
+    // one of them and not the other.
+    auto submitOne = [&](const LightNode& node) {
+        Light rlight = BuildRLight(node, lightLocs, submitted);
+        UploadedLight& record = locEntry->uploaded[submitted];
+        // Everything except `phase`: the animation clock changes every frame on
+        // every non-static light, so comparing it here would make the whole cache
+        // dead (measured: Dust_Ravine uploaded 96 lights/frame unchanged).
+        if (!SameUploadedLight(rlight, record, /*ignorePhase=*/true)) {
+            UpdateLightValues(shader, rlight);
+            RememberUploadedLight(rlight, record);
+            ++uploadedLights;
+            uploads += 12;
+        } else if (rlight.period > 0.0f && rlight.phase != record.phase) {
+            // Only the flicker clock moved. Both shaders read `phase` solely when
+            // `period > 0` (applyLightEffect gates on it), so one uniform is the
+            // whole update - and a period <= 0 light uploads nothing at all.
+            // record.phase is deliberately NOT advanced when period <= 0, so if a
+            // light is later animated it re-uploads its clock instead of
+            // inheriting a stale one.
+            if (rlight.phaseLoc >= 0)
+                SetShaderValue(shader, rlight.phaseLoc, &rlight.phase, SHADER_UNIFORM_FLOAT);
+            record.phase = rlight.phase;
+            ++phaseUploads;
+            ++uploads;
+        }
+        ++submitted;
+    };
+
     for (auto& node : g_transientLights) {
         if (!node.active) continue;
         if (submitted >= MAX_TRANSIENT_LIGHTS) break;
         if (submitted >= MAX_LIGHTS) break;
-        Light rlight = BuildRLight(node, lightLocs, submitted);
-        UpdateLightValues(shader, rlight);
-        submitted++;
+        submitOne(node);
     }
 
     for (auto& node : lights) {
         if (!node.active) continue;
         if (submitted >= MAX_LIGHTS) break;
-        Light rlight = BuildRLight(node, lightLocs, submitted);
-        UpdateLightValues(shader, rlight);
-        submitted++;
+        submitOne(node);
     }
 
-    int uploads = submitted * 12;
     if (locEntry->lightCountLoc >= 0) {
         // The fragment loop stops at the submitted count, so the tail is never
         // read and does not need disabling at all.
@@ -299,15 +475,26 @@ int LitLightning_Update(std::vector<LightNode>& lights, Shader shader, Camera3D 
                 dummy.periodLoc    = l[10];
                 dummy.effectLoc    = l[11];
                 dummy.enabled = false;
-                UpdateLightValues(shader, dummy);
+                // Same cache rule: a slot already holding a disabled dummy is
+                // not re-uploaded. This is what keeps the tail free on every
+                // frame after the first drop.
+                UploadedLight& record = locEntry->uploaded[i];
+                if (!SameUploadedLight(dummy, record)) {
+                    UpdateLightValues(shader, dummy);
+                    RememberUploadedLight(dummy, record);
+                    uploads += 12;
+                }
             }
-            uploads += (previouslyLiveTo - submitted) * 12;
         }
         locEntry->lastSubmitted = submitted;
         locEntry->uploadedOnce = true;
     }
 
     OZ_PROFILE_ADD("light.submitted", (uint64_t)submitted);
+    // Full struct uploads plus phase-only ones; both are "this light's state was
+    // written this program this frame", and `uniform.upload` above is the real
+    // cost (12 per full upload, 1 per phase-only).
+    OZ_PROFILE_ADD("light.uploads", (uint64_t)(uploadedLights + phaseUploads));
     OZ_PROFILE_ADD("uniform.upload", (uint64_t)uploads);
 
     return submitted;
@@ -378,6 +565,14 @@ void LitLightning_UpdateFrame(std::vector<LightNode>& lights, Shader shader,
         // Slot 0 is now live for this frame; without this the loop bound would
         // stay at the submitted count (0) and the fill light would be ignored.
         SetShaderLightCount(shader, 1);
+        // Record it: this light is NOT in `lights`, so without the record a
+        // later frame's world light whose fields matched the PREVIOUS record
+        // would skip its upload while the uniform actually held the fill
+        // light's values.
+        if (ShaderLightLocs* entry = LightLocsFor(shader))
+            RememberUploadedLight(fallbackDirectional, entry->uploaded[0]);
+        OZ_PROFILE_ADD("uniform.upload", 13);   // 12 light fields + uLightCount
+        OZ_PROFILE_ADD("light.uploads", 1);
     }
 
     // Update uTime for GPU light animation

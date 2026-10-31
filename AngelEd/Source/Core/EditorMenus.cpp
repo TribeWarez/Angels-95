@@ -89,6 +89,7 @@ static void CreateEditorMenuBar() {
     AppendMenuA(hCam, MF_STRING, IDM_VIEW_BOTTOM, "&Bottom\tNumpad 1");
     AppendMenuA(hCam, MF_STRING, IDM_VIEW_RIGHT, "&Right\tNumpad 3");
     AppendMenuA(hCam, MF_STRING, IDM_VIEW_LEFT, "&Left\tNumpad 9");
+    AppendMenuA(hCam, MF_STRING, IDM_VIEW_FRONT, "&Front\tNumpad 2");
     AppendMenuA(hCam, MF_STRING, IDM_VIEW_PERSPECTIVE, "&Perspective\tNumpad 5");
     AppendMenuA(hMenu, MF_POPUP, (UINT_PTR)hCam, "&Camera");
 

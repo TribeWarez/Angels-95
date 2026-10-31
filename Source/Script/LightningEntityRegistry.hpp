@@ -1,5 +1,6 @@
 #pragma once
 #include "LightningEntityDef.hpp"
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -24,6 +25,13 @@ public:
 
     // Total definitions loaded
     int Count() const { return (int)m_defs.size(); }
+
+    // Bumped whenever Find() can resolve differently: Init, Register,
+    // ReloadFile and LoadWorldOverrides. Draw-path caches key on this instead of
+    // subscribing to the reload themselves - the pickup renderer caches its
+    // mesh/clip per node, and a re-saved .ozls must invalidate that even though
+    // the EntityDef pointer it would otherwise cache stays valid.
+    uint32_t Revision() const { return m_revision; }
 
     // Direct access
     const std::unordered_map<std::string, EntityDef>& GetAll() const { return m_defs; }
@@ -98,4 +106,8 @@ private:
     // RepublishName to decide whether a world-scoped def belongs to the world
     // being edited.
     std::string m_worldDir;
+
+    // See Revision(). Starts at 1 so a default-constructed cache key (0) is
+    // always stale.
+    uint32_t m_revision = 1;
 };

@@ -15,6 +15,7 @@
 // ============================================================================
 
 #include "GizmoMath.hpp"
+#include "../Core/EditorCamera.hpp"
 
 enum class GizmoHandle {
     None = 0,
@@ -31,6 +32,12 @@ static ozg::Vec3 g_gizmoStartPivot;
 static float g_gizmoStartX = 0, g_gizmoStartY = 0, g_gizmoStartZ = 0;
 static float g_gizmoStartR = 0, g_gizmoStartS = 1;
 static float g_gizmoStartParam = 0;
+// Screen-space fallback accumulators. An axis that points (nearly) at the camera
+// has no closest-point parameter, and an edge-on plane has no ray hit; both used to
+// make the handle silently do nothing. These accumulate the pixel delta projected
+// onto the handle's screen direction instead.
+static float  g_gizmoScreenAccum = 0.0f;
+static ozg::Vec3 g_gizmoScreenAccumVec;
 static ozg::Vec3 g_gizmoStartHit;
 static float g_gizmoStartAngle = 0;
 
@@ -144,7 +151,10 @@ static GizmoHandle Gizmo_Pick(Vector2 mouse, const Camera3D& cam, int toolMode) 
         // Rotation ring in the XZ plane. Screen-space distance to the projected
         // polyline is far more forgiving than a 3D circle test.
         GizmoHandle best = GizmoHandle::None;
-        float bestDist = 8.0f;
+        // 10px, not 8: the ring radius is clamped to a 2-unit minimum, so at a
+        // distance (or in an ortho side view, where it projects to a line) an 8px
+        // band is a very small target.
+        float bestDist = 10.0f;
         const float r = len * 0.85f;
         Vector2 prev = {};
         for (int i = 0; i <= 64; i++) {
@@ -157,7 +167,20 @@ static GizmoHandle Gizmo_Pick(Vector2 mouse, const Camera3D& cam, int toolMode) 
             }
             prev = sp;
         }
-        return best;
+        if (best != GizmoHandle::None) return best;
+
+        // Inner disc: Rotate must never be a handle you cannot find. The ring is
+        // the precise target; anything inside it starts a yaw too (nothing else in
+        // Rotate mode is pickable, so this steals no other handle).
+        const Vector2 c = WorldToScreenInRect(pivot, cam, g_activeViewportRect);
+        const float rc = sqrtf((mouse.x - c.x) * (mouse.x - c.x) +
+                               (mouse.y - c.y) * (mouse.y - c.y));
+        const Vector2 edge = WorldToScreenInRect(
+            {pivot.x + r, pivot.y, pivot.z}, cam, g_activeViewportRect);
+        const float rPix = sqrtf((edge.x - c.x) * (edge.x - c.x) +
+                                 (edge.y - c.y) * (edge.y - c.y));
+        if (rPix >= 8.0f && rc <= rPix) return GizmoHandle::RotateY;
+        return GizmoHandle::None;
     }
 
     const Vector2 sp = WorldToScreenInRect(pivot, cam, g_activeViewportRect);
@@ -220,22 +243,31 @@ bool Gizmo_BeginDrag(Vector2 mouse, const Camera3D& cam, int toolMode) {
     g_gizmoStartZ = AngelTechEditor.Z;
     g_gizmoStartR = AngelTechEditor.R;
     g_gizmoStartS = AngelTechEditor.S;
+    g_gizmoScreenAccum = 0.0f;
+    g_gizmoScreenAccumVec = {};
 
     if (IsAxis(h)) {
+        // A failure here is NOT fatal any more: Gizmo_UpdateDrag falls back to the
+        // handle's screen direction when the axis points at the camera.
         if (!ozg::RayAxisParameter(ro, rd, p, ToOz(AxisVector(h)), g_gizmoStartParam))
-            return false;
+            g_gizmoStartParam = 0.0f;
     } else if (IsPlane(h)) {
         if (!ozg::RayPlane(ro, rd, p, ToOz(PlaneNormal(h)), g_gizmoStartHit))
-            return false;
+            g_gizmoStartHit = p;
     } else if (h == GizmoHandle::Screen) {
         const ozg::Vec3 n = ozg::Normalize(ozg::Sub(ToOz(cam.position), ToOz(cam.target)));
         if (!ozg::RayPlane(ro, rd, p, n, g_gizmoStartHit))
-            return false;
+            g_gizmoStartHit = p;
     } else if (h == GizmoHandle::RotateY) {
         ozg::Vec3 hit;
-        if (!ozg::RayPlane(ro, rd, p, {0, 1, 0}, hit))
-            return false;
-        g_gizmoStartAngle = atan2f(hit.z - p.z, hit.x - p.x);
+        if (ozg::RayPlane(ro, rd, p, {0, 1, 0}, hit)) {
+            g_gizmoStartAngle = atan2f(hit.z - p.z, hit.x - p.x);
+        } else {
+            // Looking level: the ring's plane is edge-on, so take the cursor's
+            // angle around the projected pivot instead of refusing to drag.
+            const Vector2 c = WorldToScreenInRect(pivot, cam, g_activeViewportRect);
+            g_gizmoStartAngle = atan2f(-(mouse.y - c.y), mouse.x - c.x);
+        }
     }
 
     g_gizmoDragHandle = h;
@@ -254,13 +286,35 @@ void Gizmo_UpdateDrag(Vector2 mouse, const Camera3D& cam, int toolMode) {
     const float len = Gizmo_Length(cam, pivot);
 
     if (IsAxis(h)) {
-        float t = 0;
-        if (!ozg::RayAxisParameter(ro, rd, p, ToOz(AxisVector(h)), t)) return;
+        // World distance moved along the axis since the drag started. When the axis
+        // is (nearly) parallel to the view ray the closest-point parameter is
+        // undefined, and `return`ing here made the handle silently dead (the Y shaft
+        // in a Top view could never be dragged; in any view the axis aimed at the
+        // camera was dead). Fall back to projecting the pixel delta onto the axis's
+        // SCREEN direction - which is what UnrealEd's axial move does (Delta.X =
+        // +MouseX, no ray at all).
+        float delta = 0.0f;
+        float t = 0.0f;
+        if (ozg::RayAxisParameter(ro, rd, p, ToOz(AxisVector(h)), t)) {
+            delta = t - g_gizmoStartParam;
+        } else {
+            const Vector2 a = WorldToScreenInRect(pivot, cam, g_activeViewportRect);
+            const Vector2 b = WorldToScreenInRect(
+                Vector3Add(pivot, Vector3Scale(AxisVector(h), len)), cam, g_activeViewportRect);
+            const float sx = b.x - a.x, sy = b.y - a.y;
+            const float len2 = sx * sx + sy * sy;
+            const Vector2 md = GetMouseDelta();
+            // `len` world units span |(sx,sy)| pixels along this direction, so one
+            // pixel of movement along it is len/sqrt(len2) world units.
+            if (len2 >= 4.0f)
+                g_gizmoScreenAccum += (md.x * sx + md.y * sy) / len2 * len;
+            delta = g_gizmoScreenAccum;
+        }
 
         if (toolMode == 2 && Gizmo_TypeCanScale()) {
-            // Scale: one world unit of drag along the axis is roughly one handle
-            // length of growth. Uniform because the renderable stores one scale.
-            const float factor = 1.0f + (t - g_gizmoStartParam) / (len > 0.001f ? len : 1.0f);
+            // Scale: one handle length of drag along the axis is 2x growth. Uniform
+            // because the renderable stores one scale.
+            const float factor = 1.0f + delta / (len > 0.001f ? len : 1.0f);
             float s = g_gizmoStartS * factor;
             if (s < 0.05f) s = 0.05f;
             if (s > 100.0f) s = 100.0f;
@@ -269,16 +323,15 @@ void Gizmo_UpdateDrag(Vector2 mouse, const Camera3D& cam, int toolMode) {
             return;
         }
 
-        const float delta = t - g_gizmoStartParam;
+        // SnapAround, not SnapValue: the grid is anchored at the drag's start
+        // position (UnrealEd's GGridBase), so touching a handle never teleports an
+        // off-grid object onto the grid before the user has moved a full step.
         if (h == GizmoHandle::AxisX) {
-            float v = g_gizmoStartX + delta;
-            AngelTechEditor.X = ozg::SnapValue(v, snap);
+            AngelTechEditor.X = ozg::SnapAround(g_gizmoStartX + delta, g_gizmoStartX, snap);
         } else if (h == GizmoHandle::AxisY) {
-            float v = g_gizmoStartY + delta;
-            AngelTechEditor.Y = ozg::SnapValue(v, snap);
+            AngelTechEditor.Y = ozg::SnapAround(g_gizmoStartY + delta, g_gizmoStartY, snap);
         } else {
-            float v = g_gizmoStartZ + delta;
-            AngelTechEditor.Z = ozg::SnapValue(v, snap);
+            AngelTechEditor.Z = ozg::SnapAround(g_gizmoStartZ + delta, g_gizmoStartZ, snap);
         }
         return;
     }
@@ -290,19 +343,44 @@ void Gizmo_UpdateDrag(Vector2 mouse, const Camera3D& cam, int toolMode) {
         else
             normal = ToOz(PlaneNormal(h));
 
+        ozg::Vec3 delta;
         ozg::Vec3 hit;
-        if (!ozg::RayPlane(ro, rd, p, normal, hit)) return;
-        const ozg::Vec3 delta = ozg::Sub(hit, g_gizmoStartHit);
-        AngelTechEditor.X = ozg::SnapValue(g_gizmoStartX + delta.x, snap);
-        AngelTechEditor.Y = ozg::SnapValue(g_gizmoStartY + delta.y, snap);
-        AngelTechEditor.Z = ozg::SnapValue(g_gizmoStartZ + delta.z, snap);
+        if (ozg::RayPlane(ro, rd, p, normal, hit)) {
+            delta = ozg::Sub(hit, g_gizmoStartHit);
+        } else {
+            // Plane seen edge-on: same screen-space fallback, projected back INTO
+            // the plane so the handle only ever moves along the two axes it draws.
+            ozg::Vec3 right, up;
+            if (!ozg::ViewBasis(ozg::Normalize(ozg::Sub(ToOz(cam.target), ToOz(cam.position))),
+                                {0.0f, 1.0f, 0.0f}, right, up))
+                return;
+            const float paneH = g_activeViewportRect.h > 0.0f
+                                    ? g_activeViewportRect.h : (float)GetScreenHeight();
+            const float k = edcam::UnitsPerPixel(
+                cam, Vector3Distance(cam.position, pivot), paneH);
+            const Vector2 md = GetMouseDelta();
+            ozg::Vec3 d = ozg::Add(ozg::Mul(right, md.x * k), ozg::Mul(up, -md.y * k));
+            d = ozg::Sub(d, ozg::Mul(normal, ozg::Dot(normal, d)));
+            g_gizmoScreenAccumVec = ozg::Add(g_gizmoScreenAccumVec, d);
+            delta = g_gizmoScreenAccumVec;
+        }
+        AngelTechEditor.X = ozg::SnapAround(g_gizmoStartX + delta.x, g_gizmoStartX, snap);
+        AngelTechEditor.Y = ozg::SnapAround(g_gizmoStartY + delta.y, g_gizmoStartY, snap);
+        AngelTechEditor.Z = ozg::SnapAround(g_gizmoStartZ + delta.z, g_gizmoStartZ, snap);
         return;
     }
 
     if (h == GizmoHandle::RotateY) {
         ozg::Vec3 hit;
-        if (!ozg::RayPlane(ro, rd, p, {0, 1, 0}, hit)) return;
-        const float ang = atan2f(hit.z - p.z, hit.x - p.x);
+        float ang;
+        if (ozg::RayPlane(ro, rd, p, {0, 1, 0}, hit)) {
+            ang = atan2f(hit.z - p.z, hit.x - p.x);
+        } else {
+            // Level view: the ring's plane is edge-on. Use the cursor's angle
+            // around the projected pivot so Rotate still works instead of dying.
+            const Vector2 c = WorldToScreenInRect(pivot, cam, g_activeViewportRect);
+            ang = atan2f(-(mouse.y - c.y), mouse.x - c.x);
+        }
         float deltaDeg = (ang - g_gizmoStartAngle) * RAD2DEG;
         deltaDeg = ozg::WrapDeg180(deltaDeg);
         float r = g_gizmoStartR + deltaDeg;
@@ -315,13 +393,27 @@ void Gizmo_UpdateDrag(Vector2 mouse, const Camera3D& cam, int toolMode) {
 // ---------------------------------------------------------------- Unreal-style
 //
 // UnrealEd's transforms are mouse + modifier gestures rather than handle drags.
-// The mapping here is translated to THIS engine's axes, which are Y-up:
+// The mapping here is translated to THIS engine's axes, which are Y-up while
+// Unreal (and OZONE) are Z-up:
 //
-//   Ctrl + LMB            -> world X        (horizontal drag)
-//   Ctrl + RMB            -> world Z        (horizontal drag; Unreal's "Y")
-//   Ctrl + LMB + RMB      -> world Y        (vertical drag; Unreal's "Z")
+//   Ctrl + LMB            -> world X        (Unreal's X)
+//   Ctrl + RMB            -> world Z        (Unreal's Y)
+//   Ctrl + LMB + RMB      -> world Y        (Unreal's Z, up/down)
 //   Ctrl + RMB in Rotate  -> yaw (degrees, gizmoAngleSnap/Shift-1)
-//   Shift + LMB           -> move the selection AND the camera together
+//   Shift + LMB           -> the same axial move, AND the camera rides along
+//
+// Those are UnrealEd's own mappings (UnEdCam.cpp, CalcAxialMoveRot): LMB is +X,
+// RMB is +Y, both buttons are -MouseY on Z. Only one of the three is ever live,
+// and ozg::UnrealAxialMove() is the single definition of which.
+//
+// Shift is NOT a different transform. In UnrealEd the modifier only decides which
+// branch runs:
+//     if(!(Buttons & (Ctrl|Shift))) { camera } else { actors }
+//     MoveActors(..., (Buttons & MOUSE_Shift) ? Viewport->Actor : NULL);
+// so Shift moves the actor on the SAME axis and additionally translates the view
+// actor by the same delta. That is what g_unrealFollowCamera reproduces. (It used
+// to be an unconstrained screen-plane move, which is neither what the modifier
+// means nor axis-constrained at all.)
 //
 // Rotation is yaw-only on purpose: OZONE stores one rotation value per
 // renderable/mesh, so mapping pitch/roll here would be a control that changes
@@ -337,29 +429,34 @@ enum class UnrealDragMode {
     TranslateZ,
     TranslateY,
     Yaw,
-    CameraFollow,
 };
 
 static UnrealDragMode g_unrealDrag = UnrealDragMode::None;
+static bool  g_unrealFollowCamera = false;   // Shift: translate the view too
 static float g_unrealStartX = 0, g_unrealStartY = 0, g_unrealStartZ = 0;
 static float g_unrealStartR = 0;
-
-static float UnrealSpeedMul() {
-    switch (g_editorPanels.unrealMoveSpeed) {
-        case 0:  return 0.25f;   // slow
-        case 2:  return 4.0f;    // fast
-        default: return 1.0f;    // medium
-    }
-}
+// Captured because a Shift gesture moves the camera too: cancelling must put the
+// VIEW back as well, or Escape reverted the selection and left the camera
+// displaced by the whole drag.
+static Vector3 g_unrealStartCamPos = {0, 0, 0};
+static Vector3 g_unrealStartCamTarget = {0, 0, 0};
+// Pixels->world is captured ONCE per gesture, from the distance at the start.
+// Re-deriving it every frame from the (moving) selection would make the drag
+// accelerate as the object approaches the camera.
+static float g_unrealDist = 0.0f;
 
 bool Gizmo_IsUnrealDragging() { return g_unrealDrag != UnrealDragMode::None; }
 
-void Gizmo_BeginUnrealDrag(UnrealDragMode mode) {
+void Gizmo_BeginUnrealDrag(UnrealDragMode mode, bool followCamera) {
     g_unrealDrag = mode;
+    g_unrealFollowCamera = followCamera;
     g_unrealStartX = AngelTechEditor.X;
     g_unrealStartY = AngelTechEditor.Y;
     g_unrealStartZ = AngelTechEditor.Z;
     g_unrealStartR = AngelTechEditor.R;
+    g_unrealStartCamPos = OTEditor.MainCamera.position;
+    g_unrealStartCamTarget = OTEditor.MainCamera.target;
+    g_unrealDist = 0.0f;
 }
 
 // `delta` is the per-frame mouse delta, so the axis can change mid-gesture
@@ -369,74 +466,70 @@ void Gizmo_BeginUnrealDrag(UnrealDragMode mode) {
 void Gizmo_UpdateUnrealDrag(Vector2 delta, const Camera3D& cam, int toolMode,
                             bool ctrl, bool shift, bool lmb, bool rmb) {
     if (g_unrealDrag == UnrealDragMode::None) return;
-    (void)shift;
 
-    if (g_unrealDrag != UnrealDragMode::CameraFollow) {
-        UnrealDragMode want = UnrealDragMode::None;
-        if (ctrl) {
-            if (lmb && rmb) want = UnrealDragMode::TranslateY;
-            else if (lmb)   want = UnrealDragMode::TranslateX;
-            else if (rmb)   want = (toolMode == 3) ? UnrealDragMode::Yaw
-                                                   : UnrealDragMode::TranslateZ;
-        }
-        if (want == UnrealDragMode::None) return;
-        g_unrealDrag = want;
+    // Re-derive the axis from the LIVE button state every frame. UnrealEd does the
+    // same (CalcAxialMoveRot dispatches on Buttons), which is what lets LMB -> X
+    // become LMB+RMB -> Y mid-drag.
+    UnrealDragMode want = UnrealDragMode::None;
+    if (ctrl || shift) {
+        if (lmb && rmb) want = UnrealDragMode::TranslateY;
+        else if (lmb)   want = UnrealDragMode::TranslateX;
+        else if (rmb)   want = (toolMode == 3) ? UnrealDragMode::Yaw
+                                               : UnrealDragMode::TranslateZ;
+    }
+    // Modifier released before the button: freeze rather than latch. Main.cpp's
+    // release path still ends the gesture, so nothing stays stuck.
+    if (want == UnrealDragMode::None) return;
+    g_unrealDrag = want;
+
+    // Ctrl and Shift own the modifiers, so snapping reads the toolbar grid
+    // directly instead of Gizmo_SnapStep() (which treats Ctrl as "snap to 1").
+    const float snap = g_editorPanels.gizmoSnap;
+    const float speed = ozg::UnrealSpeedScale(g_editorPanels.unrealMoveSpeed);
+
+    if (g_unrealDrag == UnrealDragMode::Yaw) {
+        AngelTechEditor.R = ozg::SnapAngle(AngelTechEditor.R + ozg::UnrealAxialYaw(delta.x) * speed,
+                                           Gizmo_AngleStep());
+        return;
     }
 
     const Vector3 pivot = Gizmo_Pivot();
-    const float dist = Vector3Distance(cam.position, pivot);
-    float k = dist * 0.002f;
-    if (k < 0.02f) k = 0.02f;
-    k *= UnrealSpeedMul();
+    if (g_unrealDist <= 0.0f) g_unrealDist = Vector3Distance(cam.position, pivot);
+    const float paneH = g_activeViewportRect.h > 0.0f ? g_activeViewportRect.h
+                                                      : (float)GetScreenHeight();
+    // One pixel of drag = one pixel's worth of world at the selection's depth, so
+    // the gesture covers the same screen distance at any zoom. UnrealEd multiplied
+    // by a fixed 0.25*MovementSpeed instead, which is only equivalent at one
+    // distance - that is why the old dist*0.002 factor felt violent far out and
+    // dead up close, and why the speed keys did not match UnrealEd's ratio.
+    const float k = edcam::UnitsPerPixel(cam, g_unrealDist, paneH) * speed;
 
-    // Ctrl is OUR modifier here, so snapping reads the toolbar grid directly
-    // instead of Gizmo_SnapStep() (which treats Ctrl as "snap to 1").
-    const float snap = g_editorPanels.gizmoSnap;
+    const ozg::Move3 d = ozg::UnrealAxialMove(delta.x, delta.y, lmb, rmb);
 
-    switch (g_unrealDrag) {
-        case UnrealDragMode::TranslateX:
-            AngelTechEditor.X = (snap > 0.0f)
-                ? ozg::SnapValue(AngelTechEditor.X + delta.x * k, snap)
-                : AngelTechEditor.X + delta.x * k;
-            break;
-        case UnrealDragMode::TranslateZ:
-            AngelTechEditor.Z = (snap > 0.0f)
-                ? ozg::SnapValue(AngelTechEditor.Z + delta.x * k, snap)
-                : AngelTechEditor.Z + delta.x * k;
-            break;
-        case UnrealDragMode::TranslateY:
-            // Screen-up is negative mouse-delta, so the vertical axis is negated.
-            AngelTechEditor.Y = (snap > 0.0f)
-                ? ozg::SnapValue(AngelTechEditor.Y - delta.y * k, snap)
-                : AngelTechEditor.Y - delta.y * k;
-            break;
-        case UnrealDragMode::Yaw: {
-            const float r = AngelTechEditor.R + delta.x * 0.4f * UnrealSpeedMul();
-            AngelTechEditor.R = ozg::SnapAngle(r, Gizmo_AngleStep());
-            break;
-        }
-        case UnrealDragMode::CameraFollow: {
-            // Camera-plane movement, then the camera is translated by the SAME
-            // delta: the selection stays under the cursor and the view follows,
-            // which is the point of Unreal's Shift-drag.
-            Vector3 fwd = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
-            Vector3 right = Vector3Normalize(Vector3CrossProduct(fwd, {0, 1, 0}));
-            Vector3 up = Vector3Normalize(Vector3CrossProduct(right, fwd));
-            const Vector3 d = Vector3Subtract(Vector3Scale(right, delta.x * k),
-                                              Vector3Scale(up, delta.y * k));
-            AngelTechEditor.X += d.x;
-            AngelTechEditor.Y += d.y;
-            AngelTechEditor.Z += d.z;
-            OTEditor.MainCamera.position = Vector3Add(OTEditor.MainCamera.position, d);
-            OTEditor.MainCamera.target   = Vector3Add(OTEditor.MainCamera.target, d);
-            break;
-        }
-        default: break;
+    // Applying all three components is safe and deliberate: UnrealAxialMove zeroes
+    // the two that are not live, and SnapAround(v, vStart, step) returns vStart
+    // exactly when the delta is zero. One definition of the axis mapping, no second
+    // switch here that could drift from it.
+    const float x0 = AngelTechEditor.X, y0 = AngelTechEditor.Y, z0 = AngelTechEditor.Z;
+    AngelTechEditor.X = ozg::SnapAround(x0 + d.x * k, g_unrealStartX, snap);
+    AngelTechEditor.Y = ozg::SnapAround(y0 + d.y * k, g_unrealStartY, snap);
+    AngelTechEditor.Z = ozg::SnapAround(z0 + d.z * k, g_unrealStartZ, snap);
+
+    if (g_unrealFollowCamera) {
+        // UnrealEd passes the view actor to MoveActors, so the camera moves by the
+        // SAME delta and the selection stays put on screen. The SNAPPED delta keeps
+        // the pair rigid.
+        const Vector3 step = {AngelTechEditor.X - x0,
+                              AngelTechEditor.Y - y0,
+                              AngelTechEditor.Z - z0};
+        OTEditor.MainCamera.position = Vector3Add(OTEditor.MainCamera.position, step);
+        OTEditor.MainCamera.target   = Vector3Add(OTEditor.MainCamera.target,   step);
     }
 }
 
 void Gizmo_EndUnrealDrag() {
     g_unrealDrag = UnrealDragMode::None;
+    g_unrealFollowCamera = false;
 }
 
 void Gizmo_EndDrag() {
@@ -449,7 +542,12 @@ void Gizmo_CancelUnrealDrag() {
     AngelTechEditor.Y = g_unrealStartY;
     AngelTechEditor.Z = g_unrealStartZ;
     AngelTechEditor.R = g_unrealStartR;
+    if (g_unrealFollowCamera) {
+        OTEditor.MainCamera.position = g_unrealStartCamPos;
+        OTEditor.MainCamera.target   = g_unrealStartCamTarget;
+    }
     g_unrealDrag = UnrealDragMode::None;
+    g_unrealFollowCamera = false;
 }
 
 

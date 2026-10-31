@@ -38,11 +38,51 @@ int ClampPropInt(int v, int lo, int hi);
 // the edit with the pre-edit transform.
 void SnapGizmoToSelection(const EditorSelection& sel);
 
-// Multi-select copy/paste. Copies every BRUSH in g_selSet (or the primary when the
-// set has one entry) and pastes them at a small offset, each paste stepping
-// further so repeated Ctrl+V fans out. Ctrl+C / Ctrl+V in the frame loop.
-void CopySelectedBrushes();
-void PasteBrushes();
+// Put `sel`'s world CENTRE at `centre`. This is the ONE definition of "move an
+// entity", used both for the primary selection (which the gizmo tracks) and for
+// every additional member of a multi-selection, so a Shift-selected set translates
+// as one rigid group. UnrealEd's MoveActors applies the same Delta to every
+// bSelected actor; before this the extra members only ever had their orange
+// outline moved, never the entity.
+//
+// `applyTool` also writes the gizmo's SCALE and YAW into the entity. It is true
+// only for the PRIMARY: the gizmo carries one scale and one yaw, so stamping them
+// onto every member would flatten a mixed selection into a copy of the primary's
+// rotation and size.
+void MoveSelectionCentre(const EditorSelection& sel, Vector3 centre, bool applyTool);
+
+// Clipboard. Copies EVERY entity in the selection (g_selSet, or the primary when
+// the set has one entry) into a type-tagged record set, and pastes it back at a
+// small offset with NEW ids, SELECTING the result - the same contract as
+// UnrealEd's edactCopySelected / edactPasteSelected. Ctrl+C / Ctrl+V in the frame
+// loop, and Duplicate (Ctrl+D) is copy-then-paste.
+void CopySelectedEntities();
+void PasteEntities();
+
+// Apply the Texture Manager's active texture to the whole selection. Shared by the
+// viewport right-click menu and the WorldGraph menu; both route into the ONE
+// apply implementation in Core/EditorDispatcher.cpp.
+void ApplyActiveTextureToSelection();
+
+// Drop the whole selection (HBackdrop::Click: a plain left click on empty space).
+// Clears the gizmo and any armed placement ghost with it - they are part of "the
+// selection" as far as the next frame is concerned.
+void ClearSelection();
+
+// UE1's selection modifier is Ctrl (`bSelected ^= 1` in Click(HActor)); Shift does
+// the same here, and Ctrl also extends while Unreal-style brush editing is OFF -
+// in that mode Ctrl+click is the transform gesture, so it must not select.
+bool SelectionModifierHeld();
+
+// Drop every selected entity onto the surface below it (the heightmap where no
+// solid is under it). Each member finds its OWN floor, so a crate on a ledge and a
+// barrel on the ground both land correctly.
+void SnapSelectionToGround();
+
+// Push every selected entity against the nearest brush face along the view's right
+// axis (snapped to the nearest cardinal, because collision is AABB-only). Capped to
+// a sane reach so it cannot teleport an object across the level.
+void SnapSelectionToSide();
 
 // Centre the viewport on the current selection, preserving the current view
 // direction and distance. Used by the World Hierarchy's Frame Selection item.

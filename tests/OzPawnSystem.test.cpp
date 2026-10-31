@@ -1280,6 +1280,47 @@ static int test_light_crud() {
     PASS(); return 0; END_TEST();
 }
 
+// Regression for "copying a light deletes the selected light".
+//
+// The editor's clipboard clones a node and re-adds it. Add* only allocates when
+// `id == 0`, so a clone that kept its source's id became a SECOND NAME for the
+// same light: every Remove*(id) is a remove_if, so deleting either copy destroyed
+// both, and Get*(id) returned whichever came first, so moving one moved the
+// other. PasteOne() now zeroes every cloned id; this pins the contract that makes
+// that sufficient - a clone added with id 0 gets a FRESH handle and the source
+// survives its deletion.
+static int test_cloned_node_gets_a_fresh_id() {
+    TEST("A cloned light with id 0 gets a new id; deleting it keeps the source");
+    auto& ps = PawnSystem::Instance();
+    ps.ClearLights();
+
+    LightNode src;
+    src.position = {1, 2, 3};
+    src.radius = 8.0f;
+    const int srcId = ps.AddLight(src);
+    CHECK(srcId >= 0);
+
+    LightNode clone = src;         // exactly what ClipOne/PasteOne copy
+    clone.id = 0;                  // ...and what PasteOne must zero
+    clone.position.x += 2.0f;
+    const int cloneId = ps.AddLight(clone);
+
+    CHECK(cloneId >= 0);
+    CHECK(cloneId != srcId);                    // no aliasing
+    CHECK_EQ(ps.GetLights().size(), (size_t)2);
+    CHECK(ps.GetLight(srcId) != nullptr);
+    CHECK(ps.GetLight(cloneId) != nullptr);
+    // ...and they are genuinely separate nodes.
+    CHECK(ps.GetLight(cloneId)->position.x > ps.GetLight(srcId)->position.x);
+
+    ps.RemoveLight(cloneId);
+    CHECK(ps.GetLight(srcId) != nullptr);       // the source is untouched
+    CHECK(ps.GetLight(cloneId) == nullptr);
+
+    ps.ClearLights();
+    PASS(); return 0; END_TEST();
+}
+
 // Phase F: BoneIdsFitSkeleton is the auto-enable gate for view-model skeletal
 // playback. FBX2glTF weapon exports carry MULTIPLE skins (one per mesh part);
 // raylib keeps only the first, so vertex boneIds can reference bones the
@@ -1836,6 +1877,132 @@ static int test_frustum_planes_are_valid() {
     PASS(); return 0; END_TEST();
 }
 
+// ---------------------------------------------------------------------------
+// Render-path caches added with the optimisation pass.
+// ---------------------------------------------------------------------------
+
+// The pawn cull box is the only thing between a rotated/hovering model and "the
+// enemy is invisible", so it must be conservative in every direction.
+static int test_pawn_cull_box_is_conservative() {
+    TEST("PawnCullBox covers the model for any yaw and is feet-anchored");
+    // A long, off-centre model: 4 units along Z, 1.8 tall, pivot offset in X.
+    BoundingBox mesh = {{-0.5f, 0.0f, -2.0f}, {1.5f, 1.8f, 2.0f}};
+    const Vector3 feet = {10.0f, 3.0f, -4.0f};
+    const float scale = 2.0f;
+
+    const BoundingBox box = PawnCullBox(feet, scale, mesh);
+
+    // Feet anchored: a full unit of slack below the lowest point and above the
+    // highest (poses overshoot the bind pose; hovering pawns bob).
+    CHECK(box.min.y <= feet.y - 0.5f);
+    CHECK(box.max.y >= feet.y + 1.8f * scale);
+
+    // Vertical placement follows the offset DrawAll applies, so a model pushed
+    // down onto the feet cannot escape the box.
+    const BoundingBox lowered = PawnCullBox(feet, scale, mesh, -3.0f);
+    CHECK(lowered.min.y <= feet.y - 3.0f);
+    CHECK(lowered.max.y >= feet.y - 3.0f + 1.8f * scale);
+
+    // Yaw is ignored, so the box must contain the model's corner at EVERY
+    // rotation - i.e. at least the distance to the farthest corner, which is the
+    // DIAGONAL of the X/Z extents, not the per-axis maximum.
+    const float rx = 1.5f * scale;
+    const float rz = 2.0f * scale;
+    const float halfX = box.max.x - feet.x;
+    const float halfZ = box.max.z - feet.z;
+    for (int deg = 0; deg < 360; deg += 15) {
+        const float a = (float)deg * DEG2RAD;
+        const float cx = rx * cosf(a) - rz * sinf(a);
+        const float cz = rx * sinf(a) + rz * cosf(a);
+        CHECK(halfX >= fabsf(cx) - 0.001f);
+        CHECK(halfZ >= fabsf(cz) - 0.001f);
+    }
+
+    // Behavioural half: behind the camera is culled, in front is not.
+    Camera3D cam{};
+    cam.position = {0, 0, 0};
+    cam.target = {0, 0, -1};
+    cam.up = {0, 1, 0};
+    cam.fovy = 60.0f;
+    cam.projection = CAMERA_PERSPECTIVE;
+    FrustumPlane planes[6];
+    BuildFrustum(cam, planes, 1.0f);
+
+    CHECK(AabbInFrustum(planes, PawnCullBox({0, 0, -10}, 1.0f, mesh)));
+    CHECK(!AabbInFrustum(planes, PawnCullBox({0, 0, 10}, 1.0f, mesh)));
+    PASS(); return 0; END_TEST();
+}
+
+// Which lights survive the budget is decided by this ordering, so a refactor of
+// the sort (it is decorate-sort now, not a comparator that recomputed distances)
+// must not change the contract.
+static int test_light_sort_is_tier_then_distance() {
+    TEST("LitLightning_SortByDistance orders active, tier, then nearest");
+    const Vector3 cam = {0, 0, 0};
+    std::vector<LightNode> lights(4);
+
+    lights[0].active = true;
+    lights[0].type = LitLightType::POINT;
+    lights[0].position = {100, 0, 0};      // beyond its radius -> tier 2
+    lights[0].radius = 5.0f;
+
+    lights[1].active = false;
+    lights[1].type = LitLightType::POINT;
+    lights[1].position = {0, 0, 0};        // inactive -> always last
+    lights[1].radius = 100.0f;
+
+    lights[2].active = true;
+    lights[2].type = LitLightType::DIRECTIONAL;
+    lights[2].position = {400, 300, 0};    // tier 0 wins despite the distance
+    lights[2].radius = 0.0f;
+
+    lights[3].active = true;
+    lights[3].type = LitLightType::POINT;
+    lights[3].position = {3, 0, 0};        // in range -> tier 1
+    lights[3].radius = 10.0f;
+
+    LitLightning_SortByDistance(lights, cam);
+
+    CHECK(lights[0].type == LitLightType::DIRECTIONAL);
+    CHECK(lights[1].type == LitLightType::POINT);
+    CHECK(lights[1].position.x == 3.0f);
+    CHECK(lights[2].position.x == 100.0f);
+    CHECK(!lights[3].active);
+
+    // Idempotent: a second sort must not reorder a sorted vector.
+    LitLightning_SortByDistance(lights, cam);
+    CHECK(lights[1].position.x == 3.0f);
+    PASS(); return 0; END_TEST();
+}
+
+// The pickup draw-path cache is keyed on this revision, so a def mutation that
+// does not bump it would leave a pickup rendering its previous model forever.
+static int test_registry_revision_bumps_on_def_mutation() {
+    TEST("Registry Revision advances whenever a def can resolve differently");
+    auto& reg = LightningEntityRegistry::Instance();
+    const uint32_t before = reg.Revision();
+
+    EntityDef def;
+    def.name = "RevisionProbe";
+    def.type = EntityType::PICKUP;
+    CHECK(reg.Register(def));
+    const uint32_t afterRegister = reg.Revision();
+    CHECK(afterRegister != before);
+
+    // A rejected registration mutates nothing, so it must not invalidate caches.
+    EntityDef bad;
+    bad.name = "";
+    bad.type = EntityType::PICKUP;
+    CHECK(!reg.Register(bad));
+    CHECK_EQ(reg.Revision(), afterRegister);
+
+    // The world policy can promote/drop defs; an empty target returns early but
+    // still advances (a spurious bump only costs one re-resolve).
+    reg.LoadWorldOverrides(std::string());
+    CHECK(reg.Revision() != afterRegister);
+    PASS(); return 0; END_TEST();
+}
+
 int main() {
     // Unbuffered: this binary is the one suite that has ever died without a
     // diagnostic (a segfault on Linux CI printed nothing, because stdout is
@@ -1866,6 +2033,7 @@ int main() {
     failures += test_skyzone_transition_emits_exit_then_enter();
     failures += test_emitter_crud();
     failures += test_light_crud();
+    failures += test_cloned_node_gets_a_fresh_id();
     failures += test_particle_burst();
     failures += test_weather_spawns_and_recycles();
     failures += test_weather_shares_pool_with_burst();
@@ -1895,6 +2063,9 @@ int main() {
     failures += test_status_released_when_pawn_becomes_server_owned();
     failures += test_bone_ids_fit_skeleton();
     failures += test_frustum_planes_are_valid();
+    failures += test_pawn_cull_box_is_conservative();
+    failures += test_light_sort_is_tier_then_distance();
+    failures += test_registry_revision_bumps_on_def_mutation();
 
     fprintf(stdout, "==================\n");
     fprintf(stdout, "%d/%d passed, %d failed\n",

@@ -7,6 +7,8 @@
 // single TU for AngelEd's core layer. See Wiki/Editor-Architecture-Refactor.md.
 // =============================================================================
 
+#include "EditorCamera.hpp"   // one definition of the camera gestures
+
 // Make the cwd a usable project root before anything reads a relative path.
 //
 // Almost EVERY asset path in the editor is relative and unanchored - "GameData",
@@ -92,24 +94,57 @@ static fs::path FirstAvailableWorld() {
     }
     return {};
 }
+// --- Per-pane view state -----------------------------------------------------
+//
+// The two states a preset needs to remember are "which projection" and "the
+// perspective camera to go back to". Both used to be single globals
+// (g_orthoView + g_perspectiveCamState), so in a split layout pane 2's Persp chip
+// restored PANE 1's camera - and because the active pane's camera is restored
+// from g_paneCams at the top of every frame while the only write-back happened
+// mid-frame, a preset changed from the toolbar/menu/key was silently reverted on
+// the next frame. That is why the Top/Side/Persp buttons "did nothing".
+//
+// The projection now lives where it belongs - on the pane's own Camera3D - and
+// only the saved perspective camera needs storage per pane.
+static Camera3D g_panePersp[4] = {};
+static bool     g_panePerspValid[4] = {};
+
+static int Editor_ActivePane() {
+    const int a = g_editorPanels.viewActive;
+    return (a >= 0 && a < 4) ? a : 0;
+}
+
+// Publish the editing camera back to its pane. Every camera writer must leave
+// g_paneCams in step, or the next frame's restore in Main.cpp discards the edit.
+static void Editor_CommitActiveCamera() {
+    const int a = Editor_ActivePane();
+    if (a >= 0 && a < 4) g_paneCams[a] = OTEditor.MainCamera;
+}
+
+static bool Editor_IsOrthoView() {
+    return OTEditor.MainCamera.projection == CAMERA_ORTHOGRAPHIC;
+}
+
 static void SetViewPreset(const Vector3& pos, const Vector3& target, const Vector3& up) {
-    if (!g_orthoView) {
-        g_perspectiveCamState = OTEditor.MainCamera;
-        g_orthoView = true;
+    const int pane = Editor_ActivePane();
+    if (!Editor_IsOrthoView()) {
+        g_panePersp[pane] = OTEditor.MainCamera;   // remember where Persp returns to
+        g_panePerspValid[pane] = true;
     }
     OTEditor.MainCamera.position = pos;
     OTEditor.MainCamera.target = target;
     OTEditor.MainCamera.up = up;
     OTEditor.MainCamera.projection = CAMERA_ORTHOGRAPHIC;
+    Editor_CommitActiveCamera();
 }
 
 static void SetViewPerspective() {
-    if (g_orthoView) {
-        // Restore saved state
-        OTEditor.MainCamera = g_perspectiveCamState;
-        g_orthoView = false;
+    const int pane = Editor_ActivePane();
+    if (Editor_IsOrthoView() && g_panePerspValid[pane]) {
+        OTEditor.MainCamera = g_panePersp[pane];   // THIS pane's saved perspective
     }
     OTEditor.MainCamera.projection = CAMERA_PERSPECTIVE;
+    Editor_CommitActiveCamera();
 }
 
 // Named orthographic presets. The Camera menu, the NumPad shortcuts and the
@@ -119,18 +154,16 @@ static void ViewTop()    { const Vector3 c = OTEditor.MainCamera.target; SetView
 static void ViewBottom() { const Vector3 c = OTEditor.MainCamera.target; SetViewPreset({c.x, c.y - 80, c.z + 0.1f}, c, {0, 0, 1}); }
 static void ViewRight()  { const Vector3 c = OTEditor.MainCamera.target; SetViewPreset({c.x + 80, c.y, c.z}, c, {0, 1, 0}); }
 static void ViewLeft()   { const Vector3 c = OTEditor.MainCamera.target; SetViewPreset({c.x - 80, c.y, c.z}, c, {0, 1, 0}); }
+static void ViewFront()  { const Vector3 c = OTEditor.MainCamera.target; SetViewPreset({c.x, c.y, c.z - 80}, c, {0, 1, 0}); }
 
-// Re-sync the global ortho/perspective bookkeeping from the ACTIVE pane's camera.
-// The presets keep `g_orthoView` + `g_perspectiveCamState` as their two states;
-// with multiple panes each pane has its own projection, so switching panes must
-// update those globals or SetViewPerspective would restore the PREVIOUS pane's
-// saved perspective camera.
+// Kept as a no-op shim: the preset state is now derived from the active camera
+// (see Editor_IsOrthoView) and the saved-perspective camera is per pane, so
+// nothing needs re-syncing when the active pane changes. Main.cpp still calls it.
 static void Editor_SyncViewPresetState() {
-    if (OTEditor.MainCamera.projection == CAMERA_ORTHOGRAPHIC) {
-        g_orthoView = true;
-    } else {
-        g_orthoView = false;
-        g_perspectiveCamState = OTEditor.MainCamera;
+    const int pane = Editor_ActivePane();
+    if (!Editor_IsOrthoView()) {
+        g_panePersp[pane] = OTEditor.MainCamera;
+        g_panePerspValid[pane] = true;
     }
 }
 
@@ -142,7 +175,7 @@ static void Editor_SyncViewPresetState() {
 // inventing a fifth state the chips could not show.
 enum class ViewPresetKind { Top, Bottom, Side, Perspective };
 static ViewPresetKind CurrentViewPreset() {
-    if (!g_orthoView) return ViewPresetKind::Perspective;
+    if (!Editor_IsOrthoView()) return ViewPresetKind::Perspective;
     const Vector3 up = OTEditor.MainCamera.up;
     if (up.z < -0.5f) return ViewPresetKind::Top;
     if (up.z >  0.5f) return ViewPresetKind::Bottom;
@@ -175,8 +208,12 @@ static void ToggleAnimPanel()   { ShowAnimPanel(!g_editorPanels.showAnimPanel); 
 // were the only ones that happened to be safe). A diagonal position keeps
 // forward and up independent and still centres on the origin.
 static void ResetCamera()       { OTEditor.MainCamera.position = {0, 10, -12}; OTEditor.MainCamera.target = {0, 0, 0}; OTEditor.MainCamera.up = {0, 1, 0}; }
-static void CamUp()             { OTEditor.MainCamera.position.y += 2; }
-static void CamDown()           { OTEditor.MainCamera.position.y -= 2; }
+// PageUp/PageDown raise and lower the WHOLE camera. Writing position.y alone
+// re-aimed the view at the old target, so "move up" pitched the camera down and
+// the ground slid toward the viewer - it never raised anything. Height is
+// proportional to the current focus distance so the step is useful at any zoom.
+static void CamUp()   { edcam::MoveVertical(OTEditor.MainCamera,  edcam::FocusDistance(OTEditor.MainCamera) * 0.15f); }
+static void CamDown() { edcam::MoveVertical(OTEditor.MainCamera, -edcam::FocusDistance(OTEditor.MainCamera) * 0.15f); }
 
 // Model preview for Win32 dialog (render-to-texture)
 static RenderTexture2D g_previewRT = {0};

@@ -292,6 +292,10 @@ const StatSpec kWeaponStats[] = {
     {"viewmodel_offset",       2, "Viewmodel Pos", "Viewmodel"},
     {"viewmodel_rot",          2, "Viewmodel Rot", "Viewmodel"},
     {"viewmodel_scale",        0, "Viewmodel Scale", "Viewmodel"},
+    // Separate HUD projection (Sauerbraten avatarfov / avatardepth); defaults
+    // 65 deg and 0.5. Consumed by ViewModel::Draw's PushViewModelProjection.
+    {"viewmodel_fov",          0, "Viewmodel FOV", "Viewmodel"},
+    {"viewmodel_depth",        0, "Viewmodel Depth", "Viewmodel"},
     // 0/absent = auto (clips + single-skeleton scan), 1 = force skeletal
     // playback, -1 = force static + procedural. Consumed by
     // ViewModel::SetWeapon; see the gate comment there.
@@ -655,7 +659,11 @@ static void PropsUpdateScroll(HWND hwnd) {
 
     SCROLLINFO si = { sizeof(SCROLLINFO), SIF_RANGE | SIF_PAGE | SIF_POS };
     si.nMin  = 0;
-    si.nMax  = range;
+    // nMax is the LAST REACHABLE POSITION, and Windows caps nPos at
+    // `nMax - nPage + 1`. Using (contentH - clientH) as nMax therefore stopped the
+    // thumb one PAGE short of the bottom: on a weapon def the Apply/Close row could
+    // never be scrolled into view however far the bar was dragged.
+    si.nMax  = (g_propsContentH > clientH) ? (g_propsContentH - 1) : clientH;
     si.nPage = (UINT)clientH;
     si.nPos  = g_propsScroll;
     SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
@@ -666,23 +674,42 @@ static void PropsUpdateScroll(HWND hwnd) {
 // Size the window to what the rows need, but never past the monitor's work
 // area, then publish the scroll range.
 static void PropsFitWindow(HWND hwnd, int neededH) {
-    g_propsContentH = neededH;
+    g_propsContentH = neededH > 0 ? neededH : 1;
+
+    // `neededH` is a CONTENT height (rows start at y = 0 in the client area) but
+    // SetWindowPos takes a WINDOW height. Treating the two as the same silently
+    // spent the non-client area - caption + borders, ~31px - out of the bottom
+    // margin, so the Apply/Close row sat half outside the window and the scroll
+    // range was computed against a client height the layout never got to use.
+    RECT wr;
+    GetWindowRect(hwnd, &wr);
+    int winW = wr.right - wr.left;
+    if (winW <= 0) winW = g_editorPanels.propsPanelPos.w;
+
+    RECT adj = { 0, 0, winW, g_propsContentH };
+    AdjustWindowRectEx(&adj, (DWORD)GetWindowLong(hwnd, GWL_STYLE), FALSE,
+                       (DWORD)GetWindowLong(hwnd, GWL_EXSTYLE));
+    int wantH = adj.bottom - adj.top;
 
     HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = { sizeof(MONITORINFO) };
-    int availH = 0;
-    if (GetMonitorInfo(mon, &mi))
-        availH = mi.rcWork.bottom - mi.rcWork.top;
-    if (availH < 200) availH = 600;   // no monitor info: keep some sane floor
+    int workTop = 0, workBottom = 600;
+    if (GetMonitorInfo(mon, &mi)) {
+        workTop = mi.rcWork.top;
+        workBottom = mi.rcWork.bottom;
+    }
+    if (workBottom - workTop < 200) { workTop = 0; workBottom = 600; }
 
-    int wantH = neededH;
+    // Fit the space BELOW the window's own top edge, not the raw work-area height:
+    // clamping to the height alone still let a panel sitting near the bottom of the
+    // screen grow off the end of it.
+    if (wr.top < workTop) wr.top = workTop;
+    int availH = workBottom - wr.top;
+    if (availH < 200) availH = 200;
     if (wantH > availH) wantH = availH;
 
-    RECT wr;
-    GetWindowRect(hwnd, &wr);
     if (wr.bottom - wr.top != wantH)
-        SetWindowPos(hwnd, nullptr, 0, 0, wr.right - wr.left, wantH,
-                     SWP_NOMOVE | SWP_NOZORDER);
+        SetWindowPos(hwnd, nullptr, wr.left, wr.top, winW, wantH, SWP_NOZORDER);
 
     PropsUpdateScroll(hwnd);
 }
@@ -741,6 +768,14 @@ static void PopulatePropertiesPanel(HWND hwnd) {
     RECT rc;
     GetClientRect(hwnd, &rc);
     int x = 10, y = 10, ew = 100, bw = 80, rowH = 24;
+    // Horizontal metrics, ONE pair for the whole panel. The colour rows used to be
+    // handed the raw rc.right, so their third channel and "Pick..." button ran under
+    // the vertical scrollbar, and every width computed from the client edge ignored
+    // the bar as well - the panel's widest fields clipped the moment it appeared.
+    // rc is read before WS_VSCROLL is toggled, so the reservation is unconditional.
+    const int kPadRight  = 20;   // right margin, matching every `rc.right - 20` label
+    const int kScrollRes = 18;   // width of the scrollbar that may appear later
+    const int rightEdge  = rc.right - kPadRight - kScrollRes;
     // ONE label width for the whole panel. It used to be lw = 74 for the instance
     // rows (Pos/Rot/Size/Tex) and 96 for everything from the first group header on,
     // which put a visible 22px step in the value column at the boundary. Every row
@@ -849,7 +884,7 @@ static void PopulatePropertiesPanel(HWND hwnd) {
         std::wstring wval(val.begin(), val.end());
         HWND h = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", wval.c_str(),
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
-            x + lw, y, rc.right - (x + lw) - 20, 22, hwnd, (HMENU)(INT_PTR)id, g_hInst, nullptr);
+            x + lw, y, rightEdge - (x + lw), 22, hwnd, (HMENU)(INT_PTR)id, g_hInst, nullptr);
         y += rowH;
         return h;
     };
@@ -897,7 +932,7 @@ static void PopulatePropertiesPanel(HWND hwnd) {
     auto addColorRow = [&](const wchar_t* label, int idR, int idG, int idB,
                            int r, int g, int b,
                            int lx, int* yPtr, int lw_, int ew_, int rowH_,
-                           int rightEdge) {
+                           int rightLimit) {
         const int ly = *yPtr;
         CreateLabel(hwnd, label, lx, ly, lw_, 20, 0);
         const int cw = 52;
@@ -913,7 +948,7 @@ static void PopulatePropertiesPanel(HWND hwnd) {
         // Picker sits to the right of the three channels, or on the next line if
         // the value column is too narrow for it.
         const int px = lx + lw_ + (cw + 4) * 3 + 6;
-        if (px + 70 <= rightEdge - 10) {
+        if (px + 70 <= rightLimit - 10) {
             CreateButton(hwnd, L"Pick...", px, ly, 70, 22, idR + 10000);
         }
         *yPtr += rowH_;
@@ -936,7 +971,7 @@ static void PopulatePropertiesPanel(HWND hwnd) {
         // read-only row an ID would let it be read - or worse, treated as blank.
         CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", wv.c_str(),
             WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_READONLY,
-            x + statLabelW, y, rc.right - (x + statLabelW) - 20, 22,
+            x + statLabelW, y, rightEdge - (x + statLabelW), 22,
             hwnd, nullptr, g_hInst, nullptr);
         y += rowH;
     };
@@ -1017,7 +1052,7 @@ static void PopulatePropertiesPanel(HWND hwnd) {
                 WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL |
                     (defWritable ? WS_TABSTOP : ES_READONLY) |
                     (row.isFloat ? ES_RIGHT : 0),
-                x + statLabelW, y, rc.right - (x + statLabelW) - 20, 22,
+                x + statLabelW, y, rightEdge - (x + statLabelW), 22,
                 hwnd, defWritable ? (HMENU)(INT_PTR)row.controlId : nullptr,
                 g_hInst, nullptr);
             y += rowH;
@@ -1138,7 +1173,7 @@ static void PopulatePropertiesPanel(HWND hwnd) {
                     g_editorPanels.propZoneApplyFog, &y, rowH);
         addColorRow(L"Fog Color:", ID_PP_ZENV_FOG_R, ID_PP_ZENV_FOG_G, ID_PP_ZENV_FOG_B,
                     g_editorPanels.propZoneFogR, g_editorPanels.propZoneFogG,
-                    g_editorPanels.propZoneFogB, x, &y, lw, ew, rowH, rc.right);
+                    g_editorPanels.propZoneFogB, x, &y, lw, ew, rowH, rightEdge);
         addField(L"Fog Density:", ID_PP_ZENV_FOG_DENS, g_editorPanels.propZoneFogDensity);
         addField(L"Fog Start:", ID_PP_ZENV_FOG_START, g_editorPanels.propZoneFogStart);
         addField(L"Fog End:", ID_PP_ZENV_FOG_END, g_editorPanels.propZoneFogEnd);
@@ -1146,7 +1181,7 @@ static void PopulatePropertiesPanel(HWND hwnd) {
                     g_editorPanels.propZoneApplyAmbient, &y, rowH);
         addColorRow(L"Ambient Color:", ID_PP_ZENV_AMB_R, ID_PP_ZENV_AMB_G, ID_PP_ZENV_AMB_B,
                     g_editorPanels.propZoneAmbR, g_editorPanels.propZoneAmbG,
-                    g_editorPanels.propZoneAmbB, x, &y, lw, ew, rowH, rc.right);
+                    g_editorPanels.propZoneAmbB, x, &y, lw, ew, rowH, rightEdge);
         addField(L"Ambient Intensity:", ID_PP_ZENV_AMB_INT, g_editorPanels.propZoneAmbIntensity);
         addSection("Reverb");
         addField(L"Mix:", ID_PP_ZENV_REVERB_MIX, g_editorPanels.propZoneReverbMix);
@@ -1316,7 +1351,7 @@ static void PopulatePropertiesPanel(HWND hwnd) {
         addField(L"Speed:", ID_PP_MAP_PSPEED, g_editorPanels.propMapParticleSpeed);
         addColorRow(L"Fog/Color:", ID_PP_MAP_PR, ID_PP_MAP_PG, ID_PP_MAP_PB,
                     g_editorPanels.propMapParticleR, g_editorPanels.propMapParticleG,
-                    g_editorPanels.propMapParticleB, x, &y, lw, ew, rowH, rc.right);
+                    g_editorPanels.propMapParticleB, x, &y, lw, ew, rowH, rightEdge);
         // Wind had NO control at all before (ID_SF_PAR_WINDX/Z were declared and
         // never created), so a wind value in a world file could only ever be
         // preserved, never authored.

@@ -128,9 +128,14 @@ make test_editorbus      # editor event vocabulary tests
 make test_assetscope     # editor asset-scope tree tests
 make test_events         # EventBus / TriggerSystem / ObjectiveSystem tests
 make test_game           # game-hierarchy def loading tests
-make test_gizmomath      # editor gizmo math tests
+make test_gizmomath      # editor gizmo math tests (axis/plane/snap, Unreal drag mapping)
 make test_keybinds       # keybind table tests
 make test_menu           # menu layout metrics tests
+make test_clientsettings # INI/settings round-trip tests
+make test_material       # .ozmat bake/graph tests
+make test_viewport       # editor viewport tiling / hit-testing tests
+make test_profiler       # FrameProfiler scope/counter tests
+make test_editorsnap     # editor "snap to ground / side" query tests
 ```
 
 `make test` also runs `worldcheck` over every shipped world (with `--headroom-all`

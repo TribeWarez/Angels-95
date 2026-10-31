@@ -1262,6 +1262,14 @@ void PawnSystem::Update(Vector3 playerPos, float dt,
 // ---------------------------------------------------------------------------
 void PawnSystem::DrawAll(Camera3D& camera, Shader litShader) {
     const float dt = GetFrameTime();
+
+    // Placed props have been frustum-culled since the prop pass; pawns were
+    // always submitted. The box is deliberately generous (see PawnCullBox)
+    // because a false negative here is an invisible enemy.
+    const bool cullPawns = oz::diag::PerfOn("cull");
+    FrustumPlane pawnPlanes[6];
+    if (cullPawns) BuildFrustum(camera, pawnPlanes);
+
     for (auto& p : m_pawns) {
         // Corpses are drawn (state == DEAD) so the death clip is actually seen;
         // they are removed by the corpse timer in Update(), not by this skip.
@@ -1273,6 +1281,26 @@ void PawnSystem::DrawAll(Camera3D& camera, Shader litShader) {
         PawnDef* def = FindDef(p.defName.c_str());
         if (def) {
             if (!p.mesh) p.mesh = EnsurePawnMesh(*def);
+
+            // Cull AFTER the mesh is known (its bounds are the box) and BEFORE the
+            // pose is advanced, so an off-screen pawn costs no CPU skinning. A pawn
+            // with no mesh yet (billboard def, or a failed load) is never culled:
+            // the 2D fallback is cheap and must not disappear.
+            if (cullPawns && p.mesh && p.mesh->Valid()) {
+                // Same offset the draw uses below, so the box sits where the
+                // model actually is (a centred pivot is pushed down onto the feet).
+                const float drawOffset = (def->model_y_offset != 0.0f)
+                                             ? def->model_y_offset
+                                             : def->auto_ground_offset;
+                const BoundingBox box =
+                    PawnCullBox(p.position, def->model_scale, p.mesh->Bounds(), drawOffset);
+                if (!AabbInFrustum(pawnPlanes, box)) {
+                    OZ_PROFILE_COUNT("pawns.culled");
+                    continue;
+                }
+            }
+            OZ_PROFILE_COUNT("pawns.drawn");
+
             if (p.mesh && p.mesh->Valid()) {
                 auto* skel = dynamic_cast<oz::SkeletalMesh*>(p.mesh.get());
                 auto* vmesh = dynamic_cast<oz::AnimatedMesh*>(p.mesh.get());
@@ -1761,56 +1789,73 @@ void PawnSystem::DrawEntities(Camera3D& camera, Shader litShader, Shader windSha
 
     // Pickups with bobbing: render the entity's 3D model when it declares one
     // (top-level mesh/texture or stats strings), otherwise the billboard icon.
+    //
+    // The model/clip/scale are resolved ONCE per registry revision, not every
+    // frame. The per-frame version did a registry hash lookup, two stats.strings
+    // scans, a MeshCache lookup and a dynamic_cast per pickup; only a def edit
+    // can change any of those answers, and Revision() is bumped by exactly the
+    // writers that can (Init / Register / ReloadFile / LoadWorldOverrides).
+    const uint32_t defRev = LightningEntityRegistry::Instance().Revision();
     for (auto& n : m_pickups) {
         if (!n.active) continue;
-        const EntityDef* edef = LightningEntityRegistry::Instance().Find(n.typeName);
+
+        if (n.meshRev != defRev) {
+            n.mesh.reset();
+            n.animated = false;
+            n.idleClip = -1;
+            n.meshScaleMul = 1.0f;
+
+            const EntityDef* edef = LightningEntityRegistry::Instance().Find(n.typeName);
+            if (edef) {
+                auto ms = edef->stats.floats.find("mesh_scale");
+                if (ms != edef->stats.floats.end() && ms->second > 0.0f)
+                    n.meshScaleMul = ms->second;
+
+                std::string meshPath = edef->mesh;
+                std::string texPath = edef->texture;
+                if (meshPath.empty()) {
+                    auto m = edef->stats.strings.find("mesh");
+                    if (m != edef->stats.strings.end()) meshPath = m->second;
+                }
+                if (texPath.empty()) {
+                    auto t = edef->stats.strings.find("texture");
+                    if (t != edef->stats.strings.end()) texPath = t->second;
+                }
+                if (!meshPath.empty()) {
+                    std::string baseDir = DefAssetDir(edef->sourcePath);
+                    n.mesh = (edef->meshType == "skeletal")
+                        ? oz::MeshCache::Instance().GetSkeletalChecked(meshPath, texPath, baseDir, true)
+                        : oz::MeshCache::Instance().GetStatic(meshPath, texPath, baseDir, true);
+                    auto* skel = dynamic_cast<oz::SkeletalMesh*>(n.mesh.get());
+                    if (skel && skel->ClipCount() > 0) {
+                        n.animated = true;
+                        // Idle by default rather than clip 0: a weapon's first
+                        // exported clip is `Fire`, so a pickup with no authored
+                        // clip name would mime firing its gun forever.
+                        n.idleClip = skel->ResolveClip(edef->animIdle);
+                    }
+                }
+            }
+            n.meshRev = defRev;
+        }
+
         float bob = sinf((float)GetTime() * 3.0f) * 0.15f;
         Vector3 pos = {n.position.x, n.position.y + 0.5f + bob, n.position.z};
 
-        std::shared_ptr<oz::Mesh> mesh;
-        bool animated = false;
-        if (edef) {
-            std::string meshPath = edef->mesh;
-            std::string texPath = edef->texture;
-            if (meshPath.empty()) {
-                auto m = edef->stats.strings.find("mesh");
-                if (m != edef->stats.strings.end()) meshPath = m->second;
-            }
-            if (texPath.empty()) {
-                auto t = edef->stats.strings.find("texture");
-                if (t != edef->stats.strings.end()) texPath = t->second;
-            }
-            if (!meshPath.empty()) {
-                std::string baseDir = DefAssetDir(edef->sourcePath);
-                mesh = (edef->meshType == "skeletal")
-                    ? oz::MeshCache::Instance().GetSkeletalChecked(meshPath, texPath, baseDir, true)
-                    : oz::MeshCache::Instance().GetStatic(meshPath, texPath, baseDir, true);
-                auto* skel = dynamic_cast<oz::SkeletalMesh*>(mesh.get());
-                animated = skel && skel->ClipCount() > 0;
-            }
-        }
-
-        if (mesh && mesh->Valid()) {
+        if (n.mesh && n.mesh->Valid()) {
             float yaw = atan2f(camera.position.x - pos.x, camera.position.z - pos.z) * RAD2DEG;
-            if (animated) {
-                auto* skel = static_cast<oz::SkeletalMesh*>(mesh.get());
-                // Idle by default rather than clip 0: a weapon's first exported
-                // clip is `Fire`, so a pickup with no authored clip name would
-                // mime firing its gun forever.
-                skel->ApplyPose(skel->ResolveClip(edef->animIdle), (float)GetTime());
+            if (n.animated && n.idleClip >= 0) {
+                auto* skel = static_cast<oz::SkeletalMesh*>(n.mesh.get());
+                skel->ApplyPose(n.idleClip, (float)GetTime());
             }
             oz::MeshTransform t;
             t.position = pos;
             t.yaw = yaw;
             // 1.5 is the historical pickup size; "mesh_scale" in the .ozls
             // multiplies it so an authored model can be dialled in per pickup.
-            float s = 1.5f;
-            if (edef) {
-                auto ms = edef->stats.floats.find("mesh_scale");
-                if (ms != edef->stats.floats.end() && ms->second > 0.0f) s *= ms->second;
-            }
+            const float s = 1.5f * n.meshScaleMul;
             t.scale = {s, s, s};
-            mesh->Draw(t, litShader);
+            n.mesh->Draw(t, litShader);
         } else {
             EngineBillboard::DrawPickup(camera, n.typeName.c_str(), n.position, 0.8f, litShader);
         }

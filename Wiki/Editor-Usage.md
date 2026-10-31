@@ -19,12 +19,16 @@ Supports the OZONE (`.ozone`) world format. Open/Save dialogs accept `.ozone`. O
 ### File
 | Item | Shortcut | Action |
 |---|---|---|
-| New | N | Create a new world |
-| Open... | O | Load a world from file |
-| Save | S | Save the current world |
-| Save As... | | Save to a new path |
-| Play Test | P | Save + compile the world, then launch Angels95.exe with it (b60: playtest saves and compiles before launch so the client never runs a stale export) |
-| Exit | Q | Close editor |
+| New | Ctrl+N | Create a new world |
+| Open... | Ctrl+O | Load a world from file |
+| Save | Ctrl+S | Save the current world |
+| Save As... | Ctrl+Shift+S | Save to a new path |
+| Play Test | Ctrl+P | Save + compile the world, then launch Angels95.exe with it (playtest saves and compiles before launch so the client never runs a stale export) |
+| Exit | Ctrl+Q | Close editor |
+
+Every hint in the menu bar comes from the same remappable table the shortcuts read
+(`AngelEd/Source/EditorKeys.hpp`), so a rebind cannot leave a menu advertising a
+key that no longer does anything. Edit it from **Help → Keyboard Shortcuts**.
 
 ### View
 | Item | Shortcut | Action |
@@ -34,48 +38,116 @@ Supports the OZONE (`.ozone`) world format. Open/Save dialogs accept `.ozone`. O
 | Texture Manager | F7 | Toggle texture manager |
 | Pawn Manager | F8 | Toggle pawn manager |
 | Script Manager | F9 | Toggle script manager |
-| Zone Properties | F12 | Toggle zone/env panel |
+| Material Graph Explorer | | Material graph / bake panel |
 | Node Panel | | Toggle node placement |
 | Pickups | F10 | Toggle pickup panel |
-| Light Properties | | Toggle light properties |
 | Heightmap Editor | H | Toggle heightmap editor |
-| World Graph Explorer | | Toggle world graph |
+| World Hierarchy | F3 | Toggle the World Graph |
+| Level List / Campaign | | Level + campaign rows |
 | Show Ambient | | Toggle the lit-viewport ambient contribution on/off (preview only) |
 | Show Fog | | Toggle the lit-viewport fog (world + sky horizon) on/off (preview only) |
+| Save Pane Layout | | Persist every panel's geometry to `System/AngelEd.ini` now |
+| Reset Pane Layout | | Restore the built-in panel geometry |
+
+There are **no Zone Properties / Light Properties windows**. A zone's rows live in
+Entity Properties (right-click a zone) and the level-wide state lives in the
+WorldGraph's *Map (level)* row; both old windows duplicated that state into a
+global an Apply could silently drop.
 
 ### Camera
 | Item | Shortcut | Action |
 |---|---|---|
-| Reset Camera | Home | Reset to default position |
-| Top | Numpad 7 | Orthographic top-down view |
-| Bottom | Numpad 1 | Orthographic bottom-up view |
-| Right | Numpad 3 | Orthographic right view |
-| Left | Numpad 9 | Orthographic left view |
-| Perspective | Numpad 5 | Restore perspective view |
+| Reset Camera | Home | Reset to a default 3/4 view |
+| Top | Numpad 7 | Orthographic top-down |
+| Bottom | Numpad 1 | Orthographic bottom-up |
+| Right | Numpad 3 | Orthographic right |
+| Left | Numpad 9 | Orthographic left |
+| Front | Numpad 2 | Orthographic front |
+| Perspective | Numpad 5 | Restore this pane's perspective view |
+
+Camera items and the toolbar's **Top / Side / Down / Persp** chips act on the
+**active pane only** — each viewport keeps its own camera *and* its own preset
+state, so a 2x2 layout can be Top + Front + Side + Persp like UnrealEd. The chip
+that is lit is derived from the camera, never stored, so an orbit cannot leave the
+chip claiming something the view is not.
 
 ## Entity Selection (Click + Right-Click)
 
-Click on any entity in the 3D viewport to select it (highlighted red):
+Selection happens on the **mouse press**, exactly like UnrealEd
+(`UnEdClick.cpp` resolves the hit the moment the button goes down, then lets the
+drag move whatever ended up selected). A press that also hits a gizmo handle is a
+transform, not a pick.
 
-- **Brush** — click on CSG collision geometry / OZONE primitives
-- **Model** — click on a placed 3D model
-- **NPC** — click on a pawn's billboard
-- **Pickup** — click on a pickup node
-- **Light** — click on a light node
-- **Zone** — click on a zone volume boundary
-- **Spawn** — click on a player start node
+What is under the cursor is resolved against a **5x5 pixel window** (centre plus
+four 2 px samples), not an infinitely thin ray, and the **nearest** hit wins —
+that is what makes thin targets (a path node, a light billboard, a fence prop, a
+pawn's arm) clickable at all.
+
+| Click | Result |
+|---|---|
+| **Left** | Select the entity under the cursor (highlighted red) |
+| **Left again on it** | Deselect it |
+| **Shift+Left** / **Ctrl+Left** | Extend/toggle the multi-selection (Ctrl only while Unreal-style brush movement is **off**) |
+| **Left double-click** | Select + open Entity Properties |
+| **Left on empty space** | Clear the selection (modifiers keep it, so a missed extend-click cannot wipe the set) |
+| **Right** | Select (keeping an existing multi-selection) + open the context menu |
+
+Selectable kinds: **Brush** (OZONE primitive), **Model**, **NPC**, **Pickup**,
+**Light**, **Zone**, **Spawn** (player start), **Portal**, **Mesh.\***, **Particle
+emitter**, **Path node**, **Wind zone**. Objects that are drawn invisible (an
+AutoConvex collision proxy, a hidden face) are never pickable — the picker and
+every draw path share one predicate, so what you see is what you can select.
 
 **Right-click** a selected entity to open the native context menu:
 
 | Option | Action |
 |---|---|
 | Properties | Opens the Properties panel with entity details |
-| Delete | Removes the selected entity from the world |
-| Duplicate | Creates a copy offset 2 units on X+Z |
+| Delete | Removes **every selected** entity (one undo step) |
+| Duplicate | Copies the whole selection, offset 2 units on X+Z, and selects the copies |
+| Snap to Ground | Drop each selected entity onto the surface below it (see [Snap to Ground / Side](#snap-to-ground--side)) |
+| Snap to Side | Push each selected entity against the nearest brush face along the view's right axis |
 | Append AutoConvex Collision | **Brush or Mesh only.** Voxelises the selection into convex collision boxes and appends them to the world (see [AutoConvex collision](#autoconvex-collision)) |
-| Apply Texture to Surface | Applies the currently selected texture (if a texture is active in the Texture Manager and the target is a Brush or Model) |
+| Apply Texture to Surface / to Selection | Applies the active texture. A **Brush** applies to the picked faces (or brush-wide when no face was picked), a **Model** or a **Mesh.\*** prop takes it as its texture. Applies to **every** selected entity |
 
 Right-click drag (without an entity under the cursor) orbits the camera.
+
+## Snap to Ground / Side
+
+Two toolbar chips (row 2, next to the view presets) and two context-menu items.
+Both operate on the whole selection and each entity is resolved on its own, so a
+crate on a ledge and a barrel on the floor each land correctly.
+
+- **Ground** drops an entity until its bounding box rests on the highest surface
+  under its footprint. The heightmap is the floor where no brush is below it. A
+  surface *above* the entity is never used, so standing under a roof does not
+  snap you up onto it.
+- **Side** pushes along the view's right axis (snapped to the nearest cardinal,
+  because collision is AABB-only) until the entity touches the nearest brush face.
+  The push is capped at 200 units so it cannot teleport an object across the
+  level.
+
+Both are single undo steps. Implemented in
+`AngelEd/Source/Subsystems/SnapMath.hpp` (query) and `Subsystems/Selection.cpp`
+(apply).
+
+## Transform gizmo (Move / Scale / Rotate)
+
+Pick a tool with the sidebar's **Cam / Move / Scale / Rotate** buttons.
+
+- **Move** — drag an axis handle for a constrained move, a plane handle for a
+  two-axis move, the centre sphere for a camera-plane move, or simply drag the
+  selected object.
+- **Scale** — drag an axis handle, or use the wheel. One handle length of drag is
+  roughly 2x.
+- **Rotate** — drag the yaw ring, **or anywhere inside it** (the ring's projected
+  radius shrinks with distance), or use the wheel.
+
+An axis or plane that is edge-on to the camera has no ray intersection, so the
+drag falls back to a screen-space projection of the handle's direction instead of
+doing nothing. Grid snapping is anchored at the position the drag *started*, so
+grabbing an off-grid object never teleports it onto the grid. Shift = finer step,
+Ctrl = snap at the toolbar step.
 
 ## AutoConvex collision
 
@@ -245,15 +317,21 @@ auto-expand and folders with no matches are pruned.
   the only route to a def with no instance in the open world — `Player.ozls`
   above all, whose `jump_sound` / `hurt_sound` keys need editing somewhere
 
-### Zone Properties / Environment Settings
-- **Fog**: color, density, start/end distance
-- **Ambient**: color, intensity
+### Zone + level environment (Entity Properties)
+
+The standalone **Zone Properties** window is gone. A zone volume's rows are in
+Entity Properties (right-click the zone): **Fog** (colour, density, start/end),
+**Ambient** (colour, intensity), reverb, and the zone's type/intensity. The
+*level-wide* state lives in the WorldGraph's **Map (level)** row:
+
 - **Game Type**: Singleplayer, Coop, Etheral Match, Angel Team Game, Angel Run, Capture the Orb, Time Shift
 - **Max Players**, **Respawn Time**, **Time Limit**, **Score Limit**, **Friendly Fire**
-- **Particles**: type (None/Snow/Rain/Void Realm/Psychic Realm), density, speed, color, wind
-- **Skybox**: custom skybox texture path; levelinfo path takes priority over
+- **Particles**: type (None/Snow/Rain/Void Realm/Psychic Realm), density, speed, colour, wind
+- **Skybox**: custom skybox texture path; the levelinfo path takes priority over
   `Models/Skybox.png` (see *Viewport skybox* above)
-- Per-zone overrides for fog/ambient/reverb when editing zone volumes
+
+Both halves apply **live** (the viewport previews fog/ambient as you edit) and
+push a History entry, so a mistyped value is one Ctrl+Z away.
 
 ### Pickup Panel
 - Select and place pickup nodes by type (from LightningScript entity registry)
@@ -269,16 +347,26 @@ auto-expand and folders with no matches are pruned.
 - Configure: position (X/Y/Z), size (Sx/Sy/Sz), scale
 - Click **Generate** to build terrain mesh
 
-### Light Properties
-- Configure point lights: color (R/G/B), intensity, radius
-- Light type: directional, point, spot
-- Light effect: none, watery, torch, fire, lamp
-- Toggle: flare, corona
+### Lights (Entity Properties)
 
-### World Graph Explorer
-- Lists all placed models in the current world
-- Shows each model's position, rotation, scale, and name
-- Click to select/jump to that model in the viewport
+The standalone **Light Properties** window is gone; right-click a light. Rows:
+colour (R/G/B), intensity, radius, type (directional/point/spot), effect (none,
+watery, torch, fire, lamp), flare/corona toggles, and — for spot lights — the
+inner/outer cone angles in degrees (stored as cosines, which is what the shader
+compares against). A light's `.ozls` def (matched by its `name=`) supplies the
+defaults; a value authored on the OZONE line always wins.
+
+### World Hierarchy (WorldGraph)
+
+- A grouped tree of the live world: Map (level), Brushes, Models, Meshes, NPCs,
+  Pickups, Lights, Zones, Portals, Player Starts, Emitters, Particles, Path Nodes,
+  Wind Zones
+- Filter box, **Reveal** (viewport selection → tree row, without stealing focus)
+  and **Frame Selection** (tree → camera)
+- Right-click a row for the same context menu the viewport offers (Properties,
+  Delete, Duplicate, Snap to Ground/Side, Apply Texture)
+- Derived state: it is rebuilt from a dirty flag at the frame's choke points, not
+  polled every frame
 
 ### Properties Panel
 - Context-sensitive panel showing selected entity details
@@ -320,6 +408,13 @@ because otherwise the panel could only ever edit what already exists.
 - The panel **scrolls**. A weapon def generates ~30 stat rows, so it is capped
   to the monitor's work area with a vertical scrollbar rather than growing off
   the bottom of the screen. The mouse wheel works over the panel.
+  - The window is sized from the **content** height converted to a window height,
+    so the non-client frame/caption no longer eats the bottom margin and the
+    **Apply / Close row is always fully visible**.
+  - The scroll range is published so the **last page is reachable**; the bottom
+    of a long def is not stranded below the visible range.
+  - Rows use one right margin that reserves room for the scrollbar, so no value
+    field or colour channel hides underneath it when the bar appears.
 - **Packaged defs are read-only.** A def resolved from a `.oz*` package has no
   source file to write, so the section says so instead of accepting edits that
   cannot be saved. Edit the `GameData` source and repack.
@@ -393,30 +488,60 @@ animation for `Mesh.Skeletal` entities — the text `.ozanim` format
 
 ## Keyboard Shortcuts
 
+Everything with a `Ctrl` modifier is in the remappable table (**Help → Keyboard
+Shortcuts**, persisted in `System/AngelEd.ini` `[Keys]`); the rest is fixed.
+
 | Key | Action |
 |---|---|
-| U/J | Move placement ghost X |
-| H/K | Move placement ghost Z |
-| Y/I | Move placement ghost Y |
-| O/L | Rotate placement ghost |
-| T/G | Scale placement ghost up/down |
+| Ctrl+Z / Ctrl+Y | Undo / Redo (Ctrl+Shift+Z also redoes) |
+| Ctrl+C / Ctrl+V | Copy / paste the whole selection (new ids, pasted set selected) |
+| Ctrl+D | Duplicate the whole selection |
+| Delete | Delete the whole selection |
+| Escape | Cancel an active drag (restores the pre-drag transform); otherwise clear the selection |
+| Ctrl+S / Ctrl+Shift+S / Ctrl+O / Ctrl+N / Ctrl+P / Ctrl+Q | Save / Save As / Open / New / Play Test / Exit |
+| U/J | Nudge -X / +X |
+| H/K | Nudge +Z / -Z |
+| Y/I | Nudge -Y / +Y |
+| O/L | Rotate +90 deg / -90 deg |
+| T (hold) / B (hold) | Scale up / down |
 | Enter | Commit placement |
-| Left click | Commit placement (a click, not a drag, with a ghost armed) |
 | Middle Mouse | Pan camera |
-| Shift+Middle Mouse | Pan camera vertically |
+| Shift+Middle Mouse | Pan vertically |
 | Alt+Middle Mouse | Orbit camera |
-| Scroll Wheel | Dolly camera (zoom) |
-| Home | Reset camera position |
-| F5 | Model Browser |
-| F6 | Sound Manager |
-| F7 | Texture Manager |
-| F8 | Pawn Manager |
-| F9 | Script Manager |
-| F10 | Pickup Panel |
-| F11 | Toggle Fullscreen |
-| F12 | Zone Properties |
-| H | Heightmap Editor |
-| C | Toggle collision visibility |
+| Scroll Wheel | Dolly camera |
+| PageUp / PageDown | Raise / lower the camera |
+| Home | Reset the camera |
+| Numpad 7 / 1 / 3 / 9 / 2 / 5 | Top / Bottom / Right / Left / Front / Perspective |
+| F3 | World Hierarchy |
+| F5 / F6 / F7 / F8 / F9 / F10 | Model / Sound / Texture / Pawn / Script Manager / Pickups |
+| F11 | Toggle fullscreen |
+| H | Heightmap editor |
+| G | Cycle the CSG operation (Model placement mode) |
+
+**Shortcuts follow the keyboard layout, not the physical key.** A binding is
+stored as a *letter* and resolved to whichever key produces that letter on your
+layout, so Ctrl+Z is Ctrl+Z on a German QWERTZ keyboard (where the Z key sits at
+the US-Y position) and on AZERTY. Before this, Ctrl+Z was unreachable on any
+non-US layout — and on QWERTZ it ran the "nudge Y down" key instead, which is why
+Undo appeared to move the selection.
+
+With **Unreal-Style Brush Movement** on, `1`/`2`/`3` become the movement-speed
+keys and the placement modes move to `Alt`+number.
+
+## Viewports (split camera layouts)
+
+The **View:1 / View:2V / View:2H / View:4** chip cycles the layout, and
+**Pop:On** pops the active pane into its own window.
+
+- Every pane has its **own camera and its own Top/Side/Down/Persp state**; the
+  camera presets, menu items and Numpad keys always act on the **active** pane.
+- The active pane is whichever one you last clicked; the others are read-only
+  reference views and keep their own camera as you navigate the active one.
+- A fresh session seeds the UnrealEd kit: pane 0 is an editable perspective view,
+  1 Top, 2 Front, 3 Side.
+- Popped-out panes navigate with the same gestures (MMB pan, Shift+MMB vertical,
+  Alt+MMB orbit, wheel dolly). Picking inside a pop-out is not wired yet — click
+  the main-window pane to select.
 
 ## Hot reload (defs, no Refresh click)
 
@@ -468,7 +593,7 @@ snapping modifiers.
 | Ctrl + RMB drag (horizontal) | Move along world **Z** |
 | Ctrl + LMB + RMB drag (vertical) | Move along world **Y** (up/down) |
 | Ctrl + RMB drag while the **Rotate** tool is active | Yaw |
-| Shift + LMB drag | Move the selection **and the camera** together |
+| Ctrl + Shift + LMB drag | Move on Ctrl's axis **and take the camera with it** |
 | Arrow keys | Nudge on the ground plane (X/Z) by the Snap step (or 1 unit) |
 | Ctrl + Up/Down | Nudge vertically (Y) |
 | 1 / 2 / 3 | Movement speed Slow / Medium / Fast |
@@ -479,13 +604,26 @@ Notes:
 - **Axes are translated to this engine**, which is Y-up. Unreal's X/Y/Z map to
   X/Z/Y here, matching what the viewport shows; the table names the *world* axis
   you actually move on.
+- **Exactly one axis is live at a time** (UnrealEd's `CalcAxialMoveRot`): LMB
+  moves X, RMB moves Z, both move Y. Pressing the second button mid-drag switches
+  to the vertical axis without the object jumping, because the total is the sum
+  of per-frame deltas.
+- **Snapping is anchored to the drag's start**, not to the world grid, so an
+  entity sitting at 0.37 does not teleport to 0.5 on the first pixel. This is
+  UnrealEd's `GGridBase` behaviour.
+- The pixel-to-world factor follows the selection's **depth on screen**, so the
+  drag covers the same screen distance at any zoom; the speed keys scale it by
+  0.25x / 1x / 4x (UnrealEd's MovementSpeed ratio).
 - **Pitch/roll are not mapped.** OZONE stores one rotation (yaw) per
   renderable/mesh; a drag that cannot be written back would not do what it says.
 - Ctrl/Shift gestures are ignored while an Animation vertex edit is active, and
   Shift+RMB still does the per-face Surface Properties pick.
 - A gesture pushes **one** History entry, on the first movement - a Ctrl+click
-  that never moves leaves no undo step. **Escape** during a gesture cancels it
-  and restores the pre-drag transform.
+  that never moves leaves no undo step. **Escape** during a gesture cancels it and
+  restores the pre-drag transform **and the camera**.
+- **Ctrl+click does not select while this mode is on** (it is the transform
+  modifier); Shift extends the selection instead. With the mode off, Ctrl extends
+  as well, matching UnrealEd.
 - The movement-speed keys follow the UnrealEd convention and are hard-wired;
   the placement-mode keys stay remappable and move to Alt while the option is on.
   With the option off, 1/2/3 keep their original placement-mode meaning.
@@ -505,7 +643,15 @@ on the first simulation step, so `once` volumes should be placed off the spawn.
 
 ## History (Undo / Redo)
 
-Full-document undo/redo via **Edit > Undo/Redo** or **Ctrl+Z** / **Ctrl+Y** (Ctrl+Shift+Z also redoes). Each step snapshots the whole world (geometry, entities, level metadata, heightmap) using the OZONE export, so place/delete/duplicate, property edits, lighting/portal/zone changes, texture application, heightmap generation, terrain painting, spawns and gizmo drags are all reversible. History is cleared when a world is opened or a new one is created. The Animation tool's vertex-edit undo (Ctrl+Z/Y while editing verts) is separate and takes precedence there.
+Full-document undo/redo via **Edit > Undo/Redo**, **Ctrl+Z** / **Ctrl+Y** (Ctrl+Shift+Z also redoes). Each step snapshots the whole world (geometry, entities, level metadata, heightmap) using the OZONE export, so place/delete/duplicate, property edits, lighting/portal/zone changes, texture application, heightmap generation, terrain painting, spawns, snaps and gizmo drags are all reversible. History is cleared when a world is opened or a new one is created. The Animation tool's vertex-edit undo (Ctrl+Z/Y while editing verts) is separate and takes precedence there.
+
+Two properties worth knowing:
+
+- **One edit is one step**, however many entities it touched. Deleting a 20-brush
+  multi-selection, pasting a set, or snapping a group is a single Ctrl+Z.
+- Shortcuts follow the **keyboard layout**, so Ctrl+Z is Ctrl+Z on QWERTZ/AZERTY
+  as well. Before that fix it was unreachable on any non-US layout (see the
+  Keyboard Shortcuts note).
 
 ## Known Limitations
 
@@ -515,3 +661,5 @@ Full-document undo/redo via **Edit > Undo/Redo** or **Ctrl+Z** / **Ctrl+Y** (Ctr
 - No test-play save prompts ("Reload world from playtest changes?")
 - Model/Texture preview rendering requires the raylib viewport to be focused
 - Lighting effects (watery, torch, fire, lamp) are UI only — not rendered in viewport
+- Picking inside a **popped-out** pane is not wired yet: click the main-window pane to select
+- The Properties panel does not re-flow its rows when the window is resized; it scrolls instead

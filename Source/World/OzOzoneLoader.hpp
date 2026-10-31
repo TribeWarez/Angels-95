@@ -8,6 +8,7 @@
 #include "../Physics/AutoConvex.hpp"   // AutoConvexFail, for AppendAutoConvexCollision
 #include "../Physics/DynamicCollision.hpp"   // quantum obstacles (SURF_QUANTUM)
 #include "OzoneParser.hpp"
+#include "OzoneFrustum.hpp"   // FrustumPlane: the per-frame cull cache
 #include "SurfaceFlags.hpp"
 #include "BrushMesh.hpp"   // oz::brushmesh builders (raylib-free, unit-tested)
 #include <cstdint>
@@ -328,7 +329,13 @@ public:
     // client). AngelEd sets the ACTIVE PANE's aspect before each Draw: a split
     // pane has its own projection, and using the window aspect built a frustum
     // that was too narrow for the 2x1 layout and culled visible geometry.
-    void SetCullAspect(float aspect) { m_cullAspect = (aspect > 0.0f) ? aspect : 0.0f; }
+    //
+    // Invalidates the cached frame frustum: the planes were built for the old
+    // aspect, so a pane that changes the aspect must not inherit them.
+    void SetCullAspect(float aspect) {
+        m_cullAspect = (aspect > 0.0f) ? aspect : 0.0f;
+        m_frameFrustumValid = false;
+    }
     float GetCullAspect() const { return m_cullAspect; }
 
     // Recompute one renderable's cull AABB after a transform write. AngelEd's
@@ -402,6 +409,30 @@ void ResetRenderableSurfaceDefault(int idx);
 
     // Draw all non-FAKEBACKDROP renderables (main world pass)
     void DrawWorldGeometry(Camera3D& camera);
+
+    // Build this frame's frustum ONCE, from `camera` and the current cull
+    // aspect. The client calls it at the top of DrawWorld, BEFORE the sky-portal
+    // view is rendered (that pass has to run before BeginTextureMode, i.e.
+    // before the world pass decides anything), so the portal gate and the world
+    // cull share one set of planes. Draw()/DrawWorldGeometry() fall back to
+    // building it themselves when a caller forgot, so a stale frame cannot leak
+    // into the next one.
+    void BeginFrame(const Camera3D& camera);
+
+    // True when at least one SURF_PORTAL brush's AABB survives this frame's
+    // frustum.
+    //
+    // This gates the offscreen sky view. The previous gate was
+    // HasSkyPortalFaces() - a WORLD-level flag - so any world authoring a portal
+    // face paid a half-resolution sky render every frame even when every portal
+    // was behind the player. UE1 has the equivalent and gets it right: it
+    // renders the sky zone only when a PF_FakeBackdrop polygon survived
+    // occlusion.
+    //
+    // Fails OPEN - true when no frustum has been built, or a portal brush has no
+    // usable bounds - because a false negative paints a black hole where a
+    // portal should be, while a false positive only costs one sky render.
+    bool AnyPortalFaceVisible() const;
 
     // Which faces a given pass is responsible for.
     //
@@ -558,6 +589,32 @@ private:
     WorldChunkManager m_chunkManager;
     bool m_drawCollisionProxies = false;  // editor-only debug view of SURF_COLLISION_PROXY
     float m_cullAspect = 0.0f;            // 0 = window aspect; editor sets the pane aspect
+
+    // --- Per-frame visibility state ---------------------------------------
+    // Scratch containers reused by every visibility pass. The renderer is
+    // single-threaded and these passes never nest, so members are safe here and
+    // remove a heap allocation per pass per frame - the FMemStack/MemMark idea
+    // from UE1, minus the bump allocator.
+    struct VisibleItem {
+        float dist2 = 0.0f;
+        int   index = -1;
+    };
+    struct OccluderPlane {
+        Vector3 normal{0.0f, 1.0f, 0.0f};
+        Vector3 centre{0.0f, 0.0f, 0.0f};
+    };
+    FrustumPlane m_framePlanes[6] = {};
+    // The camera the planes were built from, so a caller that moves the view
+    // between BeginFrame and the pass cannot be culled against stale planes.
+    Camera3D m_frameCamera{};
+    bool m_frameFrustumValid = false;
+    // Renderable indices carrying at least one SURF_PORTAL face (proxies
+    // excluded - neither the portal pass nor this gate ever draws them). Filled
+    // by EnsureFaceFlagCache, so it shares that cache's invalidation set.
+    mutable std::vector<int> m_portalIndices;
+    std::vector<int> m_visibleScratch;
+    std::vector<VisibleItem> m_blendScratch;
+    std::vector<OccluderPlane> m_occluderScratch;
     float m_worldAmbient[4] = {0.1f, 0.1f, 0.1f, 1.0f};  // see SetWorldAmbient
     float m_worldFogColor[3] = {0.7f, 0.7f, 0.8f};      // see SetWorldFog
     float m_worldFogStart = 10.0f;

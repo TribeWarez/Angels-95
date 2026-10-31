@@ -137,9 +137,14 @@ Angels95/
       Main.cpp              # Editor entrypoint, toolbar, 3D viewport, selection
       Editor.hpp            # Editor state, camera, lighting, cached models
       Core/                 # EditorShell, EditorDispatcher, EditorState, EditorPanelState, EditorLog
+                            #   + EditorCamera.hpp (header-only: the ONE definition of the
+                            #     pan/orbit/dolly/vertical camera gestures, shared by the
+                            #     viewport and the popped-out panes)
       Subsystems/           # Placement, PropsApply, SurfaceOps, LevelState, History (real TUs)
                             #   + Selection, EntityOps, WorldIO, OzoneExport, WorldGraphBridge,
                             #     AnimEditing (still unity fragments, #included by Main.cpp)
+                            #   + GizmoMath.hpp / SnapMath.hpp (header-only, raylib-free maths
+                            #     pinned by tests/GizmoMath.test.cpp and tests/EditorSnap.test.cpp)
       UI/                   # Win32 native panels; UiShell.cpp is the single unity TU
       Resources/            # AssetScope, PackageIO, AssetScan - shared by two panels each
       EditorIcons.cpp/.hpp  # Toolbar icon loader (AngelEd/UI/*.bmp)
@@ -409,10 +414,13 @@ Pickup types come from the LightningScript entity registry (`.ozls` definitions)
 ## Known Editor Gaps
 
 The editor is covered in detail by `Wiki/Editor-Usage.md`; the remaining
-limitations (as of b111):
+limitations:
 
 - Render meshes are not CSG-carved (CSG booleans process collision volumes only)
 - Undo/redo covers world state only; camera and selection are not restored
 - No test-play save prompts ("Reload world from playtest changes?")
 - Lighting effects (watery, torch, fire, lamp) are UI-only — not rendered in the viewport
 - Model/Texture preview rendering requires the raylib viewport to be focused
+- Picking and the gizmo are wired for the main-window panes; a **popped-out** pane
+  navigates but does not pick (click the main-window pane to select)
+- The Properties panel does not re-flow its rows on resize; it scrolls

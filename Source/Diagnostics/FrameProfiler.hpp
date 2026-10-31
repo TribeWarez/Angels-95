@@ -501,8 +501,9 @@ inline void RegisterBuiltinCounters() {
     static const char* const kNames[] = {
         "draw.calls", "draw.faces", "brush.total", "brush.fast", "brush.perface",
         "tex.stat", "uniform.lookup", "uniform.upload", "light.submitted",
-        "mesh.bind", "particle.live", "particle.drawn", "props.drawn",
-        "props.culled", "sim.steps",
+        "light.uploads", "mesh.bind", "particle.live", "particle.drawn",
+        "props.drawn", "props.culled", "pawns.drawn", "pawns.culled",
+        "sim.steps",
     };
     for (const char* name : kNames) Profiler().InternCounter(name);
 }

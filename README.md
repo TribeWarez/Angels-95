@@ -138,7 +138,9 @@ level is built around.
 - **Weapons & combat** — ranged (projectiles, ammo/reload/magazine) and melee
   (`reach`, `on_swing`/`on_hit`) defined as `.ozls` entities.
 - **AngelEd level editor** — native Win32 panels + raylib viewport, CSG brush
-  ops, OZONE export, Lit/Unlit/Wire view modes.
+  ops, OZONE export, Lit/Unlit/Wire view modes. Split viewports (1/2V/2H/4) with
+  a **per-pane camera and per-pane Top/Front/Side/Persp state**, plus popped-out
+  panes that share the same navigation gestures.
 - **Packaged assets** — `OzPack.exe` bundles models/scripts/textures/sounds/
   worlds into `.ozpak/.oztex/.ozsnd/.ozmux/.ozone` packages in `System/Data/`.
 - **GameUI object-bar HUD (b82)** — `SlotBar` renders a data-driven atlas +
@@ -159,7 +161,14 @@ level is built around.
   `https://angels95.tribewarez.com/master`; LAN + Internet browser.
 - **Editor undo/redo (b60–b81)** — full-document history (Ctrl+Z/Y/Shift+Z),
   OZONE save/playtest, Script Manager, def-aligned Entity Properties, world
-  texture import, viewport skybox.
+  texture import, viewport skybox. Undo shortcuts are **keyboard-layout aware**
+  (Ctrl+Z works on QWERTZ/AZERTY).
+- **Editor selection & transforms** — UnrealEd-parity click behaviour (5×5 px
+  pick window, select-on-press, Ctrl/Shift extend, double-click Properties,
+  backdrop deselect), a real **multi-selection** that Delete / Duplicate /
+  Copy-Paste / move / snap all act on, **Snap to Ground / Side**, and a gizmo
+  whose axis drags fall back to a screen-space projection instead of silently
+  doing nothing when the axis points at the camera.
 - **Vertex-keyframe animation (b74)** — `.ozanim` morph clips, in-editor
   animation tool, Convert to Animated, vertex deform + undo/redo.
 - **New OZONE entities (b74)** — `Mesh.Static`/`Mesh.Skeletal`,

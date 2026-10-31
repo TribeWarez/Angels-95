@@ -477,7 +477,7 @@ precisely why the path travels and the sliders do not.
 | Remaining field | Why it is not an event |
 |---|---|
 | ~~`actionApplyProperties`~~ | **Converted in R6** → `ed::Ev::ApplyProperties` carrying a `SelRef`. The row below was correct *for R2* and was out of date by one phase: the precondition it named was met in R6. |
-| `actionApplyTextureToSel` | Reads `g_sel`/`activeTexturePath` at drain time — normally the bug this refactor kills, but both writers are **context-menu** commands and `TrackPopupMenu` is **modal**, so nothing else pumps input and the selection cannot move. Capturing a Selection would mean duplicating the brush renderable resolution (which depends on `g_sel.pos` to tell a renderable index from a collision-volume index) for no behavioural gain. |
+| ~~`actionApplyTextureToSel`~~ | **Retired.** It was the last "modal `TrackPopupMenu`" exception, and the argument was sound only while there was one writer and one drain. The drain was a SECOND implementation of texture apply that never learned about `Mesh.*`, so "Apply Texture" silently did nothing on a placed prop. The context menu now posts `ed::Ev::ApplyTextureToSelection` (carrying a `faceMask`) exactly like the Texture Manager, and `EditorDispatcher` is the one implementation. 58 → 4 → 3 → **2**. |
 | `actionAnimSave` | **Intra-frame chaining signal.** The anim handlers set it themselves; the file write consumes it in the *same* frame. Queueing delays every save a frame. |
 | `actionAnimRefresh` | **Dirty flag** consumed by `RefreshAnimPanel()`. Means "re-read the panel", not "the user did something". |
 
@@ -655,10 +655,11 @@ added for the three light tags, which had no event at all. `Transform` had to mo
   with `ParticleType`, which was only in a UI header because `LevelMetadata` was. Its
   *accessor* had been implemented inside `UI/Panels/LevelState.cpp` — subsystem state
   living in a UI panel.
-- ~~**`actionApplyProperties` is still a field.**~~ **DONE in R6.** 58 → **3**.
-- **`actionApplyTextureToSel` remains a field** by the documented modal-`TrackPopupMenu`
-  argument, which is sound. `actionAnimSave` and `actionAnimRefresh` likewise. All three
-  are final unless their reasoning changes.
+- ~~**`actionApplyProperties` is still a field.**~~ **DONE in R6.** 58 → **3**, and
+  **`actionApplyTextureToSel` has since been retired** (it had become a second
+  implementation of texture apply that missed `Mesh.*`), so the count is 2.
+- **`actionAnimSave` and `actionAnimRefresh` are the two survivors.** Both are
+  intra-frame signals rather than user messages, and their reasoning has not changed.
 - **Promotion of `Subsystems/` to real translation units** (phase F, `Core/` excluded).
 - **Linux build for AngelEd** (phase G) — deferred by request. Scope already sized: 2
   missing UI stubs, ~6 guard blocks, delete `AngelEd/Makefile:38`'s `$(error)`, add
@@ -752,8 +753,7 @@ stay live-read and the event carries the `SelRef` only.
 That is safe rather than a half-finished conversion, because the staleness this refactor
 kills is an *index* that ends up naming a different entity than the one clicked. It
 cannot happen to a value the user just typed: the panel is not modal, but between the
-Apply click and the drain — the same frame — nothing pumps input. Same argument that
-keeps `actionApplyTextureToSel` a field.
+Apply click and the drain — the same frame — nothing pumps input.
 
 What it does buy is the part that was genuinely wrong. The handler used to read
 `propsTargetType`/`propsTargetIndex` from live panel state, so whichever row the panel
@@ -766,9 +766,12 @@ switch, not a `static_cast`, for the reason already recorded on the forward dire
 flag ("does this kind have a yaw"), not a target; conflating them would reintroduce the
 bug where an Apply silently reset `playerstart` yaw to 0.
 
-**Action fields: 58 → 4 → 3.** The three survivors are final unless their reasoning
-changes: `actionApplyTextureToSel` (modal `TrackPopupMenu`), `actionAnimSave`
-(intra-frame chaining), `actionAnimRefresh` (dirty flag).
+**Action fields: 58 → 4 → 3 → 2.** Two survivors remain, and their reasoning is
+unchanged: `actionAnimSave` (intra-frame chaining) and `actionAnimRefresh` (dirty
+flag). `actionApplyTextureToSel` was retired once its "modal `TrackPopupMenu`"
+argument stopped paying for itself: the drain was a second copy of the apply and
+had already drifted (no `Mesh.*` branch), so the menu now posts the same
+`ed::Ev::ApplyTextureToSelection` the Texture Manager does.
 
 ### Two build-wiring entries, deliberately
 

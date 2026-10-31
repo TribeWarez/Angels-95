@@ -47,6 +47,8 @@ static bool g_pendingNew = false;
 static Sound g_previewSound = {0};
 static bool g_previewSoundLoaded = false;
 
-// Orthographic / view preset state
-static bool g_orthoView = false;
-static Camera3D g_perspectiveCamState = {0};
+// Orthographic / view preset state is PER PANE now: the projection lives on each
+// pane's own Camera3D (see g_paneCams) and the saved perspective camera lives in
+// Core/EditorShell.cpp's g_panePersp[]. The two globals that used to be here
+// (g_orthoView / g_perspectiveCamState) meant pane 2's Persp chip restored pane
+// 1's camera.

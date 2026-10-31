@@ -17,6 +17,8 @@ namespace fs = std::filesystem;
 void LightningEntityRegistry::Init() {
     m_defs.clear();
     m_allDefs.clear();
+    // Every by-name lookup can resolve differently from here on.
+    ++m_revision;
     // Init() produces the UNFILTERED view (every world's defs, last-writer-wins).
     // LoadWorldOverrides() re-establishes the world policy; until it runs there is
     // no world to filter against. ReloadFile() reads this.
@@ -108,6 +110,7 @@ void LightningEntityRegistry::FindByType(EntityType type, std::vector<const Enti
 // ---------------------------------------------------------------------------
 bool LightningEntityRegistry::Register(const EntityDef& def) {
     if (def.name.empty() || def.type == EntityType::UNKNOWN) return false;
+    ++m_revision;
     m_defs[def.name] = def;
     for (auto& d : m_allDefs) {
         if (d.name == def.name) { d = def; return true; }
@@ -224,6 +227,7 @@ std::string WorldNameFromPrefix(const std::string& assetPrefix) {
 
 void LightningEntityRegistry::LoadWorldOverrides(const std::string& worldDir) {
     m_worldDir = worldDir;
+    ++m_revision;   // the world policy can promote/drop defs below
     const std::string want = WorldNameFromPrefix(worldDir);
     if (want.empty())
         return;
@@ -399,6 +403,7 @@ LightningEntityRegistry::ReloadFile(const std::string& pathIn) {
     }
 
     out.ok = true;
+    ++m_revision;   // one bump covers every name this file added/changed/removed
     OZ_INFO("Registry: reloaded '%s' (%zu added, %zu changed, %zu removed)",
             path.c_str(), out.added.size(), out.changed.size(), out.removed.size());
     return out;

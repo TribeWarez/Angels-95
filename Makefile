@@ -483,6 +483,11 @@ test_profiler: tests/Profiler.test.cpp Source/Diagnostics/FrameProfiler.hpp
 test_gizmomath: tests/GizmoMath.test.cpp AngelEd/Source/Subsystems/GizmoMath.hpp
 	$(SERVER_CXX) $(TEST_FLAGS) -I. tests/GizmoMath.test.cpp -o $@
 
+# Editor "Snap to Ground / Side" queries. Header-only and raylib-free, so it builds
+# headless; the editor glue that applies the delta needs a live world.
+test_editorsnap: tests/EditorSnap.test.cpp AngelEd/Source/Subsystems/SnapMath.hpp
+	$(SERVER_CXX) $(TEST_FLAGS) -I. tests/EditorSnap.test.cpp -o $@
+
 # Editor viewport layout math (Phase 0 of multiple viewports). Header-only and
 # raylib-free, so it builds headless. Pins area insets, rows x cols tiling with
 # no gaps/overlap, half-open hit testing, and that Main.cpp no longer carries the
@@ -573,7 +578,7 @@ TEST_SUITES := test_parser test_context test_registry test_entity_manager \
                test_autoconvex test_csg test_brushmesh test_surface test_gametype \
                test_editorbus test_assetscope test_events test_game test_gizmomath \
                test_keybinds test_menu test_clientsettings test_material test_viewport \
-               test_profiler
+               test_profiler test_editorsnap
 
 # The editor is built twice from two hand-maintained object lists - AngelEd/Makefile
 # and the inline `g++` list in ci.yml - because CI does not use the Makefile. They

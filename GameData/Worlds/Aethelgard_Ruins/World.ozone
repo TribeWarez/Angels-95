@@ -1,19 +1,6 @@
-# OZONE world – Aethelgard_Ruins (Oasis 333 / Level 3)
-# Progressive redesign of the original EngineTest / surface-demo map
+# OZONE world exported from AngelEd
 # Format: ozone v1.0
-# Hierarchy: Terran Prime → Hydrosis Prime → Oasis 333 → Aethelgard_Ruins
-#
-# Flow: arrival court -> ritual chambers -> great hall (reverb) -> courtyard /
-#       pyramid arena -> Path of Dissolution (water -> acid -> lava) -> terminal.
-# The surface-flag gallery along the causeway is kept intact: it is both the
-# engine's flag demo and, in fiction, the buried relay reliefs of Aethelgard.
-#
-# Zone names are deliberately unchanged from the EngineTest originals - each one
-# is the lookup key for a sibling .ozls def in this directory, so renaming a zone
-# without re-keying its def silently detaches fog/ambient and the pool damage
-# timers. Physics is differentiated per zone instead.
 
-# --- Arrival court + ritual chambers (safe tier, floors top at z=0.45) ---
 add box 10 -2.5 -0.25 60 0.5 95 0 1
 add box 20 -71 -0.25 46 0.5 42 0 5
 add box 59 0 -0.25 38 0.5 56 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=12 texScaleV=18
@@ -63,8 +50,6 @@ add box 0 -10 8.25 15 0.5 15 0 4
 add cyl 0 -10 8 0.8 0.8 8 16 0 3
 add cyl 0 -10 8.4 1.1 1.1 0.8 16 0 3
 add box 0 -10 0.05 9 0.5 9 0 2
-
-# --- Great Hall (engine_reverb zone; per-face slow pan on both long walls) ---
 add box 13 -26.75 4 9 8 0.5 0 2
 add box 27 -26.75 4 9 8 0.5 0 2
 add box 12 -49.75 4 9 8 0.5 0 2
@@ -81,8 +66,6 @@ add cyl 12 -30 8 0.8 0.8 8 16 0 3
 add cyl 28 -30 8 0.8 0.8 8 16 0 3
 add cyl 12 -46 8 0.8 0.8 8 16 0 3
 add cyl 28 -46 8 0.8 0.8 8 16 0 3
-
-# --- Courtyard connectors + pyramid arena ---
 add box 10 12.75 4 5 8 0.5 0 2
 add box 10 7.25 4 5 8 0.5 0 2
 add box 10 10 8.25 5 0.5 5 0 4
@@ -136,7 +119,6 @@ add box 59 0 2.5 12 1 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_03.
 add box 59 0 3.5 9 1 9 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_04.png texScaleU=3 texScaleV=3
 add box 59 0 4.5 6 1 6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_01.png texScaleU=2 texScaleV=2
 add box 59 0 5.5 3 1 3 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_02.png
-# Apex orb: glowing, cosmetic only (NO_BSP_CUTS so it leaves no invisible standable box).
 add sph 59 0 7.2 1 16 flags=268451840 surfGlow=(1,0.75,0.25)
 add cyl 59 22 14 0.3 1.6 14 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineaglestone.png texScaleU=2 texScaleV=4
 add cyl 44 -22 8 0.35 0.6 8 14 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=2 texScaleV=3
@@ -166,9 +148,6 @@ add box 26 -34 0.9 2 1.8 2 0 3
 add box 26 -44 1.25 2 2.5 2 0 3
 add box 9.5 -38 1.25 1 2.5 20 0 3
 add box 30.5 -38 1.25 1 2.5 20 0 3
-
-# --- Painted backdrop ring (flags=8) ---
-# Sky-portal ring (SURF_PORTAL): perimeter panels show the sky-zone view; collision unchanged.
 add box 0 45 8 60 16 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_07.png texScaleU=12 texScaleV=4 flags=32768
 add box -40 0 8 1 16 60 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_08.png texScaleU=12 texScaleV=4 flags=32768
 add box 0 -92 9 60 18 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_09.png texScaleU=12 texScaleV=4 flags=32768
@@ -179,8 +158,6 @@ add box 59 -31 9 40 18 1 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainpyramid_04.
 add box 81 -19 9 1 18 22 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_04.png texScaleU=3 texScaleV=3 flags=32768
 add box 81 19 9 1 18 22 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_04.png texScaleU=3 texScaleV=3 flags=32768
 add box 81 0 11.75 1 12.5 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_egutt_wall_01.png texScaleU=2 texScaleV=2 flags=32768
-
-# --- Path of Dissolution: causeway floor, boundary walls, pillars ---
 add box 79.5 0 -0.5 3 1 17 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=1 texScaleV=4
 add box 192 0 -0.5 222 1 34 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png texScaleU=44 texScaleV=7
 add box 192 0 0.05 222 0.1 10 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=44 texScaleV=2
@@ -201,8 +178,6 @@ add cyl 234 7 7 0.55 0.75 7 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineagle
 add box 234 7 7.4 2.2 0.8 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png
 add cyl 266 7 7 0.55 0.75 7 12 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineaglestone.png texScaleU=1 texScaleV=2
 add box 266 7 7.4 2.2 0.8 2.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png
-
-# --- Surface-flag gallery (causeway reliefs; unchanged demo row) ---
 add box 96 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png
 add box 112 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png flags=2048
 add box 128 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png flags=4096
@@ -215,30 +190,22 @@ add box 240 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Global/Items/Key.png flags=
 add box 256 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png flags=268435456
 add box 272 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png flags=67108864
 add box 288 9 1.2 2.4 2.4 2.4 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_01.png flags=8
-# Cosmetic plane: NO_BSP_CUTS + TWO_SIDED (268436480) - keep both bits.
 add pln 160 11 3.5 1 0 0 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png flags=268436480
-
-# --- Dissolution pools. Escalation is carried by pan speed + glow, not by size.
-# Water (calm): UNLIT|PAN_U|PAN_V = 788480 -> slow drift only.
 add box 109 -6.7 0.45 19.2 0.9 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=10 texScaleV=1
 add box 109 -13.3 0.45 19.2 0.9 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=10 texScaleV=1
 add box 99.7 -10 0.45 0.6 0.9 7.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=2 texScaleV=2
 add box 118.3 -10 0.45 0.6 0.9 7.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=2 texScaleV=2
 add box 109 -10 0.275 18 0.35 6 0 texPath=GameData/Tex/Global/EFX/liquid_water.png texScaleU=6 texScaleV=2 flags=788480 panU=0.05 panV=0.03
-# Acid (irritant): + SURF_GLOW = 804864, counter-drifting, faint green bleed.
 add box 157 -6.7 0.45 19.2 0.9 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=10 texScaleV=1
 add box 157 -13.3 0.45 19.2 0.9 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=10 texScaleV=1
 add box 147.7 -10 0.45 0.6 0.9 7.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=2 texScaleV=2
 add box 166.3 -10 0.45 0.6 0.9 7.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=2 texScaleV=2
 add box 157 -10 0.275 18 0.35 6 0 texPath=GameData/Tex/Global/EFX/liquid_acid.png texScaleU=6 texScaleV=2 flags=804864 panU=-0.04 panV=0.02 surfGlow=(0.05,0.18,0.05)
-# Lava (terminal burn): 804864, fastest pan, hot ember glow.
 add box 205 -6.7 0.45 19.2 0.9 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=10 texScaleV=1
 add box 205 -13.3 0.45 19.2 0.9 0.6 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=10 texScaleV=1
 add box 195.7 -10 0.45 0.6 0.9 7.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=2 texScaleV=2
 add box 214.3 -10 0.45 0.6 0.9 7.2 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_02.png texScaleU=2 texScaleV=2
 add box 205 -10 0.275 18 0.35 6 0 texPath=GameData/Tex/Global/EFX/liquid_lava.png texScaleU=6 texScaleV=2 flags=804864 panU=0.03 panV=0.05 surfGlow=(0.18,0.04,0.01)
-
-# --- Terminal chamber: dais, obelisk (slow vertical drift), glowing sphinx orb ---
 add box 296 0 0.75 7 1.5 7 0 texPath=GameData/Tex/Tileset/Egypt/eg_mainstone_04.png texScaleU=2 texScaleV=2
 add cyl 296 0 16.5 0.7 1.6 15 16 0 texPath=GameData/Tex/Tileset/Egypt/eg_maineaglestone.png texScaleU=1 texScaleV=4 flags=524288 panV=0.06
 add sph 296 0 18 1.1 16 flags=268451840 surfGlow=(1,0.75,0.25)
@@ -275,36 +242,33 @@ npc Walker 47 19 0.5
 npc Skaarj 150 3 0.5
 npc Walker 230 -3 0.5
 npc Brute 285 4 0.5
-light directional 50 50 40 140 155 180 0.12
 light directional -50 -50 70 205 215 235 0.3
-light point 16 14 5.5 80 130 255 0.45 22
+light directional 50 50 40 140 155 180 0.12
 light point -4 14 5.5 255 60 60 0.45 22
-light point 10 0 5 190 205 255 0.4 14
-light point 34 0 5.5 190 210 255 0.5 18
-light point 16 -14 5.5 255 170 50 0.45 22
 light point -4 -14 5.5 255 220 60 0.45 22
+light point 10 0 5 190 205 255 0.4 14
+light point 16 14 5.5 80 130 255 0.45 22
+light point 16 -14 5.5 255 170 50 0.45 22
 light point 20 -22 5 190 205 255 0.45 16
-light point 49 9 2.4 255 165 75 0.75 16 effect=2
 light point 14 -30 5.5 200 215 255 0.38 20
+light point 34 0 5.5 190 210 255 0.5 18
+light point 16 -38 4.5 255 225 190 0.45 16
+light point 49 9 2.4 255 165 75 0.75 16 effect=2
+light point 28 -44 5.5 200 215 255 0.38 20
 light point 49 -9 2.4 255 165 75 0.75 16 effect=2
 light point 59 0 9 190 210 255 0.5 34
-light point 16 -38 4.5 255 225 190 0.45 16
-light point 69 9 2.4 255 165 75 0.75 16 effect=2
-light point 28 -44 5.5 200 215 255 0.38 20
-light point 74 22 10.5 120 200 255 0.5 16
-light point 69 -9 2.4 255 165 75 0.75 16 effect=2
 light point 16 -60 4.5 255 180 80 0.6 18 effect=2
 light point 24 -60 4.5 255 180 80 0.6 18 effect=2
-light point 86 6.5 3.4 255 175 80 0.7 16 effect=2
-light point 20 -66 2 120 200 255 0.4 22
 light point 16 -68 4.5 255 180 80 0.5 16 effect=2
+light point 20 -66 2 120 200 255 0.4 22
+light point 69 9 2.4 255 165 75 0.75 16 effect=2
 light point 24 -68 4.5 255 180 80 0.5 16 effect=2
+light point 69 -9 2.4 255 165 75 0.75 16 effect=2
+light point 74 22 10.5 120 200 255 0.5 16
+light point 86 6.5 3.4 255 175 80 0.7 16 effect=2
 light point 150 -6.2 3.4 255 175 80 0.7 16 effect=2
 light point 205 -10 2.2 255 150 60 0.6 18
 light point 255 6.5 3.4 255 175 80 0.7 16 effect=2
-
-# Zones. Names are unchanged from EngineTest so the sibling .ozls defs keep
-# binding; only the physics is differentiated along the progression.
 zone sky -90 -90 -30 320 90 90 1 name=engine_sky gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.6
 zone water -4.5 -14.5 -0.2 4.5 -5.5 3.5 1 name=engine_water gravity=18 jump=9 terminal=60 water_gravity=6 water_drag=0.9 swim_up=4 ladder_speed=6 fly_mult=1.5
 zone ladder 70.4 20 0 71.6 24 11 1 name=arena_ladder gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=7 fly_mult=1.5
@@ -314,12 +278,21 @@ zone water 100 -13 -1 118 -7 2.5 1 name=path_water gravity=18 jump=9 terminal=60
 zone water 148 -13 -1 166 -7 2.5 1 name=path_acid gravity=18 jump=9 terminal=60 water_gravity=5 water_drag=0.85 swim_up=3.5 ladder_speed=6 fly_mult=1.5
 zone water 196 -13 -1 214 -7 2.5 1 name=path_lava gravity=18 jump=9 terminal=60 water_gravity=4 water_drag=0.8 swim_up=3 ladder_speed=6 fly_mult=1.5
 zone sound 82 4 0 302 15 8 1 name=path_surface_demo gravity=18 jump=9 terminal=60 water_gravity=8 water_drag=0.95 swim_up=5 ladder_speed=6 fly_mult=1.5
-
-# Threshold trigger: crossing onto the causeway (off both playerstarts).
-trigger Trigger_EnterVolume 82 -17 0 84 17 8 once
-# Campaign exit at the terminal (offline progression; online transition is
-# server-authoritative). Spawn is inside AlShaddai_Metropolis's floor.
 portal AlShaddai_Metropolis 300 -3 0 302.5 3 5.5 0 0 1 bidir
+trigger Trigger_EnterVolume 82 -17 0 84 17 8 once
+Mesh.Static GameData/Tex/Global/Items/MedMeshes/Med_01.glb 45 0 1.2 0 scale=3
+Mesh.Skeletal GameData/Tex/Global/Gun/Rifle_01/Fbx_Files/Rifle_01.glb 45 -14 2 90 scale=3 anim=Idle
+Mesh.Static GameData/Worlds/World_endless_snow/Models/forest/forest_pine_1.glb 44 -24 0 0 scale=1.2 tex=GameData/Tex/Global/EFX/tree_pine_needles.png wind=1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/forest/forest_pine_2.glb 74 -24 0 30 scale=1.3 tex=GameData/Tex/Global/EFX/tree_pine_needles.png wind=1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/forest/forest_pine_2.glb 44 24 0 200 scale=1.15 tex=GameData/Tex/Global/EFX/tree_pine_needles.png wind=1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/forest/forest_pine_1.glb 64 24 0 150 scale=1.25 tex=GameData/Tex/Global/EFX/tree_pine_needles.png wind=1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_2m_0.glb 100 13 0 0 scale=0.9
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_2m_2.glb 126 14 0 47 scale=1.1
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_4m_1.glb 168 13.5 0 94 scale=0.8
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_4m_3.glb 214 14 0 141
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_4m_5.glb 232 -14.5 0 188 scale=0.9
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_8m_1.glb 258 13 0 235 scale=1.15
+Mesh.Static GameData/Worlds/World_endless_snow/Models/rocks/SM_RP_Rock_8m_4.glb 286 -14 0 282 scale=0.85
 Mesh.Static GameData/Tex/Global/Items/MedMeshes/Med_01.glb 45 0 1.2 0 scale=3
 Mesh.Skeletal GameData/Tex/Global/Gun/Rifle_01/Fbx_Files/Rifle_01.glb 45 -14 2 90 scale=3 anim=Idle
 Mesh.Static GameData/Worlds/World_endless_snow/Models/forest/forest_pine_1.glb 44 -24 0 0 scale=1.2 tex=GameData/Tex/Global/EFX/tree_pine_needles.png wind=1
@@ -363,10 +336,9 @@ PathNode path_a 96 0 0.5 radius=4 next=path_b
 PathNode path_b 150 0 0.5 radius=4 next=path_c
 PathNode path_c 205 0 0.5 radius=4 next=path_d
 PathNode path_d 260 0 0.5 radius=4 next=path_e
-# path_e sat inside the terminal dais (solid to z=1.5 across x 292.5..299.5).
 PathNode path_e 288 0 0.5 radius=4 next=terminal
 PathNode terminal 290 0 0.5 radius=5 next=arena_d
 WindZone 42 -26 0 76 26 12 1 0 0.3 0.3 0.5
 levelinfo 0 8 5 0 10 50 0 GameData/Tex/Global/Sky/sky_day.png GameData/Tex/Global/Sky/sky_noon.png
 
-# End of OZONE export – Aethelgard_Ruins (Oasis 333)
+# End of OZONE export

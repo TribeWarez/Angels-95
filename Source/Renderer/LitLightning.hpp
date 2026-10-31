@@ -75,6 +75,14 @@ struct LightNode {
 // LitLightning_Animate, which is called once per frame rather than once per
 // program.
 //
+// Two caches make repeated submission within a frame cheap, and both are
+// content-based rather than frame-based, so a caller that never goes through
+// LitLightning_UpdateFrame (AngelEd calls this directly, once per pane) cannot
+// be served stale state:
+//   * the SORT is skipped when nothing the comparator reads has changed;
+//   * a light whose 12 uniforms already hold the same values in this program is
+//     not re-uploaded. See LitLightning.cpp's UploadedLight.
+//
 // Returns how many lights actually reached the GPU. That number is the only
 // truthful answer to "is this scene lit", because a light can be active, sorted
 // first and still be force-disabled when the budget is full.
@@ -101,6 +109,9 @@ void LitLightning_Animate(LightNode& node, float dt);
 //
 // Order: active, then tier (directional, in-range, out-of-range), then distance.
 // Tiers are computed in LitLightning.cpp; see LightSubmitTier for why.
+//
+// Called from LitLightning_Update, which skips it while the comparator's inputs
+// are unchanged; calling it directly always performs the sort.
 void LitLightning_SortByDistance(std::vector<LightNode>& lights, Vector3 cameraPos);
 
 // ---------------------------------------------------------------------------

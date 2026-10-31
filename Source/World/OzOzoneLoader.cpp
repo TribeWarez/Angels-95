@@ -1739,13 +1739,16 @@ void OzoneLoader::EnsureFaceFlagCache() const {
     if (m_faceFlagCache >= 0) return;
 
     int bits = 0;
-    for (const auto& r : m_renderables) {
+    m_portalIndices.clear();
+    for (int i = 0; i < (int)m_renderables.size(); ++i) {
+        const OzoneRenderable& r = m_renderables[(size_t)i];
         if (!r.loaded) continue;
         const bool proxy = (r.surfaceFlags & SURF_COLLISION_PROXY) != 0;
         const bool heightmap = r.typeId == (int)OzonePrimitiveType::HEIGHTMAP;
+        bool carriesPortal = false;
         for (int f = 0; f < FACE_COUNT; ++f) {
             const SurfaceProps& p = r.surface.Resolve((SurfaceFace)f);
-            if (p.Has(SURF_PORTAL)) bits |= 1;
+            if (p.Has(SURF_PORTAL)) { bits |= 1; carriesPortal = true; }
             // The glow/backdrop passes skip proxies and heightmaps; mirror that
             // so their cached answer can never enable a pass that draws nothing.
             if (!proxy && !heightmap) {
@@ -1753,6 +1756,10 @@ void OzoneLoader::EnsureFaceFlagCache() const {
                 if (p.Has(SURF_FAKEBACKDROP) && !p.Has(SURF_INVISIBLE)) bits |= 4;
             }
         }
+        // Only brushes the PORTAL PASS would actually draw belong in the
+        // visibility list: a proxy is drawn by no pass, so counting one would
+        // force the offscreen sky render for geometry that is never sampled.
+        if (carriesPortal && !proxy && !heightmap) m_portalIndices.push_back(i);
     }
     m_faceFlagCache = bits;
 }
@@ -1862,8 +1869,9 @@ void OzoneLoader::DrawBlendedFaces(Camera3D& camera, const std::vector<int>& vis
     // again here would double it.
     if (!oz::SurfaceMaterial::Instance().Ready()) return;
 
-    struct Item { float dist2; int idx; };
-    std::vector<Item> items;
+    // Reused member container (m_blendScratch), not a fresh vector per frame.
+    std::vector<VisibleItem>& items = m_blendScratch;
+    items.clear();
     for (int idx : visible) {
         if (idx < 0 || idx >= (int)m_renderables.size()) continue;
         OzoneRenderable& r = m_renderables[(size_t)idx];
@@ -1883,9 +1891,61 @@ void OzoneLoader::DrawBlendedFaces(Camera3D& camera, const std::vector<int>& vis
         items.push_back({dx * dx + dy * dy + dz * dz, idx});
     }
     std::sort(items.begin(), items.end(),
-              [](const Item& a, const Item& b) { return a.dist2 > b.dist2; });
-    for (const Item& it : items)
-        DrawSurface(m_renderables[(size_t)it.idx], SurfacePass::BlendedOnly);
+              [](const VisibleItem& a, const VisibleItem& b) { return a.dist2 > b.dist2; });
+    for (const VisibleItem& it : items)
+        DrawSurface(m_renderables[(size_t)it.index], SurfacePass::BlendedOnly);
+}
+
+// ---------------------------------------------------------------------------
+// Per-frame visibility: the frustum is built ONCE and shared.
+//
+// The client needs it before the sky-portal view is rendered (that has to
+// happen before BeginTextureMode, i.e. before any world pass), and the world
+// pass needs the same planes. Two BuildFrustum calls per frame was harmless but
+// made "which frustum does this gate use" ambiguous; this owns it.
+//
+// SetCullAspect() invalidates: the planes were built for the old aspect, and a
+// split pane must not inherit the previous pane's frustum.
+// ---------------------------------------------------------------------------
+void OzoneLoader::BeginFrame(const Camera3D& camera) {
+    BuildFrustum(camera, m_framePlanes, m_cullAspect);
+    m_frameCamera = camera;
+    m_frameFrustumValid = true;
+}
+
+namespace {
+// Exact compare: a camera that moved even slightly invalidates the planes.
+// Cheaper than rebuilding them, and only ever one call site uses the answer.
+bool SameCamera(const Camera3D& a, const Camera3D& b) {
+    return a.position.x == b.position.x && a.position.y == b.position.y &&
+           a.position.z == b.position.z && a.target.x == b.target.x &&
+           a.target.y == b.target.y && a.target.z == b.target.z &&
+           a.up.x == b.up.x && a.up.y == b.up.y && a.up.z == b.up.z &&
+           a.fovy == b.fovy && a.projection == b.projection;
+}
+} // namespace
+
+bool OzoneLoader::AnyPortalFaceVisible() const {
+    EnsureFaceFlagCache();
+    if (m_portalIndices.empty()) return false;
+    // No frustum yet (a caller that skipped BeginFrame): fail open. The pass is
+    // correct either way; only its cost changes.
+    if (!m_frameFrustumValid) return true;
+
+    for (int idx : m_portalIndices) {
+        if (idx < 0 || idx >= (int)m_renderables.size()) continue;
+        const OzoneRenderable& r = m_renderables[(size_t)idx];
+        if (!r.loaded) continue;
+        if (!r.hasBounds) return true;   // cannot test it -> assume visible
+        const BoundingBox& b = r.bounds;
+        // Degenerate bounds (a zero-thickness plane/brush) are never a reliable
+        // cull box anywhere else in this file, so they are not one here either.
+        const bool degenerate = !(b.min.x < b.max.x || b.min.y < b.max.y ||
+                                  b.min.z < b.max.z);
+        if (degenerate) return true;
+        if (AabbInFrustum(m_framePlanes, b)) return true;
+    }
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -1897,11 +1957,14 @@ void OzoneLoader::Draw(Camera3D& camera, bool cullBackfaces) {
     // the editor passes this in instead of the skybox block setting it.
     oz::SetBackfaceCulling(cullBackfaces);
 
-    FrustumPlane planes[6];
-    BuildFrustum(camera, planes, m_cullAspect);
-    std::vector<int> visible;
+    // Always rebuild here: the editor calls this once PER PANE with its own
+    // camera and aspect, so a cached frustum could belong to the previous pane.
+    BeginFrame(camera);
+    const FrustumPlane* planes = m_framePlanes;
+    std::vector<int>& visible = m_visibleScratch;
     {
         OZ_PROFILE_SCOPE("ozone.cull");
+        visible.clear();
         visible.reserve(m_renderables.size());
         for (int i = 0; i < (int)m_renderables.size(); i++) {
             OzoneRenderable& r = m_renderables[(size_t)i];
@@ -1943,8 +2006,11 @@ void OzoneLoader::Draw(Camera3D& camera, bool cullBackfaces) {
 // brush-wide skip on the derived mirror was invisible to a per-face backdrop, so
 // such a face was drawn by BOTH this pass and the sky pass.
 void OzoneLoader::DrawWorldGeometry(Camera3D& camera) {
-    FrustumPlane planes[6];
-    BuildFrustum(camera, planes, m_cullAspect);
+    // Reuse the frustum the client built before the sky-portal decision, so the
+    // gate and this pass cannot disagree. Rebuild when a caller did not set one,
+    // or when the camera moved since (SameCamera).
+    if (!m_frameFrustumValid || !SameCamera(m_frameCamera, camera)) BeginFrame(camera);
+    const FrustumPlane* planes = m_framePlanes;
     // No zone-based PVS here. A zone is an OPEN gameplay volume (sky, water,
     // reverb, gravity, CRT), not a closed occlusion cell, and it routinely
     // overlaps other zones. Culling "renderables whose centre is inside an
@@ -1958,27 +2024,28 @@ void OzoneLoader::DrawWorldGeometry(Camera3D& camera) {
     // Portal-plane occluders, collected ONCE (not per renderable): each is a
     // plane {normal, centre} in engine space. A `pln` carries its authored
     // normal/position; any other occluder falls back to its thinnest AABB axis.
-    struct Occluder { Vector3 n; Vector3 c; };
-    std::vector<Occluder> occluders;
+    // The container is a member reused every frame (see m_occluderScratch).
+    std::vector<OccluderPlane>& occluders = m_occluderScratch;
+    occluders.clear();
     for (auto& o : m_renderables) {
         if (!o.loaded) continue;
         // HasAnywhere, not def.flags: the flag is per FACE in the dialog, and a
         // per-face Occluder was silently inert because only the brush-wide
         // default was consulted (the same omission SURF_QUANTUM had).
         if (!o.surface.HasAnywhere((uint32_t)SURF_OCCLUDER)) continue;
-        Occluder oc;
-        oc.c = { (o.bounds.min.x+o.bounds.max.x)*0.5f,
-                 (o.bounds.min.y+o.bounds.max.y)*0.5f,
-                 (o.bounds.min.z+o.bounds.max.z)*0.5f };
+        OccluderPlane oc;
+        oc.centre = { (o.bounds.min.x+o.bounds.max.x)*0.5f,
+                      (o.bounds.min.y+o.bounds.max.y)*0.5f,
+                      (o.bounds.min.z+o.bounds.max.z)*0.5f };
         if (o.typeId == (int)OzonePrimitiveType::PLANE) {
-            oc.n = {o.planeNX, o.planeNY, o.planeNZ};
+            oc.normal = {o.planeNX, o.planeNY, o.planeNZ};
         } else {
             float ex = o.bounds.max.x - o.bounds.min.x;
             float ey = o.bounds.max.y - o.bounds.min.y;
             float ez = o.bounds.max.z - o.bounds.min.z;
-            oc.n = {0,1,0};
-            if (ex <= ey && ex <= ez) oc.n = {1,0,0};
-            else if (ez <= ex && ez <= ey) oc.n = {0,0,1};
+            oc.normal = {0,1,0};
+            if (ex <= ey && ex <= ez) oc.normal = {1,0,0};
+            else if (ez <= ex && ez <= ey) oc.normal = {0,0,1};
         }
         occluders.push_back(oc);
     }
@@ -2010,21 +2077,22 @@ void OzoneLoader::DrawWorldGeometry(Camera3D& camera) {
                            (r.bounds.min.y+r.bounds.max.y)*0.5f,
                            (r.bounds.min.z+r.bounds.max.z)*0.5f };
             for (auto& oc : occluders) {
-                float dCam = (camera.position.x-oc.c.x)*oc.n.x +
-                             (camera.position.y-oc.c.y)*oc.n.y +
-                             (camera.position.z-oc.c.z)*oc.n.z;
-                float dR   = (rc.x-oc.c.x)*oc.n.x +
-                             (rc.y-oc.c.y)*oc.n.y +
-                             (rc.z-oc.c.z)*oc.n.z;
+                float dCam = (camera.position.x-oc.centre.x)*oc.normal.x +
+                             (camera.position.y-oc.centre.y)*oc.normal.y +
+                             (camera.position.z-oc.centre.z)*oc.normal.z;
+                float dR   = (rc.x-oc.centre.x)*oc.normal.x +
+                             (rc.y-oc.centre.y)*oc.normal.y +
+                             (rc.z-oc.centre.z)*oc.normal.z;
                 if (dCam * dR < 0) return false;
             }
         }
         return true;
     };
 
-    std::vector<int> visible;
+    std::vector<int>& visible = m_visibleScratch;
     {
         OZ_PROFILE_SCOPE("ozone.cull");
+        visible.clear();
         visible.reserve(m_renderables.size());
         for (int i = 0; i < (int)m_renderables.size(); i++)
             if (isVisible(m_renderables[(size_t)i])) visible.push_back(i);

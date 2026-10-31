@@ -38,6 +38,11 @@
 #include "Core/EditorState.hpp"
 #include "Core/Viewport.hpp"
 #include "Core/ViewportRay.hpp"
+// PaneTarget.hpp defines g_paneCams, which the camera-preset helpers in
+// Core/EditorShell.cpp and the dispatcher need. It MUST come before the fragment
+// includes below (it used to sit after them, so only code that happened to be
+// included later could see the pane cameras).
+#include "Core/PaneTarget.hpp"
 #include "Subsystems/Placement.hpp"
 #include "Subsystems/LevelState.hpp"
 #include "Subsystems/History.hpp"
@@ -104,7 +109,6 @@
 #include "Core/EditorMenus.cpp"
 #include "Subsystems/AnimEditing.cpp"
 #include "Core/EditorDispatcher.cpp"
-#include "Core/PaneTarget.hpp"
 #include "Core/DetachedPane.cpp"
 
 // -----------------------------------------------------------------------------
@@ -149,24 +153,29 @@ static ed::viewport::VpRect Editor_ActiveRect(const std::vector<ed::viewport::Vp
     return rects[a];
 }
 
-// Secondary-pane cameras are DERIVED from the primary each frame, so panning the
-// primary keeps the reference views centred on what is being edited. They are
-// read-only in this phase (no per-pane navigation yet).
+// Secondary-pane cameras are DERIVED from the primary once, at init, so the
+// reference views start centred on what is being edited. Each pane then owns its
+// camera (and its own preset state), which is what makes "Top here, Persp there"
+// possible; the read-only reference panes of a split layout are simply the ones
+// the user has not clicked.
+//
+// The set is the UnrealEd 4-view kit: pane 0 is the editable perspective (the
+// startup camera), 1 Top, 2 Front, 3 Side.
 static Camera3D MakeSecondaryCam(int pane, const Camera3D& primary) {
     Camera3D c = primary;
     const Vector3 t = primary.target;
     switch (pane) {
-        case 1:
+        case 1:   // Top: looking down, up = -Z so the X axis stays horizontal
             c.position = {t.x, t.y + 80.0f, t.z + 0.1f};
             c.target = t; c.up = {0, 0, -1}; c.projection = CAMERA_ORTHOGRAPHIC;
             break;
-        case 2:
-            c.position = {t.x + 80.0f, t.y, t.z};
+        case 2:   // Front: looking along +Z
+            c.position = {t.x, t.y, t.z - 80.0f};
             c.target = t; c.up = {0, 1, 0}; c.projection = CAMERA_ORTHOGRAPHIC;
             break;
-        default:
-            c.position = {t.x + 10.0f, t.y + 10.0f, t.z - 14.0f};
-            c.target = t; c.up = {0, 1, 0}; c.projection = CAMERA_PERSPECTIVE;
+        default:  // Side: looking along -X
+            c.position = {t.x + 80.0f, t.y, t.z};
+            c.target = t; c.up = {0, 1, 0}; c.projection = CAMERA_ORTHOGRAPHIC;
             break;
     }
     return c;
@@ -553,11 +562,16 @@ int main(int argc, char **argv){
         const bool unrealSel = g_editorPanels.unrealBrushMove && _inViewport &&
                                g_sel.type != SelType::NONE && g_sel.type != SelType::MAP &&
                                !g_editorPanels.animEditVerts;
-        // Split by modifier because Shift+RMB is still the per-face surface pick:
-        // only Ctrl owns the right button in the Unreal scheme.
+        // SHIFT IS NOT AN UNREAL MODIFIER HERE - it belongs to the viewport PICK.
+        // It used to set `unrealMouseEdit`, which (a) skipped the left-click pick
+        // block entirely and (b) started a move-the-camera drag, so Shift+click -
+        // the multi-select gesture - did nothing at all while Unreal-style editing
+        // was on. Ctrl owns the mouse; Ctrl+Shift is the "drag the view with the
+        // selection" variant of it (UnrealEd's `Buttons & MOUSE_Shift`).
+        // Shift+RMB also still has to reach the per-face surface pick, which is a
+        // second reason Shift cannot arm a gesture by itself.
         const bool unrealCtrl = unrealSel && uCtrl;
-        const bool unrealShift = unrealSel && uShift && !uCtrl;
-        const bool unrealMouseEdit = unrealCtrl || unrealShift;
+        const bool unrealMouseEdit = unrealCtrl;
 
         if (unrealMouseEdit && !Gizmo_IsUnrealDragging() &&
             (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) ||
@@ -565,20 +579,23 @@ int main(int argc, char **argv){
             const bool l = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
             const bool r = IsMouseButtonDown(MOUSE_RIGHT_BUTTON);
             UnrealDragMode mode = UnrealDragMode::None;
-            if (uCtrl && (l || r)) {
+            bool follow = false;
+            if (l || r) {
                 // The exact axis is refined by the first Update (adding the second
-                // button switches X/Z -> Y without moving the object).
+                // button switches X/Z -> Y without moving the object). Shift also
+                // drags the view along, exactly as UnrealEd's
+                // `MoveActors(..., (Buttons & MOUSE_Shift) ? Viewport->Actor : NULL)`
+                // does - it is NOT a different gesture.
                 mode = (l && r) ? UnrealDragMode::TranslateY
                                 : (l ? UnrealDragMode::TranslateX
                                      : UnrealDragMode::TranslateZ);
-            } else if (uShift && !uCtrl && l) {
-                mode = UnrealDragMode::CameraFollow;
+                follow = uShift;
             }
             if (mode != UnrealDragMode::None) {
                 // History is pushed on the first actual movement, not on the
                 // press: a Ctrl+click that never moves must not leave an undo
                 // step behind (the press may be the start of a plain pick).
-                Gizmo_BeginUnrealDrag(mode);
+                Gizmo_BeginUnrealDrag(mode, follow);
                 g_gizmoDrag = true;   // lets the "mesh has no bounds yet" branch write
             }
         }
@@ -606,9 +623,10 @@ int main(int argc, char **argv){
                     MarkWorldGraphDirty();
                     g_gizmoHistPushed = false;
                 }
-                // Swallow the release so the generic handlers cannot pick or open
-                // the context menu for a gesture that was a transform.
-                (void)GetMouseDelta();
+                // No "swallow the release" call is needed or possible: the pick
+                // handlers above are gated on `!unrealMouseEdit` and on
+                // g_lbDown/g_rbDown, neither of which was armed during the drag,
+                // so a transform release cannot also pick or open a menu.
             }
         }
 
@@ -666,45 +684,92 @@ int main(int argc, char **argv){
                 }
             }
         }
-        // Left-click: select entity (red highlight) â€” suppressed while editing verts.
-        // The pick fires on RELEASE, not press, so holding LMB to drag a placement
-        // ghost still works: a drag cancels the pick via the movement threshold.
-        // Picking is deliberately independent of DrawModel â€” DrawModel only means
+        // Left-click: SELECT ON PRESS, like UnEdClick.cpp. UE1 hit-tests the moment
+        // the button goes down (`UEditorEngine::Click` -> FEditorHitObserver) and
+        // then lets the drag move whatever ended up selected; picking on RELEASE
+        // meant a press could only ever select, never select-and-drag, and the 3px
+        // movement threshold existed solely to tell the two apart.
+        //
+        // The ONE exception is a placement ghost: it is dragged while the button is
+        // held and committed only on a release that did not move, so that path keeps
+        // the click/drag distinction.
+        //
+        // Picking is deliberately independent of DrawModel - DrawModel only means
         // "a gizmo/placement ghost is drawn". Gating picks on it made the viewport
-        // unselectable whenever a placement ghost was active with nothing selected
-        // (e.g. after using the CSG toolbox), with no way to recover via Escape.
+        // unselectable whenever a placement ghost was active with nothing selected.
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !unrealMouseEdit) {
-            g_lbDown = true;
-            g_lbDownPos = GetMousePosition();
+            const Vector2 mp = GetMousePosition();
             g_gizmoHistPushed = false;
-            // Begin an intentional move only when the Move tool is active, or the
-            // press lands on the current selection. A plain viewport click never
-            // translates a selected entity.
             g_gizmoDrag = false;
-            if (!g_suppressViewportDrag && g_sel.type != SelType::NONE &&
-                !g_editorPanels.animEditVerts) {
-                Vector2 mp = GetMousePosition();
-                if (EditorViewportContains(mp)) {
-                    // Handles win over the generic "press on the object" drag: if a
-                    // handle was hit, the drag is constrained to that axis/plane.
+
+            if (!g_suppressViewportDrag && !g_editorPanels.animEditVerts &&
+                g_placeMode != PlaceMode::TERRAIN && EditorViewportContains(mp)) {
+                if (g_placementArmed && g_sel.type == SelType::NONE) {
+                    // Ghost: arm the drag; the release below commits if it never moved.
+                    g_lbDown = true;
+                } else {
+                    // ONE raycast resolves all three questions: what is under the
+                    // cursor, is this the second click of a double, and was the
+                    // entity already selected (Cam mode only drags what you had).
+                    EditorSelection probe;
+                    const bool hit = EditorRaycastAt(mp, probe);
+                    const bool wasSelected = hit && probe.type == g_sel.type &&
+                                             probe.index == g_sel.index;
+
+                    static double  s_lastClickTime = -1.0;
+                    static Vector2 s_lastClickPos = {-1.0f, -1.0f};
+                    static SelType s_lastClickType = SelType::NONE;
+                    static int     s_lastClickIndex = -1;
+                    const double now = GetTime();
+                    const bool isDouble =
+                        s_lastClickTime > 0.0 && (now - s_lastClickTime) < 0.35 &&
+                        fabsf(mp.x - s_lastClickPos.x) <= 4.0f &&
+                        fabsf(mp.y - s_lastClickPos.y) <= 4.0f &&
+                        hit && probe.type == s_lastClickType &&
+                        probe.index == s_lastClickIndex;
+
+                    // A double-click must not start a transform: opening Properties
+                    // and then nudging the entity by a pixel of mouse jitter is the
+                    // worst of both.
+                    bool openedProperties = false;
+
+                    // A handle under the cursor wins over the object behind it: that
+                    // press is a constrained transform, not a selection.
                     if (Gizmo_BeginDrag(mp, OTEditor.MainCamera,
                                         g_editorPanels.currentToolMode)) {
                         g_gizmoDrag = true;
-                        if (!g_gizmoHistPushed) {
-                            HistoryPush();
-                            g_gizmoHistPushed = true;
-                        }
-                    } else if (g_editorPanels.currentToolMode == 1) {
-                        g_gizmoDrag = true;
-                    } else if (g_editorPanels.currentToolMode == 0) {
-                        // Cam mode keeps the old convenience: a press that lands on
-                        // the selected object drags it. Scale/Rotate mode must NOT
-                        // fall back to an unconstrained move.
-                        EditorSelection probe;
-                        if (EditorRaycastAt(mp, probe) &&
-                            probe.type == g_sel.type && probe.index == g_sel.index)
-                            g_gizmoDrag = true;
+                        HistoryPush();
+                        g_gizmoHistPushed = true;
+                    } else if (isDouble) {
+                        // Click(HActor): MOUSE_LeftDouble -> select + properties.
+                        // WITHOUT the toggle-off, or the actor deselects on the way
+                        // to its own properties panel.
+                        EditorPickEntityAt(probe, hit, false);
+                        OpenPropertiesForSelection();
+                        openedProperties = true;
+                        s_lastClickTime = -1.0;   // a triple click is not two doubles
+                    } else {
+                        const bool picked = EditorPickEntityAt(probe, hit, true);
+                        // HBackdrop::Click: a plain LMB on empty space clears the
+                        // selection. A modifier keeps it, so a missed extend-click
+                        // cannot wipe the set.
+                        if (!picked && !SelectionModifierHeld() &&
+                            g_sel.type != SelType::NONE)
+                            ClearSelection();
+                        s_lastClickTime = now;
+                        s_lastClickPos = mp;
+                        s_lastClickType = g_sel.type;
+                        s_lastClickIndex = g_sel.index;
                     }
+
+                    // Begin an intentional move: Move mode always; Cam mode only
+                    // when the press landed on what was ALREADY selected, so a plain
+                    // Cam-mode click never drags the scene around. Scale/Rotate must
+                    // not fall back to an unconstrained move.
+                    if (!g_gizmoDrag && !openedProperties &&
+                        (g_editorPanels.currentToolMode == 1 ||
+                         (g_editorPanels.currentToolMode == 0 && wasSelected)))
+                        g_gizmoDrag = true;
                 }
             }
         }
@@ -716,22 +781,11 @@ int main(int argc, char **argv){
             if (g_lbDown) {
                 g_lbDown = false;
                 Vector2 mp = GetMousePosition();
-                if (!g_editorPanels.animEditVerts && g_placeMode != PlaceMode::TERRAIN &&
-                    EditorViewportContains(mp)) {
-                    // A placement ghost is armed: a CLICK places it. Without this
-                    // the click fell through to EditorPickEntity, missed (a ghost
-                    // is not pickable), set DrawModel=false and made the ghost
-                    // vanish with nothing added to the world - which reads exactly
-                    // like "the mesh I just placed got deleted". Gated on
-                    // g_placementArmed and NOT on DrawModel alone: DrawModel also
-                    // means "a selection gizmo is drawn", so every click with an
-                    // entity selected would otherwise place another copy.
-                    if (g_placementArmed && g_sel.type == SelType::NONE &&
-                        !g_suppressViewportDrag)
-                        g_commitPlacement = true;
-                    else
-                        EditorPickEntity();
-                }
+                // Only the placement ghost still resolves on release, so a press-drag
+                // can position it and a press-release places it.
+                if (!g_editorPanels.animEditVerts && EditorViewportContains(mp) &&
+                    g_placementArmed && g_sel.type == SelType::NONE)
+                    g_commitPlacement = true;
             }
             // A gizmo drag wrote new positions every frame it was held, so the WorldGraph's
             // position columns are stale. Flagging on release keeps the 60Hz rebuild off
@@ -879,6 +933,9 @@ int main(int argc, char **argv){
                         if (g_sel.type != SelType::MAP) {
                             AppendMenuA(hMenu, MF_STRING, IDM_DELETE_ENTITY, "Delete");
                             AppendMenuA(hMenu, MF_STRING, IDM_DUPLICATE_ENTITY, "Duplicate");
+                            AppendMenuA(hMenu, MF_SEPARATOR, 0, NULL);
+                            AppendMenuA(hMenu, MF_STRING, IDM_SNAP_GROUND, "Snap to Ground");
+                            AppendMenuA(hMenu, MF_STRING, IDM_SNAP_SIDE,   "Snap to Side");
                         }
                         // A Mesh or a CSG brush carries no usable collision of
                         // its own (the world is AABB-only and a placed prop has
@@ -888,10 +945,19 @@ int main(int argc, char **argv){
                             AppendMenuA(hMenu, MF_STRING, IDM_APPEND_AUTOCONVEX,
                                         "Append AutoConvex Collision");
                         }
+                        // Texture apply works on a brush face, a legacy WDL model,
+                        // or a placed Mesh.* prop - and on the WHOLE selection,
+                        // which is why the label stops naming "Surface". This used
+                        // to be offered only for BRUSH/MODEL and handled by a
+                        // second implementation that never learned about Mesh.
                         if (!g_editorPanels.activeTexturePath.empty() &&
-                            (g_sel.type == SelType::BRUSH || g_sel.type == SelType::MODEL)) {
+                            (g_sel.type == SelType::BRUSH || g_sel.type == SelType::MODEL ||
+                             g_sel.type == SelType::MESH)) {
                             AppendMenuA(hMenu, MF_SEPARATOR, 0, NULL);
-                            AppendMenuA(hMenu, MF_STRING, IDM_APPLY_TEXTURE, "Apply Texture to Surface");
+                            AppendMenuA(hMenu, MF_STRING, IDM_APPLY_TEXTURE,
+                                        g_sel.type == SelType::BRUSH
+                                            ? "Apply Texture to Surface"
+                                            : "Apply Texture to Selection");
                         }
                         POINT pt;
                         GetCursorPos(&pt);
@@ -916,7 +982,9 @@ int main(int argc, char **argv){
                         if (cmd == IDM_PROPERTIES) OpenPropertiesForSelection();
                         else if (cmd == IDM_DELETE_ENTITY) DeleteSelectedEntity();
                         else if (cmd == IDM_DUPLICATE_ENTITY) DuplicateSelectedEntity();
-                        else if (cmd == IDM_APPLY_TEXTURE) g_editorPanels.actionApplyTextureToSel = true;
+                        else if (cmd == IDM_APPLY_TEXTURE) ApplyActiveTextureToSelection();
+                        else if (cmd == IDM_SNAP_GROUND) SnapSelectionToGround();
+                        else if (cmd == IDM_SNAP_SIDE)   SnapSelectionToSide();
                         else if (cmd == IDM_APPEND_AUTOCONVEX) { AppendAutoConvexForSelection(); MarkWorldGraphDirty(); }
                         else if (cmd == IDM_SURFACE_PROPS || cmd == IDM_SURFACE_PROPS_BRUSH) {
                             // Every picked face must belong to ONE renderable:
@@ -973,45 +1041,28 @@ int main(int argc, char **argv){
         }
         // Mouse-controlled camera: only move when middle-mouse-button is held.
         // Leaves the cursor free for clicking Win32 panels.
-        // MMB          = pan horizontal (X/Z)
-        // Shift + MMB  = pan vertical (Y)
+        // MMB          = pan in the SCREEN plane (X/Z at the camera's yaw, up/down
+        //                at the camera's pitch)
+        // Shift + MMB  = pan vertically along world Y
         // Alt + MMB    = orbit around target
         // Scroll wheel = dolly forward/backward
+        //
+        // All four live in Core/EditorCamera.hpp. They were inline here AND copied
+        // verbatim into Core/DetachedPane.cpp, and both copies panned along WORLD
+        // X/Z: correct only for the default 3/4 view, sideways-on in every other
+        // one. See that header for the UnrealEd (UnEdCam.cpp) reference the scale
+        // and the ortho zoom come from.
         {
+            const float paneH = g_activeViewportRect.h > 0.0f
+                                    ? g_activeViewportRect.h : (float)GetScreenHeight();
             if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
                 Vector2 delta = GetMouseDelta();
-                float sensitivity = 0.1f;
                 bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
                 bool alt   = IsKeyDown(KEY_LEFT_ALT)   || IsKeyDown(KEY_RIGHT_ALT);
 
-                if (shift) {
-                    // Shift + MMB = pan up/down
-                    OTEditor.MainCamera.position.y -= delta.y * sensitivity;
-                    OTEditor.MainCamera.target.y -= delta.y * sensitivity;
-                } else if (alt) {
-                    // Alt + MMB = orbit around target
-                    Vector3 v = Vector3Subtract(OTEditor.MainCamera.position, OTEditor.MainCamera.target);
-                    float radius = Vector3Length(v);
-                    if (radius > 0.01f) {
-                        Vector2 ang;
-                        ang.x = atan2f(v.x, v.z); // yaw
-                        ang.y = asinf(v.y / radius); // pitch
-                        ang.x -= delta.x * 0.01f;
-                        ang.y += delta.y * 0.01f;
-                        if (ang.y > PI/2 - 0.01f) ang.y = PI/2 - 0.01f;
-                        if (ang.y < -PI/2 + 0.01f) ang.y = -PI/2 + 0.01f;
-                        v.x = radius * cosf(ang.y) * sinf(ang.x);
-                        v.y = radius * sinf(ang.y);
-                        v.z = radius * cosf(ang.y) * cosf(ang.x);
-                        OTEditor.MainCamera.position = Vector3Add(OTEditor.MainCamera.target, v);
-                    }
-                } else {
-                    // Plain MMB = pan X/Z
-                    OTEditor.MainCamera.position.x -= delta.x * sensitivity;
-                    OTEditor.MainCamera.position.z -= delta.y * sensitivity;
-                    OTEditor.MainCamera.target.x -= delta.x * sensitivity;
-                    OTEditor.MainCamera.target.z -= delta.y * sensitivity;
-                }
+                if (shift)     edcam::PanVertical(OTEditor.MainCamera, delta.y, paneH);
+                else if (alt)  edcam::Orbit(OTEditor.MainCamera, delta.x, delta.y);
+                else           edcam::Pan(OTEditor.MainCamera, delta.x, delta.y, paneH);
             }
 
             // Scroll wheel = dolly forward/backward.
@@ -1020,18 +1071,8 @@ int main(int argc, char **argv){
             bool wheelReservedForTool =
                 (g_placeMode == PlaceMode::MODEL && AngelTechEditor.DrawModel &&
                  g_editorPanels.currentToolMode != 0);
-            if (!wheelReservedForTool) {
-                float wheel = GetMouseWheelMove();
-                if (wheel != 0) {
-                    Vector3 dir = Vector3Normalize(Vector3Subtract(OTEditor.MainCamera.target, OTEditor.MainCamera.position));
-                    OTEditor.MainCamera.position.x += dir.x * wheel * 2.0f;
-                    OTEditor.MainCamera.position.y += dir.y * wheel * 2.0f;
-                    OTEditor.MainCamera.position.z += dir.z * wheel * 2.0f;
-                    OTEditor.MainCamera.target.x += dir.x * wheel * 2.0f;
-                    OTEditor.MainCamera.target.y += dir.y * wheel * 2.0f;
-                    OTEditor.MainCamera.target.z += dir.z * wheel * 2.0f;
-                }
-            }
+            if (!wheelReservedForTool)
+                edcam::Dolly(OTEditor.MainCamera, GetMouseWheelMove());
         }
         
         // Per-zone environment preview.
@@ -1453,7 +1494,14 @@ if (g_editorPanels.showCollisionBounds) {
         }
 
         // --- Placement visuals ---
-        if (AngelTechEditor.DrawModel)
+        //
+        // `|| Gizmo_IsDragging() || Gizmo_IsUnrealDragging()` is load-bearing: the
+        // gizmo drag update, the wheel scale/rotate shortcuts and the per-frame
+        // gizmo-to-entity write-back all live in this block. If DrawModel ever
+        // dropped mid-gesture (Escape, a pick miss, a panel that recomputed the
+        // selection) the drag had started but could never apply, which reads as
+        // "Move/Rotate do nothing".
+        if (AngelTechEditor.DrawModel || Gizmo_IsDragging() || Gizmo_IsUnrealDragging())
         {
             float px = AngelTechEditor.X, py = AngelTechEditor.Y, pz = AngelTechEditor.Z;
             float ps = AngelTechEditor.S, pr = AngelTechEditor.R;
@@ -1601,9 +1649,18 @@ if (g_editorPanels.showCollisionBounds) {
             // Origin sphere
             DrawSphere({px, py, pz}, gizmoTip * 0.5f, (Color){180, 180, 180, 200});
 
-            // Movement controls
-            // Keyboard nudge/rotate/scale of a selection is an undoable edit.
-            if (g_sel.type != SelType::NONE && !g_editorPanels.animEditVerts &&
+            // Movement controls - LETTER NUDGES.
+            //
+            // These are a convenience nudge, not a shortcut, so they must never run
+            // while Ctrl or Alt is held. That is not tidiness: Windows VK codes and
+            // raylib key codes are POSITIONAL, so on German QWERTZ the key LABELLED
+            // Z is the physical Y key. Ctrl+Z therefore arrived as KEY_Y, matched
+            // nothing in the shortcut table, and fell into this block as
+            // `Y -= 2.0f` - the selection stepped down the Y axis instead of
+            // undoing. Edit: Undo was unreachable on every non-US layout.
+            const bool nudgeMods = EdKeys::CtrlDown() || EdKeys::AltDown();
+            if (!nudgeMods &&
+                g_sel.type != SelType::NONE && !g_editorPanels.animEditVerts &&
                 EditorUi_ViewportHasFocus() &&
                 (IsKeyPressed(KEY_U) || IsKeyPressed(KEY_J) || IsKeyPressed(KEY_H) ||
                  IsKeyPressed(KEY_K) || IsKeyPressed(KEY_Y) || IsKeyPressed(KEY_I) ||
@@ -1611,27 +1668,29 @@ if (g_editorPanels.showCollisionBounds) {
                  IsKeyPressed(KEY_T) || IsKeyPressed(KEY_B))) {
                 HistoryPush();
             }
-            if (!IsMouseButtonDown(2)) {
-                if (IsKeyPressed(KEY_U)) AngelTechEditor.X -= 2.0f;
-                if (IsKeyPressed(KEY_J)) AngelTechEditor.X += 2.0f;
-                if (IsKeyPressed(KEY_H)) AngelTechEditor.Z += 2.0f;
-                if (IsKeyPressed(KEY_K)) AngelTechEditor.Z -= 2.0f;
-                if (IsKeyPressed(KEY_Y)) AngelTechEditor.Y -= 2.0f;
-                if (IsKeyPressed(KEY_I)) AngelTechEditor.Y += 2.0f;
-            } else {
-                if (IsKeyPressed(KEY_U)) AngelTechEditor.W -= 2.0f;
-                if (IsKeyPressed(KEY_J)) AngelTechEditor.W += 2.0f;
-                if (IsKeyPressed(KEY_H)) AngelTechEditor.L += 2.0f;
-                if (IsKeyPressed(KEY_K)) AngelTechEditor.L -= 2.0f;
-                if (IsKeyPressed(KEY_Y)) AngelTechEditor.H -= 2.0f;
-                if (IsKeyPressed(KEY_I)) AngelTechEditor.H += 2.0f;
-            }
+            if (!nudgeMods) {
+                if (!IsMouseButtonDown(2)) {
+                    if (IsKeyPressed(KEY_U)) AngelTechEditor.X -= 2.0f;
+                    if (IsKeyPressed(KEY_J)) AngelTechEditor.X += 2.0f;
+                    if (IsKeyPressed(KEY_H)) AngelTechEditor.Z += 2.0f;
+                    if (IsKeyPressed(KEY_K)) AngelTechEditor.Z -= 2.0f;
+                    if (IsKeyPressed(KEY_Y)) AngelTechEditor.Y -= 2.0f;
+                    if (IsKeyPressed(KEY_I)) AngelTechEditor.Y += 2.0f;
+                } else {
+                    if (IsKeyPressed(KEY_U)) AngelTechEditor.W -= 2.0f;
+                    if (IsKeyPressed(KEY_J)) AngelTechEditor.W += 2.0f;
+                    if (IsKeyPressed(KEY_H)) AngelTechEditor.L += 2.0f;
+                    if (IsKeyPressed(KEY_K)) AngelTechEditor.L -= 2.0f;
+                    if (IsKeyPressed(KEY_Y)) AngelTechEditor.H -= 2.0f;
+                    if (IsKeyPressed(KEY_I)) AngelTechEditor.H += 2.0f;
+                }
 
-            if (IsKeyPressed(KEY_O)) AngelTechEditor.R += 90.0f;
-            if (IsKeyPressed(KEY_L)) AngelTechEditor.R -= 90.0f;
-            if (IsKeyDown(KEY_T)) AngelTechEditor.S += 0.5f;
-            // NOTE: scale-down is B, not G â€” G cycles the CSG op in MODEL mode.
-            if (IsKeyDown(KEY_B)) AngelTechEditor.S -= 0.5f;
+                if (IsKeyPressed(KEY_O)) AngelTechEditor.R += 90.0f;
+                if (IsKeyPressed(KEY_L)) AngelTechEditor.R -= 90.0f;
+                if (IsKeyDown(KEY_T)) AngelTechEditor.S += 0.5f;
+                // NOTE: scale-down is B, not G â€” G cycles the CSG op in MODEL mode.
+                if (IsKeyDown(KEY_B)) AngelTechEditor.S -= 0.5f;
+            }
 
             // Vertex-edit transform (Phase C): the movement/rotate keys deform
             // the selected vertices instead of moving the mesh node.
@@ -1687,147 +1746,49 @@ if (g_editorPanels.showCollisionBounds) {
                 g_editorPanels.animPrevValid = false;
             }
 
-            // Sync gizmo position back to selected entity (for manipulation)
+            // Sync gizmo position back into the selection (for manipulation).
+            //
+            // The per-type write itself lives in MoveSelectionCentre() so the
+            // ADDITIONAL members of a multi-selection can use the same code.
+            // UnrealEd's MoveActors applies one Delta to every bSelected actor;
+            // here only the primary used to move, so a Shift-selected set came
+            // apart the moment you dragged it.
             if (g_sel.type != SelType::NONE && !g_editorPanels.animEditVerts) {
-                Vector3 newPos = {AngelTechEditor.X, AngelTechEditor.Y, AngelTechEditor.Z};
-                int idx = g_sel.index;
-                if (g_sel.type == SelType::NPC) {
-                    Pawn* p = PawnSystem::Instance().Get(idx);
-                    if (p) p->position = newPos;
-                } else if (g_sel.type == SelType::PICKUP) {
-                    auto& pickups = PawnSystem::Instance().GetPickups();
-                    for (auto& pk : pickups) {
-                        if ((int)pk.id == idx) { pk.position = newPos; break; }
-                    }
-                } else if (g_sel.type == SelType::BRUSH) {
-                    // idx is a renderable index (see EditorRaycastAt), so there is no
-                    // collision-volume fallback to try. The old code guessed with
-                    // `idx < Count()` and otherwise went looking for a matching
-                    // collision volume, which is how dragging a brush could move a
-                    // different one.
-                    const int rIdx = (OzoneLoader::Instance().Get(idx) != nullptr) ? idx : -1;
-                    if (rIdx >= 0) {
-                        OzoneRenderable* r = OzoneLoader::Instance().Get(rIdx);
-                        if (r) {
-                            // Rotation-aware centre (the same box the picker and
-                            // SnapGizmoToSelection use). The old code used the
-                            // UNROTATED mesh centre here, so a rotated brush's
-                            // pivot and its write-back disagreed and the brush
-                            // slid/jittered as this ran every frame.
-                            const Vector3 center = BrushCenter(*r);
-                            const Vector3 oldPos = r->position;
-                            const float oldScale = r->scale;
-                            const float oldRot = r->rotation;
-                            r->position = {newPos.x + (oldPos.x - center.x),
-                                           newPos.y + (oldPos.y - center.y),
-                                           newPos.z + (oldPos.z - center.z)};
-                            // Scale/Rotate tool modes write back to the renderable
-                            if (g_editorPanels.currentToolMode == 2) r->scale = AngelTechEditor.S;
-                            if (g_editorPanels.currentToolMode == 3) r->rotation = AngelTechEditor.R * DEG2RAD;
-                            if (r->position.x != oldPos.x || r->position.y != oldPos.y ||
-                                r->position.z != oldPos.z || r->scale != oldScale ||
-                                r->rotation != oldRot) {
-                                g_editorPanels.collisionDirty = true;
-                                // Culling must see the NEW transform immediately;
-                                // otherwise the selected brush is culled against
-                                // its old AABB and vanishes as soon as you drag it.
-                                OzoneLoader::Instance().RefreshRenderableBounds(rIdx);
-                            }
+                const Vector3 newPos = {AngelTechEditor.X, AngelTechEditor.Y, AngelTechEditor.Z};
+
+                // Multi-selection: the gizmo tracks the PRIMARY, so the rigid
+                // delta is (newPos - primary's last centre). Each other member is
+                // offset from its OWN centre by that delta - not assigned the
+                // primary's position, which would stack the whole set on one spot.
+                if (g_selSet.size() > 1) {
+                    const Vector3 d = {newPos.x - g_sel.pos.x,
+                                       newPos.y - g_sel.pos.y,
+                                       newPos.z - g_sel.pos.z};
+                    if (d.x != 0.0f || d.y != 0.0f || d.z != 0.0f) {
+                        for (auto& s : g_selSet) {
+                            if (s.type == g_sel.type && s.index == g_sel.index) continue;
+                            const Vector3 p = {s.pos.x + d.x, s.pos.y + d.y, s.pos.z + d.z};
+                            MoveSelectionCentre(s, p, false);
+                            s.pos = p;
                         }
-                    }
-                    // Rebuild the CSG world once, AFTER the drag, not every frame.
-                    // Mid-drag the renderable moves continuously, so a per-frame
-                    // rebuild is a full O(brush) CSG pass for no benefit; nothing
-                    // reads collision while the gizmo is being dragged.
-                    if (g_editorPanels.collisionDirty && !g_gizmoDrag) {
-                        OzoneLoader::Instance().RebuildCollisionVolumes();
-                        g_editorPanels.collisionDirty = false;
-                    }
-                } else if (g_sel.type == SelType::LIGHT) {
-                    LightNode* l = PawnSystem::Instance().GetLight(idx);
-                    if (l) l->position = newPos;
-                } else if (g_sel.type == SelType::SPAWN) {
-                    if (PlayerStartNode* s = FindPlayerStartById(idx))
-                        s->position = newPos;
-                } else if (g_sel.type == SelType::PORTAL) {
-                    auto& portals = ZoneManager::Instance().GetPortals();
-                    if (idx >= 0 && idx < (int)portals.size()) {
-                        auto& p = portals[idx];
-                        Vector3 center = {(p.bounds.min.x + p.bounds.max.x) * 0.5f,
-                                          (p.bounds.min.y + p.bounds.max.y) * 0.5f,
-                                          (p.bounds.min.z + p.bounds.max.z) * 0.5f};
-                        Vector3 delta = {newPos.x - center.x, newPos.y - center.y, newPos.z - center.z};
-                        p.bounds.min.x += delta.x; p.bounds.min.y += delta.y; p.bounds.min.z += delta.z;
-                        p.bounds.max.x += delta.x; p.bounds.max.y += delta.y; p.bounds.max.z += delta.z;
-                    }
-                } else if (g_sel.type == SelType::ZONE) {
-                    // Bounds-centred, like PORTAL. This branch was missing, so the
-                    // Move tool changed the gizmo and then wrote nothing: a zone
-                    // could only be moved through the Properties panel.
-                    auto& zones = ZoneManager::Instance().GetZones();
-                    for (auto& z : zones) {
-                        if ((int)z.id != idx) continue;
-                        Vector3 center = {(z.bounds.min.x + z.bounds.max.x) * 0.5f,
-                                          (z.bounds.min.y + z.bounds.max.y) * 0.5f,
-                                          (z.bounds.min.z + z.bounds.max.z) * 0.5f};
-                        Vector3 delta = {newPos.x - center.x, newPos.y - center.y, newPos.z - center.z};
-                        z.bounds.min.x += delta.x; z.bounds.min.y += delta.y; z.bounds.min.z += delta.z;
-                        z.bounds.max.x += delta.x; z.bounds.max.y += delta.y; z.bounds.max.z += delta.z;
-                        break;
-                    }
-                } else if (g_sel.type == SelType::MESH) {
-                    if (MeshObjectNode* m = PawnSystem::Instance().GetMeshObject(idx)) {
-                        m->yaw = AngelTechEditor.R;   // UI works in degrees
-                        if (g_editorPanels.currentToolMode == 2 && AngelTechEditor.S > 0.01f)
-                            m->scale = AngelTechEditor.S;
-                        // The gizmo / raycast store the model's world CENTRE, but
-                        // m->position is the model's ORIGIN (often the feet). Writing
-                        // the centre straight into position shifted every model by
-                        // its own local offset the moment it was selected.
-                        if (m->mesh && m->mesh->Valid()) {
-                            const BoundingBox& mb = m->mesh->Bounds();
-                            const float lx = (mb.min.x + mb.max.x) * 0.5f * m->scale;
-                            const float ly = (mb.min.y + mb.max.y) * 0.5f * m->scale;
-                            const float lz = (mb.min.z + mb.max.z) * 0.5f * m->scale;
-                            const float c = cosf(m->yaw * DEG2RAD);
-                            const float s = sinf(m->yaw * DEG2RAD);
-                            const Vector3 offset = { lx * c + lz * s, ly, -lx * s + lz * c };
-                            m->position = {newPos.x - offset.x, newPos.y - offset.y,
-                                           newPos.z - offset.z};
-                        } else if (g_gizmoDrag) {
-                            // Unknown local offset (mesh still resolving): only
-                            // an explicit drag may write the centre. Doing it on
-                            // every frame made a texture reload shift the prop.
-                            m->position = newPos;
-                        }
-                    }
-                } else if (g_sel.type == SelType::PARTICLE) {
-                    if (ParticleEmitterNode* e = PawnSystem::Instance().GetParticleEmitter(idx)) {
-                        e->position = newPos;
-                        e->yaw = AngelTechEditor.R;
-                    }
-                } else if (g_sel.type == SelType::PATHNODE) {
-                    if (PathNode* pn = PawnSystem::Instance().GetPathNode(idx))
-                        pn->position = newPos;
-                } else if (g_sel.type == SelType::WINDZONE) {
-                    if (WindZoneNode* z = PawnSystem::Instance().GetWindZone(idx)) {
-                        Vector3 center = {(z->bounds.min.x + z->bounds.max.x) * 0.5f,
-                                          (z->bounds.min.y + z->bounds.max.y) * 0.5f,
-                                          (z->bounds.min.z + z->bounds.max.z) * 0.5f};
-                        Vector3 delta = {newPos.x - center.x, newPos.y - center.y, newPos.z - center.z};
-                        z->bounds.min.x += delta.x; z->bounds.min.y += delta.y; z->bounds.min.z += delta.z;
-                        z->bounds.max.x += delta.x; z->bounds.max.y += delta.y; z->bounds.max.z += delta.z;
-                    }
-                } else if (g_sel.type == SelType::MODEL) {
-                    if (idx >= 0 && idx < CachedModelCounter) {
-                        CachedModels[idx].X = newPos.x;
-                        CachedModels[idx].Y = newPos.y;
-                        CachedModels[idx].Z = newPos.z;
-                        CachedModels[idx].R = AngelTechEditor.R;
-                        if (g_editorPanels.currentToolMode == 2 && AngelTechEditor.S > 0.01f)
-                            CachedModels[idx].S = AngelTechEditor.S;
+                        // Keep the primary's own entry in the set in step, so the
+                        // highlight box and the next frame's delta agree.
+                        for (auto& s : g_selSet)
+                            if (s.type == g_sel.type && s.index == g_sel.index) s.pos = newPos;
                     }
                 }
+
+                MoveSelectionCentre(g_sel, newPos, true);
+
+                // Rebuild the CSG world once, AFTER the drag, not every frame.
+                // Mid-drag the renderables move continuously, so a per-frame
+                // rebuild is a full O(brush) CSG pass for no benefit; nothing
+                // reads collision while the gizmo is being dragged.
+                if (g_editorPanels.collisionDirty && !g_gizmoDrag) {
+                    OzoneLoader::Instance().RebuildCollisionVolumes();
+                    g_editorPanels.collisionDirty = false;
+                }
+
                 // Update selection stored position
                 g_sel.pos = newPos;
             }
@@ -1996,10 +1957,18 @@ AngelTechEditor.DrawModel = false;
             } else if (g_editorPanels.currentToolMode == 3) {
                 float wheel = GetMouseWheelMove();
                 if (wheel != 0) AngelTechEditor.R += wheel * 15.0f;
-            } else if (IsMouseButtonDown(0)) {
+            } else if (IsMouseButtonDown(0) && !Gizmo_IsUnrealDragging()) {
                 // A selected entity moves only for an intentional gesture; a
                 // placement ghost (no selection) still drags freely. Suppressed
                 // entirely while the post-context-menu input guard is active.
+                //
+                // `!Gizmo_IsUnrealDragging()` is load-bearing: an UnrealEd Ctrl/
+                // Shift gesture sets g_gizmoDrag so that the "mesh has no bounds"
+                // branch may write, and this fallback then ALSO ran - moving the
+                // selection along the camera plane on top of its constrained axis.
+                // The result drifted diagonally and never stayed on the axis the
+                // modifier named, which is exactly the "axis movement is broken"
+                // report. The gesture owns the drag; this must not join in.
                 bool allowMove = !g_suppressViewportDrag &&
                     (g_sel.type == SelType::NONE || g_gizmoDrag);
                 if (allowMove) {
@@ -2011,27 +1980,31 @@ AngelTechEditor.DrawModel = false;
                     // always snapped; this fallback silently did not, which is the
                     // other half of "snap only works occasionally".
                     const float snapStep = Gizmo_SnapStep();
-                    // Camera-relative fallback for a free drag (ghost or Cam-mode
-                    // object drag). The old X += dx/8 was screen-space and did not
-                    // follow the cursor; this moves along the camera's right/up
-                    // vectors, scaled by distance so it stays 1:1 on screen.
-                    if (g_sel.type == SelType::NONE) {
-                        AngelTechEditor.X += GetMouseDelta().x / 8;
-                        AngelTechEditor.Y += GetMouseDelta().y / 8;
-                        AngelTechEditor.Z -= (GetMouseWheelMove() * 2);
-                    } else {
-                        Vector3 fwd = Vector3Normalize(Vector3Subtract(
-                            OTEditor.MainCamera.target, OTEditor.MainCamera.position));
-                        Vector3 right = Vector3Normalize(Vector3CrossProduct(fwd, {0, 1, 0}));
-                        Vector3 up = Vector3Normalize(Vector3CrossProduct(right, fwd));
-                        const float dist = Vector3Distance(OTEditor.MainCamera.position,
-                                                           {AngelTechEditor.X, AngelTechEditor.Y, AngelTechEditor.Z});
-                        const float k = dist * 0.0016f;
+                    // Camera-relative free drag: screen-right/screen-up at the
+                    // pivot's depth, so the object tracks the cursor and stays 1:1
+                    // on screen at any zoom. ONE path for the ghost and for the
+                    // selected entity - the old ghost branch was `X += dx/8;
+                    // Y += dy/8`, which ignored the camera entirely and moved the
+                    // ghost UP when the mouse went down.
+                    const Vector3 fwd = Vector3Normalize(Vector3Subtract(
+                        OTEditor.MainCamera.target, OTEditor.MainCamera.position));
+                    ozg::Vec3 right, up;
+                    if (ozg::ViewBasis({fwd.x, fwd.y, fwd.z}, {0.0f, 1.0f, 0.0f}, right, up)) {
+                        const float paneH = g_activeViewportRect.h > 0.0f
+                                                ? g_activeViewportRect.h : (float)GetScreenHeight();
+                        const float dist = Vector3Distance(
+                            OTEditor.MainCamera.position,
+                            {AngelTechEditor.X, AngelTechEditor.Y, AngelTechEditor.Z});
+                        const float k = edcam::UnitsPerPixel(OTEditor.MainCamera, dist, paneH);
                         const Vector2 d = GetMouseDelta();
                         AngelTechEditor.X += (right.x * d.x - up.x * d.y) * k;
                         AngelTechEditor.Y += (right.y * d.x - up.y * d.y) * k;
                         AngelTechEditor.Z += (right.z * d.x - up.z * d.y) * k;
                     }
+                    // An armed ghost used to be moved along world Z by the wheel
+                    // (`Z -= wheel*2`), which is a horizontal axis unrelated to the
+                    // view - so the wheel did TWO things in that mode and neither
+                    // predictably. The wheel now only dollies; drag moves the ghost.
                     if (snapStep > 0.0f) {
                         AngelTechEditor.X = ozg::SnapValue(AngelTechEditor.X, snapStep);
                         AngelTechEditor.Y = ozg::SnapValue(AngelTechEditor.Y, snapStep);
@@ -2039,7 +2012,11 @@ AngelTechEditor.DrawModel = false;
                     }
                 }
             }
-            if (IsMouseButtonDown(1) && !g_suppressViewportDrag) {
+            if (IsMouseButtonDown(1) && !g_suppressViewportDrag && !Gizmo_IsUnrealDragging()) {
+                // Right-drag resizes the placement ghost. Gated off the Unreal
+                // gesture for the same reason as the move above: Ctrl+RMB is the
+                // world-Z axis move, and this used to resize the selection's
+                // bounding box on every one of those drags.
                 AngelTechEditor.W += GetMouseDelta().x / 8;
                 AngelTechEditor.H += GetMouseDelta().y / 8;
                 AngelTechEditor.L -= (GetMouseWheelMove() * 2);
@@ -2523,9 +2500,38 @@ AngelTechEditor.DrawModel = false;
                     bx += cw + 2;
                 }
 
-                // Viewport layout: 1x1 -> 1x2 -> 2x1 -> 2x2. The secondary panes
-                // are reference views derived from the primary camera; input stays
-                // on the primary pane until per-pane routing lands.
+                // Snap tools. "Side" pushes along the VIEW's right axis (snapped to
+                // the nearest cardinal), so it is the sibling of whatever you are
+                // looking through rather than a fixed world direction.
+                bx += 6;
+                {
+                    const bool canSnap = g_sel.type != SelType::NONE &&
+                                         g_sel.type != SelType::MAP;
+                    struct SnapChip { const char* label; bool ground; };
+                    static const SnapChip kSnapChips[] = {
+                        {"Ground", true},
+                        {"Side",   false},
+                    };
+                    for (const auto& sc : kSnapChips) {
+                        const int cw = (int)strlen(sc.label) * 7 + 10;
+                        const Color bg = !canSnap ? (Color){38, 38, 42, 255}
+                                                   : (Color){45, 45, 50, 255};
+                        DrawRectangle(bx, by, cw, rowH, bg);
+                        DrawText(sc.label, bx + 4, by + 5, 12,
+                                 canSnap ? LIGHTGRAY : (Color){90, 90, 95, 255});
+                        if (canSnap && CheckCollisionPointRec(
+                                GetMousePosition(),
+                                {(float)bx, (float)by, (float)cw, (float)rowH}) &&
+                            IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                            if (sc.ground) SnapSelectionToGround();
+                            else           SnapSelectionToSide();
+                        }
+                        bx += cw + 2;
+                    }
+                }
+                // Viewport layout: 1x1 -> 1x2 -> 2x1 -> 2x2. Every pane has its own
+                // camera and its own Top/Side/Down/Persp preset state now, so a
+                // split layout can be Top + Front + Side + Persp like UnrealEd.
                 bx += 6;
                 static const char* kLayoutLabels[] = {"View:1", "View:2V", "View:2H", "View:4"};
                 int lay = g_editorPanels.viewLayout;
@@ -2974,8 +2980,11 @@ AngelTechEditor.DrawModel = false;
             ai.meshId   = g_editorPanels.animTargetMesh;
             ai.clipName = g_editorPanels.animClipName;
             ai.time     = g_editorPanels.animTime;
-            if (IsKeyPressed(KEY_Z)) ed::EventBus::instance().post(ed::Ev::AnimUndo, ai);
-            if (IsKeyPressed(KEY_Y)) ed::EventBus::instance().post(ed::Ev::AnimRedo, ai);
+            // Layout-aware: these are the keys LABELLED Z / Y, not the US
+            // positions. On QWERTZ/AZERTY the two are swapped, so a positional
+            // check made Ctrl+Z do nothing and Ctrl+Y hit the wrong stack.
+            if (IsKeyPressed(EdKeys::PhysicalKey(KEY_Z))) ed::EventBus::instance().post(ed::Ev::AnimUndo, ai);
+            if (IsKeyPressed(EdKeys::PhysicalKey(KEY_Y))) ed::EventBus::instance().post(ed::Ev::AnimRedo, ai);
         }
         if (g_editorPanels.actionAnimRefresh) {
             g_editorPanels.actionAnimRefresh = false;
@@ -2992,78 +3001,6 @@ AngelTechEditor.DrawModel = false;
                 PostMessageA((HWND)g_editorPanels.hAnimPanel,
                              EditorPanelState::kAnimPanelTick, 0, 0);
             }
-        }
-
-        // Apply active texture to selected entity (from context menu)
-        if (g_editorPanels.actionApplyTextureToSel) {
-            if (!g_editorPanels.activeTexturePath.empty() && g_sel.type != SelType::NONE) {
-                HistoryPush();
-                if (g_sel.type == SelType::BRUSH) {
-                    // g_sel.index is a renderable index for BRUSH (see
-                    // EditorRaycastAt), so the whole "it might be a collision-volume
-                    // index, let me hunt for a matching renderable" chain below was
-                    // working around an ambiguity that no longer exists. The old chain
-                    // could end up applying the texture to a DIFFERENT brush than the
-                    // one selected, because a collision index below the renderable
-                    // count passed the first branch.
-                    //
-                    // The context menu is opened from a PER-FACE pick and is called
-                    // "Apply Texture to Surface", so apply to the picked faces when
-                    // there are any. It used to ignore them and texture the whole
-                    // brush, which is not what the menu says and not what the
-                    // right-click selected.
-                    const int rIdx = g_sel.index;
-                    OzoneRenderable* brush = OzoneLoader::Instance().Get(rIdx);
-                    uint32_t faceMask = 0;
-                    for (const auto& sp : g_selectedSurfaces) {
-                        if (sp.renderable != rIdx) continue;
-                        if (sp.face < 0 || sp.face >= oz::surface::FACE_COUNT) continue;
-                        faceMask |= (1u << (int)sp.face);
-                    }
-
-                    if (brush && faceMask != 0) {
-                        int appliedFaces = 0;
-                        for (int f = 0; f < oz::surface::FACE_COUNT; f++) {
-                            if (!(faceMask & (1u << f))) continue;
-                            // Keep this face's flags/UV/alpha/glow; substitute only
-                            // the texture. Overwriting the whole SurfaceProps here
-                            // would silently reset every other property.
-                            oz::surface::SurfaceProps p =
-                                brush->surface.Resolve((oz::surface::SurfaceFace)f);
-                            p.texPath = g_editorPanels.activeTexturePath;
-                            OzoneLoader::Instance().SetRenderableFace(
-                                rIdx, (oz::surface::SurfaceFace)f, p);
-                            appliedFaces++;
-                        }
-                        EditorLog("Applied texture to %d face(s) of renderable idx=%d: %s",
-                                  appliedFaces, rIdx,
-                                  g_editorPanels.activeTexturePath.c_str());
-                        if (g_editorPanels.hSurfaceProps)
-                            SurfacePropsRefresh((HWND)g_editorPanels.hSurfaceProps);
-                        g_editorPanels.textureProbeRenderable = rIdx;
-                    } else {
-                        // No face pick for this brush (e.g. the menu came from a
-                        // model row or a stale surface selection): fall back to the
-                        // brush-wide default.
-                        bool applied = OzoneLoader::Instance().ApplyRenderableTexture(
-                            rIdx, g_editorPanels.activeTexturePath.c_str());
-                        EditorLog("Applied texture to brush renderable idx=%d (sel=%d): %s",
-                                  rIdx, g_sel.index, applied ? "ok" : "FAILED");
-                        if (applied) g_editorPanels.textureProbeRenderable = rIdx;
-                    }
-                } else if (g_sel.type == SelType::MODEL && g_sel.index >= 0 && g_sel.index < CachedModelCounter) {
-                    int mid = CachedModels[g_sel.index].ModelId;
-                    if (ApplyTextureToModel(mid, g_editorPanels.activeTexturePath.c_str()))
-                        EditorLog("Applied texture to model %d: %s", mid,
-                                  g_editorPanels.activeTexturePath.c_str());
-                }
-            } else {
-                // A silent no-op is indistinguishable from "the texture did not
-                // render" in a user's session log; name the actual reason.
-                EditorLog("Apply texture: nothing to apply to (selection=%d, texture='%s')",
-                          (int)g_sel.type, g_editorPanels.activeTexturePath.c_str());
-            }
-            g_editorPanels.actionApplyTextureToSel = false;
         }
 
     #ifdef _WIN32
@@ -3172,6 +3109,15 @@ AngelTechEditor.DrawModel = false;
             g_previewNeedsUpdate = false;
         }
 #endif
+        // Publish the editing camera LAST. The pane's camera is the authority
+        // (Main.cpp restores it at the top of every frame), so anything that
+        // changed OTEditor.MainCamera after the mid-frame commit used to be
+        // discarded next frame - which is why the Top/Side/Persp chips, the
+        // NumPad presets, the Camera menu, Reset Camera and Focus Selection all
+        // looked dead. The mid-frame commit above stays for the pane switch, but
+        // this is the one that decides what survives the frame.
+        Editor_CommitActiveCamera();
+
         EndDrawing();
 
         if (benchSession.active) {
@@ -3343,8 +3289,8 @@ AngelTechEditor.DrawModel = false;
         // table avoids a conflict row for something every user expects fixed.
         if (EditorUi_ViewportHasFocus() &&
             (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))) {
-            if (IsKeyPressed(KEY_C)) CopySelectedBrushes();
-            if (IsKeyPressed(KEY_V)) PasteBrushes();
+            if (IsKeyPressed(EdKeys::PhysicalKey(KEY_C))) CopySelectedEntities();
+            if (IsKeyPressed(EdKeys::PhysicalKey(KEY_V))) PasteEntities();
         }
         // Undo / redo (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z). Deferred to the anim tool
         // while vertex-editing, which owns its own undo stack.
@@ -3354,7 +3300,8 @@ AngelTechEditor.DrawModel = false;
             // Ctrl+Shift+Z is a second, hard-wired redo binding (not in the table:
             // it is the same key as Undo with Shift, and the table has one key per
             // action).
-            if (EdKeys::CtrlDown() && EdKeys::ShiftDown() && IsKeyPressed(KEY_Z))
+            if (EdKeys::CtrlDown() && EdKeys::ShiftDown() &&
+                IsKeyPressed(EdKeys::PhysicalKey(KEY_Z)))
                 HistoryRedo();
         }
 
@@ -3369,6 +3316,7 @@ AngelTechEditor.DrawModel = false;
         if (IsKeyPressed(KEY_KP_1)) ViewBottom();
         if (IsKeyPressed(KEY_KP_3)) ViewRight();
         if (IsKeyPressed(KEY_KP_9)) ViewLeft();
+        if (IsKeyPressed(KEY_KP_2)) ViewFront();
         if (IsKeyPressed(KEY_KP_5)) SetViewPerspective();
 
         }  // EditorUi_ViewportHasFocus()

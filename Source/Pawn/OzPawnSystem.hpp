@@ -15,6 +15,7 @@
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
+#include <cmath>
 
 // ---------------------------------------------------------------------------
 // PawnSystem — dynamic entity / NPC manager
@@ -49,6 +50,33 @@ enum class PawnState : uint8_t {
 // DrawAll); it is deactivated and despawned when this expires. The server-owned
 // (multiplayer) path uses the same window.
 inline constexpr float kPawnCorpseSeconds = 6.0f;
+
+// Conservative world AABB used to frustum-cull ONE pawn.
+//
+// `feet` is the pawn's position (the body is anchored there), `meshBounds` is the
+// shared mesh's bind-pose AABB and `verticalOffset` is the offset DrawAll applies
+// to put the model's lowest point on the feet (`auto_ground_offset`, or the
+// .cfg override). Yaw is ignored - a pawn's model can face any direction, so the
+// horizontal half-extent must be the DIAGONAL of the X/Z extents, exactly like
+// the prop cull in DrawEntities. Per-axis maxima are not a yaw upper bound and
+// culled the rotated end of a long model.
+//
+// Deliberately generous vertically (a full unit of slack at both ends) because a
+// pose can overshoot its bind-pose bounds and a hovering pawn bobs. A false
+// negative here is an INVISIBLE ENEMY, so every pad is one-sided.
+inline BoundingBox PawnCullBox(const Vector3& feet, float modelScale,
+                               const BoundingBox& meshBounds,
+                               float verticalOffset = 0.0f) {
+    const float s = fabsf(modelScale);
+    const float rx = fmaxf(fabsf(meshBounds.min.x), fabsf(meshBounds.max.x)) * s + 0.5f;
+    const float rz = fmaxf(fabsf(meshBounds.min.z), fabsf(meshBounds.max.z)) * s + 0.5f;
+    const float horiz = sqrtf(rx * rx + rz * rz) + 1.0f;
+    const float base = feet.y + verticalOffset;
+    BoundingBox b;
+    b.min = {feet.x - horiz, base + meshBounds.min.y * s - 1.0f, feet.z - horiz};
+    b.max = {feet.x + horiz, base + meshBounds.max.y * s + 1.0f, feet.z + horiz};
+    return b;
+}
 
 // TODO: Gun/WEapon PawnDefs for stat block
 // Template definition shared between spawn calls; stored in an internal
@@ -319,6 +347,22 @@ struct PickupNode {
     bool active = true;
     float respawnTimer = 0.0f;
     float respawnTime = 30.0f;  // default respawn time
+
+    // --- Draw-path cache (see DrawEntities) --------------------------------
+    // Resolving a pickup's model used to happen EVERY frame: a registry hash
+    // lookup, two stats.strings scans, a MeshCache lookup and a dynamic_cast per
+    // pickup. Those results only change when a def changes, so they are cached
+    // and keyed on LightningEntityRegistry::Revision().
+    //
+    // The EntityDef POINTER is deliberately NOT cached: Find() returns a pointer
+    // into the registry's map and only ReloadFile's in-place update is guaranteed
+    // to preserve it, so a future Init() would leave it dangling. Derived values
+    // cannot dangle.
+    std::shared_ptr<oz::Mesh> mesh;
+    bool  animated = false;     // mesh has clips and should be posed
+    int   idleClip = -1;        // resolved animIdle clip (-1 = none / not skeletal)
+    float meshScaleMul = 1.0f;  // authored `mesh_scale` stat multiplier
+    uint32_t meshRev = 0;       // registry revision the fields above were built for
 };
 
 // Emitter type for sound/music markers

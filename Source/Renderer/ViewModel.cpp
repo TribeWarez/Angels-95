@@ -18,10 +18,27 @@ namespace oz {
 // A held weapon should read as roughly a forearm-to-torso long prop.
 static constexpr float kViewModelTargetSize = 0.55f;
 
+// Sauerbraten draws the HUD gun with its OWN projection, not the world one:
+//
+//   project(curavatarfov, aspect, farplane, false, false, false, avatardepth)
+//
+// where avatarfov defaults to 65 (world fov 100) and avatardepth to 0.5. Keeping
+// the HUD gun on its own FOV means a world-FOV change or a zoom cannot stretch
+// it, and the depth scale compresses the gun's clip-space Z so only geometry
+// almost touching the eye occludes it. Without that scale, a wall one unit away
+// hides a weapon whose grip is half a unit from the eye, because both are drawn
+// with the same projection and the wall legitimately wins the depth test.
+//
+// Values are per-weapon overridable (`viewmodel_fov`, `viewmodel_depth`) but the
+// defaults are the Sauerbraten ones so a def that authors neither behaves like
+// the reference implementation.
+static constexpr float kViewModelFov = 65.0f;
+static constexpr float kViewModelDepth = 0.5f;
+
 // Source assets disagree wildly on scale because each came out of a different
 // DCC tool. Measured from the shipped GLBs:
 //
-//   pistol_01   bbox 0.223 x 0.032 x 0.141   (already human-scale)
+//   pistol_01   bbox 0.224 x 0.141 x 0.032   (already human-scale)
 //   etheral_waver bbox ~9.9 x 1.1 x 0.52      (node scale of 100/100/64.8,
 //                                               plus a ~19 unit origin offset)
 //
@@ -60,6 +77,49 @@ static Vector3 ComputeCenter(const BoundingBox& b) {
     return { (b.min.x + b.max.x) * 0.5f,
              (b.min.y + b.max.y) * 0.5f,
              (b.min.z + b.max.z) * 0.5f };
+}
+
+// Push the HUD projection. This mirrors Sauerbraten's
+//
+//     project(curavatarfov, aspect, farplane, false, false, false, avatardepth)
+//
+// (Sauerbraten's glScalef(1, 1, avatardepth) + glFrustum pair is a clip-space
+// depth bias, not a change to the view-space distance).
+//
+// The world depth buffer is deliberately NOT cleared. Only the projection the
+// gun is rasterised with changes; geometry that is genuinely at the eye still
+// occludes it.
+static void PushViewModelProjection(float fovDeg, float depthScale) {
+    const double nearD = (double)RL_CULL_DISTANCE_NEAR;
+    const double farD  = (double)RL_CULL_DISTANCE_FAR;
+    const double aspect = (double)GetScreenWidth() /
+                          (double)std::fmax(1.0f, (float)GetScreenHeight());
+
+    // MatrixPerspective is the same generator BeginMode3D uses, so the HUD
+    // projection matches the world camera except for fovy. The depth scale is
+    // applied on the RIGHT: in raylib's row-vector convention v * (P * S)
+    // projects first and scales clip-space Z second. Putting S on the left
+    // shortens view-space Z instead and pulls the whole weapon toward the eye
+    // (it grows and slides off screen), which is not a depth bias.
+    Matrix projection = MatrixPerspective((double)fovDeg * DEG2RAD, aspect, nearD, farD);
+    if (depthScale != 1.0f)
+        projection = MatrixMultiply(projection, MatrixScale(1.0f, 1.0f, depthScale));
+
+    // Flush the world batch before changing the projection; otherwise any
+    // queued world geometry would be rasterised with the HUD projection.
+    rlDrawRenderBatchActive();
+    rlMatrixMode(RL_PROJECTION);
+    rlPushMatrix();
+    rlSetMatrixProjection(projection);
+    rlMatrixMode(RL_MODELVIEW);
+}
+
+static void PopViewModelProjection() {
+    // Flush the gun before restoring the world projection for the same reason.
+    rlDrawRenderBatchActive();
+    rlMatrixMode(RL_PROJECTION);
+    rlPopMatrix();
+    rlMatrixMode(RL_MODELVIEW);
 }
 
 ViewModel& ViewModel::Instance() {
@@ -168,6 +228,12 @@ void ViewModel::SetWeapon(const EntityDef* def, int variantIndex) {
     m_offset   = VmStatVec3(def, "viewmodel_offset", {0.22f, -0.18f, 0.45f});
     m_rot      = VmStatVec3(def, "viewmodel_rot", {0.0f, 0.0f, 0.0f});
     m_scale    = VmStatFloat(def, "viewmodel_scale", 1.0f);
+    m_fov      = VmStatFloat(def, "viewmodel_fov", kViewModelFov);
+    m_depth    = VmStatFloat(def, "viewmodel_depth", kViewModelDepth);
+    if (m_fov < 10.0f)  m_fov = 10.0f;
+    if (m_fov > 170.0f) m_fov = 170.0f;
+    if (m_depth < 0.05f) m_depth = 0.05f;
+    if (m_depth > 4.0f)  m_depth = 4.0f;
     m_recoilMax = VmStatFloat(def, "recoil", 1.0f);
     m_reloadSeconds = VmStatFloat(def, "reload_time", 1.2f);
     // raylib resamples glTF clips at 60 fps, so that is the default conversion
@@ -465,7 +531,10 @@ void ViewModel::Draw(Camera3D& camera, Shader litShader) {
     // one. Behind-the-eye is still checked separately.
     if (m_key != s_frustumWarned) {
         const BoundingBox& b = m_mesh->Bounds();
-        const float tanHalf = std::tan(camera.fovy * 0.5f * DEG2RAD);
+        // The gun is rasterised with this projection, not the world's; using
+        // camera.fovy here made the coverage test disagree with the draw and
+        // produced off-screen warnings on weapons that were clearly visible.
+        const float tanHalf = std::tan(m_fov * 0.5f * DEG2RAD);
         const float aspect = (float)GetScreenWidth() /
                              (float)std::fmax(1.0f, (float)GetScreenHeight());
         float nearestDepth = 1e9f;
@@ -509,9 +578,10 @@ void ViewModel::Draw(Camera3D& camera, Shader litShader) {
     }
 
     // Depth test stays ON: a wall between the camera and the weapon must occlude
-    // it. Disabling it (the old behaviour) drew the pistol over every wall in the
-    // level, which read as "occlusion missing".
-    rlDrawRenderBatchActive();
+    // it. The gun's own projection (above) is what keeps that from happening to
+    // a wall that is merely NEAR the eye. Disabling depth entirely (the old
+    // behaviour) drew the pistol over every wall in the level.
+    PushViewModelProjection(m_fov, m_depth);
     m_mesh->DrawMatrix(world, litShader);
 
     // Detachable magazine (sibling `_AdditionalMeshes.glb`). Drawn with the same
@@ -535,6 +605,8 @@ void ViewModel::Draw(Camera3D& camera, Shader litShader) {
         Matrix magWorld = MatrixMultiply(buildLocal(m_attachCenter, magOff, magScale), camWorld);
         m_attach->DrawSubmeshMatrix(m_magMesh, magWorld, litShader);
     }
+
+    PopViewModelProjection();
 
     if (s_trace) OZ_INFO("[CHAIN] VM::Draw post-DrawMatrix");
 }

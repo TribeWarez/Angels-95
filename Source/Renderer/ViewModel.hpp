@@ -17,6 +17,9 @@ namespace oz {
 //   viewmodel_mesh / viewmodel_texture        (strings, default to mesh/texture)
 //   viewmodel_offset / viewmodel_rot          (vec3, camera space: x right, y up, z forward)
 //   viewmodel_scale / recip                   (floats)
+//   viewmodel_fov / viewmodel_depth            (floats, separate HUD projection;
+//                                               defaults follow Sauerbraten's
+//                                               avatarfov=65 / avatardepth=0.5)
 //   recoil                                     (float, kick amount)
 //   viewmodel_skeletal                         (float: absent/0 = auto,
 //                                               1 = force skeletal playback,
@@ -97,6 +100,10 @@ private:
     Vector3 m_offset{0.22f, -0.18f, 0.45f};
     Vector3 m_rot{0.0f, 0.0f, 0.0f};
     float m_scale = 1.0f;
+    // Separate HUD projection, as Sauerbraten's drawhudmodel -> project(
+    // curavatarfov, ..., avatardepth). See the constants in ViewModel.cpp.
+    float m_fov = 65.0f;
+    float m_depth = 0.5f;
 
     // Head-bob phase/amount fed from Core.hpp. Sway is a fraction of the camera
     // bob so the weapon lags the view rather than sliding in lockstep.

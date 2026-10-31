@@ -162,6 +162,7 @@ static LRESULT CALLBACK EditorWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             case IDM_VIEW_BOTTOM:   ViewBottom(); return 0;
             case IDM_VIEW_RIGHT:    ViewRight(); return 0;
             case IDM_VIEW_LEFT:     ViewLeft(); return 0;
+            case IDM_VIEW_FRONT:    ViewFront(); return 0;
             case IDM_VIEW_PERSPECTIVE: SetViewPerspective(); return 0;
             case IDM_WORLD_GRAPH:   ToggleWorldGraph(); return 0;
             case IDM_LEVEL_LIST:    ShowLevelList(!g_editorPanels.showLevelList); RefreshLevelList(); return 0;
@@ -187,8 +188,10 @@ static LRESULT CALLBACK EditorWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             case IDM_DELETE_ENTITY: DeleteSelectedEntity(); return 0;
             case IDM_DUPLICATE_ENTITY: DuplicateSelectedEntity(); return 0;
             case IDM_APPLY_TEXTURE:
-                g_editorPanels.actionApplyTextureToSel = true;
+                ApplyActiveTextureToSelection();
                 return 0;
+            case IDM_SNAP_GROUND: SnapSelectionToGround(); return 0;
+            case IDM_SNAP_SIDE:   SnapSelectionToSide();   return 0;
             case IDM_CANCEL:        return 0;
         }
     }
