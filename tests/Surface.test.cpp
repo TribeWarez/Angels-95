@@ -1083,6 +1083,11 @@ static void test_dead_flags_are_still_dead() {
     // because inert is the property that matters, not unread.
     const Named dead[] = {
         { SURF_SPECIAL_LIT, "SURF_SPECIAL_LIT" },
+        // MODULATED has a shader branch, but it multiplies by `colDiffuse.rgb`
+        // and a brush's diffuse-map colour is always WHITE - so the multiply is
+        // a no-op. Inert is the property that matters (same reasoning as
+        // SURF_NO_SMOOTH below), so it is hidden in the dialog.
+        { SURF_MODULATED, "SURF_MODULATED" },
         { SURF_MIRROR, "SURF_MIRROR" }, { SURF_ENVIRONMENT, "SURF_ENVIRONMENT" },
         { SURF_SMALL_WAVY, "SURF_SMALL_WAVY" },
         { SURF_BRIGHT_CORNERS, "SURF_BRIGHT_CORNERS" },
@@ -1095,23 +1100,24 @@ static void test_dead_flags_are_still_dead() {
         { SURF_NO_SMOOTH, "SURF_NO_SMOOTH" },
     };
     const int deadCount = (int)(sizeof(dead) / sizeof(dead[0]));
-    check(deadCount == 13, "the dead-flag register has 13 entries");
+    check(deadCount == 14, "the dead-flag register has 14 entries");
 
-    // The dialog's Flags tab exposes 18 rows: these 17 live flags plus MIRROR
+    // The dialog's Flags tab exposes 17 rows: these 16 live flags plus MIRROR
     // shown-but-disabled as "(planned)". SURF_PORTAL moved out of the planned
     // group when the sky portal landed - it is now a real render pass. SURF_QUANTUM
     // moved out when the dynamic-collision side-list gained its first consumer.
     // SURF_OCCLUDER was already counted here while having NO row at all; it has
     // one now, and the check below enforces that for every live flag.
+    // SURF_MODULATED moved OUT to the dead register (the multiply is a no-op).
     const uint32_t live[] = {
         SURF_FAKEBACKDROP, SURF_INVISIBLE, SURF_MASKED, SURF_TRANSLUCENT,
-        SURF_ALPHABLEND, SURF_MODULATED, SURF_TWO_SIDED, SURF_UNLIT,
+        SURF_ALPHABLEND, SURF_TWO_SIDED, SURF_UNLIT,
         SURF_FAKE_LIT, SURF_GLOW, SURF_PAN_U, SURF_PAN_V,
         SURF_NO_FOG, SURF_NO_BSP_CUTS, SURF_PORTAL, SURF_OCCLUDER,
         SURF_QUANTUM,
     };
     const int liveCount = (int)(sizeof(live) / sizeof(live[0]));
-    check(liveCount == 17, "17 flags are live and offered as enabled checkboxes");
+    check(liveCount == 16, "16 flags are live and offered as enabled checkboxes");
 
     // Every LIVE flag needs a row in the dialog. The old test only asserted that
     // no DEAD flag was offered, so SURF_OCCLUDER was counted live while having no
@@ -1120,7 +1126,7 @@ static void test_dead_flags_are_still_dead() {
     {
         const char* liveNames[] = {
             "SURF_FAKEBACKDROP", "SURF_INVISIBLE", "SURF_MASKED", "SURF_TRANSLUCENT",
-            "SURF_ALPHABLEND", "SURF_MODULATED", "SURF_TWO_SIDED", "SURF_UNLIT",
+            "SURF_ALPHABLEND", "SURF_TWO_SIDED", "SURF_UNLIT",
             "SURF_FAKE_LIT", "SURF_GLOW", "SURF_PAN_U", "SURF_PAN_V",
             "SURF_NO_FOG", "SURF_NO_BSP_CUTS", "SURF_PORTAL", "SURF_OCCLUDER",
             "SURF_QUANTUM",
@@ -1779,6 +1785,43 @@ static void test_no_zone_pvs_culling() {
           "the frustum AABB test is still the world-visibility path");
 }
 
+// ---------------------------------------------------------------------------
+// Transparent pass
+// ---------------------------------------------------------------------------
+// SURF_TRANSLUCENT / SURF_ALPHABLEND faces turn the depth WRITE off (a glass pane
+// must not occlude what is behind it), so drawing them inside the opaque pass made
+// them order-dependent: an opaque brush at a higher renderable index passed the
+// depth test and painted straight over the water. They are selected by their own
+// pass and drawn back-to-front after everything opaque, by BOTH the client and
+// the editor - a source check because the draw itself needs a GL context.
+static void test_blended_faces_have_their_own_pass() {
+    const std::string hdr = ReadFile("Source/World/OzOzoneLoader.hpp");
+    const std::string src = ReadFile("Source/World/OzOzoneLoader.cpp");
+    if (hdr.empty() || src.empty()) {
+        printf("  SKIP  transparent pass is wired (loader sources not found)\n");
+        return;
+    }
+    check(hdr.find("BlendedOnly") != std::string::npos,
+          "the loader declares a transparent pass");
+    check(src.find("const bool blended = p.Has(SURF_TRANSLUCENT) || p.Has(SURF_ALPHABLEND)")
+              != std::string::npos,
+          "FaceBelongsToPass resolves 'blended' in exactly one place");
+    check(src.find("&& !blended") != std::string::npos,
+          "the opaque pass excludes blended faces, so each face has one owner");
+    check(src.find("SurfacePass::BlendedOnly") != std::string::npos,
+          "the transparent pass selects those faces explicitly");
+    check(src.find("return a.dist2 > b.dist2;") != std::string::npos,
+          "blended faces are sorted back-to-front (nearer panes blend last)");
+
+    size_t calls = 0, p = 0;
+    while ((p = src.find("DrawBlendedFaces(camera, visible)", p)) != std::string::npos) {
+        ++calls;
+        ++p;
+    }
+    check(calls >= 2,
+          "both DrawWorldGeometry (client) and Draw (editor) run the transparent pass");
+}
+
 int main() {
     printf("Surface tests:\n");
     test_legacy_bits_stable();
@@ -1796,6 +1839,7 @@ int main() {
     test_derive_legacy_surface_mirror();
     test_backdrop_gain();
     test_dead_flags_are_still_dead();
+    test_blended_faces_have_their_own_pass();
     test_inert_flag_predicates();
     test_seed_inert_values();
     test_brush_wide_default_contract();

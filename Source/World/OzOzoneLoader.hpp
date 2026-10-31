@@ -393,10 +393,16 @@ void ResetRenderableSurfaceDefault(int idx);
     // wall with a single glowing face picked up an additive ghost of its other
     // five. Making the filter a parameter makes "exactly once" structural.
     enum class SurfacePass {
-        Full,          // the world pass: every face except backdrop/portal + invisible
+        Full,          // the OPAQUE world pass: every face except backdrop/portal/blended
         GlowingOnly,   // the glow halo: only SURF_GLOW faces
         BackdropOnly,  // the sky pass: only SURF_FAKEBACKDROP faces
         SkyPortalOnly, // the portal pass: only SURF_PORTAL faces, sampled from the sky view
+        // TRANSLUCENT / ALPHABLEND faces. They write no depth (a blended surface
+        // must not occlude what is behind it), so drawing them inside the opaque
+        // pass made them ORDER-DEPENDENT: an opaque brush at a higher renderable
+        // index passed the depth test and erased the glass. They are drawn in a
+        // second, back-to-front pass after all opaque geometry instead.
+        BlendedOnly,
     };
 
     // Draw one renderable through the surface-flagged path: up to six per-face
@@ -502,6 +508,12 @@ private:
     bool LoadPrimitives(std::vector<OzonePrimitive>& primitives,
                         const std::string& gameDataWorldDir,
                         const std::string& worldDir);
+
+    // Second pass: every blended (translucent / alpha-blended) face of the
+    // renderables named by `visible`, sorted back-to-front. Drawn after the
+    // opaque pass by BOTH Draw() (editor) and DrawWorldGeometry() (client), so
+    // the two cannot disagree about what a pane of water looks like.
+    void DrawBlendedFaces(Camera3D& camera, const std::vector<int>& visible);
 
     static Shader s_litFogShader;
     static Shader s_backupLitFogShader;

@@ -223,9 +223,12 @@ void SurfaceMaterial::BeginSurfaceState(const surface::SurfaceProps& p) {
     if (m_blendOpen || m_cullScope || m_depthMaskOff) return;  // never nest
 
     if (p.Has(SURF_MODULATED)) {
-        // raylib has no BLEND_MULTIPLY, so open the blend and let the shader
-        // multiply against whatever the framebuffer already holds. Depth write
-        // stays on: a modulated surface is still an occluder.
+        // HIDDEN in the dialog: the shader's only "modulate" is
+        // `lit *= colDiffuse.rgb`, and a brush's diffuse-map colour is always
+        // WHITE, so it is a x1.0 multiply and looks identical to an opaque face.
+        // Kept for hand-authored files so they do not silently change blend
+        // state; depth write stays on, as before. The old comment claimed this
+        // multiplied against the framebuffer, which is not what BLEND_ALPHA does.
         BeginBlendMode(BLEND_ALPHA);
         m_blendOpen = true;
     } else if (p.Has(SURF_TRANSLUCENT) || p.Has(SURF_ALPHABLEND)) {

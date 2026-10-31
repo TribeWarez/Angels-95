@@ -59,7 +59,12 @@ static const SurfaceFlagRow kSurfaceFlagRows[] = {
     { L"Masked",              SURF_MASKED,          true },
     { L"Translucent",         SURF_TRANSLUCENT,     true },
     { L"AlphaBlend",          SURF_ALPHABLEND,      true },
-    { L"Modulated",           SURF_MODULATED,       true },
+    // Hidden: `Surface.fs` multiplies by `colDiffuse.rgb`, and a brush's
+    // diffuse-map colour is always WHITE (only `.texture` is ever set), so the
+    // multiply is x1.0 and the face is indistinguishable from an opaque one.
+    // Offering it would save a bit that does nothing - the same policy as the
+    // other dead flags. See the note in Renderer/SurfaceMaterial.cpp.
+    { L"Modulated",           SURF_MODULATED,       false },
     { L"Fake Backdrop",       SURF_FAKEBACKDROP,    true },
     { L"Fake Lit",            SURF_FAKE_LIT,        true },
     { L"Unlit",               SURF_UNLIT,           true },

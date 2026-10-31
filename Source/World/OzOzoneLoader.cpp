@@ -1543,10 +1543,17 @@ static bool FaceBelongsToPass(oz::surface::SurfaceFace f,
                               OzoneLoader::SurfacePass pass) {
     using namespace oz::surface;
     if (p.Has(SURF_INVISIBLE)) return false;
+    // A blended face is owned by the transparent pass. It is still drawn through
+    // DrawSurface, but AFTER the opaque geometry - see SurfacePass::BlendedOnly.
+    const bool blended = p.Has(SURF_TRANSLUCENT) || p.Has(SURF_ALPHABLEND);
     switch (pass) {
         case OzoneLoader::SurfacePass::Full:
-            // Backdrops and portals belong to their own passes.
-            return !p.Has(SURF_FAKEBACKDROP) && !p.Has(SURF_PORTAL);
+            // Backdrops, portals and blended faces belong to their own passes.
+            return !p.Has(SURF_FAKEBACKDROP) && !p.Has(SURF_PORTAL) && !blended;
+        case OzoneLoader::SurfacePass::BlendedOnly:
+            // A backdrop keeps the sky pass (it is painted scenery, not glass);
+            // a portal stays opaque and is owned by the portal pass.
+            return blended && !p.Has(SURF_FAKEBACKDROP) && !p.Has(SURF_PORTAL);
         case OzoneLoader::SurfacePass::GlowingOnly:
             // A portal is a hole: an additive halo over it would glow the hole.
             return p.Has(SURF_GLOW) && !p.Has(SURF_PORTAL);
@@ -1736,6 +1743,53 @@ static inline void DrawRenderable(OzoneRenderable& r) {
 }
 
 // ---------------------------------------------------------------------------
+// DrawBlendedFaces — transparent geometry, after everything opaque.
+//
+// TRANSLUCENT/ALPHABLEND faces call rlDisableDepthMask (a glass pane must not
+// occlude what is behind it), which means they do not record their own depth.
+// Drawn in the opaque pass they were therefore order-dependent: any opaque brush
+// at a higher renderable index passed the depth test and painted straight over
+// the water. Sorting far-to-near also matters BETWEEN blended faces, since a
+// nearer pane must blend over a farther one.
+//
+// Sorting is per renderable (by its world AABB centre), not per face: blended
+// content is a handful of waterfalls/pools, and a brush's six faces are
+// contiguous in space.
+// ---------------------------------------------------------------------------
+void OzoneLoader::DrawBlendedFaces(Camera3D& camera, const std::vector<int>& visible) {
+    using namespace oz::surface;
+    // The surface shader is what carries the blend state. Without it the opaque
+    // pass fell back to DrawModelEx, which drew the WHOLE brush - so drawing it
+    // again here would double it.
+    if (!oz::SurfaceMaterial::Instance().Ready()) return;
+
+    struct Item { float dist2; int idx; };
+    std::vector<Item> items;
+    for (int idx : visible) {
+        if (idx < 0 || idx >= (int)m_renderables.size()) continue;
+        OzoneRenderable& r = m_renderables[(size_t)idx];
+        // Heightmaps have no surface block; they are never blended.
+        if (r.typeId == (int)OzonePrimitiveType::HEIGHTMAP) continue;
+        bool any = false;
+        for (int f = 0; f < FACE_COUNT && !any; f++)
+            any = FaceBelongsToPass((SurfaceFace)f, r.surface.Resolve((SurfaceFace)f),
+                                    SurfacePass::BlendedOnly);
+        if (!any) continue;
+        const float cx = (r.bounds.min.x + r.bounds.max.x) * 0.5f;
+        const float cy = (r.bounds.min.y + r.bounds.max.y) * 0.5f;
+        const float cz = (r.bounds.min.z + r.bounds.max.z) * 0.5f;
+        const float dx = cx - camera.position.x;
+        const float dy = cy - camera.position.y;
+        const float dz = cz - camera.position.z;
+        items.push_back({dx * dx + dy * dy + dz * dz, idx});
+    }
+    std::sort(items.begin(), items.end(),
+              [](const Item& a, const Item& b) { return a.dist2 > b.dist2; });
+    for (const Item& it : items)
+        DrawSurface(m_renderables[(size_t)it.idx], SurfacePass::BlendedOnly);
+}
+
+// ---------------------------------------------------------------------------
 // Draw — all renderables (backward compat, used by editor)
 // ---------------------------------------------------------------------------
 void OzoneLoader::Draw(Camera3D& camera, bool cullBackfaces) {
@@ -1746,7 +1800,10 @@ void OzoneLoader::Draw(Camera3D& camera, bool cullBackfaces) {
 
     FrustumPlane planes[6];
     BuildFrustum(camera, planes);
-    for (auto& r : m_renderables) {
+    std::vector<int> visible;
+    visible.reserve(m_renderables.size());
+    for (int i = 0; i < (int)m_renderables.size(); i++) {
+        OzoneRenderable& r = m_renderables[(size_t)i];
         if (!r.loaded) continue;
         // Generated collision proxies are invisible unless the editor has
         // explicitly asked for them - otherwise a single AutoConvex pass would
@@ -1756,6 +1813,10 @@ void OzoneLoader::Draw(Camera3D& camera, bool cullBackfaces) {
                             r.bounds.min.y < r.bounds.max.y ||
                             r.bounds.min.z < r.bounds.max.z) &&
             !AabbInFrustum(planes, r.bounds)) continue;
+        visible.push_back(i);
+    }
+    for (int i : visible) {
+        OzoneRenderable& r = m_renderables[(size_t)i];
         if (r.typeId == (int)OzonePrimitiveType::HEIGHTMAP && m_hmReady) {
             DrawModelEx(m_hmModel, m_hmPosition, (Vector3){0,1,0}, 0,
                         (Vector3){m_hmScale, m_hmScale, m_hmScale}, WHITE);
@@ -1763,6 +1824,8 @@ void OzoneLoader::Draw(Camera3D& camera, bool cullBackfaces) {
             DrawRenderable(r);
         }
     }
+    // Transparent faces last, so the editor shows the same water the game does.
+    DrawBlendedFaces(camera, visible);
 }
 
 // ---------------------------------------------------------------------------
@@ -1811,27 +1874,29 @@ void OzoneLoader::DrawWorldGeometry(Camera3D& camera) {
         occluders.push_back(oc);
     }
 
-    for (auto& r : m_renderables) {
-        if (!r.loaded) continue;
+    // ONE visibility test, used by both passes: the blended pass must see exactly
+    // the renderables the opaque pass would have, or a pane of glass could vanish
+    // depending on which loop it landed in.
+    auto isVisible = [&](const OzoneRenderable& r) -> bool {
+        if (!r.loaded) return false;
         // Collision proxies are never drawn in-game, whatever the editor toggle
         // says: they exist to stop the player falling through a prop.
-        if (r.surfaceFlags & SURF_COLLISION_PROXY) continue;
+        if (r.surfaceFlags & SURF_COLLISION_PROXY) return false;
         // Quantum obstacle: hidden exactly while it is being LOOKED AT. The
         // decision is not made here - `quantumHidden` is written once per frame by
         // Core.hpp's UpdateQuantumObstacles from the same AabbInFrustum call the
         // cull below would use, so this pass, the collision side-list and the
         // editor can never disagree about which state the brush is in.
-        if (r.quantumHidden) continue;
+        if (r.quantumHidden) return false;
         if (r.hasBounds && (r.bounds.min.x < r.bounds.max.x ||
                             r.bounds.min.y < r.bounds.max.y ||
                             r.bounds.min.z < r.bounds.max.z) &&
-            !AabbInFrustum(planes, r.bounds)) continue;
+            !AabbInFrustum(planes, r.bounds)) return false;
         // Occlusion: a renderable on the far side of any occluder plane is skipped.
         if (!occluders.empty()) {
             Vector3 rc = { (r.bounds.min.x+r.bounds.max.x)*0.5f,
                            (r.bounds.min.y+r.bounds.max.y)*0.5f,
                            (r.bounds.min.z+r.bounds.max.z)*0.5f };
-            bool occluded = false;
             for (auto& oc : occluders) {
                 float dCam = (camera.position.x-oc.c.x)*oc.n.x +
                              (camera.position.y-oc.c.y)*oc.n.y +
@@ -1839,10 +1904,19 @@ void OzoneLoader::DrawWorldGeometry(Camera3D& camera) {
                 float dR   = (rc.x-oc.c.x)*oc.n.x +
                              (rc.y-oc.c.y)*oc.n.y +
                              (rc.z-oc.c.z)*oc.n.z;
-                if (dCam * dR < 0) { occluded = true; break; }
+                if (dCam * dR < 0) return false;
             }
-            if (occluded) continue;
         }
+        return true;
+    };
+
+    std::vector<int> visible;
+    visible.reserve(m_renderables.size());
+    for (int i = 0; i < (int)m_renderables.size(); i++)
+        if (isVisible(m_renderables[(size_t)i])) visible.push_back(i);
+
+    for (int i : visible) {
+        OzoneRenderable& r = m_renderables[(size_t)i];
         if (r.typeId == (int)OzonePrimitiveType::HEIGHTMAP && m_hmReady) {
             DrawModelEx(m_hmModel, m_hmPosition, (Vector3){0,1,0}, 0,
                         (Vector3){m_hmScale, m_hmScale, m_hmScale}, WHITE);
@@ -1850,6 +1924,9 @@ void OzoneLoader::DrawWorldGeometry(Camera3D& camera) {
             DrawRenderable(r);
         }
     }
+    // Glass and water LAST, so opaque geometry (drawn with depth writes) cannot
+    // erase them. They write no depth themselves - see DrawBlendedFaces.
+    DrawBlendedFaces(camera, visible);
 }
 
 // ---------------------------------------------------------------------------

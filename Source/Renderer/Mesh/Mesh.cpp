@@ -95,6 +95,42 @@ bool Mesh::Load(const std::string& meshPath, const std::string& texPath,
     return true;
 }
 
+namespace {
+// Cached gate locations, per shader program (there is one LitFog in practice).
+struct MaterialGateLocs {
+    unsigned int id = 0;
+    int normal = -1;
+    int emissive = -1;
+};
+MaterialGateLocs& GatesFor(Shader shader) {
+    static MaterialGateLocs g;
+    if (g.id != shader.id) {
+        g.id       = shader.id;
+        g.normal   = GetShaderLocation(shader, "uHasNormalMap");
+        g.emissive = GetShaderLocation(shader, "uHasEmissive");
+    }
+    return g;
+}
+} // namespace
+
+// Clear the two per-mesh material gates after a mesh draw.
+//
+// A GLSL uniform holds its last value for the whole PROGRAM, and these are the
+// one pair only oz::Mesh uploads. The same LitFog program also draws OZONE
+// brushes (the fast path), EngineBillboard sprites and the portal quad - none of
+// which call BindMaterial. So a prop with a baked .ozmat left uHasNormalMap = 1
+// (and an unrelated normal map bound) for whatever drew next in that program: in
+// the editor, the whole next frame's brushes came out normal-mapped from the
+// last prop on screen. Resetting here keeps the "unbound uniform" class closed
+// without touching every brush/billboard call site.
+static void ClearMaterialGates(Shader shader) {
+    if (shader.id == 0) return;
+    MaterialGateLocs& g = GatesFor(shader);
+    const int zero = 0;
+    if (g.normal >= 0)   SetShaderValue(shader, g.normal, &zero, SHADER_UNIFORM_INT);
+    if (g.emissive >= 0) SetShaderValue(shader, g.emissive, &zero, SHADER_UNIFORM_INT);
+}
+
 void Mesh::BindMaterial(Shader shader) const {
     if (shader.id == 0) return;
     const int hasNormal = (m_material.normal.id > 0) ? 1 : 0;
@@ -138,6 +174,7 @@ void Mesh::Draw(const MeshTransform& t, Shader litShader) {
     if (litShader.id > 0) BindMaterial(litShader);
 
     DrawModelEx(m_model, t.position, {0.0f, 1.0f, 0.0f}, t.yaw, t.scale, WHITE);
+    if (litShader.id > 0) ClearMaterialGates(litShader);
 }
 
 void Mesh::DrawSubmesh(int index, const MeshTransform& t, Shader litShader, Color tint) {
@@ -172,6 +209,7 @@ void Mesh::DrawSubmesh(int index, const MeshTransform& t, Shader litShader, Colo
     Matrix matTrans = MatrixTranslate(t.position.x, t.position.y, t.position.z);
     Matrix transform = MatrixMultiply(MatrixMultiply(matScale, matRot), matTrans);
     DrawMesh(m_model.meshes[index], mat, transform);
+    if (litShader.id > 0) ClearMaterialGates(litShader);
 }
 
 void Mesh::DrawSubmeshMatrix(int index, const Matrix& transform, Shader litShader,
@@ -194,6 +232,7 @@ void Mesh::DrawSubmeshMatrix(int index, const Matrix& transform, Shader litShade
     }
     mat.maps[MATERIAL_MAP_DIFFUSE].color = tint;
     DrawMesh(m_model.meshes[index], mat, transform);
+    if (litShader.id > 0) ClearMaterialGates(litShader);
 }
 
 void Mesh::DrawMatrix(const Matrix& transform, Shader litShader) {
@@ -209,6 +248,7 @@ void Mesh::DrawMatrix(const Matrix& transform, Shader litShader) {
         if (mi < 0 || mi >= m_model.materialCount) mi = 0;
         DrawMesh(m_model.meshes[i], m_model.materials[mi], transform);
     }
+    if (litShader.id > 0) ClearMaterialGates(litShader);
 }
 
 } // namespace oz
