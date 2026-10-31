@@ -775,10 +775,12 @@ static int test_stashed_weapon_drop() {
     em.StashWeapon("stash_sword");
     CHECK_EQ(em.StashedWeaponCount(), 1);
 
-    // Bar is still full: a flush attempt finds no room and consumes the
-    // entry rather than placing it.
+    // Bar is still full: a flush attempt finds no room and KEEPS the entry, so
+    // a later pickup can place it. It used to consume it - and the pickup path
+    // flushes at the end of the SAME call that stashes, so a full hotbar
+    // destroyed the weapon immediately and the HUD counter read 0.
     CHECK(!em.FlushNextStashedWeapon());
-    CHECK_EQ(em.StashedWeaponCount(), 0);
+    CHECK_EQ(em.StashedWeaponCount(), 1);
 
     // Free a slot by despawning whatever was in slot 0; the manager already
     // clears the slot entry on Despawn.
@@ -786,7 +788,6 @@ static int test_stashed_weapon_drop() {
     em.Despawn(freeInstance);
     CHECK_EQ(em.HotbarFirstFreeSlot(), 0);
 
-    em.StashWeapon("stash_sword");
     CHECK(em.FlushNextStashedWeapon());
     CHECK_EQ(em.StashedWeaponCount(), 0);
     EntityInstance* placed = em.Get(em.HotbarAt(0));
@@ -920,6 +921,92 @@ static int test_auto_equip_and_defense() {
     em.EquipmentUnequip(3);
     CHECK_EQ(em.EquipmentAt(3), -1);
     CHECK_EQ((int)em.GetPlayerDefense(), 0);
+    PASS(); return 0; END_TEST();
+}
+
+// DeserializeState runs on startup AND on every death respawn (LoadSave). It
+// used to reset the hotbar/equipment arrays without despawning the instances
+// they named, so each call leaked one instance per slot until MAX_ENTITIES (512)
+// ran out and gear stopped restoring.
+static int test_deserialize_reuses_instances() {
+    TEST("DeserializeState does not leak instances across loads");
+    auto& reg = LightningEntityRegistry::Instance();
+    EntityDef sword;
+    sword.name = "reuse_sword";
+    sword.type = EntityType::WEAPON;
+    reg.Register(sword);
+
+    auto& em = LightningEntityManager::Instance();
+    em.Init();
+    em.HotbarAssign(0, em.Spawn("reuse_sword"));
+    em.HotbarAssign(1, em.Spawn("reuse_sword"));
+    CHECK(em.HotbarAt(0) >= 0);
+    CHECK(em.HotbarAt(1) >= 0);
+    const int before = em.Count();
+    CHECK(before >= 2);
+
+    const std::string state = em.SerializeState();
+    for (int i = 0; i < 30; i++) {
+        CHECK(em.DeserializeState(state));
+        CHECK_EQ(em.Count(), before);
+        CHECK(em.HotbarAt(0) >= 0);
+        CHECK(em.HotbarAt(1) >= 0);
+    }
+    PASS(); return 0; END_TEST();
+}
+
+// Equipping a SECOND piece into an occupied slot.
+//
+// AutoEquip spawns the new piece (so it is the LAST instance) and then
+// EquipmentAssign despawned the old occupant - a swap-remove that relocates the
+// new piece into the old index. Assigning the pre-despawn index left the slot
+// pointing one past the end: Get() returned null, defense dropped, and every
+// later pickup into the slot was despawned too.
+static int test_auto_equip_replaces_same_slot() {
+    TEST("AutoEquip twice into one slot keeps the new piece");
+    auto& reg = LightningEntityRegistry::Instance();
+    EntityDef first;
+    first.name = "repl_armor_1";
+    first.type = EntityType::ARMOR;
+    first.stats.strings["equip_slot"] = "armor";
+    first.stats.floats["defense"] = 10.0f;
+    EntityDef second;
+    second.name = "repl_armor_2";
+    second.type = EntityType::ARMOR;
+    second.stats.strings["equip_slot"] = "armor";
+    second.stats.floats["defense"] = 25.0f;
+    reg.Register(first);
+    reg.Register(second);
+
+    auto& em = LightningEntityManager::Instance();
+    em.Init();
+    // Two unrelated instances AFTER the armour, so the new piece is not the
+    // last element and the swap path is the one that used to break.
+    EntityDef filler;
+    filler.name = "repl_filler";
+    filler.type = EntityType::UPGRADE;
+    reg.Register(filler);
+    CHECK(em.Spawn("repl_filler") >= 0);
+    CHECK(em.Spawn("repl_filler") >= 0);
+
+    CHECK(em.AutoEquip(reg.Find("repl_armor_1")));
+    const int slotA = 0;   // "armor"
+    CHECK(em.Get(em.EquipmentAt(slotA)) != nullptr);
+    CHECK_EQ((int)em.GetPlayerDefense(), 10);
+
+    CHECK(em.AutoEquip(reg.Find("repl_armor_2")));
+    const int idx = em.EquipmentAt(slotA);
+    CHECK(idx >= 0);
+    CHECK(em.Get(idx) != nullptr);
+    CHECK(em.Get(idx)->def != nullptr);
+    CHECK(em.Get(idx)->def->name == std::string("repl_armor_2"));
+    CHECK_EQ((int)em.GetPlayerDefense(), 25);
+
+    // The replaced piece must be gone, not merely unreferenced.
+    for (int i = 0; i < em.Count(); i++) {
+        if (em.Get(i) && em.Get(i)->def)
+            CHECK(em.Get(i)->def->name != std::string("repl_armor_1"));
+    }
     PASS(); return 0; END_TEST();
 }
 
@@ -1437,6 +1524,7 @@ int main() {
     failures += test_hotbar_drag_reorder();
     failures += test_stashed_weapon_drop();
     failures += test_multi_despawn_cycles();
+    failures += test_deserialize_reuses_instances();
     failures += test_fire_no_weapon();
     failures += test_fire_not_a_weapon();
     failures += test_fire_cooldown();
@@ -1449,6 +1537,7 @@ int main() {
     failures += test_reload_full_ammo();
     failures += test_equipment_slot_name();
     failures += test_auto_equip_and_defense();
+    failures += test_auto_equip_replaces_same_slot();
     failures += test_respec_skills();
     // Registers a SKYZONE def (no "Player" involvement) - safe before the
     // ordering-sensitive tail.

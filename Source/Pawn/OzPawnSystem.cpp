@@ -18,6 +18,7 @@
 #include <rlgl.h>
 #include <cmath>
 #include <algorithm>
+#include <functional>
 #include <cstdio>
 #include <cstring>
 #include <unordered_map>
@@ -290,6 +291,26 @@ void PawnSystem::Despawn(int id) {
 // DespawnAll
 // ---------------------------------------------------------------------------
 void PawnSystem::DespawnAll() {
+    // Release every pawn's SCRIPT instance. Despawn() does this for one pawn,
+    // but this function never did, so each world load leaked one
+    // LightningEntityManager instance per NPC. The campaign's 15 worlds (plus
+    // retries) exhausted MAX_ENTITIES (512), after which Spawn() only warned and
+    // new NPCs lost every script hook.
+    //
+    // Despawn() swap-removes, so collect first and remove in DESCENDING index
+    // order: a removed slot is then never refilled from an instance we have yet
+    // to visit (the swap source is either a higher, already-removed index or a
+    // non-pawn instance nothing indexes by position).
+    std::vector<int> scriptIdx;
+    scriptIdx.reserve(m_pawns.size());
+    for (const auto& p : m_pawns)
+        if (p.scriptInstanceIndex >= 0) scriptIdx.push_back(p.scriptInstanceIndex);
+    std::sort(scriptIdx.begin(), scriptIdx.end(), std::greater<int>());
+    scriptIdx.erase(std::unique(scriptIdx.begin(), scriptIdx.end()), scriptIdx.end());
+    for (int idx : scriptIdx)
+        LightningEntityManager::Instance().Despawn(idx);
+    for (auto& p : m_pawns) p.scriptInstanceIndex = -1;
+
     for (auto& p : m_pawns) {
         // ZERO every released handle. `m_pawns` is a GROWING vector and this
         // function walks EVERY slot, including ones the next world does not

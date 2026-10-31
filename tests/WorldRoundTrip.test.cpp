@@ -42,6 +42,14 @@ static const OzonePrimitive* first_of(const std::vector<OzonePrimitive>& v,
     return nullptr;
 }
 
+// Read a source file (tests run from the repository root).
+static std::string slurp(const char* path) {
+    std::ifstream f(path, std::ios::binary);
+    std::ostringstream ss;
+    ss << f.rdbuf();
+    return ss.str();
+}
+
 // ---------------------------------------------------------------------------
 // Surface value spellings
 // ---------------------------------------------------------------------------
@@ -175,12 +183,6 @@ static void test_door_locked_typo_does_not_throw() {
 // someone adds to one file and forgets in the other) - the two lists are
 // hand-maintained and had already drifted.
 static void test_exporter_keys_are_parsed() {
-    auto slurp = [](const char* path) -> std::string {
-        std::ifstream f(path, std::ios::binary);
-        std::ostringstream ss;
-        ss << f.rdbuf();
-        return ss.str();
-    };
     const std::string exp = slurp("AngelEd/Source/Subsystems/OzoneExport.cpp");
     const std::string par = slurp("Source/World/OzoneParser.cpp");
     if (exp.empty() || par.empty()) {
@@ -245,6 +247,25 @@ static void test_shipped_worlds_parse_surf_values() {
     report(ok, "shipped worlds' surfAlpha/surfGlowScale actually load");
 }
 
+// ---------------------------------------------------------------------------
+// World lifecycle
+// ---------------------------------------------------------------------------
+// LoadWorld must clear every per-world container. Placed Mesh.* props were the
+// one it missed: InjectMeshObjects only APPENDS, so after any world with props
+// every later world drew all of them too, stacked at the same coordinates.
+// A source check because LoadWorld needs a GL context and a full client.
+static void test_load_world_clears_props() {
+    const std::string core = slurp("Source/Core.hpp");
+    const size_t a = core.find("Clear all existing entities before loading new world");
+    const size_t b = (a == std::string::npos) ? std::string::npos
+                                              : core.find("DespawnAll()", a);
+    const size_t clearAt = (a == std::string::npos) ? std::string::npos
+                                                    : core.find("ClearMeshObjects()", a);
+    bool ok = a != std::string::npos && b != std::string::npos &&
+              clearAt != std::string::npos && clearAt < b;
+    report(ok, "LoadWorld clears placed Mesh.* props");
+}
+
 int main() {
     printf("WorldRoundTrip tests:\n");
     test_surface_value_aliases();
@@ -255,6 +276,7 @@ int main() {
     test_door_locked_typo_does_not_throw();
     test_exporter_keys_are_parsed();
     test_shipped_worlds_parse_surf_values();
+    test_load_world_clears_props();
 
     printf("\nResults: %d/%d passed\n", pass_count, test_count);
     return (pass_count == test_count) ? 0 : 1;

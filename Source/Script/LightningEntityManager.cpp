@@ -156,11 +156,22 @@ void LightningEntityManager::StashWeapon(const std::string& defName) {
 bool LightningEntityManager::FlushNextStashedWeapon() {
     while (!m_stashedWeapons.empty()) {
         const std::string defName = m_stashedWeapons.front();
-        m_stashedWeapons.erase(m_stashedWeapons.begin());
         const int idx = Spawn(defName.c_str());
-        if (idx < 0) continue;     // def vanished; try the next stash entry
-        if (HotbarPlaceFirstFree(idx)) return true;
-        Despawn(idx);                // still no room; the entry is consumed
+        if (idx < 0) {
+            // The def no longer resolves: drop the entry, it can never place.
+            m_stashedWeapons.erase(m_stashedWeapons.begin());
+            continue;
+        }
+        if (HotbarPlaceFirstFree(idx)) {
+            m_stashedWeapons.erase(m_stashedWeapons.begin());
+            return true;
+        }
+        // Still full: KEEP the entry for the next attempt. It used to be
+        // consumed here, and OzPawnSystem calls this at the end of the very
+        // same pickup that stashed the weapon - so a full hotbar destroyed the
+        // stash immediately and the HUD counter was always 0.
+        Despawn(idx);
+        return false;
     }
     return false;
 }
@@ -1899,12 +1910,23 @@ int LightningEntityManager::EquipmentAt(int slot) const {
 
 void LightningEntityManager::EquipmentAssign(int slot, int instanceIndex) {
     if (slot < 0 || slot >= EQUIP_SLOT_COUNT) return;
-    // Fire on_unequip on old occupant, then despawn
+    if (m_equipment[slot] == instanceIndex) return;   // already worn / same value
+
+    // Fire on_unequip on the old occupant, then despawn it.
     if (m_equipment[slot] >= 0) {
-        int oldIdx = m_equipment[slot];
+        const int oldIdx = m_equipment[slot];
         if (oldIdx >= 0 && oldIdx < (int)m_instances.size())
             RunAction(&m_instances[oldIdx], "on_unequip");
+        // Despawn() is a SWAP-REMOVE. The new piece is spawned before this call
+        // (AutoEquip), so it is normally the LAST element - and if oldIdx is
+        // lower, the swap relocates it into oldIdx. Storing the pre-despawn
+        // index then put an out-of-range value in the slot: Get() returned null
+        // (slot showed empty), EquipmentStatSum skipped it, and every later
+        // pickup into that slot was despawned too. Track the move.
+        const bool moved = (instanceIndex == (int)m_instances.size() - 1) &&
+                           (oldIdx < instanceIndex);
         Despawn(oldIdx);
+        if (moved) instanceIndex = oldIdx;
     }
     m_equipment[slot] = instanceIndex;
     if (instanceIndex >= 0 && instanceIndex < (int)m_instances.size())
@@ -2331,6 +2353,36 @@ std::string LightningEntityManager::SerializeState() const {
 
 bool LightningEntityManager::DeserializeState(const std::string& data) {
     // Parse "hotbar:def1,def2,...|equip:def1,def2,...|"
+    //
+    // REUSE the instances the current slots already name instead of spawning a
+    // fresh one per slot. This is called by LoadSave(), i.e. at startup AND on
+    // every death respawn, and the old code just reset the two index arrays:
+    // the instances they pointed at stayed in m_instances forever (about 16
+    // orphans per death, plus a cached model each) until MAX_ENTITIES (512) was
+    // exhausted, at which point Spawn() only warned and the hotbar/equipment
+    // silently stopped restoring.
+    struct Reuse { std::string name; int idx; };
+    std::vector<Reuse> pool;
+    auto collect = [&](int idx) {
+        if (idx < 0 || idx >= (int)m_instances.size()) return;
+        const EntityDef* d = m_instances[idx].def;
+        if (!d) return;
+        for (const auto& r : pool) if (r.idx == idx) return;   // no duplicates
+        pool.push_back({d->name, idx});
+    };
+    for (int s = 0; s < HOTBAR_SIZE; s++) collect(m_hotbar[s]);
+    for (int s = 0; s < EQUIP_SLOT_COUNT; s++) collect(m_equipment[s]);
+    auto takeReusable = [&](const std::string& name) -> int {
+        for (size_t i = 0; i < pool.size(); i++) {
+            if (pool[i].name == name) {
+                const int idx = pool[i].idx;
+                pool.erase(pool.begin() + (std::ptrdiff_t)i);
+                return idx;
+            }
+        }
+        return -1;
+    };
+
     // First clear existing
     for (int s = 0; s < HOTBAR_SIZE; s++) m_hotbar[s] = -1;
     for (int s = 0; s < EQUIP_SLOT_COUNT; s++) m_equipment[s] = -1;
@@ -2352,7 +2404,11 @@ bool LightningEntityManager::DeserializeState(const std::string& data) {
             while (!name.empty() && (name[0] == ' ' || name[0] == '\t')) name.erase(0, 1);
             while (!name.empty() && (name.back() == ' ' || name.back() == '\t')) name.pop_back();
             if (!name.empty()) {
-                int idx = Spawn(name);
+                // Reuse the instance the slot already held (see the pool above),
+                // otherwise spawn. Without the reuse this function leaked one
+                // instance per slot on every call.
+                int idx = takeReusable(name);
+                if (idx < 0) idx = Spawn(name);
                 if (idx >= 0) arr[s] = idx;
             }
             if (comma == std::string::npos) break;
@@ -2411,7 +2467,12 @@ bool LightningEntityManager::DeserializeState(const std::string& data) {
             if (end == std::string::npos) end = data.size();
             std::string section = data.substr(p, end - p);
             size_t start = 0;
-            m_unlockedSkills.clear();
+            // Do NOT clear the list here. UnlockSkill() applies one-time
+            // max_health/mana/PE bonuses and early-returns when the node is
+            // already unlocked - clearing made every LoadSave() (i.e. every
+            // death respawn) re-apply them, so max HP ratcheted upward for the
+            // rest of the session. Skills are permanent; a save is a record of
+            // what was unlocked, never a revocation.
             while (start < section.size()) {
                 size_t comma = section.find(',', start);
                 std::string name = (comma == std::string::npos)

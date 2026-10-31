@@ -5,7 +5,7 @@ entity "arena" : skyzone {
             if ($result == 0) {
                 wtflag 0 1
                 spawn_pawn "Walker" 10 2 -55
-                spawn_pawn "Walker"-10 2 -60
+                spawn_pawn "Walker" -10 2 -60
                 spawn_pawn "Skaarj" 0 2 -70
                 msg "The canyon rumbles - the sand disgorges enemies!"
             }

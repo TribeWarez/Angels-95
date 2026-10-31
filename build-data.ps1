@@ -146,6 +146,15 @@ if (Test-Path $efxDir) {
     Run-OzPack "OZTX" $efxDir "$OUT_TEX\efx.oztex"
 }
 
+# --- Skill / spell icons (referenced by `icon =` in Pawn/Skills/*.ozls) ---
+# These used to be packaged by neither script, so every packaged build shipped
+# spell defs whose icons did not exist. worldcheck --asset-refs could not see it
+# because the loose files are present in a checkout.
+$skillIconsDir = "$GAMEDATA\Tex\Global\Skills"
+if (Test-Path $skillIconsDir) {
+    Run-OzPack "OZTX" $skillIconsDir "$OUT_TEX\skill_icons.oztex"
+}
+
 # --- Gore: blood splat decals (Tex/Global/Gibs/*.jpg) ---
 $gibsDir = "$GAMEDATA\Tex\Global\Gibs"
 if (Test-Path $gibsDir) {

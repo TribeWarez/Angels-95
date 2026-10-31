@@ -360,7 +360,12 @@ bool LightningScriptContext::ExecuteNext() {
         ls >> idxStr;
         int idx = 0;
         if (idxStr.rfind("$", 0) == 0) idx = (int)m_floatVars[idxStr.substr(1)];
-        else idx = std::stoi(idxStr);
+        else if (!idxStr.empty()) {
+            // Was a bare std::stoi: `rtflag x` threw straight out of the script
+            // VM. Same uncaught-throw class the parser was hardened against.
+            try { idx = std::stoi(idxStr); }
+            catch (...) { LS_WARN("rtflag: '%s' is not an integer", idxStr.c_str()); }
+        }
         if (idx >= 0 && idx < MAX_FLAGS) m_intVars["result"] = m_flags[idx];
         m_pc++;
 

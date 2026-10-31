@@ -505,6 +505,12 @@ auto LoadWorld()
         PawnSystem::Instance().ClearPathNodes();
         PawnSystem::Instance().ClearWindZones();
         PawnSystem::Instance().ClearDoors();
+        // Placed Mesh.Static / Mesh.Skeletal props are per-world too. The editor
+        // always cleared them, the client did not, and InjectMeshObjects only
+        // APPENDS - so after playing any world with props (Sektor_01: 46,
+        // World_endless_snow: 40) every later world drew all of them as well,
+        // stacked at the same coordinates. The list also grew monotonically.
+        PawnSystem::Instance().ClearMeshObjects();
         // Sky zones are per-world too. This call was missing, so every transition
         // kept the previous world's zones (all worlds are authored near the
         // origin, so the old zone matched first and won) and leaked its sky

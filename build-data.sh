@@ -123,6 +123,10 @@ fi
 [ -d "$GAMEDATA/Pawn/Player" ]       && run_ozpack "OZPK" "$GAMEDATA/Pawn/Player"       "$OUT/player.ozpak"
 # --- Skill tree + spell defs ---
 [ -d "$GAMEDATA/Pawn/Skills" ]       && run_ozpack "OZPK" "$GAMEDATA/Pawn/Skills"       "$OUT/skills.ozpak"
+# --- Skill / spell icons (referenced by `icon =` in Pawn/Skills/*.ozls) ---
+# The Windows script used to omit this too; keeping the two in step is the whole
+# point of this file. Without it a packaged build ships defs with no icons.
+[ -d "$GAMEDATA/Tex/Global/Skills" ] && run_ozpack "OZTX" "$GAMEDATA/Tex/Global/Skills" "$OUT_TEX/skill_icons.oztex"
 # --- Light defaults ---
 [ -d "$GAMEDATA/Pawn/Lights" ]       && run_ozpack "OZPK" "$GAMEDATA/Pawn/Lights"       "$OUT/lights.ozpak"
 
