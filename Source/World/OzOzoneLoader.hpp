@@ -82,6 +82,9 @@ struct OzoneRenderable {
     std::vector<float> uvBase;
     std::string texPath;         // filesystem/package path to custom texture (empty = use tileset)
     Texture2D customTex = {0};   // loaded custom texture (id=0 if using tileset)
+    // SKYBOX only: the authored `topTex=` ceiling texture. Kept here (rather
+    // than only on the primitive) so the editor's exporter can round-trip it.
+    std::string skyTopTex;
     // PLANE orientation, in ENGINE space (the file is Z-up; the loader converts).
     // A plane's normal and distance cannot be recovered from its mesh bounding
     // box, so they are carried explicitly for the editor to round-trip.
@@ -493,6 +496,13 @@ void ResetRenderableSurfaceDefault(int idx);
     static Shader GetLitFogShader() { return s_litFogShader; }
 
 private:
+    // ONE primitive -> renderable pass, shared by LoadFile() and LoadString().
+    // They used to be a copy each and the copies drifted (see the definition).
+    // CSG is rebuilt by the callers, not here.
+    bool LoadPrimitives(std::vector<OzonePrimitive>& primitives,
+                        const std::string& gameDataWorldDir,
+                        const std::string& worldDir);
+
     static Shader s_litFogShader;
     static Shader s_backupLitFogShader;
     std::vector<OzoneRenderable> m_renderables;

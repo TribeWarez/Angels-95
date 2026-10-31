@@ -149,9 +149,18 @@ static bool ParseSurfaceField(const std::string& key, const std::string& val,
         else WarnBadSurfaceValue("flags", val, line);
         return true;
     }
+    // Both spellings are accepted. The EXPORTER and the documented authoring
+    // vocabulary use the `surf*` prefix, while this parser only knew the bare
+    // form - so every shipped `surfAlpha=` / `surfGlowScale=` line was ignored
+    // at load (water rendered opaque, glow scale stayed 1.0) and, because
+    // surface.def kept its defaults, the next export omitted the key entirely.
+    // A round-trip test (tests/OzoneRoundTrip.test.cpp) pins both spellings.
     if (numF("alpha", p.alpha))       return true;
+    if (numF("surfAlpha", p.alpha))   return true;
     if (numF("cutoff", p.alphaCutoff)) return true;
+    if (numF("surfCutoff", p.alphaCutoff)) return true;
     if (numF("glowScale", p.glowScale)) return true;
+    if (numF("surfGlowScale", p.glowScale)) return true;
     if (numI("texSlot", p.texSlot))   return true;
     if (numI("surfTexSlot", p.texSlot)) return true;
     if (f("tex") || f("surfTex"))         { p.texPath = val; return true; }
@@ -436,6 +445,23 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
                         else if (key == "fly_mult=")    prim.physics.flySpeedMult = v;
                         continue;
                     }
+                    // Env-block enable flags. The positional block (args 7..16)
+                    // turns BOTH fog and ambient on; these let an author keep the
+                    // values but disable one of them. An explicit flag wins over
+                    // the positional inference (see OzOzoneLoader's zone branch).
+                    if (s.rfind("applyFog=", 0) == 0 ||
+                        s.rfind("applyAmbient=", 0) == 0) {
+                        size_t eq = s.find('=');
+                        int v = 1;
+                        if (!TryInt(s.substr(eq + 1), v)) {
+                            OZ_WARN("OZONE line %d: zone '%s' is not an integer",
+                                    lineNo, s.c_str());
+                            continue;
+                        }
+                        if (s.rfind("applyFog=", 0) == 0) prim.zoneApplyFog = v ? 1 : 0;
+                        else                              prim.zoneApplyAmbient = v ? 1 : 0;
+                        continue;
+                    }
                     // Unknown token: stop parsing the rest of the line (parity
                     // with the old behaviour for non-numeric tokens) - but say so,
                     // because on an entity line this is almost always a typo.
@@ -576,7 +602,15 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
             while (ls >> s) {
                 if (s.rfind("key=", 0) == 0) { prim.doorKey = s.substr(4); }
                 else if (s.rfind("anim=", 0) == 0) { prim.doorAnim = s.substr(5); }
-                else if (s.rfind("locked=", 0) == 0) { prim.doorLocked = (std::stof(s.substr(7)) != 0.0f); }
+                else if (s.rfind("locked=", 0) == 0) {
+                    // Was a raw std::stof(): `locked=yes` threw out of the parser
+                    // and killed the process with no diagnostic - the same
+                    // abort class the rest of this file was hardened against.
+                    float lv = 0.0f;
+                    if (TryFloat(s.substr(7), lv)) prim.doorLocked = (lv != 0.0f);
+                    else OZ_WARN("OZONE line %d: door locked '%s' is not a number",
+                                 lineNo, s.c_str());
+                }
                 else {
                     try { prim.args.push_back(std::stof(s)); } catch (...) { break; }
                 }
@@ -600,17 +634,20 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
                     else break;
                 }
                 const size_t boundsCount = prim.args.size();
-                prim.args.push_back(once);
-                prim.args.push_back(team);
                 // Same silent-drop class as `portal`: the loader gates on a full
-                // 6-number box, and the two flags appended just above would push
-                // a SHORT tuple past that check - 4 bounds + once + team = 6
-                // numbers, which reads as a valid box built out of garbage. Count
-                // the bounds BEFORE appending so the report is honest.
-                if (boundsCount < 6)
+                // 6-number box, and appending the two flags to a SHORT tuple made
+                // 4 bounds + once + team = 6 numbers, which passed that gate and
+                // built a box out of garbage - while the warning claimed the
+                // trigger was dropped. Only append the flags when the box is
+                // actually complete, so a malformed line is genuinely rejected.
+                if (boundsCount >= 6) {
+                    prim.args.push_back(once);
+                    prim.args.push_back(team);
+                } else {
                     OZ_WARN("OZONE line %d: trigger '%s' needs 6 box numbers "
                             "(minX minY minZ maxX maxY maxZ), got %d; the trigger is dropped",
                             lineNo, prim.entityType.c_str(), (int)boundsCount);
+                }
             }
         } else if (type_name == "ParticleEmitter") {
             prim.type = OzonePrimitiveType::ENTITY_PARTICLE_EMITTER;
@@ -738,7 +775,14 @@ std::vector<OzonePrimitive> OzoneParser::parse_string(const std::string& content
                         else OZ_WARN("OZONE line %d: skybox scale '%s' is not a number", lineNo, s.c_str());
                         continue;
                     }
-                    if (s.rfind("topTex=", 0) == 0) { prim.surface.def.texPath = s.substr(7); continue; }
+                    // Stored on its own field, NOT surface.def.texPath: the latter
+                    // is the brush-wide texture, and DrawSurface resolves it for
+                    // EVERY face - so a `topTex=` ceiling retextured the whole
+                    // skybox. See OzonePrimitive::skyTopTex.
+                    if (s.rfind("topTex=", 0) == 0) {
+                        prim.skyTopTex = StripQuotes(s.substr(7));
+                        continue;
+                    }
                     try { prim.args.push_back(std::stof(s)); }
                     catch (...) { break; }
                 }

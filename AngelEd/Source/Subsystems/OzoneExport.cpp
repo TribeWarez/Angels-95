@@ -43,6 +43,10 @@ void ExportToOzone(std::ostream& output) {
                << " " << (size > 0.01f ? size : 512.0f);
         if (r->surface.def.panU != 0.0f) output << " panU=" << r->surface.def.panU;
         if (r->surface.def.panV != 0.0f) output << " panV=" << r->surface.def.panV;
+        // `topTex=` is preserved even though the renderer paints one texture per
+        // skybox: dropping it on save was the data-loss half of the bug.
+        if (!r->skyTopTex.empty())
+            output << " topTex=" << MakeWorldRelativePath(r->skyTopTex);
         output << "\n";
     }
     for (int i = 0; i < loader.Count(); i++) {
@@ -295,12 +299,18 @@ void ExportToOzone(std::ostream& output) {
                << " " << zone.intensity;
         // Export env overrides if any are set
         auto& eo = zone.envOverrides;
-        if (eo.applyFog || eo.applyAmbient || eo.reverbMix > 0.0f) {
+        if (eo.applyFog || eo.applyAmbient || eo.reverbMix > 0.0f || eo.reverbDecay > 0.0f) {
             output << " " << eo.fogR << " " << eo.fogG << " " << eo.fogB
                    << " " << eo.fogDensity << " " << eo.fogStart << " " << eo.fogEnd
                    << " " << eo.ambR << " " << eo.ambG << " " << eo.ambB
                    << " " << eo.ambIntensity
                    << " " << eo.reverbMix << " " << eo.reverbDecay;
+            // The positional block means "both fog and ambient are on", so a
+            // zone that only wanted one of them could never say so and reloaded
+            // with fog at the default density. Written explicitly; a file from
+            // before these existed still defaults both to on.
+            output << " applyFog=" << (eo.applyFog ? 1 : 0)
+                   << " applyAmbient=" << (eo.applyAmbient ? 1 : 0);
         }
         // Script-hook name (name= kwarg; consumed by the loader, not an arg index)
         if (!zone.name.empty())

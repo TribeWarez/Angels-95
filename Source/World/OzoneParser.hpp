@@ -81,6 +81,19 @@ struct OzonePrimitive {
     // positional arg(0) when it resolves to a known mode; unknown names warn
     // and fall back to arg(0) rather than silently becoming 0.
     std::string gametypeKey;
+    // skybox: optional `topTex=` ceiling texture. Deliberately NOT stored in
+    // `surface.def.texPath`: that field is the brush-wide texture, so putting the
+    // ceiling's path there made `DrawSurface` override ALL SIX faces with it.
+    // Carried separately so the round-trip can preserve it even while the
+    // renderer still paints one texture per skybox.
+    std::string skyTopTex;
+    // Zone env overrides: `applyFog=` / `applyAmbient=` (0 or 1).
+    // The positional env block (args 7..16) implies BOTH are on, so a zone that
+    // only wants ambient (or only reverb) had no way to say so - it reloaded
+    // with fog at the default density. -1 means "not authored", i.e. infer from
+    // the positional block as before.
+    int zoneApplyFog = -1;
+    int zoneApplyAmbient = -1;
     // GameEngine.ParticleEmitter: `key=value` overrides of the positional tail,
     // stored as {positional index, value}. Twenty-three bare positional floats
     // with no way to retune one of them means an author who wants different

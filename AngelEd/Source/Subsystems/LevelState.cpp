@@ -37,6 +37,12 @@ void SetLevelMetadata(const LevelMetadata& meta) {
 // ExportToOzone omits `levelinfo` when everything is default, so a plain
 // open-save round trip DELETED the level's skybox and rules.
 void LoadLevelMetadataFromPrims(const std::vector<OzonePrimitive>& prims) {
+    // RESET first: this describes the document being loaded, not the session.
+    // Without it, opening a world after one that had `levelinfo`/`particles` (or
+    // File > New) kept the previous world's skybox paths, game rules and weather
+    // and wrote them into the next file on save. The old comment above only
+    // covered the opposite direction (defaults leaking into a loaded document).
+    SetLevelMetadata(LevelMetadata{});
     for (const auto& pr : prims) {
         if (pr.type == OzonePrimitiveType::ENTITY_LEVELINFO) {
             LevelMetadata meta = GetLevelMetadata();

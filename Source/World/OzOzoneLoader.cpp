@@ -202,6 +202,14 @@ static bool ParseOzoneEntity(const OzonePrimitive& prim,
                     if (prim.args.size() >= 19)
                         node.envOverrides.reverbDecay = prim.args[18];
                 }
+                // An explicit `applyFog=` / `applyAmbient=` wins over the
+                // positional block's "both were authored, so both are on"
+                // inference. Without this a zone edited to ambient-only came
+                // back with fog at the panel default density (1.0) on entry.
+                if (prim.zoneApplyFog >= 0)
+                    node.envOverrides.applyFog = (prim.zoneApplyFog != 0);
+                if (prim.zoneApplyAmbient >= 0)
+                    node.envOverrides.applyAmbient = (prim.zoneApplyAmbient != 0);
                 // Per-zone physics overrides (named kwargs; absent = defaults)
                 node.physics = prim.physics;
                 out.zones.push_back(node);
@@ -339,7 +347,18 @@ static bool ParseOzoneEntity(const OzonePrimitive& prim,
         }
         case OzonePrimitiveType::ENTITY_DOOR: {
             // door <meshPath> x y z yaw [key=] [anim=] [locked=]
-            if (prim.args.size() >= 5) {
+            //
+            // Four numbers, not five: the gate used to require >= 5, so the
+            // natural line never loaded at all. It is still parse-only (nothing
+            // draws, collides with or opens a door), so say so once rather than
+            // letting the author believe it worked. No shipped world uses `door`.
+            if (prim.args.size() >= 4) {
+                static bool s_warnedDoor = false;
+                if (!s_warnedDoor) {
+                    s_warnedDoor = true;
+                    OZ_WARN("OZONE: `door` entities have no runtime behaviour yet "
+                            "(nothing draws or opens them); the line is parsed and kept");
+                }
                 DoorNode d;
                 d.meshPath = StripQuotes(prim.meshPath);
                 d.position = {prim.args[0], prim.args[2], prim.args[1]}; // Z-up -> Y-up
@@ -1182,46 +1201,22 @@ Model OzoneLoader::BuildFromPrimitive(int type, const std::vector<float>& args) 
 }
 
 // ---------------------------------------------------------------------------
-// LoadFile Ã¢â‚¬â€ also loads world textures from the .ozone file's directory
+// LoadPrimitives
+//
+// The ONE primitive -> renderable pass. LoadFile() and LoadString() used to
+// carry a copy each, and the copies had already drifted: the LoadString one
+// dropped brush rotation (so Ctrl+Z in the editor flattened every rotated
+// brush, and the next save wrote rot 0), had no SKYBOX branch (an undo turned
+// the skybox into a 1x1x1 untextured cube), and did not resolve the heightmap
+// or per-brush texture paths against the world directory (so both were lost
+// after an undo + save). A future field must be added HERE, once.
+//
+// CSG is deliberately NOT part of this pass: LoadFile keeps its mesh/csg
+// timing split, and both callers rebuild afterwards.
 // ---------------------------------------------------------------------------
-bool OzoneLoader::LoadFile(const char* path) {
-    const auto tLoad0 = std::chrono::steady_clock::now();
-    OZ_INFO("OzoneLoader: loading %s", path);
-    Unload();
-
-    // Extract world directory from the .ozone path and load textures
-    std::string p(path);
-    std::string worldDir;
-    std::string gameDataWorldDir;
-    size_t slash = p.find_last_of("/\\");
-    if (slash != std::string::npos) {
-        worldDir = p.substr(0, slash + 1);
-        // Extract world name for GameData path resolution (e.g. "world_EngineTest.ozone" â†’ "EngineTest")
-        std::string fname = p.substr(slash + 1);
-        std::string prefix = "world_";
-        std::string suffix = ".ozone";
-        if (fname.rfind(prefix, 0) == 0 && fname.size() > prefix.size() + suffix.size()) {
-            std::string worldName = fname.substr(prefix.size(), fname.size() - prefix.size() - suffix.size());
-            gameDataWorldDir = std::string("GameData/Worlds/") + worldName + "/";
-            // Prefer GameData tileset over package directory
-            if (fs::exists(gameDataWorldDir + "oztex/tileset/")) {
-                LoadWorldTextures(gameDataWorldDir);
-            } else {
-                LoadWorldTextures(worldDir);
-            }
-        } else {
-            LoadWorldTextures(worldDir);
-        }
-    }
-    // Remember the world directory for .ozls def matching (GameData path when
-    // available so world-local skyzone defs win over same-named ones elsewhere)
-    m_worldDir = gameDataWorldDir.empty() ? worldDir : gameDataWorldDir;
-
-    const auto tTex = std::chrono::steady_clock::now();
-    auto primitives = OzoneParser::parse_file(path);
-    if (primitives.empty()) return false;
-    const auto tParse = std::chrono::steady_clock::now();
-
+bool OzoneLoader::LoadPrimitives(std::vector<OzonePrimitive>& primitives,
+                                 const std::string& gameDataWorldDir,
+                                 const std::string& worldDir) {
     // Entities are parsed into a plain set first; the orchestrator decides when
     // (and whether) to inject them into the runtime systems.
     ParseOzoneEntities(primitives, m_worldDir, m_zoneCounters, m_entities);
@@ -1237,6 +1232,21 @@ bool OzoneLoader::LoadFile(const char* path) {
             sb.typeId = (int)OzonePrimitiveType::SKYBOX;
             sb.csgOp = 0;
             sb.surface = prim.surface;
+            // The authored sky texture is the brush-wide texture (the OWNER),
+            // not the legacy mirror. Nothing wrote it at all before, so
+            // `r->texPath` was empty at export time and every save emitted
+            // `skybox  0 0 512 512` - the next load then read a centre
+            // coordinate as the texture path and the skybox was destroyed.
+            sb.surface.def.texPath = StripQuotes(prim.entityType);
+            sb.skyTopTex = prim.skyTopTex;
+            if (!sb.skyTopTex.empty()) {
+                static bool s_warnedTopTex = false;
+                if (!s_warnedTopTex) {
+                    s_warnedTopTex = true;
+                    OZ_WARN("skybox: topTex is parsed and preserved but not rendered "
+                            "(one texture per skybox); the main texture covers all faces");
+                }
+            }
             // args: cx cy cz size [scale]
             const float cx = prim.args.size() > 0 ? prim.args[0] : 0.0f;
             const float cy = prim.args.size() > 1 ? prim.args[1] : 0.0f;
@@ -1249,8 +1259,6 @@ bool OzoneLoader::LoadFile(const char* path) {
             sb.model = BuildSkybox(0.0f, 0.0f, 0.0f, size, nullptr);
             sb.loaded = (sb.model.meshCount > 0);
             sb.scale = 1.0f;
-            sb.surfaceFlags = (int)(sb.surface.def.flags &
-                                    (SURF_FAKEBACKDROP | SURF_COLLISION_PROXY | SURF_INVISIBLE));
             if (sb.loaded) {
                 // Unlit + two-sided so the interior is visible from inside, and
                 // no-fog so a sky never greys out at distance.
@@ -1273,6 +1281,11 @@ bool OzoneLoader::LoadFile(const char* path) {
             } else {
                 OZ_WARN("skybox: geometry build failed for '%s'", prim.entityType.c_str());
             }
+            // Derive the legacy mirrors AFTER the flags/texture are final, so
+            // `r->texPath` / `surfaceFlags` (what ExportToOzone and the draw
+            // filters read) agree with the owner. Hand-assigning surfaceFlags
+            // here was the one writer going the wrong direction.
+            DeriveLegacyRenderable(sb);
             m_renderables.push_back(sb);
             continue;
         }
@@ -1347,6 +1360,55 @@ r.csgOp = prim.csgOp;
     }
     }
 
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// LoadFile Ã¢â‚¬â€ also loads world textures from the .ozone file's directory
+// ---------------------------------------------------------------------------
+bool OzoneLoader::LoadFile(const char* path) {
+    const auto tLoad0 = std::chrono::steady_clock::now();
+    OZ_INFO("OzoneLoader: loading %s", path);
+    Unload();
+
+    // Extract world directory from the .ozone path and load textures
+    std::string p(path);
+    std::string worldDir;
+    std::string gameDataWorldDir;
+    size_t slash = p.find_last_of("/\\");
+    if (slash != std::string::npos) {
+        worldDir = p.substr(0, slash + 1);
+        // Extract world name for GameData path resolution (e.g. "world_EngineTest.ozone" â†’ "EngineTest")
+        std::string fname = p.substr(slash + 1);
+        std::string prefix = "world_";
+        std::string suffix = ".ozone";
+        if (fname.rfind(prefix, 0) == 0 && fname.size() > prefix.size() + suffix.size()) {
+            std::string worldName = fname.substr(prefix.size(), fname.size() - prefix.size() - suffix.size());
+            gameDataWorldDir = std::string("GameData/Worlds/") + worldName + "/";
+            // Prefer GameData tileset over package directory
+            if (fs::exists(gameDataWorldDir + "oztex/tileset/")) {
+                LoadWorldTextures(gameDataWorldDir);
+            } else {
+                LoadWorldTextures(worldDir);
+            }
+        } else {
+            LoadWorldTextures(worldDir);
+        }
+    }
+    // Remember the world directory for .ozls def matching (GameData path when
+    // available so world-local skyzone defs win over same-named ones elsewhere)
+    m_worldDir = gameDataWorldDir.empty() ? worldDir : gameDataWorldDir;
+
+    const auto tTex = std::chrono::steady_clock::now();
+    auto primitives = OzoneParser::parse_file(path);
+    if (primitives.empty()) return false;
+    const auto tParse = std::chrono::steady_clock::now();
+
+    // ONE primitive -> renderable pass, shared with LoadString(). The two
+    // copies had already drifted (rotation and the SKYBOX branch were missing
+    // from the LoadString one), so a Ctrl+Z flattened every rotated brush and
+    // turned the skybox into a 1x1x1 cube. See LoadPrimitives().
+    LoadPrimitives(primitives, gameDataWorldDir, worldDir);
     // Lights are bound to zone volumes by InjectOzoneEntities(), not here.
     const auto tCsg0 = std::chrono::steady_clock::now();
     RebuildCollisionVolumes();
@@ -1375,8 +1437,9 @@ bool OzoneLoader::LoadString(const char* data, const char* worldDir) {
 
     // Optional world directory: load the tileset before parsing so texSlot
     // indices resolve to real textures (editor snapshot restore path).
+    std::string wd;
     if (worldDir && worldDir[0]) {
-        std::string wd(worldDir);
+        wd.assign(worldDir);
         if (!wd.empty() && wd.back() != '/' && wd.back() != '\\')
             wd += '/';
         LoadWorldTextures(wd);
@@ -1386,71 +1449,8 @@ bool OzoneLoader::LoadString(const char* data, const char* worldDir) {
     auto primitives = OzoneParser::parse_string(data);
     if (primitives.empty()) return false;
 
-    ParseOzoneEntities(primitives, m_worldDir, m_zoneCounters, m_entities);
-
-    for (auto& prim : primitives) {
-        if (IsEntityPrimitive(prim.type)) continue;
-
-        // Heightmap is handled specially
-        if (prim.type == OzonePrimitiveType::HEIGHTMAP) {
-        OzoneRenderable r;
-        r.typeId = (int)prim.type;
-        r.position = {0,0,0};
-        r.scale = 1.0f;
-        r.model = BuildHeightmap(StripQuotes(prim.entityType),
-                                 StripQuotes(prim.entitySubType), prim.args);
-        r.loaded = m_hmReady;
-        r.csgOp = 0;
-        m_renderables.push_back(r);
-        continue;
-    }
-
-    OzoneRenderable r;
-    r.typeId = (int)prim.type;
-    r.csgOp = prim.csgOp;
-    r.surface = prim.surface;   // per-face surface props (flags/texture/UV/pan/alpha/glow)
-    // Derive the legacy views rather than copying the parser's copy of them. The
-    // parser already ran DeriveLegacySurfaceFields, so the values agree today -
-    // but one code path is one thing that cannot forget a field, and a
-    // hand-assigned mirror is how surfaceFlags and surface.def.flags came to
-    // disagree in the first place.
-    DeriveLegacyRenderable(r);
-    if (prim.args.size() >= 3)
-        r.position = {prim.args[0], prim.args[2], prim.args[1]};
-
-    r.scale = 1.0f;
-    r.model = BuildFromPrimitive((int)prim.type, prim.args);
-    r.loaded = (r.model.meshCount > 0);
-    // World-space AABB for frustum culling
-    ComputeCollisionAABB((int)prim.type, prim.args, r.position, r.bounds);
-    r.hasBounds = true;
-    // texScaleU/V stay at 1.0 here on purpose: they are extra multipliers on top
-    // of the generated mesh UVs, not an absolute. Seeding them with BuildBox's
-    // baked tiling (as this used to) meant an export wrote `texScaleU=16` for an
-    // already-16x-tiled box and the next load applied 16 on top of 16 -> 256x.
-    if (prim.type == OzonePrimitiveType::BOX && prim.args.size() >= 8)
-        r.texSlot = (int)prim.args[7];
-    else if (prim.type == OzonePrimitiveType::CYLINDER && prim.args.size() >= 9)
-        r.texSlot = (int)prim.args[8];
-    else if (prim.type == OzonePrimitiveType::PYRAMID && prim.args.size() >= 7)
-        r.texSlot = (int)prim.args[6];
-    StorePlaneOrientation(r, prim);
-    StoreCylinderShape(r, prim);
-    if (r.texSlot > 0) ApplyTexSlotToModel(r.model, r.texSlot);
-    m_renderables.push_back(r);
-    if (prim.texScaleU != 1.0f || prim.texScaleV != 1.0f ||
-        prim.texOffsetU != 0.0f || prim.texOffsetV != 0.0f) {
-        ApplyRenderableUV((int)m_renderables.size() - 1,
-                          prim.texScaleU, prim.texScaleV,
-                          prim.texOffsetU, prim.texOffsetV);
-    }
-    if (!prim.texPath.empty()) {
-        std::string tp = StripQuotes(prim.texPath);
-        if (!tp.empty() && tp.rfind("GameData/", 0) != 0 && !m_worldDir.empty())
-            tp = m_worldDir + tp;
-        ApplyRenderableTexture((int)m_renderables.size() - 1, tp.c_str());
-    }
-    }
+    // The SAME pass LoadFile uses - never a second copy. See LoadPrimitives().
+    LoadPrimitives(primitives, std::string(), wd);
     // Lights are bound to zone volumes by InjectOzoneEntities(), not here.
     RebuildCollisionVolumes();
     return true;

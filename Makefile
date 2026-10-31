@@ -419,6 +419,14 @@ test_pawn_system: tests/OzPawnSystem.test.cpp Source/Pawn/OzPawnSystem.cpp Sourc
 test_ozone_parser: tests/OzoneParser.test.cpp Source/World/OzoneParser.cpp Source/World/SurfaceFlags.cpp Source/Log.cpp
 	$(SERVER_CXX) $(TEST_FLAGS) -ISource $^ $(BUILD_DIR)/miniz.o -o $@
 
+# OZONE round-trip: the surface spellings the EXPORTER emits must actually parse,
+# the zone env enable flags, the skybox topTex split, the trigger/loader arity
+# agreement, and a drift gate that fails when a new `key=` appears in
+# AngelEd/Source/Subsystems/OzoneExport.cpp without the parser learning it.
+# Raylib-free, so headless.
+test_world_roundtrip: tests/WorldRoundTrip.test.cpp Source/World/OzoneParser.cpp Source/World/SurfaceFlags.cpp Source/Log.cpp
+	$(SERVER_CXX) $(TEST_FLAGS) -ISource $^ $(BUILD_DIR)/miniz.o -o $@
+
 # Surface flag registry + per-face surface props. Raylib-free, so headless.
 test_surface: tests/Surface.test.cpp Source/World/SurfaceFlags.cpp
 	$(SERVER_CXX) $(TEST_FLAGS) -ISource $^ -o $@
@@ -553,7 +561,8 @@ test_ozls_writer: tests/OzlsWriter.test.cpp Source/Script/OzlsWriter.cpp Source/
 # (the old shape spelled the list twice - once as prerequisites, once as `-./suite`
 # lines - and the two had to be kept in step by hand).
 TEST_SUITES := test_parser test_context test_registry test_entity_manager \
-               test_pawn_system test_ozone_parser test_join_uri test_master \
+               test_pawn_system test_ozone_parser test_world_roundtrip \
+               test_join_uri test_master \
                test_network test_game_state test_ozanim test_ozls_writer \
                test_autoconvex test_csg test_brushmesh test_surface test_gametype \
                test_editorbus test_assetscope test_events test_game test_gizmomath \
@@ -615,4 +624,4 @@ test: check-editor-objects $(TEST_SUITES) worldcheck
 	@echo "All suites passed."
 
 clean:
-	rm -rf $(BUILD_DIR) *.exe AngelServ Angels95 AngelMaster OzPack *.o AngelEd/*.o AngelEd/Source/*.o test_context test_parser test_registry test_ozone_parser test_join_uri test_master test_network test_game_state test_ozanim test_ozls_writer test_autoconvex test_csg test_brushmesh test_surface test_gametype test_editorbus test_assetscope test_events test_game test_gizmomath test_keybinds test_menu test_clientsettings worldcheck
+	rm -rf $(BUILD_DIR) *.exe AngelServ Angels95 AngelMaster OzPack *.o AngelEd/*.o AngelEd/Source/*.o test_context test_parser test_registry test_ozone_parser test_world_roundtrip test_entity_manager test_pawn_system test_join_uri test_master test_network test_game_state test_ozanim test_ozls_writer test_autoconvex test_csg test_brushmesh test_surface test_gametype test_editorbus test_assetscope test_events test_game test_gizmomath test_keybinds test_menu test_clientsettings test_material test_viewport worldcheck

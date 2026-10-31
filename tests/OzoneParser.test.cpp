@@ -74,10 +74,12 @@ static void test_trigger_arity() {
         && shortLine.size() == 1
         && shortLine[0].type == OzonePrimitiveType::ENTITY_TRIGGER
         && shortLine[0].entityType == "Trigger_EnterVolume"
-        // 3 bounds + once + team = 5 total: below the loader's 6-number box
-        // check, so the line is dropped rather than mis-read.
-        && shortLine[0].args.size() == 5
-        && shortLine[0].args.size() - 2 < 6;       // bounds before the flags
+        // The parser now appends once/team ONLY to a complete 6-number box, so
+        // a short line stays exactly as authored (3 numbers). It used to append
+        // them regardless, leaving 5 numbers - still under the loader's >= 6
+        // gate, but with two flag floats sitting inside the tuple the gate
+        // measures, which is one field away from reading garbage as bounds.
+        && shortLine[0].args.size() == 3;
     if (ok) { pass_count++; printf("PASS\n"); }
     else printf("FAIL: full=%zu/%zu short=%zu/%zu\n",
                 full.size(), full.size() ? full[0].args.size() : 0,
