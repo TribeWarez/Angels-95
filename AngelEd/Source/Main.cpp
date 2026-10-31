@@ -742,8 +742,8 @@ int main(int argc, char **argv){
                         g_gizmoHistPushed = true;
                     } else if (isDouble) {
                         // Click(HActor): MOUSE_LeftDouble -> select + properties.
-                        // WITHOUT the toggle-off, or the actor deselects on the way
-                        // to its own properties panel.
+                        // `false` = no modifier toggle: a double-click REPLACES the
+                        // set instead of toggling the actor it just opened.
                         EditorPickEntityAt(probe, hit, false);
                         OpenPropertiesForSelection();
                         openedProperties = true;
@@ -889,11 +889,12 @@ int main(int argc, char **argv){
             // AABB-level, so clicking the top of a wall selects the +Y face and
             // not the brush as a whole.
             const SurfaceFacePick spfPick = _inVpRel ? PickSurfaceFace(_mp_rel) : SurfaceFacePick{};
-            // Pick without the left-click toggle so right-clicking the already
-            // selected entity opens its menu instead of deselecting it. Gate on
-            // the hit result â€” on a miss g_sel still holds the previous entity,
-            // so a stale selection would otherwise pop a Delete menu onto
-            // whatever the user right-clicked next (or on empty space).
+            // Right-click never toggles set membership: it opens the menu for
+            // whatever was picked, and a toggle here would drop the entity the
+            // menu is about to act on. Gate on the hit result - on a miss g_sel
+            // still holds the previous entity, so a stale selection would
+            // otherwise pop a Delete menu onto whatever the user right-clicked
+            // next (or on empty space).
             if (_inVpRel) {
                 if (EditorPickEntity(false)) {
                     // Native Win32 context menu with TPM_RETURNCMD (avoids WM_COMMAND routing issues)

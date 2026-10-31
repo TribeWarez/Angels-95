@@ -10,6 +10,7 @@
 #include <algorithm>
 
 #include "SnapMath.hpp"
+#include "../Core/SelectionSet.hpp"
 
 // Thirteen per-container raycasts, one per entity kind, all sharing the same shape:
 // pick the nearest hit and fill `out`. They lived in Core/EditorShell.hpp until R6,
@@ -827,15 +828,24 @@ void ClearSelection() {
 // Apply an already-resolved pick. Split out of EditorPickEntity so the click
 // handler can decide double-click / "was it already selected" from ONE raycast.
 //
-// `toggleOffSame`: left-click, so clicking the entity that is already the primary
-// deselects it. Right-click passes false, otherwise right-clicking the selected
-// entity would deselect it instead of opening its context menu.
+// `allowToggle`: left-click paths pass true, the context-menu path false. It
+// gates the MODIFIER toggle only - a plain click is IDEMPOTENT.
+//
+// A plain left click on the entity that is already selected must KEEP it. This
+// used to deselect ("click the selected object again to drop it"), which became
+// a bug the moment picking moved to PRESS (UnEdClick.cpp parity): the hit is
+// resolved on button-down and the drag then moves whatever is selected, so
+// deselecting on that same press meant a Move/Scale/Rotate gesture started with
+// nothing selected - reported as "I try to move the brush and it deselects
+// itself". UE1 toggles membership with MOUSE_Ctrl (`bSelected ^= 1`), never on a
+// plain click; empty space is what clears the selection (HBackdrop::Click, which
+// the caller applies).
 //
 // Returns true only when `hit` is true. On a miss NOTHING is touched - the caller
 // decides whether that means "clear the selection" (HBackdrop) or "keep it" (the
 // context-menu path must not target an entity the user did not click).
 static bool EditorPickEntityAt(const EditorSelection& probe, bool hit,
-                               bool toggleOffSame) {
+                               bool allowToggle) {
     if (!hit) return false;
 
     const EditorSelection prevSel = g_sel;
@@ -845,15 +855,32 @@ static bool EditorPickEntityAt(const EditorSelection& probe, bool hit,
     // duplicate, MoveActors) walks the whole set, so multi-select is the base
     // model there. g_sel stays the PRIMARY (the gizmo/Properties target); g_selSet
     // is the full set every bulk operation acts on.
-    const bool extend = toggleOffSame && SelectionModifierHeld();
-
-    // Clicking the same entity again with no modifier deselects it.
-    if (!extend && toggleOffSame && g_sel.type == prevSel.type && g_sel.index == prevSel.index) {
-        ClearSelection();
-        return true;
+    //
+    // The membership rule is a pure function so it can be pinned headlessly
+    // (tests/SelectionSet.test.cpp): a plain click on an already-selected entity
+    // KEEPS the set, because the same press starts the transform gesture.
+    bool alreadyInSet = false;
+    for (const auto& s : g_selSet) {
+        if (s.type == g_sel.type && s.index == g_sel.index) {
+            alreadyInSet = true;
+            break;
+        }
     }
-    // Clicking a different zone while one is selected = deselect
-    if (!extend && toggleOffSame && prevSel.type != SelType::NONE && g_sel.type == SelType::ZONE) {
+    const edsel::PickAction action =
+        edsel::ResolvePickAction(allowToggle, SelectionModifierHeld(), alreadyInSet);
+    const bool extend = (action == edsel::PickAction::Toggle);
+
+    // A ZONE pick while something else is selected clears instead of switching:
+    // zones are huge volumes (one usually contains the camera), so a click that
+    // merely lands inside one must not steal the selection from the object the
+    // user is about to transform.
+    //
+    // Gated on PickAction::Replace - i.e. "this would otherwise replace the
+    // set". It must NOT fire for Keep (the zone is already selected, and this
+    // press is about to drag it) or Toggle, which would make a selected zone
+    // undeselectable by clicking it.
+    if (action == edsel::PickAction::Replace && allowToggle &&
+        prevSel.type != SelType::NONE && g_sel.type == SelType::ZONE) {
         ClearSelection();
         return true;
     }
@@ -872,24 +899,11 @@ static bool EditorPickEntityAt(const EditorSelection& probe, bool hit,
             return true;
         }
         if (removed) g_sel = g_selSet.back();   // promote another member to primary
-    } else {
-        // A RIGHT-click on an entity that is already part of the multi-selection
-        // keeps the whole set: the context menu acts on everything selected, and
-        // collapsing it to the one entity under the cursor made every
-        // multi-selection menu action silently single-target.
-        bool alreadyInSet = false;
-        if (!toggleOffSame) {
-            for (const auto& s : g_selSet)
-                if (s.type == g_sel.type && s.index == g_sel.index) {
-                    alreadyInSet = true;
-                    break;
-                }
-        }
-        if (!alreadyInSet) {
-            g_selSet.clear();
-            g_selSet.push_back(g_sel);
-        }
+    } else if (action == edsel::PickAction::Replace) {
+        g_selSet.clear();
+        g_selSet.push_back(g_sel);
     }
+    // PickAction::Keep: the set is untouched and g_sel is already the primary.
     EditorLog("Selected: %s (type=%d idx=%d)  [%zu selected]",
               g_sel.name.c_str(), (int)g_sel.type, g_sel.index, g_selSet.size());
     AngelTechEditor.DrawModel = true;
@@ -906,10 +920,10 @@ static bool EditorPickEntityAt(const EditorSelection& probe, bool hit,
 // Raycast at the CURRENT mouse position and apply the pick. Callers that already
 // resolved it (the press handler, which also needs the double-click test) use
 // EditorPickEntityAt directly so one click costs one raycast sweep.
-static bool EditorPickEntity(bool toggleOffSame = true) {
+static bool EditorPickEntity(bool allowToggle = true) {
     EditorSelection probe;
     const bool hit = EditorRaycastAt(GetMousePosition(), probe);
-    return EditorPickEntityAt(probe, hit, toggleOffSame);
+    return EditorPickEntityAt(probe, hit, allowToggle);
 }
 
 static void EditorHoverEntity() {
