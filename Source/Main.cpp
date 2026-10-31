@@ -1582,6 +1582,18 @@ ShowSpellbook = false;
             g_client.update(cam.position.x, cam.position.y, cam.position.z,
                             yaw, pitch, stance);
 
+            // Keep g_network_enabled in step with the transport. It used to be
+            // written only where we START or stop a session, so a server timeout
+            // or a failed handshake (both of which disconnect from inside the
+            // transport) left it true forever: /connect then refused with
+            // "Already connected" and the only recovery was /disconnect.
+            if (g_network_enabled && !g_client.is_connected() &&
+                !g_client.is_connecting()) {
+                OZ_INFO("Network: session ended (timeout or handshake failure); "
+                        "clearing g_network_enabled");
+                g_network_enabled = false;
+            }
+
             if (g_client.is_connected()) {
                 LightningEntityManager::Instance().SetPlayerLevel(g_client.get_level());
                 LightningEntityManager::Instance().SetPlayerXP(g_client.get_xp());

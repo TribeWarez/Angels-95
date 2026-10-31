@@ -963,6 +963,61 @@ static void test_player_state_payload_size() {
     else printf("FAIL: sizeof=%zu\n", sizeof(net::PlayerStateData));
 }
 
+// Every sender leaves the record's tail uninitialised and only memcpy's its own
+// payload, so sending `msg` directly leaked up to ~1KB of stack (previous
+// packets from other players, pointers, strings) on every datagram. Both peers
+// stop reading at `size`, which is why it was invisible.
+static void test_send_record_zeroes_tail() {
+    test_count++;
+    printf("  TEST the send record zeroes the bytes past the payload... ");
+    net::NetworkMessage msg;                       // deliberately NOT initialised
+    msg.magic = net::MAGIC;
+    msg.type = 99;
+    msg.size = 8;
+    msg.sequence = 1;
+    msg.timestamp = 2;
+    std::memset(msg.payload, 0xAB, sizeof(msg.payload));   // "stale stack"
+
+    const net::NetworkMessage out = net::MakeSendRecord(msg);
+    bool tailZero = true;
+    for (size_t i = 8; i < sizeof(out.payload); i++)
+        if (out.payload[i] != 0) { tailZero = false; break; }
+    const bool ok = out.magic == net::MAGIC && out.type == 99 &&
+                    out.size == 8 && out.sequence == 1 &&
+                    out.payload[0] == 0xAB && out.payload[7] == 0xAB &&
+                    tailZero;
+    if (ok) { pass_count++; printf("PASS\n"); }
+    else    printf("FAIL: size=%u tailZero=%d\n", out.size, (int)tailZero);
+}
+
+// A lying `size` must not describe a buffer it does not have: the receiver
+// trusts `size` to gate memcpys, so clamping here keeps the record honest.
+static void test_send_record_clamps_size() {
+    test_count++;
+    printf("  TEST an oversized payload size is clamped... ");
+    net::NetworkMessage msg{};
+    msg.size = 0xFFFFFFFFu;
+    const net::NetworkMessage out = net::MakeSendRecord(msg);
+    const bool ok = out.size == sizeof(out.payload);
+    if (ok) { pass_count++; printf("PASS\n"); }
+    else    printf("FAIL: size=%u expected %zu\n", out.size, sizeof(out.payload));
+}
+
+// PLAYER_ACTION's `power` is client-claimed. Unclamped, INT_MAX one-shot every
+// NPC and a negative value HEALED its target (damage_player subtracts).
+static void test_clamp_action_damage() {
+    test_count++;
+    printf("  TEST PLAYER_ACTION damage is clamped to a sane range... ");
+    const bool ok =
+        net::ClampActionDamage(0) == 1 &&
+        net::ClampActionDamage(-500) == 1 &&
+        net::ClampActionDamage(72) == 72 &&                       // shotgun volley
+        net::ClampActionDamage(0x7FFFFFFF) == net::PLAYER_MAX_ACTION_DAMAGE &&
+        net::ClampActionDamage(net::PLAYER_MAX_ACTION_DAMAGE) == net::PLAYER_MAX_ACTION_DAMAGE;
+    if (ok) { pass_count++; printf("PASS\n"); }
+    else    printf("FAIL\n");
+}
+
 int main() {
     printf("Network packet tests:\n");
     test_magic_constant();
@@ -991,6 +1046,9 @@ int main() {
     test_discovery_tail();
     test_directed_message_attribution();
     test_player_state_payload_size();
+    test_send_record_zeroes_tail();
+    test_send_record_clamps_size();
+    test_clamp_action_damage();
 
     printf("\nResults: %d/%d passed\n", pass_count, test_count);
     return (pass_count == test_count) ? 0 : 1;

@@ -594,19 +594,52 @@ static void on_server_message(const net::NetworkMessage& msg,
             net::WeaponFireData wfd;
             memcpy(&wfd, msg.payload, sizeof(wfd));
             wfd.player_id = sender.id;
-            // Spawn server-side projectile
+
             ServerPlayer* sp = g_game_state.get_player(sender.id);
-            if (sp) {
-                WorldState* ws = g_game_state.get_world(sp->world_index);
-                if (ws) {
-                    NetVec3 origin = {wfd.origin_x, wfd.origin_y, wfd.origin_z};
-                    NetVec3 dir = {wfd.dir_x, wfd.dir_y, wfd.dir_z};
-                    float speed = 20.0f;
-                    float lifetime = 2.0f;
-                    float damage = (float)wfd.power;
-                    g_game_state.spawn_projectile(*ws, sender.id, origin, dir, speed, damage, lifetime);
-                }
+            if (!sp) return;
+            // A dead player cannot fire (the client is client-authoritative about
+            // its own input, so this is the only place that can refuse).
+            if (sp->dead) break;
+            WorldState* ws = g_game_state.get_world(sp->world_index);
+            if (!ws) break;
+
+            // Origin/direction/power are UNTRUSTED. The sibling MELEE_HIT and
+            // NPC_DAMAGE handlers cap damage and re-validate against the server's
+            // own positions; this path used to take all three verbatim, so a
+            // client could spawn a projectile anywhere aimed at anyone with
+            // arbitrary damage.
+            const float vals[6] = {wfd.origin_x, wfd.origin_y, wfd.origin_z,
+                                   wfd.dir_x, wfd.dir_y, wfd.dir_z};
+            bool finite = true;
+            for (float v : vals) if (!std::isfinite(v)) finite = false;
+            if (!finite) {
+                OZ_WARN("PLAYER_ACTION from %u: non-finite origin/direction dropped",
+                        sender.id);
+                break;
             }
+            float dx = wfd.dir_x, dy = wfd.dir_y, dz = wfd.dir_z;
+            const float len = sqrtf(dx*dx + dy*dy + dz*dz);
+            if (!(len > 1e-4f)) {
+                // A zero direction parks the projectile on the player, where it
+                // damages whoever is standing there.
+                OZ_WARN("PLAYER_ACTION from %u: zero-length direction dropped", sender.id);
+                break;
+            }
+            NetVec3 origin = {wfd.origin_x, wfd.origin_y, wfd.origin_z};
+            NetVec3 dir = {dx / len, dy / len, dz / len};
+
+            const int dmg = net::ClampActionDamage(wfd.power);
+            if (dmg != wfd.power)
+                OZ_WARN("PLAYER_ACTION from %u: damage %d clamped to %d",
+                        sender.id, wfd.power, dmg);
+            wfd.power = dmg;          // observers see the clamped value too
+            wfd.dir_x = dir.x; wfd.dir_y = dir.y; wfd.dir_z = dir.z;
+
+            const float speed = 20.0f;
+            const float lifetime = 2.0f;
+            g_game_state.spawn_projectile(*ws, sender.id, origin, dir, speed,
+                                          (float)dmg, lifetime);
+
             // Relay weapon fire to other players for visual rendering
             net::NetworkMessage relay;
             relay.magic = net::MAGIC;
@@ -675,10 +708,20 @@ static void on_server_message(const net::NetworkMessage& msg,
             break;
         }
         case net::MessageType::SCENE_UPDATE: {
-            if (msg.size < sizeof(net::SceneUpdateData)) break;
-            OZ_INFO("SCENE_UPDATE from player %u (data_size=%u) — relaying",
-                    sender.id, msg.size);
-            g_game_server->broadcast_message(msg);
+            // Server -> client ONLY. This relayed a client's payload verbatim to
+            // every OTHER client, and the receiving side feeds `active_world`
+            // into LoadWorld - which treats a name containing ".ozone" as a
+            // direct filesystem path. Any peer could therefore make every player
+            // try to load an arbitrary local file as a world. The server authors
+            // its own scene (send_join_world_list); it never needs to relay one.
+            // Rate-limited so a peer cannot spam the log.
+            static std::unordered_map<uint32_t, double> s_lastSceneWarn;
+            const double sceneNow = time(nullptr);
+            if (sceneNow - s_lastSceneWarn[sender.id] > 10.0) {
+                s_lastSceneWarn[sender.id] = sceneNow;
+                OZ_WARN("SCENE_UPDATE from player %u rejected (server-authoritative)",
+                        sender.id);
+            }
             break;
         }
         case net::MessageType::NPC_STATE_UPDATE: {

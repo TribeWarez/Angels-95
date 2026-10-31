@@ -36,6 +36,31 @@ static void test_heartbeat_roundtrip() {
     expect(ok, "heartbeat encode/decode round-trip", line);
 }
 
+// A heartbeat is unauthenticated text from any host that can reach the master.
+// `players=4294967295` used to be stored verbatim: the browser showed nonsense
+// and /api/stats summed it into a uint32 that wraps.
+static void test_heartbeat_clamps_player_counts() {
+    Heartbeat out;
+    const bool ok = DecodeHeartbeat(
+        "OZHEARTBEAT:gamename=angels95;host=h;map=m;port=27015;"
+        "players=4294967295;maxplayers=999;", out)
+        && out.players <= (uint32_t)MAX_ADVERTISED_PLAYERS
+        && out.maxplayers <= (uint32_t)MAX_ADVERTISED_PLAYERS
+        && out.players <= out.maxplayers;
+    expect(ok, "heartbeat player counts are clamped and consistent",
+           "players=" + std::to_string(out.players) +
+           " maxplayers=" + std::to_string(out.maxplayers));
+
+    // A full-but-honest count still survives the clamp, and players may not
+    // exceed the slot count.
+    Heartbeat over;
+    const bool ok2 = DecodeHeartbeat(
+        "OZHEARTBEAT:gamename=angels95;host=h;map=m;port=27015;"
+        "players=30;maxplayers=8;", over)
+        && over.players == 8 && over.maxplayers == 8;
+    expect(ok2, "players is capped at maxplayers, not silently kept higher");
+}
+
 static void test_heartbeat_prefix() {
     std::string line = EncodeHeartbeat(Heartbeat{});
     expect(StartsWith(line, "OZHEARTBEAT:"), "heartbeat has OZHEARTBEAT prefix");
@@ -160,6 +185,7 @@ static void test_expiry() {
 int main() {
     printf("Master protocol tests:\n");
     test_heartbeat_roundtrip();
+    test_heartbeat_clamps_player_counts();
     test_heartbeat_prefix();
     test_heartbeat_rejects_wrong_gamename();
     test_heartbeat_rejects_missing_port();

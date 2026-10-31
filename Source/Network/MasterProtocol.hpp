@@ -47,6 +47,10 @@ constexpr int HEARTBEAT_INTERVAL_S      = 30;   // server -> master cadence
 constexpr int EXPIRE_SECONDS            = 90;   // 3x heartbeat interval
 constexpr int MAX_SERVERS               = 4096;
 constexpr const char* HEARTBEAT_PREFIX  = "OZHEARTBEAT:";
+// Mirror of net::MAX_PLAYERS (the wire limit). Duplicated because this header is
+// deliberately dependency-free, so it cannot include Network.hpp; a heartbeat
+// advertising more than this is not a real server.
+constexpr int MAX_ADVERTISED_PLAYERS    = 32;
 constexpr size_t MAX_NAME_LEN           = 64;
 constexpr size_t MAX_MAP_LEN            = 64;
 constexpr size_t MAX_VER_LEN            = 16;
@@ -186,8 +190,20 @@ inline bool DecodeHeartbeat(const std::string& data, Heartbeat& out) {
         n = strtoul(v.c_str(), nullptr, 10);
         out.http_port = (n > 65535) ? 0 : (uint16_t)n;
     }
-    if (ParseKV(body, "players", v))    out.players = (uint32_t)strtoul(v.c_str(), nullptr, 10);
-    if (ParseKV(body, "maxplayers", v)) out.maxplayers = (uint32_t)strtoul(v.c_str(), nullptr, 10);
+    // Clamped: a heartbeat is unauthenticated text from any host that can reach
+    // the master. `players=4294967295` used to be stored verbatim, shown as
+    // nonsense in the browser and summed into /api/stats (a uint32 total that
+    // wraps). A real server never advertises more than the wire limit.
+    if (ParseKV(body, "players", v)) {
+        n = strtoul(v.c_str(), nullptr, 10);
+        out.players = (n > (unsigned long)MAX_ADVERTISED_PLAYERS)
+                          ? (uint32_t)MAX_ADVERTISED_PLAYERS : (uint32_t)n;
+    }
+    if (ParseKV(body, "maxplayers", v)) {
+        n = strtoul(v.c_str(), nullptr, 10);
+        out.maxplayers = (n > (unsigned long)MAX_ADVERTISED_PLAYERS)
+                             ? (uint32_t)MAX_ADVERTISED_PLAYERS : (uint32_t)n;
+    }
     if (ParseKV(body, "password", v))   out.password = (v == "1" || v == "true");
     if (ParseKV(body, "proto", v)) {
         unsigned long p = strtoul(v.c_str(), nullptr, 10);
@@ -198,6 +214,9 @@ inline bool DecodeHeartbeat(const std::string& data, Heartbeat& out) {
             out.public_ip = v;
     }
     if (out.maxplayers == 0) out.maxplayers = 32;
+    // A full server cannot have more players than slots; without this the
+    // browser can show "40 / 8" and the aggregate counters disagree.
+    if (out.players > out.maxplayers) out.players = out.maxplayers;
     return true;
 }
 

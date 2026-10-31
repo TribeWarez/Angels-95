@@ -687,10 +687,13 @@ bool NetworkServer::send_message(const NetworkPlayer& player,
     addr.sin_port = htons(player.port);
     inet_pton(AF_INET, player.ip_address, &addr.sin_addr);
 
+    // Zeroed record: see MakeSendRecord. Callers leave the tail uninitialised.
+    NetworkMessage out = MakeSendRecord(msg);
+
     ssize_t bytes = sendto(TO_SOCK(m_socket_fd),
-                           sock_sendto_buf(&msg, sizeof(msg)), 0,
+                           sock_sendto_buf(&out, sizeof(out)), 0,
                            (struct sockaddr*)&addr, sizeof(addr));
-    return bytes == static_cast<ssize_t>(sizeof(msg));
+    return bytes == static_cast<ssize_t>(sizeof(out));
 }
 
 bool NetworkServer::broadcast_message(const NetworkMessage& msg) {
@@ -980,11 +983,14 @@ void NetworkClient::update() {
 
 bool NetworkClient::send_message(const NetworkMessage& msg) {
     if (!m_connected || sock_fd_bad(m_socket_fd)) return false;
+    // Same zeroed-record rule as the server side (see MakeSendRecord).
+    NetworkMessage out = MakeSendRecord(msg);
+
     ssize_t bytes = sendto(TO_SOCK(m_socket_fd),
-                           sock_sendto_buf(&msg, sizeof(msg)), 0,
+                           sock_sendto_buf(&out, sizeof(out)), 0,
                            (struct sockaddr*)&m_server_address,
                            sizeof(m_server_address));
-    return bytes == static_cast<ssize_t>(sizeof(msg));
+    return bytes == static_cast<ssize_t>(sizeof(out));
 }
 
 // ---------------------------------------------------------------------------

@@ -1394,7 +1394,15 @@ void GameState::tick_projectiles(WorldState& ws, float dt) {
         for (auto& player : m_players) {
             if (!player.connected) continue;
             if (player.id == p.owner_id) continue;
-            if (!m_friendly_fire) continue;
+            // Same world only. Every world is authored near the origin, so a shot
+            // in world A used to damage a player standing at the same coordinates
+            // in world B. The NPC loops above are already scoped by `ws`.
+            if (player.world_index != ws.world_index) continue;
+            // The WORLD's own rule, not the global. m_friendly_fire is overwritten
+            // once per world in init_worlds, so it holds whichever world loaded
+            // last - the same last-world-wins bug the per-world rules were split
+            // out to fix.
+            if (!ws.friendly_fire) continue;
             if (m_gameTypeInfo.teamBased && attacker &&
                 player.team == attacker->team) continue;
             float dx = p.position.x - player.position.x;

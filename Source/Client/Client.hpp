@@ -142,6 +142,10 @@ public:
 
     // Status
     bool is_connected() const { return m_client.is_connected(); }
+    // True while the handshake is in flight. Distinct from is_connected(): a
+    // connecting client is not yet connected, and treating that as "offline"
+    // would tear down a session that is still authenticating.
+    bool is_connecting() const { return m_client.is_connecting(); }
     int get_ping_ms() const { return m_client.get_ping_ms(); }
     // Ping cadence, seconds between PING samples. The Advanced Options dialog
     // drives this from [AngelTech.Network] ping_interval.
@@ -175,8 +179,18 @@ public:
             if (o.world_index == world_index) out.push_back(o);
         return out;
     }
-    const std::vector<RemotePlayer>& remote_players() const { return m_remote_players; }
-    const std::vector<ClientProjectile>& projectiles() const { return m_projectiles; }
+    // Snapshots BY VALUE, like npcs()/pickups() above. Returning a reference let
+    // the game thread iterate while the receive path push_back'd into the same
+    // vector, so a PLAYER_UPDATE arriving mid-frame could reallocate it and the
+    // draw pass then read freed memory. Small N - a copy per frame is cheap.
+    std::vector<RemotePlayer> remote_players() const {
+        std::lock_guard<std::mutex> l(m_msg_mutex);
+        return m_remote_players;
+    }
+    std::vector<ClientProjectile> projectiles() const {
+        std::lock_guard<std::mutex> l(m_msg_mutex);
+        return m_projectiles;
+    }
     int get_xp() const { return m_xp; }
     int get_level() const { return m_level; }
     int get_xp_to_next() const { return m_xp_to_next; }

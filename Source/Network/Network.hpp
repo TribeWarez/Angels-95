@@ -167,6 +167,23 @@ enum class MessageType : uint32_t {
 // (which the client cannot include); keep the two in step.
 constexpr float SERVER_MAX_STAMINA = 100.0f;
 
+// Hard ceiling on the damage ONE PLAYER_ACTION may claim. The client sends the
+// VOLLEY total for a multi-pellet weapon (the shotgun's 8 pellets x 9 = 72), so
+// this sits far above any shipped weapon while still stopping a client that
+// sends INT_MAX and one-shots everything (or a negative value, which used to
+// HEAL the target because nothing clamped `npc.health` upward either).
+constexpr int PLAYER_MAX_ACTION_DAMAGE = 250;
+
+// The clamp the server applies to a PLAYER_ACTION's `power`. Exposed so the
+// rule is testable without a socket, and so a future caller cannot re-derive a
+// different bound. A non-positive value becomes 1 rather than 0 or negative:
+// damage_player ADDS `-amount`, so a negative claim healed its target.
+inline int ClampActionDamage(int power) {
+    if (power < 1) return 1;
+    if (power > PLAYER_MAX_ACTION_DAMAGE) return PLAYER_MAX_ACTION_DAMAGE;
+    return power;
+}
+
 // The profile as the server holds it. `displayName` is always safe to print;
 // `modelPath`/`voiceSet` are OPAQUE STRINGS THE SERVER NEVER OPENS OR RESOLVES
 // — they exist so the client can be told what it asked for. Any future code that
@@ -205,6 +222,28 @@ struct NetworkMessage {
     uint8_t payload[MAX_MESSAGE_SIZE];
 };
 #pragma pack(pop)
+
+// Build the on-the-wire record: the header plus exactly `size` payload bytes,
+// inside a ZEROED message.
+//
+// Every sender declares `NetworkMessage msg;` (uninitialised) and memcpy's only
+// its payload into it, then sends sizeof(msg). The bytes past the payload were
+// therefore whatever the stack held - previously parsed packets from other
+// players, pointers, possibly strings - and both peers stop reading at `size`,
+// so nothing ever looked wrong. ONE builder instead of every call site having to
+// remember `{}`, and `size` is clamped to the buffer it describes.
+inline NetworkMessage MakeSendRecord(const NetworkMessage& msg) {
+    NetworkMessage out{};
+    out.magic     = msg.magic;
+    out.type      = msg.type;
+    out.sequence  = msg.sequence;
+    out.timestamp = msg.timestamp;
+    const size_t n = (msg.size < sizeof(out.payload)) ? (size_t)msg.size
+                                                      : sizeof(out.payload);
+    std::memcpy(out.payload, msg.payload, n);
+    out.size = (uint32_t)n;
+    return out;
+}
 
 // ---------------------------------------------------------------------------
 // Client profile sync (protocol v2)

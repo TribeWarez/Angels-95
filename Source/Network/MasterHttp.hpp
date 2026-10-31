@@ -254,7 +254,13 @@ inline bool HttpsRequest(const std::string& method, const ParsedUrl& u,
 #else
     // --- POSIX: shell out to curl ---
     if (u.host.empty()) return false;
-    std::string cmd = "curl -sS -k --max-time " + std::to_string(timeout_ms / 1000 + 1) +
+    // NO `-k`. Certificate verification was disabled on this path while the
+    // Windows path (WinHTTP/Schannel) verified, so on Linux any on-path attacker
+    // could MITM the server browser and feed arbitrary ip:port entries - which
+    // the client then probes and lets the player join. `--fail` makes a 4xx/5xx
+    // exit non-zero, so a rejected heartbeat is reported instead of looking like
+    // a success with an empty body.
+    std::string cmd = "curl -sS --fail --max-time " + std::to_string(timeout_ms / 1000 + 1) +
                       " -X " + method;
     if (!body.empty()) {
         // Single-quote the body; escape embedded single quotes
