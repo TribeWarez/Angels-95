@@ -7,6 +7,8 @@
 // single TU for AngelEd's core layer. See Wiki/Editor-Architecture-Refactor.md.
 // =============================================================================
 
+#include "../Core/AssetPath.hpp"
+
 static const char* LegacyPickupType(int idx) {
     static const char* map[] = {"HealthVial","ManaVial","EnergyCrystal","Key","Coin","Powerup"};
     return (idx >= 0 && idx < 6) ? map[idx] : nullptr;
@@ -138,19 +140,10 @@ static const char* CsgPrefixName(int op) {
 
 // Renderable texture paths are stored resolved (absolute) after loading; convert
 // back to a portable, world- or repo-relative path.
+//
+// The implementation is Core/AssetPath.hpp so the exporter, this file and
+// tests/AssetPath.test.cpp share ONE definition. Keep the local name: five call
+// sites in OzoneExport.cpp use it.
 static std::string MakeWorldRelativePath(const std::string& p) {
-    std::string s = p;
-    for (auto& c : s) if (c == '\\') c = '/';
-    // Repo-relative is the most portable form (loader accepts GameData/ as-is)
-    size_t gd = s.find("GameData/");
-    if (gd != std::string::npos) return s.substr(gd);
-    // World-relative subdirs
-    size_t oz = s.find("oztex/");
-    if (oz != std::string::npos) return s.substr(oz);
-    size_t wt = s.find("Worlds/");
-    if (wt != std::string::npos) {
-        size_t w1 = s.find('/', wt + 7); // end of the world folder
-        if (w1 != std::string::npos && w1 + 1 < s.size()) return s.substr(w1 + 1);
-    }
-    return s;
+    return ozasset::ToPortablePath(p);
 }

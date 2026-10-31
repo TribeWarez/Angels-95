@@ -199,8 +199,8 @@ void ExportToOzone(std::ostream& output) {
     if (loader.HasHeightmap() && !loader.GetHeightmapImagePath().empty()) {
         Vector3 hp = loader.GetHeightmapPosition();
         Vector3 hs = loader.GetHeightmapSize();
-        std::string img = loader.GetHeightmapImagePath();
-        std::string tex = loader.GetHeightmapTexturePath();
+        std::string img = MakeWorldRelativePath(loader.GetHeightmapImagePath());
+        std::string tex = MakeWorldRelativePath(loader.GetHeightmapTexturePath());
         output << "heightmap " << img << " " << (tex.empty() ? img : tex)
                << " " << hp.x << " " << hp.z << " " << hp.y   // Z-up
                << " " << loader.GetHeightmapScale()
@@ -385,10 +385,16 @@ void ExportToOzone(std::ostream& output) {
     for (auto& m : pawns.GetMeshObjects()) {
         if (m.meshPath.empty()) continue;
         Vector3 p = zup(m.position);
+        // Mesh paths arrive RESOLVED (absolute) from the Model Browser, and used
+        // to be written here verbatim - which is how a committed world came to
+        // hold `G:\projects\...\GameData\...\Bush_Dry_B.glb`: it resolves on the
+        // author's machine and fails worldcheck --asset-refs on Linux. Every
+        // other path-valued field already goes through MakeWorldRelativePath.
         output << (m.skeletal ? "Mesh.Skeletal " : "Mesh.Static ")
-               << m.meshPath << " " << p.x << " " << p.y << " " << p.z << " " << m.yaw;
+               << MakeWorldRelativePath(m.meshPath)
+               << " " << p.x << " " << p.y << " " << p.z << " " << m.yaw;
         if (m.scale != 1.0f) output << " scale=" << m.scale;
-        if (!m.texturePath.empty()) output << " tex=" << m.texturePath;
+        if (!m.texturePath.empty()) output << " tex=" << MakeWorldRelativePath(m.texturePath);
         if (m.skeletal && !m.animClip.empty()) output << " anim=" << m.animClip;
         if (m.skeletal && !m.animFile.empty()) output << " animfile=" << m.animFile;
         if (!m.materialName.empty()) output << " material=" << m.materialName;
@@ -411,7 +417,7 @@ void ExportToOzone(std::ostream& output) {
                << " " << e.gravity << " " << e.radius
                << " " << d.x << " " << d.y << " " << d.z
                << " " << e.yaw;
-        if (!e.texturePath.empty()) output << " tex=" << e.texturePath;
+        if (!e.texturePath.empty()) output << " tex=" << MakeWorldRelativePath(e.texturePath);
         output << "\n";
     }
 

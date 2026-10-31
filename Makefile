@@ -491,6 +491,9 @@ test_editorsnap: tests/EditorSnap.test.cpp AngelEd/Source/Subsystems/SnapMath.hp
 test_selectionset: tests/SelectionSet.test.cpp AngelEd/Source/Core/SelectionSet.hpp
 	$(SERVER_CXX) $(TEST_FLAGS) -I. tests/SelectionSet.test.cpp -o $@
 
+test_assetpath: tests/AssetPath.test.cpp AngelEd/Source/Core/AssetPath.hpp
+	$(SERVER_CXX) $(TEST_FLAGS) -I. tests/AssetPath.test.cpp -o $@
+
 # Editor viewport layout math (Phase 0 of multiple viewports). Header-only and
 # raylib-free, so it builds headless. Pins area insets, rows x cols tiling with
 # no gaps/overlap, half-open hit testing, and that Main.cpp no longer carries the
@@ -581,7 +584,7 @@ TEST_SUITES := test_parser test_context test_registry test_entity_manager \
                test_autoconvex test_csg test_brushmesh test_surface test_gametype \
                test_editorbus test_assetscope test_events test_game test_gizmomath \
                test_keybinds test_menu test_clientsettings test_material test_viewport \
-               test_profiler test_editorsnap test_selectionset
+               test_profiler test_editorsnap test_selectionset test_assetpath
 
 # The editor is built twice from two hand-maintained object lists - AngelEd/Makefile
 # and the inline `g++` list in ci.yml - because CI does not use the Makefile. They
@@ -639,4 +642,4 @@ test: check-editor-objects $(TEST_SUITES) worldcheck
 	@echo "All suites passed."
 
 clean:
-	rm -rf $(BUILD_DIR) *.exe AngelServ Angels95 AngelMaster OzPack *.o AngelEd/*.o AngelEd/Source/*.o test_context test_parser test_registry test_ozone_parser test_world_roundtrip test_entity_manager test_pawn_system test_join_uri test_master test_network test_game_state test_ozanim test_ozls_writer test_autoconvex test_csg test_brushmesh test_surface test_gametype test_editorbus test_assetscope test_events test_game test_gizmomath test_keybinds test_menu test_clientsettings test_material test_viewport test_profiler worldcheck test_selectionset
+	rm -rf $(BUILD_DIR) *.exe AngelServ Angels95 AngelMaster OzPack *.o AngelEd/*.o AngelEd/Source/*.o test_context test_parser test_registry test_ozone_parser test_world_roundtrip test_entity_manager test_pawn_system test_join_uri test_master test_network test_game_state test_ozanim test_ozls_writer test_autoconvex test_csg test_brushmesh test_surface test_gametype test_editorbus test_assetscope test_events test_game test_gizmomath test_keybinds test_menu test_clientsettings test_material test_viewport test_profiler worldcheck test_selectionset test_assetpath

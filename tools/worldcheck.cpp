@@ -29,6 +29,10 @@
 // debt. Invoked once by `make test` and the CI worldcheck step.
 
 #include "../Source/World/OzoneParser.hpp"
+// ONE definition of "make a path portable" / "is this path anchored to one
+// machine", shared with the editor's exporter. It is deliberately dependency-free
+// so this tool, AngelEd and tests/AssetPath.test.cpp all agree.
+#include "../AngelEd/Source/Core/AssetPath.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -479,6 +483,20 @@ void auditAssetRefs(const std::string& gameDataRoot) {
                     std::string v = unquote(meshPath);
                     if (!looksLikePath(v)) continue;
                     refs++;
+                    // Absolute paths resolve on the author's machine and nowhere
+                    // else - but they DO resolve on a Windows checkout, which is
+                    // exactly how such a reference stayed green locally and broke
+                    // the Linux job. Error instead of resolving.
+                    if (ozasset::IsMachineAnchored(v)) {
+                        broken++;
+                        char buf[640];
+                        snprintf(buf, sizeof buf,
+                                 "asset reference is an ABSOLUTE path (not portable): "
+                                 "%s:%d  %s",
+                                 p.c_str(), lineNo, v.c_str());
+                        err(buf);
+                        continue;
+                    }
                     std::string attempted, onDisk;
                     RefState st = resolveRefCase(v, fileDir, repoRoot, attempted, onDisk);
                     if (st == RefState::Exact) continue;
@@ -512,6 +530,20 @@ void auditAssetRefs(const std::string& gameDataRoot) {
                     std::string v = unquote(stripLineComment(tok));
                     if (!looksLikePath(v)) continue;
                     refs++;
+                    // Absolute paths resolve on the author's machine and nowhere
+                    // else - but they DO resolve on a Windows checkout, which is
+                    // exactly how such a reference stayed green locally and broke
+                    // the Linux job. Error instead of resolving.
+                    if (ozasset::IsMachineAnchored(v)) {
+                        broken++;
+                        char buf[640];
+                        snprintf(buf, sizeof buf,
+                                 "asset reference is an ABSOLUTE path (not portable): "
+                                 "%s:%d  %s",
+                                 p.c_str(), lineNo, v.c_str());
+                        err(buf);
+                        continue;
+                    }
                     std::string attempted, onDisk;
                     RefState st = resolveRefCase(v, fileDir, repoRoot, attempted, onDisk);
                     if (st == RefState::Exact) continue;
@@ -543,6 +575,16 @@ void auditAssetRefs(const std::string& gameDataRoot) {
             std::string v = unquote(stripLineComment(value));
             if (v.empty()) continue;
             refs++;
+            if (ozasset::IsMachineAnchored(v)) {
+                broken++;
+                char buf[640];
+                snprintf(buf, sizeof buf,
+                         "asset reference is an ABSOLUTE path (not portable): %s:%d  "
+                         "%s = %s",
+                         p.c_str(), lineNo, key.c_str(), v.c_str());
+                err(buf);
+                continue;
+            }
             std::string attempted, onDisk;
             RefState st = resolveRefCase(v, fileDir, repoRoot, attempted, onDisk);
             if (st == RefState::Exact) continue;
@@ -802,10 +844,31 @@ int main(int argc, char** argv) {
     };
     for (const auto& p : prims) {
         if (!p.texPath.empty()) {
-            if (!resolves(p.texPath)) missingRefs.insert(p.texPath);
+            if (ozasset::IsMachineAnchored(p.texPath)) {
+                // A path that only resolves on the machine that authored it is
+                // NOT portable, and it resolves on a Windows checkout - which is
+                // exactly how an absolute `G:\...` reference stayed green locally
+                // and failed the Linux job. Report it as its own error so the
+                // Windows run catches it too.
+                char buf[640];
+                snprintf(buf, sizeof buf,
+                         "asset reference is an ABSOLUTE path (resolves only on the "
+                         "machine that authored it): %s", p.texPath.c_str());
+                err(buf);
+            } else if (!resolves(p.texPath)) {
+                missingRefs.insert(p.texPath);
+            }
         }
         if (!p.meshPath.empty()) {
-            if (!resolves(p.meshPath)) missingRefs.insert(p.meshPath);
+            if (ozasset::IsMachineAnchored(p.meshPath)) {
+                char buf[640];
+                snprintf(buf, sizeof buf,
+                         "asset reference is an ABSOLUTE path (resolves only on the "
+                         "machine that authored it): %s", p.meshPath.c_str());
+                err(buf);
+            } else if (!resolves(p.meshPath)) {
+                missingRefs.insert(p.meshPath);
+            }
         }
     }
     for (const auto& m : missingRefs) {
