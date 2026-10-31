@@ -1,5 +1,6 @@
 #pragma once
 #include "raylib.h"
+#include "../Package/PackageAssetLoader.hpp"   // LoadShaderWithFallback
 #include <string>
 
 // ---------------------------------------------------------------------------
@@ -56,8 +57,14 @@ public:
         if (m_loaded) return;
         std::string dir = shaderDir ? shaderDir : "GameData/Shaders/";
         if (dir.back() != '/' && dir.back() != '\\') dir += '/';
-        m_shader = LoadShader((dir + "Sky.vs").c_str(),
-                              (dir + "Sky.fs").c_str());
+        // LoadShaderWithFallback, NOT raylib's LoadShader: this was the ONLY
+        // shader loader in the tree that could not read from a package, and
+        // release builds ship System/ with the shaders in shaders.ozpak (no
+        // GameData/ tree at all). So in every packaged install this failed and
+        // the skybox lost the horizon fog the shader exists for - invisible in a
+        // dev checkout, which is why it survived.
+        m_shader = LoadShaderWithFallback((dir + "Sky.vs").c_str(),
+                                          (dir + "Sky.fs").c_str());
         if (m_shader.id == 0) {
             // Not fatal. The skybox then draws through raylib's default material
             // shader exactly as it always has - i.e. unfogged. Say so, because the

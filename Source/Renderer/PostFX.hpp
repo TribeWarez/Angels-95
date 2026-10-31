@@ -228,6 +228,7 @@ public:
         if (m_addShader.id > 0)    { UnloadShader(m_addShader);    m_addShader = Shader{0}; }
         if (m_warpShader.id > 0)   { UnloadShader(m_warpShader);   m_warpShader = Shader{0}; }
         m_shadersTried = false;
+        m_coreOk = false;
         m_warpTried = false;
         m_warpCurrent = 0.0f;
         m_warpTarget = 0.0f;
@@ -250,8 +251,14 @@ private:
     }
 
     bool EnsureShaders() {
-        if (m_brightShader.id > 0) return true;
-        if (m_shadersTried) return false;
+        // Latch on the RESULT, not on "bright loaded". The old first line
+        // (`if (m_brightShader.id > 0) return true;`) short-circuited the failure
+        // check: if one of the four shaders failed but BloomBright succeeded, the
+        // second Resolve() reported success and ran the chain with an
+        // uninitialised program - an ungraded frame, an unblurred "bloom" and
+        // every location at -1 - so a total failure on frame 1 became a silent
+        // half-working chain from frame 2.
+        if (m_shadersTried) return m_coreOk;
         m_shadersTried = true;
 
         m_brightShader = LoadShaderWithFallback(nullptr, "GameData/Shaders/BloomBright.fs");
@@ -260,6 +267,7 @@ private:
         m_addShader    = LoadShaderWithFallback(nullptr, "GameData/Shaders/BloomAdd.fs");
         if (m_brightShader.id == 0 || m_blurShader.id == 0 ||
             m_gradeShader.id == 0 || m_addShader.id == 0) {
+            m_coreOk = false;
             OZ_WARN("PostFX: bloom/grade shader failed to load - drawing the scene ungraded");
             return false;
         }
@@ -273,6 +281,7 @@ private:
         m_locVignette  = GetShaderLocation(m_gradeShader, "uVignette");
         m_locTint      = GetShaderLocation(m_gradeShader, "uTint");
         m_locStrength  = GetShaderLocation(m_addShader, "uStrength");
+        m_coreOk = true;
         return true;
     }
 
@@ -366,6 +375,9 @@ private:
     Shader m_addShader{0};
     Shader m_warpShader{0};
     bool m_shadersTried = false;
+    // Whether the whole bloom/grade chain loaded. Sticky per attempt; see
+    // EnsureShaders().
+    bool m_coreOk = false;
     bool m_warpTried = false;
     float m_warpCurrent = 0.0f;
     float m_warpTarget  = 0.0f;

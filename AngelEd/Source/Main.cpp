@@ -1130,13 +1130,17 @@ int main(int argc, char **argv){
 
         // Apply lighting mode before 3D rendering
         rlDrawRenderBatchActive();
-        if (OTEditor.ViewMode == LightingMode::WIREFRAME) {
+        if (OTEditor.ViewMode == LightingMode::WIREFRAME)
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-            glDisable(GL_CULL_FACE);
-        } else {
+        else
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-            glEnable(GL_CULL_FACE);
-        }
+        // Backface culling is NOT set here. It is applied by
+        // OzoneLoader::Draw(camera, cullBackfaces) through the tracked setter in
+        // Renderer/CullState.hpp. The raw glEnable/glDisable pair that used to
+        // live here left that tracked flag stale, so every later ScopedCullOff
+        // restored the wrong value - and Draw() defaulted cullBackfaces=true, so
+        // it re-enabled culling immediately afterwards and WIREFRAME drew front
+        // faces only (a box lost its far edges).
 
         // --- Multi-viewport (Phase 1): the primary pane is the full editor pass
         // below; secondary panes are read-only reference views rendered after it.
@@ -1181,8 +1185,9 @@ int main(int argc, char **argv){
 
         DrawGrid(1000, 10.0f);
 
-        // OZONE world geometry
-        OzoneLoader::Instance().Draw(OTEditor.MainCamera);
+        // OZONE world geometry. The caller's view mode IS the culling intent.
+        OzoneLoader::Instance().Draw(OTEditor.MainCamera,
+                                     OTEditor.ViewMode != LightingMode::WIREFRAME);
 
         // SURF_PORTAL faces sample the sky view rendered before BeginMode3D.
         // Drawn after the world so geometry in front of a portal occludes it -
@@ -2102,7 +2107,8 @@ AngelTechEditor.DrawModel = false;
                     &skyFog);
             }
             DrawGrid(1000, 10.0f);
-            OzoneLoader::Instance().Draw(cam);
+            OzoneLoader::Instance().Draw(cam,
+                                         OTEditor.ViewMode != LightingMode::WIREFRAME);
             {
                 Shader bbShader = {0};
                 if (OTEditor.ViewMode == LightingMode::LIT) bbShader = OTEditor.LitFogShader;

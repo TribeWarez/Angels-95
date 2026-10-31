@@ -2201,6 +2201,34 @@ void DrawWorld()
                                         skyFog.density, skyFog.intensity);
 
     // -----------------------------------------------------------------------
+    // Keep the scene target in step with a mid-session window resize.
+    //
+    // Every "window size" button (Settings, Title > Video, Advanced Options) only
+    // calls SetWindowSize - there was no IsWindowResized handler anywhere, so the
+    // whole 3D scene kept rendering at the old internal resolution and was
+    // upscaled to the new window, soft and pixelated, until the next world load.
+    // Bloom/grade/CRT followed the stale size too (Resolve reads Target's size).
+    //
+    // Only when the target WAS tracking the window: a target created by
+    // Settings' "Set Resolution" (1280*scale x 720*scale) is deliberately not the
+    // window size, and must not be overridden on a resize.
+    // -----------------------------------------------------------------------
+    {
+        static int s_lastWinW = GetScreenWidth();
+        static int s_lastWinH = GetScreenHeight();
+        const int winW = GetScreenWidth();
+        const int winH = GetScreenHeight();
+        const bool wasFullWindow = (Target.texture.width  == s_lastWinW &&
+                                    Target.texture.height == s_lastWinH);
+        if ((winW != s_lastWinW || winH != s_lastWinH) && wasFullWindow) {
+            oz::PostFX::DestroyTarget(Target);
+            Target = oz::PostFX::CreateTarget(winW, winH);
+        }
+        s_lastWinW = winW;
+        s_lastWinH = winH;
+    }
+
+    // -----------------------------------------------------------------------
     // SURF_PORTAL support: pre-render the sky from the zone anchor, half-res.
     // Gated on the world actually authoring a portal face, so worlds without one
     // pay nothing. `Target`'s size is passed because the face shader samples in
